@@ -1,0 +1,9 @@
+export { StepBasicInfo } from './StepBasicInfo';
+export { StepCredentials } from './StepCredentials';
+export { StepOtpVerification } from './StepOtpVerification';
+export { StepProfileSetup } from './StepProfileSetup';
+export { StepHowItWorks } from './StepHowItWorks';
+export { StepConsentForm } from './StepConsentForm';
+export { StepWhatHappensNext } from './StepWhatHappensNext';
+export { StepSubscription } from './StepSubscription';
+export { StepBridgeNumber } from './StepBridgeNumber';

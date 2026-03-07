@@ -21,6 +21,8 @@
       },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Atto needs microphone access for voice calls",
+        "NSPhotoLibraryUsageDescription": "ATTO needs access to your photo library to set your profile picture",
+        "NSCameraUsageDescription": "ATTO needs camera access to take a profile photo",
         "UIBackgroundModes": [
           "voip",
           "audio",
@@ -42,7 +44,9 @@
         "android.permission.WRITE_CONTACTS",
         "android.permission.RECORD_AUDIO",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.CAMERA"
       ],
       "package": "com.atto.sound"
     },
@@ -64,6 +68,7 @@
           "enableGooglePay": true
         }
       ],
+      "expo-image-picker",
       "expo-contacts",
       "expo-asset",
       "expo-audio",

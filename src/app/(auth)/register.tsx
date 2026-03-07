@@ -159,7 +159,7 @@ export default function RegisterScreen() {
     }
   };
 
-  // Step 2 → Check phone availability, send OTP, then advance
+  // Step 2 → Check phone availability, send OTP, then advance to OTP screen
   const handleCredentialsNext = async () => {
     setIsLoading(true);
     setApiError(null);

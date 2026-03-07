@@ -57,6 +57,7 @@ export function StepCredentials({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={16}
       >
         {/* Header */}

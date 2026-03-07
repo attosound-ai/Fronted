@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/react-native';
 import { authService } from '@/lib/api/authService';
 import { authStorage } from '@/lib/auth/storage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { getErrorMessage } from '@/utils/formatters';
 import { useSubscriptionStore } from './subscriptionStore';
 import type {
   User,
@@ -162,7 +163,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);
       useSubscriptionStore.getState().fetchSubscription();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Login failed';
+      const message = getErrorMessage(error, 'Invalid credentials');
       set({ isAuthenticating: false, error: message });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_FAILED, { error: message });
       throw error;

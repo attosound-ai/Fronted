@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -49,8 +49,8 @@ export function StepBasicInfo({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={16}
-        onScrollBeginDrag={() => Keyboard.dismiss()}
       >
         {/* Header */}
         <View style={styles.header}>

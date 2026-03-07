@@ -36,7 +36,17 @@ export const PLACEHOLDER_POSTS: FeedPost[] = [
   {
     id: 'placeholder-song',
     type: 'audio',
-    author: ATTO_AUTHOR,
+    author: {
+      id: 1,
+      username: 'Suicide King',
+      displayName: 'Suicide King',
+      avatar:
+        'https://res.cloudinary.com/da9vymoah/image/upload/v1772838792/WhatsApp_Image_2026-03-06_at_11.26.53_e2plfm.jpg',
+      isFollowing: false,
+      isVerified: true,
+    },
+    audioUrl:
+      'https://res.cloudinary.com/da9vymoah/video/upload/v1772839154/AUDIO-2026-03-06-11-30-06_vekhdt.mp3',
     title: 'Unreleased Track',
     description: 'Preview of something special coming your way',
     likesCount: 120_000,

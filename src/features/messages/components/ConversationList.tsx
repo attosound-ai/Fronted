@@ -20,10 +20,10 @@ export function ConversationList() {
   const { conversations, isLoading, isRefreshing, error, refresh } = useConversations();
 
   const handleConversationPress = useCallback(
-    (conversationId: string, participantName: string) => {
+    (conversationId: string, participantName: string, participantId: string) => {
       router.push({
         pathname: '/chat',
-        params: { conversationId, participantName },
+        params: { conversationId, participantName, participantId },
       });
     },
     []

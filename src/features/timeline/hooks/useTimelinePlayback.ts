@@ -215,31 +215,38 @@ export function useTimelinePlayback({
       let cancelled = false;
       const lanes = [...laneIndices.current];
 
-      (async () => {
-        // 1. Sync all lane players (load sources + seek)
-        await Promise.all(lanes.map((lane) => syncLanePlayer(lane, playbackPositionMs)));
-        if (cancelled) return;
+      // Start playhead animation immediately — don't block on audio loading
+      startAnimation();
 
-        // 2. Wait for all players to be loaded
-        await Promise.all(
-          lanes.map((lane) => {
+      // Load and play audio in the background (best-effort)
+      (async () => {
+        try {
+          // 1. Sync all lane players (load sources + seek)
+          await Promise.all(lanes.map((lane) => syncLanePlayer(lane, playbackPositionMs)));
+          if (cancelled) return;
+
+          // 2. Wait for all players to be loaded (with timeout fallback)
+          await Promise.all(
+            lanes.map((lane) => {
+              const player = playersRef.current.get(lane);
+              const clipExists = findClipOnLane(clipsRef.current, playbackPositionMs, lane);
+              if (player && clipExists) return waitForLoaded(player);
+              return Promise.resolve(true);
+            })
+          );
+          if (cancelled) return;
+
+          // 3. Play all loaded players
+          for (const lane of lanes) {
             const player = playersRef.current.get(lane);
             const clipExists = findClipOnLane(clipsRef.current, playbackPositionMs, lane);
-            if (player && clipExists) return waitForLoaded(player);
-            return Promise.resolve(true);
-          })
-        );
-        if (cancelled) return;
-
-        // 3. Play all loaded players
-        for (const lane of lanes) {
-          const player = playersRef.current.get(lane);
-          const clipExists = findClipOnLane(clipsRef.current, playbackPositionMs, lane);
-          if (player && clipExists) {
-            player.play();
+            if (player && clipExists) {
+              player.play();
+            }
           }
+        } catch {
+          // Audio playback is best-effort; animation continues regardless
         }
-        startAnimation();
       })();
 
       return () => {

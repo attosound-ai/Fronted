@@ -3,11 +3,13 @@ import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { CreateActionSheet } from './CreateActionSheet';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 const ATTO_LOGO_URI =
   'https://res.cloudinary.com/dxzcutnlp/image/upload/v1771017624/Property_1_Variant4_vq9shb.png';
 
 export function FeedHeader() {
+  const canUpload = useSubscriptionStore((s) => s.hasEntitlement)('record_upload');
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
 
@@ -16,9 +18,11 @@ export function FeedHeader() {
   return (
     <View style={styles.container}>
       <View style={styles.leftIcons}>
-        <TouchableOpacity onPress={() => setActionSheetVisible(true)} style={styles.iconButton}>
-          <Ionicons name="add" size={28} color="#FFF" />
-        </TouchableOpacity>
+        {canUpload && (
+          <TouchableOpacity onPress={() => setActionSheetVisible(true)} style={styles.iconButton}>
+            <Ionicons name="add" size={28} color="#FFF" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={showComingSoon} style={styles.iconButton}>
           <Ionicons name="bag-outline" size={24} color="#FFF" />
         </TouchableOpacity>

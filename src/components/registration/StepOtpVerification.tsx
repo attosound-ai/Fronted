@@ -69,6 +69,7 @@ export function StepOtpVerification({
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >

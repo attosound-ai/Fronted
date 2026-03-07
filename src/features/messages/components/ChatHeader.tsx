@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
-import { useParticipantAvatar } from '../hooks/useParticipantAvatar';
+import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 
 interface ChatHeaderProps {
   participantName: string;
@@ -14,7 +14,8 @@ interface ChatHeaderProps {
 
 export function ChatHeader({ participantName, participantId, onBack }: ChatHeaderProps) {
   const insets = useSafeAreaInsets();
-  const avatarUri = useParticipantAvatar(participantId);
+  const { avatarUri, displayName } = useParticipantProfile(participantId);
+  const name = participantName || displayName || 'User';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + SPACING.sm }]}>
@@ -28,7 +29,7 @@ export function ChatHeader({ participantName, participantId, onBack }: ChatHeade
       </TouchableOpacity>
       <Avatar uri={avatarUri} size="sm" />
       <Text variant="h3" numberOfLines={1} style={styles.name}>
-        {participantName}
+        {name}
       </Text>
     </View>
   );

@@ -7,7 +7,6 @@ import {
   TextInput,
   Share,
   useWindowDimensions,
-  Keyboard,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
@@ -86,9 +85,9 @@ export function StepProfileSetup({
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       bottomOffset={16}
       showsVerticalScrollIndicator={false}
-      onScrollBeginDrag={() => Keyboard.dismiss()}
     >
       {/* API Error Banner */}
       {apiError && (

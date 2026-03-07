@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
@@ -19,9 +20,19 @@ function MessageBubbleInner({ message, isOwn }: MessageBubbleProps) {
         <Text variant="body" style={styles.content}>
           {message.content}
         </Text>
-        <Text variant="small" style={styles.time}>
-          {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
-        </Text>
+        <View style={styles.meta}>
+          <Text variant="small" style={styles.time}>
+            {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
+          </Text>
+          {isOwn && (
+            <Ionicons
+              name={message.isRead ? 'checkmark-done' : 'checkmark'}
+              size={14}
+              color={message.isRead ? '#60A5FA' : 'rgba(255,255,255,0.5)'}
+              style={styles.readIcon}
+            />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -57,9 +68,17 @@ const styles = StyleSheet.create({
   content: {
     color: COLORS.white,
   },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 3,
+    marginTop: 2,
+  },
   time: {
     color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
-    alignSelf: 'flex-end',
+  },
+  readIcon: {
+    marginLeft: 2,
   },
 });

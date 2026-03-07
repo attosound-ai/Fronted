@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
+import { MessageNotificationBanner } from '@/components/ui/MessageNotificationBanner';
 import { useAuthStore } from '@/stores/authStore';
+import { useChatStore } from '@/features/messages/stores/chatStore';
+import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
 
 /**
  * TabsLayout — Bottom navigation matching Figma design.
@@ -13,12 +16,27 @@ export default function TabsLayout() {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const totalUnread = useChatStore((s) => s.totalUnread);
+
+  const connectSocket = useChatStore((s) => s.connectSocket);
+  const disconnectSocket = useChatStore((s) => s.disconnectSocket);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/(auth)/login');
+      router.replace('/(auth)/welcome');
     }
   }, [isLoading, isAuthenticated]);
+
+  // Connect WebSocket when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      connectSocket();
+    }
+    return () => disconnectSocket();
+  }, [isAuthenticated, connectSocket, disconnectSocket]);
+
+  // Join user-level channel for real-time conversation list updates
+  useUserChannel();
 
   // Don't render tabs (which trigger feed/Twilio requests) until auth is confirmed
   if (isLoading || !isAuthenticated) {
@@ -79,6 +97,9 @@ export default function TabsLayout() {
                 size={24}
               />
             ),
+            tabBarBadge:
+              totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
+            tabBarBadgeStyle: { backgroundColor: '#EF4444', fontSize: 10 },
           }}
         />
         <Tabs.Screen
@@ -95,10 +116,7 @@ export default function TabsLayout() {
             },
           }}
         />
-        <Tabs.Screen
-          name="projects"
-          options={{ href: null }}
-        />
+        <Tabs.Screen name="projects" options={{ href: null }} />
         <Tabs.Screen
           name="profile"
           options={{
@@ -117,6 +135,8 @@ export default function TabsLayout() {
         visible={comingSoonVisible}
         onClose={() => setComingSoonVisible(false)}
       />
+
+      <MessageNotificationBanner />
     </>
   );
 }

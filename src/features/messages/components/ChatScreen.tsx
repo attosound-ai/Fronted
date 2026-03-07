@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   FlatList,
@@ -6,6 +6,8 @@ import {
   Platform,
   ActivityIndicator,
   StyleSheet,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
@@ -13,9 +15,12 @@ import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
 import { showToast } from '@/components/ui/Toast';
 import { useChat } from '../hooks/useChat';
+import { useRealtimeChat } from '../hooks/useRealtimeChat';
+import { useChatStore } from '../stores/chatStore';
 import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import { ChatInputBar } from './ChatInputBar';
+import { TypingIndicator } from './TypingIndicator';
 import type { ChatMessage } from '../types';
 
 interface ChatScreenProps {
@@ -41,13 +46,40 @@ export function ChatScreen({
     isSending,
     loadMore,
     sendError,
+    refresh,
   } = useChat(conversationId);
+
+  // WebSocket real-time layer
+  const { sendViaSocket, markRead, sendTyping } = useRealtimeChat(conversationId);
+
+  // Typing state for this conversation
+  const typingUsers = useChatStore((s) => s.typingUsers[conversationId]);
+  const isParticipantTyping = typingUsers ? typingUsers.size > 0 : false;
+
+  // Mark messages as read when screen is focused and new messages arrive
+  useEffect(() => {
+    if (messages.length > 0) {
+      markRead();
+    }
+  }, [messages.length, markRead]);
 
   useEffect(() => {
     if (sendError) {
       showToast('Failed to send message');
     }
   }, [sendError]);
+
+  const handleSend = useCallback(
+    async (content: string) => {
+      try {
+        await sendViaSocket(content);
+      } catch {
+        // Fallback to REST if WebSocket fails
+        sendMessage(content);
+      }
+    },
+    [sendViaSocket, sendMessage]
+  );
 
   const handleBack = useCallback(() => {
     router.back();
@@ -64,6 +96,20 @@ export function ChatScreen({
       <MessageBubble message={item} isOwn={item.senderId === userId} />
     ),
     [userId]
+  );
+
+  // Custom pull-to-refresh for inverted FlatList (RefreshControl doesn't work with inverted)
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+
+  const handleScrollEndDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      // On inverted FlatList, overscrolling past newest messages gives negative contentOffset.y
+      if (event.nativeEvent.contentOffset.y < -80 && !pullRefreshing) {
+        setPullRefreshing(true);
+        Promise.resolve(refresh()).finally(() => setPullRefreshing(false));
+      }
+    },
+    [refresh, pullRefreshing]
   );
 
   const renderFooter = useCallback(() => {
@@ -92,28 +138,48 @@ export function ChatScreen({
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={COLORS.white} />
         </View>
-      ) : messages.length === 0 ? (
-        <View style={styles.empty}>
-          <Text variant="body" style={styles.emptyText}>
-            No messages yet. Say hello!
-          </Text>
-        </View>
       ) : (
         <FlatList
+          style={styles.list}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.messageId}
           inverted
+          keyboardDismissMode="interactive"
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
+          onScrollEndDrag={handleScrollEndDrag}
           ListFooterComponent={renderFooter}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text variant="body" style={styles.emptyText}>
+                No messages yet. Say hello!
+              </Text>
+            </View>
+          }
+          ListHeaderComponent={
+            <>
+              {pullRefreshing ? (
+                <View style={styles.pullRefresh}>
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                </View>
+              ) : null}
+              {isParticipantTyping ? (
+                <TypingIndicator name={participantName} />
+              ) : null}
+            </>
+          }
           windowSize={10}
           maxToRenderPerBatch={10}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
       )}
-      <ChatInputBar onSend={sendMessage} isSending={isSending} />
+      <ChatInputBar
+        onSend={handleSend}
+        isSending={isSending}
+        onTyping={sendTyping}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -123,14 +189,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.black,
   },
+  list: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   empty: {
-    flex: 1,
-    justifyContent: 'center',
+    paddingVertical: SPACING.xl,
     alignItems: 'center',
   },
   emptyText: {
@@ -141,6 +209,10 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingVertical: SPACING.lg,
+    alignItems: 'center',
+  },
+  pullRefresh: {
+    paddingVertical: SPACING.md,
     alignItems: 'center',
   },
 });

@@ -94,6 +94,7 @@ export default function ForgotPasswordScreen() {
         <KeyboardAwareScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           bottomOffset={16}
           showsVerticalScrollIndicator={false}
         >
@@ -144,6 +145,7 @@ export default function ForgotPasswordScreen() {
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >

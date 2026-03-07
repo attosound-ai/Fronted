@@ -8,7 +8,9 @@ interface AudioWaveformProps {
   maxHeight?: number;
   minHeight?: number;
   color?: string;
+  playedColor?: string;
   playing?: boolean;
+  progress?: number;
 }
 
 /**
@@ -24,7 +26,9 @@ export function AudioWaveform({
   maxHeight = 40,
   minHeight = 4,
   color = '#3B82F6',
+  playedColor = '#3B82F6',
   playing = true,
+  progress = 0,
 }: AudioWaveformProps) {
   // Generate random base heights once (stable across re-renders)
   const barHeights = useMemo(
@@ -80,6 +84,9 @@ export function AudioWaveform({
           outputRange: [bar.base, bar.peak],
         });
 
+        const barProgress = (i + 1) / barCount;
+        const isPlayed = barProgress <= progress;
+
         return (
           <Animated.View
             key={i}
@@ -88,7 +95,7 @@ export function AudioWaveform({
               {
                 width: barWidth,
                 height,
-                backgroundColor: color,
+                backgroundColor: isPlayed ? playedColor : color,
                 marginHorizontal: barGap / 2,
                 borderRadius: barWidth / 2,
               },

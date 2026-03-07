@@ -104,7 +104,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
     try {
       const { clientSecret, paymentIntentId } = await paymentService.createCheckout(
         planId,
-        state.email,
+        state.email
       );
 
       const { error: initError } = await initPaymentSheet({

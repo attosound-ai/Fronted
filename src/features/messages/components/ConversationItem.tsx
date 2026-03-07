@@ -4,30 +4,37 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
-import { useParticipantAvatar } from '../hooks/useParticipantAvatar';
+import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import type { ChatConversation } from '../types';
 
 interface ConversationItemProps {
   conversation: ChatConversation;
-  onPress: (conversationId: string, participantName: string) => void;
+  onPress: (
+    conversationId: string,
+    participantName: string,
+    participantId: string
+  ) => void;
 }
 
 function ConversationItemInner({ conversation, onPress }: ConversationItemProps) {
-  const avatarUri = useParticipantAvatar(conversation.participantId);
+  const { avatarUri, displayName } = useParticipantProfile(conversation.participantId);
+  const name = conversation.participantName || displayName || 'User';
 
   return (
     <TouchableOpacity
       style={styles.container}
-      onPress={() => onPress(conversation.conversationId, conversation.participantName)}
+      onPress={() =>
+        onPress(conversation.conversationId, name, conversation.participantId)
+      }
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${conversation.participantName || 'User'}${conversation.unreadCount > 0 ? `, ${conversation.unreadCount} unread` : ''}`}
+      accessibilityLabel={`Conversation with ${name}${conversation.unreadCount > 0 ? `, ${conversation.unreadCount} unread` : ''}`}
     >
       <Avatar uri={avatarUri} size="md" />
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text variant="h3" numberOfLines={1} style={styles.name}>
-            {conversation.participantName || 'User'}
+            {name}
           </Text>
           {conversation.lastMessageAt && (
             <Text variant="small" style={styles.time}>

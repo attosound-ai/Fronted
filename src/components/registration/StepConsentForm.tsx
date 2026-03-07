@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { StepProps } from '@/types/registration';
@@ -128,8 +128,8 @@ export const StepConsentForm: React.FC<StepProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         bottomOffset={16}
-        onScrollBeginDrag={() => Keyboard.dismiss()}
       >
         {/* Header */}
         <View style={styles.header}>

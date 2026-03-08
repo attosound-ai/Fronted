@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
+    height: SCREEN_WIDTH * 1.25,
     backgroundColor: '#111',
   },
   counter: {

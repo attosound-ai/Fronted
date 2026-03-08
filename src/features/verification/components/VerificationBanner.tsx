@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useVerification } from '../hooks/useVerification';
 import { ArtistInfoCard } from './ArtistInfoCard';
 
@@ -14,12 +15,13 @@ import { ArtistInfoCard } from './ArtistInfoCard';
  */
 export function VerificationBanner() {
   const user = useAuthStore((s) => s.user);
+  const hasBridgeNumber = useSubscriptionStore((s) => s.hasEntitlement('bridge_number'));
 
   const { otpCode, otpError, isVerifying, isFetchingBridge, handleOtpChange } =
     useVerification();
 
-  // Only show for unverified representatives
-  if (!user || user.role !== 'representative' || user.profileVerified) {
+  // Only show for unverified representatives with a paid plan that includes bridge_number
+  if (!user || user.role !== 'representative' || user.profileVerified || !hasBridgeNumber) {
     return null;
   }
 

@@ -23,7 +23,7 @@ export function VideoMedia(_props: VideoMediaProps) {
 const styles = StyleSheet.create({
   container: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 0.75,
+    height: SCREEN_WIDTH * 1.25,
     backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',

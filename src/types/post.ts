@@ -17,6 +17,8 @@ export interface PostAuthor {
   isVerified?: boolean;
 }
 
+export type OnProfilePress = (author: PostAuthor) => void;
+
 export interface FeedPost {
   id: string;
   type: PostType;

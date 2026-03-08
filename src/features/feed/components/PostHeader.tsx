@@ -4,12 +4,12 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import type { PostAuthor } from '@/types/post';
+import type { PostAuthor, OnProfilePress } from '@/types/post';
 
 interface PostHeaderProps {
   author: PostAuthor;
   onFollow?: (userId: number) => void;
-  onProfilePress?: (userId: number) => void;
+  onProfilePress?: OnProfilePress;
   onBookmark?: () => void;
   onReport?: () => void;
 }
@@ -27,7 +27,7 @@ export function PostHeader({
     <View style={styles.container}>
       <TouchableOpacity
         style={styles.authorInfo}
-        onPress={() => onProfilePress?.(author.id)}
+        onPress={() => onProfilePress?.(author)}
         activeOpacity={0.7}
       >
         <Avatar uri={author.avatar} size="sm" />

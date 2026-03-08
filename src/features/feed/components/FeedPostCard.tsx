@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import type { FeedPost } from '@/types/post';
+import type { FeedPost, PostAuthor } from '@/types/post';
 import { PostHeader } from './PostHeader';
 import { PostMedia } from './media/PostMedia';
 import { PostActions } from './PostActions';
@@ -12,7 +12,7 @@ interface FeedPostCardProps {
   onComment?: () => void;
   onShare?: () => void;
   onBookmark?: () => void;
-  onProfilePress?: (userId: number) => void;
+  onProfilePress?: (author: PostAuthor) => void;
   onShowSupport?: () => void;
   onReport?: () => void;
 }

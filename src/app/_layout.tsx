@@ -233,6 +233,13 @@ function RootLayout() {
                     }}
                   />
                   <Stack.Screen
+                    name="user/[id]"
+                    options={{
+                      headerShown: false,
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
                     name="subscription"
                     options={{
                       headerShown: false,

@@ -8,12 +8,13 @@ import {
   StyleSheet,
 } from 'react-native';
 
+import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { useFeed } from '../hooks/useFeed';
 import { FeedPostCard } from './FeedPostCard';
 import { PLACEHOLDER_POSTS } from '../constants/placeholderPosts';
-import type { FeedPost } from '@/types/post';
+import type { FeedPost, PostAuthor } from '@/types/post';
 import type { Post } from '@/types';
 
 interface FeedListProps {
@@ -63,8 +64,17 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
     toggleLike,
   } = useFeed();
 
-  const handleProfilePress = useCallback((_userId: number) => {
-    // TODO: Navigate to user profile
+  const handleProfilePress = useCallback((author: PostAuthor) => {
+    router.push({
+      pathname: '/user/[id]',
+      params: {
+        id: String(author.id),
+        displayName: author.displayName,
+        username: author.username,
+        avatar: author.avatar ?? '',
+        verified: author.isVerified ? '1' : '0',
+      },
+    });
   }, []);
 
   const feedPosts: FeedPost[] = [...posts.map(toFeedPost), ...PLACEHOLDER_POSTS];

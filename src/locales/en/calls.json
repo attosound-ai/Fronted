@@ -1,0 +1,47 @@
+{
+  "incoming": {
+    "label": "Incoming Call",
+    "decline": "Decline",
+    "accept": "Accept"
+  },
+  "active": {
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "speaker": "Speaker",
+    "end": "End",
+    "hold": "Hold",
+    "resume": "Resume",
+    "stop": "Stop",
+    "capture": "Capture",
+    "recording": "Recording {{time}}",
+    "processingRecording": "Processing recording...",
+    "clipCount_one": "{{count}} clip",
+    "clipCount_other": "{{count}} clips",
+    "tapToRecord": "Tap Record to capture audio",
+    "recordingFailed": "Recording failed",
+    "recordingNotFound": "Recording Not Found",
+    "recordingNotFoundMessage": "The recording was saved on the server but could not be loaded. Try refreshing the project.",
+    "couldNotLoadRecording": "Could not load recording: {{message}}",
+    "couldNotLink": "Could not link to project: {{message}}",
+    "exportComplete": "Export Complete",
+    "exportCompleteMessage": "Audio exported ({{size}}KB)",
+    "clipVolume": "Clip Volume",
+    "capturingAudio": "Capturing Audio",
+    "laneName": "Lane Name",
+    "laneNamePrompt": "Enter a name for lane {{number}}"
+  },
+  "banner": {
+    "tapToRecord": "Tap to Record",
+    "callInProgress": "Call in progress"
+  },
+  "projectPicker": {
+    "selectProject": "Select Project",
+    "newProject": "New Project",
+    "subtitle": "Choose a project for this recording",
+    "projectName": "Project name",
+    "descriptionPlaceholder": "Description (optional)",
+    "noProjects": "No projects yet. Create your first one above.",
+    "segmentCount_one": "{{count}} segment",
+    "segmentCount_other": "{{count}} segments"
+  }
+}

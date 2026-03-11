@@ -1,0 +1,64 @@
+{
+  "headerTitle": "Assinatura",
+  "currentPlanBadge": "Plano atual",
+  "upgradeButton": "Fazer Upgrade",
+  "cancelButton": "Cancelar",
+  "featuresShow": "Ver recursos",
+  "featuresHide": "Ocultar recursos",
+  "plans": {
+    "connect_free": {
+      "name": "Connect",
+      "price": "Gratuito",
+      "features": [
+        "Buscar e descobrir criadores",
+        "Ouvir gravações",
+        "Comentar e interagir com conteúdo",
+        "Navegar na comunidade"
+      ]
+    },
+    "record": {
+      "name": "Record",
+      "price": "R$99/ano",
+      "features": [
+        "Gravar e enviar conteúdo",
+        "Criar um perfil",
+        "Engajamento com a comunidade",
+        "Número telefônico bridge"
+      ]
+    },
+    "record_pro": {
+      "name": "Record Pro",
+      "price": "R$139/ano",
+      "features": [
+        "Suite de produção avançada",
+        "Vídeos com avatar de IA (4 a 10 seg)",
+        "Gravações ilimitadas",
+        "Analytics avançado",
+        "Algoritmo de descoberta prioritária"
+      ]
+    },
+    "connect_pro": {
+      "name": "Connect Pro",
+      "price": "R$1.999/ano",
+      "features": [
+        "Painel de analytics de talentos",
+        "Criadores emergentes em destaque",
+        "Insights de engajamento e demografia",
+        "Relatórios de dados exportáveis",
+        "Acesso antecipado a talentos emergentes"
+      ]
+    }
+  },
+  "cancelDialog": {
+    "title": "Cancelar Assinatura",
+    "message": "Tem certeza? Você perderá o acesso aos recursos premium ao final do seu período de cobrança.",
+    "keepPlan": "Manter Plano",
+    "confirm": "Cancelar"
+  },
+  "successUpgrade": "Sua assinatura foi atualizada!",
+  "successCancelled": "Sua assinatura foi cancelada.",
+  "errorTitle": "Erro",
+  "errorUpgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
+  "errorCancelFailed": "Falha ao cancelar. Tente novamente.",
+  "merchantName": "ATTO Sound"
+}

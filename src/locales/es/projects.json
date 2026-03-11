@@ -1,0 +1,77 @@
+{
+  "list": {
+    "title": "Proyectos",
+    "errorCreateFailed": "No se pudo crear el proyecto"
+  },
+  "empty": {
+    "title": "Aún no hay proyectos",
+    "subtitle": "Cree su primer proyecto para comenzar a organizar sus grabaciones"
+  },
+  "card": {
+    "trackSingular": "pista",
+    "trackPlural": "pistas"
+  },
+  "detail": {
+    "statTracks": "Pistas",
+    "statClips": "Clips",
+    "statStatus": "Estado",
+    "sectionAudioSegments": "Segmentos de audio",
+    "segmentDefaultLabel": "Grabación {{index}}",
+    "emptySegments": "Aún no hay segmentos. Grabe durante una llamada para agregar audio.",
+    "projectNotFound": "Proyecto no encontrado",
+    "openEditorButton": "Abrir editor",
+    "deleteButton": "Eliminar",
+    "deleteAlertTitle": "Eliminar proyecto",
+    "deleteAlertMessage": "¿Está seguro? Esta acción no se puede deshacer.",
+    "deleteAlertConfirm": "Eliminar",
+    "deleteAlertCancel": "Cancelar",
+    "errorDeleteFailed": "No se pudo eliminar el proyecto"
+  },
+  "create": {
+    "sheetTitle": "Nuevo proyecto",
+    "namePlaceholder": "Nombre del proyecto",
+    "descriptionPlaceholder": "Descripción (opcional)",
+    "createButton": "Crear"
+  },
+  "timeline": {
+    "editorTitle": "Editor de línea de tiempo",
+    "saveStatusSaving": "Guardando...",
+    "saveStatusUnsaved": "Sin guardar",
+    "saveStatusSaved": "Guardado",
+    "toolSplit": "Dividir",
+    "toolDelete": "Eliminar",
+    "toolVolume": "Volumen",
+    "toolUndo": "Deshacer",
+    "toolRedo": "Rehacer",
+    "toolImport": "Importar",
+    "toolImporting": "Importando...",
+    "toolExport": "Exportar",
+    "toolRecord": "Grabar",
+    "toolStopRecording": "Detener {{elapsed}}",
+    "emptyClips": "Aún no hay clips. Los segmentos aparecerán como clips cuando se agreguen.",
+    "clipCountSingular": "{{n}} clip",
+    "clipCountPlural": "{{n}} clips",
+    "laneNamePromptTitle": "Nombre de la pista",
+    "laneNamePromptMessage": "Ingrese un nombre para la pista {{index}}",
+    "laneNamePromptNext": "Siguiente",
+    "laneNamePromptCancel": "Cancelar",
+    "laneColorTitle": "Color de la pista",
+    "laneColorCancel": "Cancelar",
+    "laneColorBlue": "Azul",
+    "laneColorRed": "Rojo",
+    "laneColorGreen": "Verde",
+    "laneColorPurple": "Morado",
+    "laneColorOrange": "Naranja",
+    "laneColorPink": "Rosa",
+    "exportCompleteTitle": "Exportación completada",
+    "exportCompleteMessage": "Audio exportado ({{size}}KB)",
+    "exportCompleteOk": "OK",
+    "errorNoClipsToExport": "No hay clips para exportar",
+    "errorExportFailed": "Error al exportar",
+    "errorAutosaveFailed": "Error al guardar automáticamente",
+    "errorRemoveClipsFirst": "Primero elimine los clips de esta pista",
+    "volumeModalTitle": "Volumen del clip",
+    "volumeDoneButton": "Listo",
+    "loadingTitle": "Optimizando su experiencia..."
+  }
+}

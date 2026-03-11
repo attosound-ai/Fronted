@@ -1,0 +1,64 @@
+{
+  "headerTitle": "Suscripción",
+  "currentPlanBadge": "Plan actual",
+  "upgradeButton": "Mejorar plan",
+  "cancelButton": "Cancelar",
+  "featuresShow": "Ver características",
+  "featuresHide": "Ocultar características",
+  "plans": {
+    "connect_free": {
+      "name": "Connect",
+      "price": "Gratis",
+      "features": [
+        "Busque y descubra creadores",
+        "Escuche grabaciones",
+        "Comente e interactúe con el contenido",
+        "Navegación en la comunidad"
+      ]
+    },
+    "record": {
+      "name": "Record",
+      "price": "$99/año",
+      "features": [
+        "Grabe y suba contenido",
+        "Cree un perfil",
+        "Participación en la comunidad",
+        "Número de teléfono puente"
+      ]
+    },
+    "record_pro": {
+      "name": "Record Pro",
+      "price": "$139/año",
+      "features": [
+        "Suite de producción avanzada",
+        "Videos con avatar de IA (4-10 seg)",
+        "Grabaciones ilimitadas",
+        "Analíticas mejoradas",
+        "Algoritmo de descubrimiento prioritario"
+      ]
+    },
+    "connect_pro": {
+      "name": "Connect Pro",
+      "price": "$1,999/año",
+      "features": [
+        "Panel de analíticas de talentos",
+        "Creadores emergentes destacados",
+        "Información de participación y demografía",
+        "Reportes de datos exportables",
+        "Acceso anticipado a talentos emergentes"
+      ]
+    }
+  },
+  "cancelDialog": {
+    "title": "Cancelar suscripción",
+    "message": "¿Está seguro? Perderá el acceso a las funciones premium al final de su período de facturación.",
+    "keepPlan": "Mantener plan",
+    "confirm": "Cancelar"
+  },
+  "successUpgrade": "¡Su suscripción ha sido mejorada!",
+  "successCancelled": "Su suscripción ha sido cancelada.",
+  "errorTitle": "Error",
+  "errorUpgradeFailed": "No se pudo procesar la mejora. Por favor intente nuevamente.",
+  "errorCancelFailed": "No se pudo cancelar. Por favor intente nuevamente.",
+  "merchantName": "ATTO Sound"
+}

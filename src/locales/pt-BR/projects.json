@@ -1,0 +1,77 @@
+{
+  "list": {
+    "title": "Projetos",
+    "errorCreateFailed": "Falha ao criar projeto"
+  },
+  "empty": {
+    "title": "Nenhum projeto ainda",
+    "subtitle": "Crie seu primeiro projeto para começar a organizar suas gravações"
+  },
+  "card": {
+    "trackSingular": "faixa",
+    "trackPlural": "faixas"
+  },
+  "detail": {
+    "statTracks": "Faixas",
+    "statClips": "Clipes",
+    "statStatus": "Status",
+    "sectionAudioSegments": "Segmentos de Áudio",
+    "segmentDefaultLabel": "Gravação {{index}}",
+    "emptySegments": "Nenhum segmento ainda. Grave durante uma chamada para adicionar áudio.",
+    "projectNotFound": "Projeto não encontrado",
+    "openEditorButton": "Abrir Editor",
+    "deleteButton": "Excluir",
+    "deleteAlertTitle": "Excluir Projeto",
+    "deleteAlertMessage": "Tem certeza? Esta ação não pode ser desfeita.",
+    "deleteAlertConfirm": "Excluir",
+    "deleteAlertCancel": "Cancelar",
+    "errorDeleteFailed": "Falha ao excluir o projeto"
+  },
+  "create": {
+    "sheetTitle": "Novo Projeto",
+    "namePlaceholder": "Nome do projeto",
+    "descriptionPlaceholder": "Descrição (opcional)",
+    "createButton": "Criar"
+  },
+  "timeline": {
+    "editorTitle": "Editor de Linha do Tempo",
+    "saveStatusSaving": "Salvando...",
+    "saveStatusUnsaved": "Não salvo",
+    "saveStatusSaved": "Salvo",
+    "toolSplit": "Dividir",
+    "toolDelete": "Excluir",
+    "toolVolume": "Volume",
+    "toolUndo": "Desfazer",
+    "toolRedo": "Refazer",
+    "toolImport": "Importar",
+    "toolImporting": "Importando...",
+    "toolExport": "Exportar",
+    "toolRecord": "Gravar",
+    "toolStopRecording": "Parar {{elapsed}}",
+    "emptyClips": "Nenhum clipe ainda. Os segmentos aparecerão como clipes quando adicionados.",
+    "clipCountSingular": "{{n}} clipe",
+    "clipCountPlural": "{{n}} clipes",
+    "laneNamePromptTitle": "Nome da Faixa",
+    "laneNamePromptMessage": "Digite um nome para a faixa {{index}}",
+    "laneNamePromptNext": "Próximo",
+    "laneNamePromptCancel": "Cancelar",
+    "laneColorTitle": "Cor da Faixa",
+    "laneColorCancel": "Cancelar",
+    "laneColorBlue": "Azul",
+    "laneColorRed": "Vermelho",
+    "laneColorGreen": "Verde",
+    "laneColorPurple": "Roxo",
+    "laneColorOrange": "Laranja",
+    "laneColorPink": "Rosa",
+    "exportCompleteTitle": "Exportação Concluída",
+    "exportCompleteMessage": "Áudio exportado ({{size}}KB)",
+    "exportCompleteOk": "OK",
+    "errorNoClipsToExport": "Nenhum clipe para exportar",
+    "errorExportFailed": "Falha na exportação",
+    "errorAutosaveFailed": "Falha no salvamento automático",
+    "errorRemoveClipsFirst": "Remova os clipes desta faixa primeiro",
+    "volumeModalTitle": "Volume do Clipe",
+    "volumeDoneButton": "Concluir",
+    "loadingTitle": "Otimizando sua experiência..."
+  }
+}

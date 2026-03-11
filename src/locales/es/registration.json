@@ -1,0 +1,147 @@
+{
+  "basicInfo": {
+    "title": "Ingrese sus datos para continuar",
+    "nameLabel": "Nombre",
+    "namePlaceholder": "Ingrese su nombre completo",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "Ingrese su correo electrónico",
+    "phoneLabel": "Número de teléfono"
+  },
+  "credentials": {
+    "title": "Cree su contraseña",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Cree una contraseña (mín. 8 caracteres)",
+    "confirmLabel": "Confirmar contraseña",
+    "confirmPlaceholder": "Repita su contraseña",
+    "legalAgeCheckbox": "Confirmo que soy mayor de edad para usar esta plataforma.",
+    "termsPrefix": "He leído y acepto los",
+    "termsLink": "Términos y Condiciones"
+  },
+  "otp": {
+    "title": "Ingrese el código que enviamos a su teléfono",
+    "sending": "Enviando...",
+    "resendCode": "Reenviar código",
+    "resendCodeCountdown": "Reenviar código ({{seconds}}s)",
+    "resendFailed": "No se pudo reenviar el código"
+  },
+  "profileSetup": {
+    "addProfilePicture": "Agregar foto de perfil",
+    "namePlaceholder": "Juan Pérez",
+    "uploadPhotoTitle": "Subir foto de perfil",
+    "chooseFromGallery": "Elegir de la galería",
+    "takePhoto": "Tomar foto",
+    "profilePreview": "Vista previa del perfil",
+    "repQuestion": "¿Representará a un artista en ATTO?",
+    "repDescription": "Está creando esta cuenta en nombre de un artista y cuenta con su permiso para gestionar y publicar su contenido.",
+    "yesRepresent": "Sí, represento a un artista",
+    "noForMe": "No, esta cuenta es para mí"
+  },
+  "howItWorks": {
+    "title": "Cómo funciona la representación artística",
+    "paragraph": "Como representante, administrará esta cuenta en nombre del artista.\nSerá responsable de publicar contenido, gestionar interacciones y manejar las comunicaciones relacionadas con el perfil del artista.",
+    "bullets": [
+      "Actúa en nombre del artista",
+      "Debe contar con su consentimiento explícito",
+      "Todas las acciones se registran para mayor transparencia",
+      "El artista puede revocar la representación en cualquier momento"
+    ]
+  },
+  "consentForm": {
+    "title": "Se requiere el consentimiento del artista",
+    "relationshipLabel": "¿Cuál es su relación?",
+    "relationshipFamily": "Familiar",
+    "relationshipFriend": "Amigo/a",
+    "relationshipManager": "Mánager / Representante",
+    "artistNameLabel": "Nombre del artista",
+    "artistNamePlaceholder": "Ingrese el nombre completo del artista",
+    "inmateNumberLabel": "Número de recluso",
+    "inmateNumberPlaceholder": "Ingrese el número",
+    "stateLabel": "Estado",
+    "statePlaceholder": "Seleccionar estado",
+    "stateDisclaimer": "Próximamente más estados. Actualmente solo Connecticut está disponible.",
+    "consentCheckbox": "Entiendo y acepto que todas las llamadas de <bold>verificación de consentimiento</bold> serán grabadas con fines legales y de seguridad.",
+    "lookupFailed": "Recluso no encontrado. Por favor verifique el número e intente nuevamente.",
+    "confirmTitle": "Confirmar identidad del recluso",
+    "inmateName": "Nombre",
+    "inmateNumber": "Recluso #",
+    "dateOfBirth": "Fecha de nacimiento",
+    "location": "Ubicación",
+    "status": "Estado",
+    "offense": "Delito",
+    "sentenceDate": "Fecha de sentencia",
+    "maxSentence": "Sentencia máxima",
+    "maxRelease": "Liberación máxima",
+    "estRelease": "Liberación estimada",
+    "confirmPerson": "Confirmar — Esta es la persona",
+    "notThisPerson": "No es esta persona"
+  },
+  "whatHappensNext": {
+    "title": "¿Qué sucede después?",
+    "verifyConsentTitle": "Verificar consentimiento del artista",
+    "verifyConsentParagraph": "Nos pondremos en contacto directamente con el artista para verificar su consentimiento para que usted actúe como su representante. Este es un paso fundamental para garantizar que se respeten los derechos y deseos del artista.",
+    "howCallsWorkTitle": "Cómo funcionan las llamadas",
+    "howCallsWorkParagraph": "Todas las llamadas de verificación de consentimiento se graban automáticamente para el cumplimiento legal y su protección. Estas grabaciones sirven como documentación oficial de la aprobación del artista.",
+    "callFeatures": [
+      "Almacenadas de forma segura en una carpeta dedicada dentro de su perfil",
+      "Disponibles para escuchar, descargar o publicar en cualquier momento"
+    ],
+    "recordingsPrivate": "Estas grabaciones son privadas y accesibles <bold>solo desde su cuenta</bold>."
+  },
+  "subscription": {
+    "title": "Elija su plan",
+    "subtitle": "Desbloquee funciones que se adapten a sus objetivos.",
+    "mostPopular": "MÁS POPULAR",
+    "perYear": "/año",
+    "seeFeatures": "Ver características",
+    "hideFeatures": "Ocultar características",
+    "disclaimer": "Cancele cuando quiera. La suscripción se renueva automáticamente a menos que se cancele antes de la renovación.",
+    "continueWithout": "Continuar sin suscripción",
+    "plans": {
+      "record": {
+        "name": "Record",
+        "features": [
+          "Grabe y suba contenido",
+          "Cree un perfil",
+          "Participación en la comunidad",
+          "Número de teléfono puente"
+        ]
+      },
+      "recordPro": {
+        "name": "Record Pro",
+        "features": [
+          "Suite de producción avanzada",
+          "Videos con avatar de IA (4-10 seg)",
+          "Grabaciones ilimitadas",
+          "Analíticas mejoradas",
+          "Algoritmo de descubrimiento prioritario"
+        ]
+      },
+      "connectPro": {
+        "name": "Connect Pro",
+        "features": [
+          "Panel de analíticas de talentos",
+          "Creadores emergentes destacados",
+          "Información de participación y demografía",
+          "Reportes de datos exportables",
+          "Acceso anticipado a talentos emergentes"
+        ]
+      }
+    }
+  },
+  "bridgeNumber": {
+    "title": "Su número puente",
+    "subtitle": "Este es su número único para conectarse con el artista. Compártalo de forma segura.",
+    "assigning": "Asignando su número único...",
+    "purchaseFailed": "No pudimos adquirir su número. Por favor intente nuevamente más tarde.",
+    "notAvailable": "No disponible",
+    "save": "Guardar",
+    "shareMessage": "Su número puente ATTO: {{number}}\n\nUse este número para conectarse con su artista.",
+    "shareTitle": "Número puente ATTO",
+    "contactPermission": "Permiso requerido",
+    "contactPermissionMessage": "Permita el acceso a Contactos para guardar el número puente.",
+    "saveContactTitle": "Guardar contacto puente",
+    "assigningButton": "Asignando número...",
+    "noteSecure": "Mantenga este número seguro. El artista lo necesitará para verificar y establecer la conexión.",
+    "noteOtp": "Se enviará un OTP al recluso para verificar su representación antes de que se pueda establecer la llamada puente."
+  }
+}

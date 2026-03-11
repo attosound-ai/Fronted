@@ -1,0 +1,34 @@
+{
+  "header": {
+    "title": "Messages",
+    "newMessageAccessibility": "New message"
+  },
+  "empty": {
+    "title": "No messages yet",
+    "subtitle": "Start a conversation"
+  },
+  "error": {
+    "loadingMessages": "Error loading messages"
+  },
+  "conversation": {
+    "fallbackUserName": "User",
+    "unreadAccessibility": "{{name}}, {{count}} unread",
+    "noPreview": ""
+  },
+  "chat": {
+    "inputPlaceholder": "Type a message...",
+    "inputAccessibilityLabel": "Message input",
+    "sendAccessibilityLabel": "Send message",
+    "emptyMessages": "No messages yet. Say hello!",
+    "errorFailedToSend": "Failed to send message"
+  },
+  "newMessage": {
+    "headerTitle": "New Message",
+    "searchPlaceholder": "Search users...",
+    "searchAccessibilityLabel": "Search users",
+    "backAccessibilityLabel": "Go back",
+    "creatingConversation": "Creating conversation...",
+    "errorFailedToStart": "Failed to start conversation",
+    "messageUserAccessibility": "Message {{name}}"
+  }
+}

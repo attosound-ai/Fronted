@@ -1,0 +1,83 @@
+{
+  "header": {
+    "createSheetTitle": "Crear",
+    "createOptionProjectsTitle": "Proyectos",
+    "createOptionProjectsSubtitle": "Abra sus proyectos de audio",
+    "createOptionUploadTitle": "Subir publicación",
+    "createOptionUploadSubtitle": "Comparta con su audiencia"
+  },
+  "post": {
+    "followButton": "Seguir",
+    "menuSave": "Guardar",
+    "menuUnsave": "Quitar guardado",
+    "menuReport": "Reportar",
+    "viewAllComments": "Ver todos los {{count}} comentarios",
+    "share": "Compartir",
+    "shareToLabel": "Compartir en...",
+    "shareToSubtitle": "Abrir menú para compartir",
+    "copyLink": "Copiar enlace",
+    "copyLinkSubtitle": "Copiar enlace de la publicación",
+    "linkCopied": "Enlace copiado al portapapeles",
+    "comments": "Comentarios",
+    "noCommentsYet": "Aún no hay comentarios. ¡Sé el primero!",
+    "replyingTo": "Respondiendo a @{{username}}",
+    "addCommentPlaceholder": "Agregar un comentario..."
+  },
+  "create": {
+    "headerTitle": "Nueva publicación",
+    "typeSelectorTitle": "¿Qué desea compartir?",
+    "typePhoto": "Foto",
+    "typeSong": "Canción",
+    "typeVideo": "Video",
+    "typeReel": "Reel",
+    "typePoem": "Poema",
+    "captionStepTitle": "Agregar una descripción",
+    "captionPlaceholder": "Escriba una descripción...",
+    "poemPlaceholder": "Escriba su poema...",
+    "poemEmptyPreview": "Su poema aparecerá aquí...",
+    "previewTitle": "Vista previa",
+    "nextButton": "Siguiente",
+    "publishButton": "Publicar",
+    "errorTitle": "Error al publicar",
+    "uploadingText": "Subiendo... {{progress}}%",
+    "selectPhotos": "Seleccionar fotos",
+    "selectPhotosHint": "Hasta 10 fotos",
+    "selectAudio": "Seleccionar audio",
+    "selectAudioHint": "Elija una canción de su biblioteca",
+    "fromLibrary": "Desde la biblioteca",
+    "recordVideo": "Grabar",
+    "addMore": "Agregar más",
+    "multiplePhotosHintSingular": "+{{n}} foto más",
+    "multiplePhotosHintPlural": "+{{n}} fotos más"
+  },
+  "verification": {
+    "bannerTitle": "Autorización pendiente",
+    "bannerSubtitle": "Ingrese el código del artista para obtener su consentimiento",
+    "editTitle": "Editar contacto del artista",
+    "labelRelationship": "Relación",
+    "placeholderRelationship": "Seleccionar relación",
+    "relationshipFamily": "Familia",
+    "relationshipFriend": "Amigo",
+    "relationshipManager": "Manager",
+    "labelArtistName": "Nombre del artista",
+    "placeholderArtistName": "Ingrese el nombre del artista",
+    "labelInmateNumber": "Número de recluso",
+    "placeholderInmateNumber": "Ingrese el número de recluso",
+    "labelArtistEmail": "Correo del artista",
+    "placeholderArtistEmail": "Ingrese el correo del artista (opcional)",
+    "labelArtistPhone": "Número de contacto del artista",
+    "warningReauthorize": "Cambiar la información de contacto del artista cancelará su autorización actual y requerirá una nueva verificación.",
+    "saveButton": "Guardar y reautorizar"
+  },
+  "list": {
+    "errorLoadTitle": "Error al cargar",
+    "errorLoadRetry": "Desliza hacia abajo para reintentar"
+  },
+  "search": {
+    "title": "Explorar",
+    "subtitle": "Descubre contenido nuevo"
+  },
+  "listen": {
+    "title": "Proyectos"
+  }
+}

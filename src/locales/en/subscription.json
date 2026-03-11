@@ -1,0 +1,64 @@
+{
+  "headerTitle": "Subscription",
+  "currentPlanBadge": "Current plan",
+  "upgradeButton": "Upgrade",
+  "cancelButton": "Cancel",
+  "featuresShow": "See features",
+  "featuresHide": "Hide features",
+  "plans": {
+    "connect_free": {
+      "name": "Connect",
+      "price": "Free",
+      "features": [
+        "Search and discover creators",
+        "Listen to recordings",
+        "Comment and engage with content",
+        "Community browsing"
+      ]
+    },
+    "record": {
+      "name": "Record",
+      "price": "$99/year",
+      "features": [
+        "Record and upload content",
+        "Create a profile",
+        "Community engagement",
+        "Bridge phone number"
+      ]
+    },
+    "record_pro": {
+      "name": "Record Pro",
+      "price": "$139/year",
+      "features": [
+        "Advanced production suite",
+        "AI avatar videos (4-10 sec)",
+        "Unlimited recordings",
+        "Enhanced analytics",
+        "Priority discovery algorithm"
+      ]
+    },
+    "connect_pro": {
+      "name": "Connect Pro",
+      "price": "$1,999/year",
+      "features": [
+        "Talent analytics dashboard",
+        "Top emerging creators",
+        "Engagement & demographic insights",
+        "Exportable data reports",
+        "Early access to emerging talent"
+      ]
+    }
+  },
+  "cancelDialog": {
+    "title": "Cancel Subscription",
+    "message": "Are you sure? You will lose access to premium features at the end of your billing period.",
+    "keepPlan": "Keep Plan",
+    "confirm": "Cancel"
+  },
+  "successUpgrade": "Your subscription has been upgraded!",
+  "successCancelled": "Your subscription has been cancelled.",
+  "errorTitle": "Error",
+  "errorUpgradeFailed": "Failed to process upgrade. Please try again.",
+  "errorCancelFailed": "Failed to cancel. Please try again.",
+  "merchantName": "ATTO Sound"
+}

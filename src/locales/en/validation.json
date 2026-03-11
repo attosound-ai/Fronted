@@ -1,0 +1,18 @@
+{
+  "nameRequired": "Name is required",
+  "emailInvalid": "Please enter a valid email address",
+  "phoneInvalid": "Please enter a valid phone number",
+  "passwordWeak": "Password must be at least 8 characters with uppercase, lowercase, and a number",
+  "passwordMismatch": "Passwords do not match",
+  "legalAgeRequired": "You must confirm you are of legal age",
+  "termsRequired": "You must accept the Terms and Conditions",
+  "displayNameRequired": "Display name is required",
+  "otpIncomplete": "Please enter the complete 6-digit code",
+  "relationshipRequired": "Please select your relationship",
+  "artistNameRequired": "Artist name is required",
+  "inmateNumberInvalid": "Invalid inmate number",
+  "stateRequired": "Please select a state",
+  "consentRequired": "You must agree to call recording",
+  "usernameRequired": "Username is required",
+  "inmateNumberRequired": "Inmate number is required"
+}

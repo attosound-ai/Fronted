@@ -36,16 +36,25 @@ export const API_ENDPOINTS = {
     FOLLOWING: (userId: number) => `/users/${userId}/following`,
     FOLLOW: (userId: number) => `/users/${userId}/follow`,
     SEARCH: '/users/search',
+    DISCOVER: '/users/discover',
     VERIFICATION_SEND_OTP: '/users/me/verification/send-otp',
     VERIFICATION_VERIFY: '/users/me/verification/verify',
   },
 
   POSTS: {
     FEED: '/posts/feed',
+    REELS: '/posts/reels',
+    REELS_VIEW: '/posts/reels/view',
+    SEARCH: '/content/search',
     CREATE: '/posts',
     DETAIL: (postId: string) => `/posts/${postId}`,
     LIKE: (postId: string) => `/posts/${postId}/like`,
     COMMENTS: (postId: string) => `/posts/${postId}/comments`,
+    BOOKMARK: (postId: string) => `/posts/${postId}/bookmark`,
+    REPOST: (postId: string) => `/posts/${postId}/repost`,
+    BOOKMARKS_LIST: '/posts/bookmarks',
+    USER_POSTS: (userId: number) => `/posts/user/${userId}`,
+    DELETE: (postId: string) => `/content/${postId}`,
   },
 
   MESSAGES: {

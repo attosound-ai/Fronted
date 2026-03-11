@@ -4,17 +4,20 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
+import { LanguageSelectorButton } from '@/components/ui/LanguageSelectorButton';
 import { authService } from '@/lib/api/authService';
 import { isValidEmail, isStrongPassword } from '@/utils/validators';
 
 type Step = 'email' | 'reset';
 
 export default function ForgotPasswordScreen() {
+  const { t } = useTranslation('auth');
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -33,7 +36,7 @@ export default function ForgotPasswordScreen() {
     setApiError('');
 
     if (!isValidEmail(email.trim())) {
-      setEmailError('Enter a valid email address');
+      setEmailError(t('forgotPassword.emailError'));
       return;
     }
 
@@ -56,17 +59,15 @@ export default function ForgotPasswordScreen() {
 
     let hasError = false;
     if (otp.length !== 6) {
-      setOtpError('Enter the 6-digit code');
+      setOtpError(t('forgotPassword.otpError'));
       hasError = true;
     }
     if (!isStrongPassword(password)) {
-      setPasswordError(
-        'Password must be 8+ chars with uppercase, lowercase, and a number'
-      );
+      setPasswordError(t('forgotPassword.passwordError'));
       hasError = true;
     }
     if (password !== confirmPassword) {
-      setConfirmError('Passwords do not match');
+      setConfirmError(t('forgotPassword.confirmError'));
       hasError = true;
     }
     if (hasError) return;
@@ -81,7 +82,7 @@ export default function ForgotPasswordScreen() {
       router.replace('/(auth)/login');
     } catch (error: unknown) {
       const msg =
-        error instanceof Error ? error.message : 'Reset failed. Please try again.';
+        error instanceof Error ? error.message : t('forgotPassword.resetFailed');
       setApiError(msg);
     } finally {
       setIsLoading(false);
@@ -91,6 +92,7 @@ export default function ForgotPasswordScreen() {
   if (step === 'email') {
     return (
       <SafeAreaView style={styles.container}>
+        <LanguageSelectorButton style={styles.languageButton} />
         <KeyboardAwareScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
@@ -103,11 +105,10 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
 
           <Text variant="h2" style={styles.title}>
-            Reset your password
+            {t('forgotPassword.title')}
           </Text>
           <Text variant="body" style={styles.subtitle}>
-            Enter your account email. We will send a verification code to your registered
-            phone.
+            {t('forgotPassword.subtitle')}
           </Text>
 
           {apiError ? (
@@ -117,7 +118,7 @@ export default function ForgotPasswordScreen() {
           ) : null}
 
           <Input
-            label="Email"
+            label={t('forgotPassword.emailLabel')}
             value={email}
             onChangeText={(v: string) => {
               setEmail(v);
@@ -130,7 +131,7 @@ export default function ForgotPasswordScreen() {
           />
 
           <Button
-            title="Send Code"
+            title={t('forgotPassword.sendCode')}
             onPress={handleSendOtp}
             loading={isLoading}
             disabled={isLoading}
@@ -142,6 +143,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LanguageSelectorButton style={styles.languageButton} />
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -154,10 +156,10 @@ export default function ForgotPasswordScreen() {
         </TouchableOpacity>
 
         <Text variant="h2" style={styles.title}>
-          Enter the code
+          {t('forgotPassword.enterCode')}
         </Text>
         <Text variant="body" style={styles.subtitle}>
-          Check your phone for the 6-digit code, then create a new password.
+          {t('forgotPassword.codeSubtitle')}
         </Text>
 
         {apiError ? (
@@ -181,7 +183,7 @@ export default function ForgotPasswordScreen() {
 
         <View>
           <Input
-            label="New Password"
+            label={t('forgotPassword.newPasswordLabel')}
             value={password}
             onChangeText={(v: string) => {
               setPassword(v);
@@ -201,7 +203,7 @@ export default function ForgotPasswordScreen() {
         </View>
 
         <Input
-          label="Confirm New Password"
+          label={t('forgotPassword.confirmPasswordLabel')}
           value={confirmPassword}
           onChangeText={(v: string) => {
             setConfirmPassword(v);
@@ -213,7 +215,7 @@ export default function ForgotPasswordScreen() {
         />
 
         <Button
-          title="Reset Password"
+          title={t('forgotPassword.resetButton')}
           onPress={handleReset}
           loading={isLoading}
           disabled={isLoading}
@@ -227,6 +229,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  languageButton: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    zIndex: 10,
   },
   content: {
     flexGrow: 1,

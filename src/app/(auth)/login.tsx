@@ -4,16 +4,19 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
+import { LanguageSelectorButton } from '@/components/ui/LanguageSelectorButton';
 import { useAuthStore } from '@/stores/authStore';
 
 type Step = 'identifier' | 'password' | '2fa';
 
 export default function LoginScreen() {
+  const { t } = useTranslation('auth');
   const [step, setStep] = useState<Step>('identifier');
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [identifier, setIdentifier] = useState('');
@@ -81,7 +84,7 @@ export default function LoginScreen() {
     setIdentifierError('');
     clearError();
     if (!identifier.trim()) {
-      setIdentifierError('Enter your phone, email, or username');
+      setIdentifierError(t('login.identifierError'));
       return;
     }
     Keyboard.dismiss();
@@ -92,7 +95,7 @@ export default function LoginScreen() {
     setPasswordError('');
     clearError();
     if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+      setPasswordError(t('login.passwordError'));
       return;
     }
     try {
@@ -136,7 +139,7 @@ export default function LoginScreen() {
         return (
           <View style={styles.form}>
             <Text variant="h1" style={styles.title}>
-              {"What's your email, phone, or username?"}
+              {t('login.identifierTitle')}
             </Text>
 
             {authError && (
@@ -146,7 +149,7 @@ export default function LoginScreen() {
             )}
 
             <Input
-              placeholder="Phone number, email, username"
+              placeholder={t('login.identifierPlaceholder')}
               value={identifier}
               onChangeText={(v: string) => {
                 setIdentifier(v);
@@ -163,7 +166,7 @@ export default function LoginScreen() {
             />
 
             <Button
-              title="Continue"
+              title={t('login.continue')}
               onPress={handleContinue}
               disabled={!identifier.trim()}
             />
@@ -174,7 +177,7 @@ export default function LoginScreen() {
         return (
           <View style={styles.form}>
             <Text variant="h1" style={styles.title}>
-              Enter your password
+              {t('login.passwordTitle')}
             </Text>
             <Text variant="caption" style={styles.subtitle}>
               {identifier}
@@ -188,7 +191,7 @@ export default function LoginScreen() {
 
             <View>
               <Input
-                placeholder="Password"
+                placeholder={t('login.passwordPlaceholder')}
                 value={password}
                 onChangeText={(v: string) => {
                   setPassword(v);
@@ -217,7 +220,7 @@ export default function LoginScreen() {
             </View>
 
             <Button
-              title="Sign In"
+              title={t('login.signIn')}
               onPress={handleLogin}
               loading={isAuthenticating}
               disabled={isAuthenticating}
@@ -228,7 +231,7 @@ export default function LoginScreen() {
               style={styles.forgotRow}
             >
               <Text variant="caption" style={styles.forgotLink}>
-                Forgot password?
+                {t('login.forgotPassword')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -242,11 +245,10 @@ export default function LoginScreen() {
             </View>
 
             <Text variant="h2" style={styles.twoFaTitle}>
-              Two-Factor Authentication
+              {t('twoFactor.title')}
             </Text>
             <Text variant="body" style={styles.twoFaSubtitle}>
-              Enter the 6-digit code sent to{'\n'}
-              {pending2FA?.maskedTarget}
+              {t('twoFactor.subtitle', { maskedTarget: pending2FA?.maskedTarget })}
             </Text>
 
             {authError && (
@@ -265,7 +267,7 @@ export default function LoginScreen() {
             />
 
             <Button
-              title="Verify"
+              title={t('twoFactor.verify')}
               onPress={handleVerify2FA}
               loading={isAuthenticating}
               disabled={otpCode.length !== 6}
@@ -284,6 +286,7 @@ export default function LoginScreen() {
       >
         <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
       </TouchableOpacity>
+      <LanguageSelectorButton style={styles.languageButton} />
 
       <KeyboardAwareScrollView
         contentContainerStyle={styles.content}
@@ -322,6 +325,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: 4,
   },
+  languageButton: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    zIndex: 10,
+  },
   form: {
     gap: 16,
   },
@@ -351,7 +360,7 @@ const styles = StyleSheet.create({
   },
   forgotLink: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   shieldIcon: {
     alignItems: 'center',

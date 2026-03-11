@@ -16,6 +16,7 @@ import type { Post } from '@/types';
 export function useFeed() {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   // Query infinita para el feed
   const {
@@ -35,19 +36,19 @@ export function useFeed() {
     enabled: isAuthenticated,
   });
 
-  // Mutation para like
+  // Mutation para like (toggles like/unlike based on current state)
+  // Variable carries the PRE-update isLiked so mutationFn is not affected by onMutate's optimistic toggle
   const likeMutation = useMutation({
-    mutationFn: (postId: string) => feedService.likePost(postId),
-    onMutate: async (postId) => {
-      // Track like/unlike
-      const pages = queryClient.getQueryData(QUERY_KEYS.FEED.INFINITE) as any;
-      const post = pages?.pages
-        ?.flatMap((p: any) => p.data)
-        ?.find((p: Post) => p.id === postId);
+    mutationFn: async ({ postId, isLiked }: { postId: string; isLiked: boolean }) => {
+      if (isLiked) {
+        await feedService.unlikePost(postId);
+      } else {
+        await feedService.likePost(postId);
+      }
+    },
+    onMutate: async ({ postId, isLiked }) => {
       analytics.capture(
-        post?.isLiked
-          ? ANALYTICS_EVENTS.FEED.POST_UNLIKED
-          : ANALYTICS_EVENTS.FEED.POST_LIKED,
+        isLiked ? ANALYTICS_EVENTS.FEED.POST_UNLIKED : ANALYTICS_EVENTS.FEED.POST_LIKED,
         { post_id: postId }
       );
 
@@ -66,8 +67,8 @@ export function useFeed() {
               post.id === postId
                 ? {
                     ...post,
-                    isLiked: !post.isLiked,
-                    likesCount: post.isLiked ? post.likesCount - 1 : post.likesCount + 1,
+                    isLiked: !isLiked,
+                    likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
                   }
                 : post
             ),
@@ -81,6 +82,38 @@ export function useFeed() {
       // Rollback on error
       if (context?.previousData) {
         queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, context.previousData);
+      }
+    },
+  });
+
+  // Mutation para eliminar post propio
+  const deleteMutation = useMutation({
+    mutationFn: (postId: string) => feedService.deletePost(postId),
+    onMutate: async (postId) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.FEED.INFINITE });
+      const previousData = queryClient.getQueryData(QUERY_KEYS.FEED.INFINITE);
+      queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            data: page.data.filter((p: Post) => p.id !== postId),
+          })),
+        };
+      });
+      return { previousData };
+    },
+    onError: (_, __, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, context.previousData);
+      }
+    },
+    onSuccess: () => {
+      if (currentUserId) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
+        });
       }
     },
   });
@@ -99,6 +132,11 @@ export function useFeed() {
     // Actions
     refresh: refetch,
     loadMore: fetchNextPage,
-    toggleLike: (postId: string) => likeMutation.mutate(postId),
+    toggleLike: (postId: string) => {
+      const pages = queryClient.getQueryData(QUERY_KEYS.FEED.INFINITE) as any;
+      const post = pages?.pages?.flatMap((p: any) => p.data)?.find((p: Post) => p.id === postId);
+      likeMutation.mutate({ postId, isLiked: post?.isLiked ?? false });
+    },
+    deletePost: (postId: string) => deleteMutation.mutate(postId),
   };
 }

@@ -1,12 +1,7 @@
 import { useState } from 'react';
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-} from 'react-native';
+import { View, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from './Text';
 import { BottomSheet } from './BottomSheet';
@@ -29,6 +24,7 @@ export function PhoneInput({
   label,
   error,
 }: PhoneInputProps) {
+  const { t } = useTranslation('common');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -64,15 +60,11 @@ export function PhoneInput({
         </TouchableOpacity>
 
         <TextInput
-          style={[
-            styles.input,
-            isFocused && styles.focused,
-            error && styles.errorBorder,
-          ]}
+          style={[styles.input, isFocused && styles.focused, error && styles.errorBorder]}
           value={phoneNumber}
           onChangeText={onPhoneNumberChange}
           keyboardType="phone-pad"
-          placeholder="Phone number"
+          placeholder={t('phoneInput.placeholder')}
           placeholderTextColor="#666666"
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
@@ -88,7 +80,7 @@ export function PhoneInput({
       <BottomSheet
         visible={isPickerOpen}
         onClose={() => setIsPickerOpen(false)}
-        title="Select Country"
+        title={t('phoneInput.selectCountry')}
       >
         <FlatList
           data={COUNTRY_CODES}
@@ -142,7 +134,7 @@ const styles = StyleSheet.create({
   countryText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
   },
   input: {
     flex: 1,
@@ -152,7 +144,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     color: '#FFFFFF',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     borderWidth: 1,
     borderColor: '#222222',
   },

@@ -1,14 +1,9 @@
 import { useState, useCallback } from 'react';
-import {
-  View,
-  FlatList,
-  StyleSheet,
-  RefreshControl,
-  Pressable,
-} from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { ProjectCard } from './ProjectCard';
@@ -18,6 +13,7 @@ import { useProjects, useCreateProject } from '../hooks/useProjects';
 import type { Project } from '@/types/project';
 
 export function ProjectListScreen() {
+  const { t } = useTranslation('projects');
   const { data: projects, isLoading, refetch } = useProjects();
   const createProject = useCreateProject();
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -32,12 +28,12 @@ export function ProjectListScreen() {
             router.push(`/project/${project.id}`);
           },
           onError: () => {
-            showToast('Failed to create project');
+            showToast(t('list.errorCreateFailed'));
           },
-        },
+        }
       );
     },
-    [createProject],
+    [createProject]
   );
 
   const handleProjectPress = useCallback((project: Project) => {
@@ -48,19 +44,16 @@ export function ProjectListScreen() {
     ({ item }: { item: Project }) => (
       <ProjectCard project={item} onPress={() => handleProjectPress(item)} />
     ),
-    [handleProjectPress],
+    [handleProjectPress]
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text variant="h2" style={styles.title}>
-          Projects
+          {t('list.title')}
         </Text>
-        <Pressable
-          style={styles.addButton}
-          onPress={() => setSheetVisible(true)}
-        >
+        <Pressable style={styles.addButton} onPress={() => setSheetVisible(true)}>
           <Ionicons name="add" size={32} color="#000" />
         </Pressable>
       </View>

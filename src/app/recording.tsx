@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useCallStore } from '@/stores/callStore';
 import { ActiveCallScreen } from '@/components/call/ActiveCallScreen';
 
 export default function RecordingScreen() {
+  const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const wasConnected = useRef(false);
 

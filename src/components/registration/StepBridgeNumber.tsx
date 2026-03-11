@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -31,6 +32,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
   isLoading,
   apiError,
 }) => {
+  const { t } = useTranslation(['registration', 'common']);
   const [provisioning, setProvisioning] = useState(!state.bridgeNumber);
   const [provisioningFailed, setProvisioningFailed] = useState(false);
   const pollCount = useRef(0);
@@ -85,7 +87,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
     try {
       const ExpoClipboard = require('expo-clipboard');
       await ExpoClipboard.setStringAsync(bridgeNumber);
-      showToast('Copied to clipboard');
+      showToast(t('common:toasts.copiedToClipboard'));
     } catch {
       await Share.share({ message: bridgeNumber });
     }
@@ -94,8 +96,8 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `Your ATTO Bridge Number: ${bridgeNumber}\n\nUse this number to connect with your artist.`,
-        title: 'ATTO Bridge Number',
+        message: t('bridgeNumber.shareMessage', { number: bridgeNumber }),
+        title: t('bridgeNumber.shareTitle'),
       });
     } catch {
       // User cancelled share
@@ -108,8 +110,8 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Permission required',
-          'Allow access to Contacts to save the bridge number.'
+          t('bridgeNumber.contactPermission'),
+          t('bridgeNumber.contactPermissionMessage')
         );
         return;
       }
@@ -120,7 +122,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
     } catch {
       await Share.share({
         message: `ATTO Bridge - ${artistName}\n${bridgeNumber}`,
-        title: 'Save Bridge Contact',
+        title: t('bridgeNumber.saveContactTitle'),
       });
     }
   };
@@ -135,11 +137,9 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <Text variant="h1" style={styles.title}>
-            Your Bridge Number
+            {t('bridgeNumber.title')}
           </Text>
-          <Text style={styles.subtitle}>
-            This is your unique number for connecting with the artist. Share it securely.
-          </Text>
+          <Text style={styles.subtitle}>{t('bridgeNumber.subtitle')}</Text>
         </View>
 
         {/* Bridge Number Display */}
@@ -147,24 +147,27 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
           {provisioning ? (
             <View style={styles.provisioningContainer}>
               <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={styles.provisioningText}>Assigning your unique number...</Text>
+              <Text style={styles.provisioningText}>{t('bridgeNumber.assigning')}</Text>
             </View>
           ) : provisioningFailed ? (
             <View style={styles.provisioningContainer}>
               <Ionicons name="alert-circle-outline" size={40} color="#EF4444" />
-              <Text style={styles.failedText}>
-                We could not purchase your number. Please try again later.
-              </Text>
+              <Text style={styles.failedText}>{t('bridgeNumber.purchaseFailed')}</Text>
             </View>
           ) : (
             <RNText style={styles.bridgeNumber} allowFontScaling={false}>
-              {bridgeNumber ?? 'Not available'}
+              {bridgeNumber ?? t('bridgeNumber.notAvailable')}
             </RNText>
           )}
         </View>
 
         {/* Action Buttons */}
-        <View style={[styles.actionsContainer, (provisioning || provisioningFailed) && styles.disabledActions]}>
+        <View
+          style={[
+            styles.actionsContainer,
+            (provisioning || provisioningFailed) && styles.disabledActions,
+          ]}
+        >
           <TouchableOpacity
             style={styles.actionButton}
             onPress={handleCopy}
@@ -176,8 +179,13 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
             />
-            <Text style={[styles.actionText, (provisioning || provisioningFailed) && styles.disabledText]}>
-              Copy
+            <Text
+              style={[
+                styles.actionText,
+                (provisioning || provisioningFailed) && styles.disabledText,
+              ]}
+            >
+              {t('common:buttons.copy')}
             </Text>
           </TouchableOpacity>
 
@@ -194,8 +202,13 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
             />
-            <Text style={[styles.actionText, (provisioning || provisioningFailed) && styles.disabledText]}>
-              Share
+            <Text
+              style={[
+                styles.actionText,
+                (provisioning || provisioningFailed) && styles.disabledText,
+              ]}
+            >
+              {t('common:buttons.share')}
             </Text>
           </TouchableOpacity>
 
@@ -212,8 +225,13 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
             />
-            <Text style={[styles.actionText, (provisioning || provisioningFailed) && styles.disabledText]}>
-              Save
+            <Text
+              style={[
+                styles.actionText,
+                (provisioning || provisioningFailed) && styles.disabledText,
+              ]}
+            >
+              {t('bridgeNumber.save')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -222,17 +240,11 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         <View style={styles.notesContainer}>
           <View style={styles.noteRow}>
             <View style={styles.bullet} />
-            <Text style={styles.noteText}>
-              Keep this number secure. The artist will need it to verify and establish the
-              connection.
-            </Text>
+            <Text style={styles.noteText}>{t('bridgeNumber.noteSecure')}</Text>
           </View>
           <View style={styles.noteRow}>
             <View style={styles.bullet} />
-            <Text style={styles.noteText}>
-              An OTP will be sent to the inmate to verify your representation before the
-              bridge call can be established.
-            </Text>
+            <Text style={styles.noteText}>{t('bridgeNumber.noteOtp')}</Text>
           </View>
         </View>
 
@@ -251,7 +263,11 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
       {/* Bottom button */}
       <View style={styles.footer}>
         <Button
-          title={provisioning ? 'Assigning number...' : 'Continue'}
+          title={
+            provisioning
+              ? t('bridgeNumber.assigningButton')
+              : t('common:buttons.continue')
+          }
           onPress={onNext}
           disabled={isLoading || provisioning}
           loading={isLoading || provisioning}
@@ -281,14 +297,14 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   title: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 28,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 12,
   },
   subtitle: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     lineHeight: 22,
     color: '#CCCCCC',
@@ -305,7 +321,7 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
   },
   bridgeNumber: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 28,
     lineHeight: 40,
     color: '#FFFFFF',
@@ -317,13 +333,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   provisioningText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     color: '#999999',
     textAlign: 'center',
   },
   failedText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     color: '#EF4444',
     textAlign: 'center',
@@ -357,7 +373,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#222222',
   },
   actionText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     color: '#FFFFFF',
   },
@@ -378,7 +394,7 @@ const styles = StyleSheet.create({
   },
   noteText: {
     flex: 1,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
     lineHeight: 20,
     color: '#CCCCCC',
@@ -401,7 +417,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     flex: 1,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#EF4444',
   },

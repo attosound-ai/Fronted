@@ -28,7 +28,9 @@ export function useUserProfile(userId: string) {
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.USERS.PROFILE(numericId) });
-      const previous = queryClient.getQueryData<User>(QUERY_KEYS.USERS.PROFILE(numericId));
+      const previous = queryClient.getQueryData<User>(
+        QUERY_KEYS.USERS.PROFILE(numericId)
+      );
       if (previous) {
         queryClient.setQueryData<User>(QUERY_KEYS.USERS.PROFILE(numericId), {
           ...previous,

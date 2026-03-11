@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import type { InmateLookupResponse } from '@/types';
 import { Text } from '@/components/ui/Text';
@@ -38,6 +39,8 @@ export const StepConsentForm: React.FC<StepProps> = ({
   isLoading,
   apiError,
 }) => {
+  const { t } = useTranslation(['registration', 'common']);
+  const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -45,28 +48,28 @@ export const StepConsentForm: React.FC<StepProps> = ({
   const [showInmateModal, setShowInmateModal] = useState(false);
 
   const relationshipOptions: SelectOption[] = [
-    { label: 'Family', value: 'family' },
-    { label: 'Friend', value: 'friend' },
-    { label: 'Manager / Representative', value: 'manager' },
+    { label: t('consentForm.relationshipFamily'), value: 'family' },
+    { label: t('consentForm.relationshipFriend'), value: 'friend' },
+    { label: t('consentForm.relationshipManager'), value: 'manager' },
   ];
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!state.relationship) {
-      newErrors.relationship = 'Please select your relationship';
+      newErrors.relationship = tv('relationshipRequired');
     }
     if (!isNotEmpty(state.artistName || '')) {
-      newErrors.artistName = 'Artist name is required';
+      newErrors.artistName = tv('artistNameRequired');
     }
     if (!isValidInmateNumber(state.inmateNumber || '')) {
-      newErrors.inmateNumber = 'Invalid inmate number';
+      newErrors.inmateNumber = tv('inmateNumberInvalid');
     }
     if (!state.inmateState) {
-      newErrors.inmateState = 'Please select a state';
+      newErrors.inmateState = tv('stateRequired');
     }
     if (!state.consentToRecording) {
-      newErrors.consentToRecording = 'You must agree to call recording';
+      newErrors.consentToRecording = tv('consentRequired');
     }
 
     setErrors(newErrors);
@@ -83,9 +86,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
       setInmateData(data);
       setShowInmateModal(true);
     } catch (error: unknown) {
-      setLookupError(
-        getErrorMessage(error, 'Inmate not found. Please check the number and try again.')
-      );
+      setLookupError(getErrorMessage(error, t('consentForm.lookupFailed')));
     } finally {
       setLookupLoading(false);
     }
@@ -110,16 +111,20 @@ export const StepConsentForm: React.FC<StepProps> = ({
     setInmateData(null);
   };
 
-  const consentLabel = useMemo(
-    () => (
+  const consentLabel = useMemo(() => {
+    const raw = t('consentForm.consentCheckbox');
+    const match = raw.match(/^(.*?)<bold>(.*?)<\/bold>(.*)$/s);
+    const before = match ? match[1] : raw;
+    const bold = match ? match[2] : '';
+    const after = match ? match[3] : '';
+    return (
       <Text style={styles.checkboxLabel}>
-        I understand and agree that all{' '}
-        <Text style={styles.boldText}>consent verification</Text> calls will be recorded
-        for legal and security purposes.
+        {before}
+        <Text style={styles.boldText}>{bold}</Text>
+        {after}
       </Text>
-    ),
-    []
-  );
+    );
+  }, [t]);
 
   return (
     <View style={styles.container}>
@@ -143,14 +148,14 @@ export const StepConsentForm: React.FC<StepProps> = ({
             </TouchableOpacity>
           )}
           <Text variant="h1" style={styles.title}>
-            Artist consent is required
+            {t('consentForm.title')}
           </Text>
         </View>
 
         {/* Form fields */}
         <View style={styles.form}>
           <Select
-            label="What is your relationship?"
+            label={t('consentForm.relationshipLabel')}
             options={relationshipOptions}
             value={state.relationship || null}
             onChange={(value) => {
@@ -161,21 +166,21 @@ export const StepConsentForm: React.FC<StepProps> = ({
           />
 
           <Input
-            label="Artist Name"
+            label={t('consentForm.artistNameLabel')}
             value={state.artistName || ''}
             onChangeText={(value) => {
               dispatch({ type: 'UPDATE_FIELD', field: 'artistName', value });
               setErrors((prev) => ({ ...prev, artistName: '' }));
             }}
             error={errors.artistName}
-            placeholder="Enter artist's full name"
+            placeholder={t('consentForm.artistNamePlaceholder')}
           />
 
           {/* Inmate number + State on same row */}
           <View style={styles.inlineRow}>
             <View style={styles.inlineField}>
               <Input
-                label="Inmate number"
+                label={t('consentForm.inmateNumberLabel')}
                 value={state.inmateNumber || ''}
                 onChangeText={(value) => {
                   dispatch({ type: 'UPDATE_FIELD', field: 'inmateNumber', value });
@@ -183,13 +188,13 @@ export const StepConsentForm: React.FC<StepProps> = ({
                 }}
                 keyboardType="number-pad"
                 error={errors.inmateNumber}
-                placeholder="Enter number"
+                placeholder={t('consentForm.inmateNumberPlaceholder')}
               />
             </View>
             <View style={styles.inlineField}>
               <Select
-                label="State"
-                placeholder="Select state"
+                label={t('consentForm.stateLabel')}
+                placeholder={t('consentForm.statePlaceholder')}
                 options={AVAILABLE_STATES}
                 value={state.inmateState || null}
                 onChange={(value) => {
@@ -199,7 +204,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
                 error={errors.inmateState}
                 footer={
                   <Text variant="small" style={styles.disclaimer}>
-                    More states coming soon. Currently only Connecticut is supported.
+                    {t('consentForm.stateDisclaimer')}
                   </Text>
                 }
               />
@@ -235,7 +240,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
 
         <View style={styles.buttonWrapper}>
           <Button
-            title="Continue"
+            title={t('common:buttons.continue')}
             onPress={handleContinue}
             disabled={isLoading || lookupLoading}
             loading={isLoading || lookupLoading}
@@ -247,30 +252,54 @@ export const StepConsentForm: React.FC<StepProps> = ({
       <BottomSheet
         visible={showInmateModal}
         onClose={handleRejectInmate}
-        title="Confirm Inmate Identity"
+        title={t('consentForm.confirmTitle')}
       >
         {inmateData && (
           <View>
             <View style={styles.inmateGrid}>
-              <InmateCell label="Name" value={inmateData.inmateName} />
-              <InmateCell label="Inmate #" value={inmateData.inmateNumber} />
-              <InmateCell label="Date of Birth" value={inmateData.dateOfBirth} />
-              <InmateCell label="Location" value={inmateData.currentLocation} />
-              <InmateCell label="Status" value={inmateData.status} />
-              <InmateCell label="Offense" value={inmateData.offense} />
-              <InmateCell label="Sentence Date" value={inmateData.sentenceDate} />
-              <InmateCell label="Max Sentence" value={inmateData.maxSentence} />
-              <InmateCell label="Max Release" value={inmateData.maxReleaseDate} />
-              <InmateCell label="Est. Release" value={inmateData.estReleaseDate} />
+              <InmateCell
+                label={t('consentForm.inmateName')}
+                value={inmateData.inmateName}
+              />
+              <InmateCell
+                label={t('consentForm.inmateNumber')}
+                value={inmateData.inmateNumber}
+              />
+              <InmateCell
+                label={t('consentForm.dateOfBirth')}
+                value={inmateData.dateOfBirth}
+              />
+              <InmateCell
+                label={t('consentForm.location')}
+                value={inmateData.currentLocation}
+              />
+              <InmateCell label={t('consentForm.status')} value={inmateData.status} />
+              <InmateCell label={t('consentForm.offense')} value={inmateData.offense} />
+              <InmateCell
+                label={t('consentForm.sentenceDate')}
+                value={inmateData.sentenceDate}
+              />
+              <InmateCell
+                label={t('consentForm.maxSentence')}
+                value={inmateData.maxSentence}
+              />
+              <InmateCell
+                label={t('consentForm.maxRelease')}
+                value={inmateData.maxReleaseDate}
+              />
+              <InmateCell
+                label={t('consentForm.estRelease')}
+                value={inmateData.estReleaseDate}
+              />
             </View>
 
             <View style={styles.modalButtons}>
               <Button
-                title="Confirm — This is the person"
+                title={t('consentForm.confirmPerson')}
                 onPress={handleConfirmInmate}
               />
               <Button
-                title="Not this person"
+                title={t('consentForm.notThisPerson')}
                 onPress={handleRejectInmate}
                 variant="outline"
               />
@@ -307,7 +336,7 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 20,
     color: '#FFFFFF',
   },
@@ -323,7 +352,7 @@ const styles = StyleSheet.create({
   },
   disclaimer: {
     color: '#666666',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
     marginTop: 12,
   },
@@ -338,13 +367,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   checkboxLabel: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 10,
     lineHeight: 14,
     color: '#CCCCCC',
   },
   boldText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 10,
     lineHeight: 14,
     color: '#FFFFFF',
@@ -358,7 +387,7 @@ const styles = StyleSheet.create({
     borderColor: '#EF4444',
   },
   errorText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
     color: '#EF4444',
   },
@@ -379,13 +408,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   inmateLabel: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 11,
     color: '#888888',
     marginBottom: 2,
   },
   inmateValue: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#FFFFFF',
   },

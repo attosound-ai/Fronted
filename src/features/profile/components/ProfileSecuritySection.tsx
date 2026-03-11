@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   TouchableOpacity,
@@ -26,6 +27,7 @@ interface ProfileSecuritySectionProps {
 }
 
 export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
+  const { t } = useTranslation('profile');
   const setUser = useAuthStore((s) => s.setUser);
 
   const [flowState, setFlowState] = useState<FlowState>('idle');
@@ -63,7 +65,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       setMaskedTarget(target);
       setFlowState('verify_otp');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to send code');
+      setError(err instanceof Error ? err.message : t('security.errorFailedToSendCode'));
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       setUser(me);
       handleClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Invalid code');
+      setError(err instanceof Error ? err.message : t('security.errorInvalidCode'));
     } finally {
       setLoading(false);
     }
@@ -95,22 +97,25 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       setUser(me);
       handleClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to disable 2FA');
+      setError(err instanceof Error ? err.message : t('security.errorFailedToDisable'));
     } finally {
       setLoading(false);
     }
   }, [password, setUser, handleClose]);
 
-  const methodLabel = user.twoFactorMethod === 'email' ? 'Email' : 'SMS';
+  const methodLabel =
+    user.twoFactorMethod === 'email'
+      ? t('security.methodEmail')
+      : t('security.methodSms');
 
   return (
     <>
-      <ProfileSection title="Security">
+      <ProfileSection title={t('security.sectionTitle')}>
         <View style={styles.row}>
           <View style={styles.rowLeft}>
             <Ionicons name="shield-checkmark-outline" size={18} color="#888888" />
             <Text variant="body" style={styles.label}>
-              Two-Factor Auth
+              {t('security.twoFactorLabel')}
             </Text>
           </View>
           <Switch
@@ -123,7 +128,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
         {is2FAEnabled && (
           <ProfileInfoRow
             icon="chatbubble-outline"
-            label="Method"
+            label={t('security.methodLabel')}
             value={methodLabel}
             showDivider={false}
           />
@@ -134,7 +139,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       <BottomSheet
         visible={flowState === 'choose_method'}
         onClose={handleClose}
-        title="Choose verification method"
+        title={t('security.chooseMethodTitle')}
       >
         <View style={styles.sheetContent}>
           {error ? (
@@ -154,10 +159,10 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
               >
                 <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
                 <Text variant="body" style={styles.methodText}>
-                  SMS
+                  {t('security.smsOptionLabel')}
                 </Text>
                 <Text variant="small" style={styles.methodDesc}>
-                  Code via text message
+                  {t('security.smsOptionDesc')}
                 </Text>
               </TouchableOpacity>
 
@@ -168,10 +173,10 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
               >
                 <Ionicons name="mail-outline" size={24} color="#3B82F6" />
                 <Text variant="body" style={styles.methodText}>
-                  Email
+                  {t('security.emailOptionLabel')}
                 </Text>
                 <Text variant="small" style={styles.methodDesc}>
-                  Code via email
+                  {t('security.emailOptionDesc')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -183,12 +188,11 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       <BottomSheet
         visible={flowState === 'verify_otp'}
         onClose={handleClose}
-        title="Verify your identity"
+        title={t('security.verifyIdentityTitle')}
       >
         <View style={styles.sheetContent}>
           <Text variant="body" style={styles.sheetSubtitle}>
-            Enter the 6-digit code sent to{'\n'}
-            {maskedTarget}
+            {t('security.verifyIdentitySubtitle', { target: maskedTarget })}
           </Text>
 
           {error ? (
@@ -207,7 +211,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
           />
 
           <Button
-            title="Confirm"
+            title={t('security.confirmButton')}
             onPress={handleConfirmEnable}
             loading={loading}
             disabled={otpCode.length !== 6}
@@ -219,11 +223,11 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       <BottomSheet
         visible={flowState === 'confirm_disable'}
         onClose={handleClose}
-        title="Disable Two-Factor Auth"
+        title={t('security.disableTwoFactorTitle')}
       >
         <View style={styles.sheetContent}>
           <Text variant="body" style={styles.sheetSubtitle}>
-            Enter your password to disable 2FA
+            {t('security.disableTwoFactorSubtitle')}
           </Text>
 
           {error ? (
@@ -233,7 +237,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
           ) : null}
 
           <Input
-            placeholder="Password"
+            placeholder={t('security.passwordPlaceholder')}
             value={password}
             onChangeText={(v: string) => {
               setPassword(v);
@@ -244,7 +248,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
           />
 
           <Button
-            title="Disable 2FA"
+            title={t('security.disable2faButton')}
             onPress={handleConfirmDisable}
             loading={loading}
             disabled={!password}

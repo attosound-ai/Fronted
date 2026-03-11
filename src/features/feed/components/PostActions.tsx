@@ -43,7 +43,11 @@ export function PostActions({
   return (
     <View style={styles.container}>
       <View style={styles.leftActions}>
-        <TouchableOpacity onPress={handleLike} activeOpacity={0.7} style={styles.actionItem}>
+        <TouchableOpacity
+          onPress={handleLike}
+          activeOpacity={0.7}
+          style={styles.actionItem}
+        >
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
             <MaterialCommunityIcons
               name={post.isLiked ? 'thumb-up' : 'thumb-up-outline'}
@@ -56,7 +60,11 @@ export function PostActions({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onComment} activeOpacity={0.7} style={styles.actionItem}>
+        <TouchableOpacity
+          onPress={onComment}
+          activeOpacity={0.7}
+          style={styles.actionItem}
+        >
           <Ionicons
             name="chatbubble-outline"
             size={26}
@@ -68,10 +76,16 @@ export function PostActions({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onRepost} activeOpacity={0.7} style={styles.actionItem}>
-          <Feather name="repeat" size={24} color="#FFF" />
+        <TouchableOpacity
+          onPress={onRepost}
+          activeOpacity={0.7}
+          style={styles.actionItem}
+        >
+          <Feather name="repeat" size={24} color={post.isReposted ? '#22C55E' : '#FFF'} />
           {post.repostsCount > 0 && (
-            <Text style={styles.metricText}>{formatCount(post.repostsCount)}</Text>
+            <Text style={[styles.metricText, post.isReposted && styles.repostedText]}>
+              {formatCount(post.repostsCount)}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -118,7 +132,10 @@ const styles = StyleSheet.create({
   metricText: {
     color: '#FFF',
     fontSize: 13,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
+  },
+  repostedText: {
+    color: '#22C55E',
   },
   heartContainer: {
     width: 34,
@@ -138,6 +155,6 @@ const styles = StyleSheet.create({
     top: 8.5,
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Archivo_700Bold',
   },
 });

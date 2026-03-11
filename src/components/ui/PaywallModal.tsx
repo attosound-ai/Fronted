@@ -1,24 +1,25 @@
 import { View, Modal, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import type { Entitlement } from '@/types';
 
-const ENTITLEMENT_LABELS: Record<Entitlement, string> = {
-  browse_search: 'Search & Discovery',
-  listen: 'Listen to Recordings',
-  comment: 'Comment & Engage',
-  record_upload: 'Record & Upload',
-  advanced_production: 'Advanced Production Suite',
-  ai_avatars: 'AI Avatar Videos',
-  enhanced_analytics: 'Enhanced Analytics',
-  priority_discovery: 'Priority Discovery',
-  talent_dashboard: 'Talent Dashboard',
-  exportable_reports: 'Exportable Reports',
-  early_access: 'Early Access',
-  bridge_number: 'Bridge Phone Number',
+const ENTITLEMENT_KEY_MAP: Record<Entitlement, string> = {
+  browse_search: 'browseSearch',
+  listen: 'listen',
+  comment: 'comment',
+  record_upload: 'recordUpload',
+  advanced_production: 'advancedProduction',
+  ai_avatars: 'aiAvatars',
+  enhanced_analytics: 'enhancedAnalytics',
+  priority_discovery: 'priorityDiscovery',
+  talent_dashboard: 'talentDashboard',
+  exportable_reports: 'exportableReports',
+  early_access: 'earlyAccess',
+  bridge_number: 'bridgeNumber',
 };
 
 const UPGRADE_PLANS = [
@@ -33,8 +34,16 @@ interface PaywallModalProps {
   requiredEntitlement: Entitlement;
 }
 
-export function PaywallModal({ visible, onClose, requiredEntitlement }: PaywallModalProps) {
+export function PaywallModal({
+  visible,
+  onClose,
+  requiredEntitlement,
+}: PaywallModalProps) {
+  const { t } = useTranslation('common');
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
+
+  const getEntitlementLabel = (key: Entitlement) =>
+    t(`entitlements.${ENTITLEMENT_KEY_MAP[key]}` as 'entitlements.browseSearch');
 
   const handleUpgrade = () => {
     onClose();
@@ -52,32 +61,38 @@ export function PaywallModal({ visible, onClose, requiredEntitlement }: PaywallM
           <Ionicons name="lock-closed" size={40} color="#FFFFFF" />
 
           <Text variant="h3" style={styles.title}>
-            Upgrade Required
+            {t('paywall.upgradeRequired')}
           </Text>
 
           <Text variant="body" style={styles.description}>
-            {ENTITLEMENT_LABELS[requiredEntitlement]} is not available on your current plan.
+            {t('paywall.notAvailable', {
+              feature: getEntitlementLabel(requiredEntitlement),
+            })}
           </Text>
 
           <View style={styles.currentPlan}>
             <Text variant="caption" style={styles.currentLabel}>
-              Current plan
+              {t('paywall.currentPlan')}
             </Text>
             <Text variant="body" style={styles.currentValue}>
               {currentPlan === 'connect_free'
-                ? 'Connect (Free)'
+                ? t('planNames.connectFree')
                 : currentPlan === 'record'
-                  ? 'Record'
+                  ? t('planNames.record')
                   : currentPlan === 'record_pro'
-                    ? 'Record Pro'
-                    : 'Connect Pro'}
+                    ? t('planNames.recordPro')
+                    : t('planNames.connectPro')}
             </Text>
           </View>
 
-          <Button title="View Plans" onPress={handleUpgrade} style={styles.upgradeButton} />
+          <Button
+            title={t('buttons.viewPlans')}
+            onPress={handleUpgrade}
+            style={styles.upgradeButton}
+          />
 
           <TouchableOpacity onPress={onClose} style={styles.laterButton}>
-            <Text style={styles.laterText}>Maybe Later</Text>
+            <Text style={styles.laterText}>{t('paywall.maybeLater')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -109,14 +124,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 18,
     textAlign: 'center',
     marginTop: 4,
   },
   description: {
     color: '#999999',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -133,12 +148,12 @@ const styles = StyleSheet.create({
   },
   currentLabel: {
     color: '#666666',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
   },
   currentValue: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 14,
   },
   upgradeButton: {
@@ -150,7 +165,7 @@ const styles = StyleSheet.create({
   },
   laterText: {
     color: '#666666',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
   },
 });

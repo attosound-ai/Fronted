@@ -1,11 +1,5 @@
 import { useState } from 'react';
-import {
-  TextInput,
-  View,
-  StyleSheet,
-  TextInputProps,
-  ViewStyle,
-} from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
 
 import { Text } from './Text';
 
@@ -22,12 +16,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
  * - Single Responsibility: Solo maneja entrada de texto
  * - Interface Segregation: Props específicas para inputs
  */
-export function Input({
-  label,
-  error,
-  containerStyle,
-  ...props
-}: InputProps) {
+export function Input({ label, error, containerStyle, ...props }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -72,7 +61,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     color: '#FFFFFF',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     borderWidth: 1,
     borderColor: '#222222',
   },

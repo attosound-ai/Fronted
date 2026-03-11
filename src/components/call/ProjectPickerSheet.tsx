@@ -1,13 +1,8 @@
 import { useState } from 'react';
-import {
-  View,
-  Pressable,
-  ScrollView,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { Input } from '@/components/ui/Input';
@@ -22,6 +17,7 @@ interface ProjectPickerSheetProps {
 }
 
 export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps) {
+  const { t } = useTranslation(['calls', 'common']);
   const { data: projects, isLoading } = useProjects();
   const createProject = useCreateProject();
   const setActiveProjectId = useCallStore((s) => s.setActiveProjectId);
@@ -54,9 +50,9 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
           router.push('/recording');
         },
         onError: () => {
-          showToast('Failed to create project');
+          showToast(t('common:toasts.failedToCreateProject'));
         },
-      },
+      }
     );
   };
 
@@ -64,12 +60,14 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
     <BottomSheet
       visible={visible}
       onClose={handleClose}
-      title={mode === 'list' ? 'Select Project' : 'New Project'}
+      title={
+        mode === 'list' ? t('projectPicker.selectProject') : t('projectPicker.newProject')
+      }
     >
       {mode === 'list' ? (
         <>
           <Text variant="caption" style={styles.subtitle}>
-            Choose a project for this recording
+            {t('projectPicker.subtitle')}
           </Text>
 
           {isLoading ? (
@@ -77,16 +75,13 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
           ) : (
             <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
               {/* Create new project option */}
-              <Pressable
-                style={styles.option}
-                onPress={() => setMode('create')}
-              >
+              <Pressable style={styles.option} onPress={() => setMode('create')}>
                 <View style={[styles.iconCircle, styles.createCircle]}>
                   <Ionicons name="add" size={22} color="#3B82F6" />
                 </View>
                 <View style={styles.textContainer}>
                   <Text variant="body" style={styles.createText}>
-                    New Project
+                    {t('projectPicker.newProject')}
                   </Text>
                 </View>
               </Pressable>
@@ -107,7 +102,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
                     </Text>
                     {(project.segmentCount ?? 0) > 0 && (
                       <Text variant="caption" style={styles.meta}>
-                        {project.segmentCount} segment{project.segmentCount !== 1 ? 's' : ''}
+                        {t('projectPicker.segmentCount', { count: project.segmentCount })}
                       </Text>
                     )}
                   </View>
@@ -117,7 +112,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
 
               {(!projects || projects.length === 0) && !isLoading && (
                 <Text variant="caption" style={styles.emptyText}>
-                  No projects yet. Create your first one above.
+                  {t('projectPicker.noProjects')}
                 </Text>
               )}
             </ScrollView>
@@ -128,17 +123,19 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
         <View style={styles.createForm}>
           <Pressable style={styles.backButton} onPress={() => setMode('list')}>
             <Ionicons name="arrow-back" size={20} color="#888" />
-            <Text variant="caption" style={styles.backText}>Back</Text>
+            <Text variant="caption" style={styles.backText}>
+              {t('common:buttons.back')}
+            </Text>
           </Pressable>
           <Input
-            placeholder="Project name"
+            placeholder={t('projectPicker.projectName')}
             value={name}
             onChangeText={setName}
             maxLength={200}
             autoFocus
           />
           <Input
-            placeholder="Description (optional)"
+            placeholder={t('projectPicker.descriptionPlaceholder')}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -146,7 +143,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
             style={styles.descriptionInput}
           />
           <Button
-            title="Create"
+            title={t('common:buttons.create')}
             onPress={handleCreateSubmit}
             disabled={!name.trim() || createProject.isPending}
             loading={createProject.isPending}
@@ -195,12 +192,12 @@ const styles = StyleSheet.create({
   createText: {
     color: '#3B82F6',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   projectName: {
     color: '#FFF',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   meta: {
     color: '#666',

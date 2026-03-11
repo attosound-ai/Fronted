@@ -19,3 +19,4 @@ export type { SelectOption } from './Select';
 export { PhoneInput } from './PhoneInput';
 export { ProfilePreviewCard } from './ProfilePreviewCard';
 export { Toast, showToast } from './Toast';
+export { LanguageSelectorButton } from './LanguageSelectorButton';

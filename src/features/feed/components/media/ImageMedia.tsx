@@ -54,13 +54,10 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     lastTap.current = now;
   }, [onDoubleTap, heartScale, heartOpacity]);
 
-  const onScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-      setActiveIndex(index);
-    },
-    []
-  );
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    setActiveIndex(index);
+  }, []);
 
   if (images.length === 0) return null;
 
@@ -94,10 +91,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
       {images.length > 1 && (
         <View style={styles.dots}>
           {images.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.dot, i === activeIndex && styles.dotActive]}
-            />
+            <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
           ))}
         </View>
       )}
@@ -139,7 +133,7 @@ const styles = StyleSheet.create({
   counterText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   dots: {
     flexDirection: 'row',

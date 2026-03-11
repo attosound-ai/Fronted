@@ -25,6 +25,7 @@ export function AudioMedia({ post }: AudioMediaProps) {
     progress,
     currentTime,
     duration,
+    barAmplitudes,
     togglePlayPause,
     seekToFraction,
   } = useAudioPlayback(post.audioUrl);
@@ -68,6 +69,7 @@ export function AudioMedia({ post }: AudioMediaProps) {
           playedColor="#3B82F6"
           playing={isPlaying}
           progress={progress}
+          amplitudes={barAmplitudes}
         />
       </TouchableOpacity>
 
@@ -106,7 +108,7 @@ const styles = StyleSheet.create({
   time: {
     color: '#999',
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     minWidth: 70,
     textAlign: 'right',
   },

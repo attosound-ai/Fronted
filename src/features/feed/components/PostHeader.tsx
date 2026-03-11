@@ -1,27 +1,36 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { useAuthStore } from '@/stores/authStore';
 import type { PostAuthor, OnProfilePress } from '@/types/post';
 
 interface PostHeaderProps {
   author: PostAuthor;
+  isBookmarked?: boolean;
   onFollow?: (userId: number) => void;
   onProfilePress?: OnProfilePress;
   onBookmark?: () => void;
   onReport?: () => void;
+  onDelete?: () => void;
 }
 
 export function PostHeader({
   author,
+  isBookmarked,
   onFollow,
   onProfilePress,
   onBookmark,
   onReport,
+  onDelete,
 }: PostHeaderProps) {
+  const { t } = useTranslation('feed');
   const [menuVisible, setMenuVisible] = useState(false);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isOwnPost = currentUserId !== undefined && String(author.id) === String(currentUserId);
 
   return (
     <View style={styles.container}>
@@ -34,21 +43,19 @@ export function PostHeader({
         <Text variant="body" style={styles.username}>
           {author.displayName.toUpperCase()}
         </Text>
-        {author.isVerified && (
-          <MaterialIcons name="verified" size={13} color="#3B82F6" />
-        )}
+        {author.isVerified && <MaterialIcons name="verified" size={13} color="#3B82F6" />}
       </TouchableOpacity>
 
       <View style={styles.spacer} />
 
-      {!author.isFollowing && (
+      {!isOwnPost && !author.isFollowing && (
         <TouchableOpacity
           onPress={() => onFollow?.(author.id)}
           activeOpacity={0.7}
           style={styles.followButton}
         >
           <Text variant="body" style={styles.followText}>
-            Follow
+            {t('post.followButton')}
           </Text>
         </TouchableOpacity>
       )}
@@ -71,10 +78,14 @@ export function PostHeader({
           }}
         >
           <View style={styles.menuIcon}>
-            <Ionicons name="bookmark-outline" size={24} color="#FFF" />
+            <Ionicons
+              name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+              size={24}
+              color="#FFF"
+            />
           </View>
           <Text variant="body" style={styles.menuText}>
-            Save
+            {isBookmarked ? t('post.menuUnsave') : t('post.menuSave')}
           </Text>
         </TouchableOpacity>
 
@@ -92,9 +103,30 @@ export function PostHeader({
             <Ionicons name="flag-outline" size={24} color="#EF4444" />
           </View>
           <Text variant="body" style={styles.menuTextDanger}>
-            Report
+            {t('post.menuReport')}
           </Text>
         </TouchableOpacity>
+
+        {isOwnPost && (
+          <>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                setMenuVisible(false);
+                onDelete?.();
+              }}
+            >
+              <View style={styles.menuIcon}>
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+              </View>
+              <Text variant="body" style={styles.menuTextDanger}>
+                Delete post
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </BottomSheet>
     </View>
   );
@@ -114,7 +146,7 @@ const styles = StyleSheet.create({
   },
   username: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
   followButton: {
@@ -126,7 +158,7 @@ const styles = StyleSheet.create({
   },
   followText: {
     color: '#FFF',
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 14,
   },
   spacer: {

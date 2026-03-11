@@ -72,14 +72,15 @@
       "expo-contacts",
       "expo-asset",
       "expo-audio",
-      "expo-localization",
+      ["expo-localization", { "supportedLocales": ["en", "es", "pt-BR"] }],
       [
         "@sentry/react-native/expo",
         {
           "organization": "atto-sound",
           "project": "react-native"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "router": {},

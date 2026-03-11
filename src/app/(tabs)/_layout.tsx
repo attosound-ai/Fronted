@@ -80,12 +80,6 @@ export default function TabsLayout() {
               />
             ),
           }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setComingSoonVisible(true);
-            },
-          }}
         />
         <Tabs.Screen
           name="messages"

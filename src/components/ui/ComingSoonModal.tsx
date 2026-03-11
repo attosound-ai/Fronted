@@ -1,5 +1,6 @@
 import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 
 interface ComingSoonModalProps {
@@ -8,13 +9,9 @@ interface ComingSoonModalProps {
 }
 
 export function ComingSoonModal({ visible, onClose }: ComingSoonModalProps) {
+  const { t } = useTranslation('common');
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -29,11 +26,11 @@ export function ComingSoonModal({ visible, onClose }: ComingSoonModalProps) {
           />
 
           <Text variant="h2" style={styles.title}>
-            Coming Soon
+            {t('comingSoon.title')}
           </Text>
 
           <Text variant="body" style={styles.description}>
-            This section is under construction and will be available soon.
+            {t('comingSoon.description')}
           </Text>
         </View>
       </View>

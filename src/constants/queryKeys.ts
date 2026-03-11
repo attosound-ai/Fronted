@@ -16,7 +16,12 @@ export const QUERY_KEYS = {
   FEED: {
     ALL: ['feed'] as const,
     INFINITE: ['feed', 'infinite'] as const,
+    REELS: ['feed', 'reels'] as const,
     POST: (id: string) => ['feed', 'post', id] as const,
+    COMMENTS: (postId: string) => ['feed', 'comments', postId] as const,
+    BOOKMARKS: ['feed', 'bookmarks'] as const,
+    USER_POSTS: (userId: number) => ['feed', 'user-posts', userId] as const,
+    SEARCH: (query: string) => ['feed', 'search', query] as const,
   },
 
   // Users

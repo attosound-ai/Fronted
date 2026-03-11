@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text, Button, BottomSheet, ProfilePreviewCard } from '@/components/ui';
 import { useAuthStore } from '@/stores/authStore';
@@ -35,6 +36,7 @@ export function StepProfileSetup({
   showRepQuestion,
   onRepChoice,
 }: StepProfileSetupProps) {
+  const { t } = useTranslation(['registration', 'common', 'validation']);
   const [error, setError] = useState<string | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -73,7 +75,7 @@ export function StepProfileSetup({
 
   const validateAndContinue = () => {
     if (!isNotEmpty(state.displayName)) {
-      setError('Display name is required');
+      setError(t('validation:displayNameRequired'));
       return;
     }
     setError(null);
@@ -111,7 +113,7 @@ export function StepProfileSetup({
           <>
             <Ionicons name="camera" size={40} color="#666666" />
             <Text variant="body" style={styles.avatarText}>
-              Add Profile picture
+              {t('profileSetup.addProfilePicture')}
             </Text>
           </>
         )}
@@ -127,7 +129,7 @@ export function StepProfileSetup({
                 dispatch({ type: 'UPDATE_FIELD', field: 'displayName', value });
                 setError(null);
               }}
-              placeholder="Jhon Doe"
+              placeholder={t('profileSetup.namePlaceholder')}
               placeholderTextColor="#666666"
               style={styles.textInput}
               autoCapitalize="words"
@@ -157,7 +159,7 @@ export function StepProfileSetup({
 
         {/* Done button below name field */}
         <Button
-          title="Done"
+          title={t('common:buttons.done')}
           onPress={validateAndContinue}
           disabled={isLoading}
           loading={isLoading}
@@ -168,7 +170,7 @@ export function StepProfileSetup({
       <BottomSheet
         visible={showImagePicker}
         onClose={() => setShowImagePicker(false)}
-        title="Upload Profile Photo"
+        title={t('profileSetup.uploadPhotoTitle')}
       >
         <View style={styles.pickerOptions}>
           <TouchableOpacity
@@ -178,7 +180,7 @@ export function StepProfileSetup({
           >
             <Ionicons name="images-outline" size={20} color="#000000" />
             <Text variant="body" style={styles.pickerOptionPrimaryText}>
-              Choose from Gallery
+              {t('profileSetup.chooseFromGallery')}
             </Text>
           </TouchableOpacity>
 
@@ -189,7 +191,7 @@ export function StepProfileSetup({
           >
             <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
             <Text variant="body" style={styles.pickerOptionText}>
-              Take Photo
+              {t('profileSetup.takePhoto')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -199,7 +201,7 @@ export function StepProfileSetup({
       <BottomSheet
         visible={showPreview}
         onClose={() => setShowPreview(false)}
-        title="Profile Preview"
+        title={t('profileSetup.profilePreview')}
       >
         <ProfilePreviewCard
           displayName={state.displayName}
@@ -212,21 +214,20 @@ export function StepProfileSetup({
       <BottomSheet visible={!!showRepQuestion} onClose={() => {}}>
         <View style={styles.repContent}>
           <Text variant="h2" style={styles.repTitle}>
-            Will you represent an artist on ATTO?
+            {t('profileSetup.repQuestion')}
           </Text>
           <Text variant="body" style={styles.repDescription}>
-            You are creating this account on behalf of an artist and have their permission
-            to manage and publish their content.
+            {t('profileSetup.repDescription')}
           </Text>
           <View style={styles.repButtons}>
             <Button
-              title="Yes, I represent an artist"
+              title={t('profileSetup.yesRepresent')}
               onPress={() => onRepChoice?.(true)}
               variant="primary"
               loading={isLoading}
             />
             <Button
-              title="No, this account is for me"
+              title={t('profileSetup.noForMe')}
               onPress={() => onRepChoice?.(false)}
               variant="outline"
               disabled={isLoading}
@@ -300,7 +301,7 @@ const styles = StyleSheet.create({
   textInput: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     padding: 0,
   },
   iconButton: {
@@ -334,12 +335,12 @@ const styles = StyleSheet.create({
   pickerOptionPrimaryText: {
     color: '#000000',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   pickerOptionText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   repContent: {
     gap: 16,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, PhoneInput } from '@/components/ui';
 import { StepProps } from '@/types/registration';
@@ -19,21 +20,23 @@ export function StepBasicInfo({
   isLoading,
   apiError,
 }: StepProps) {
+  const { t } = useTranslation(['registration', 'common']);
+  const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validateAndContinue = () => {
     const newErrors: Record<string, string> = {};
 
     if (!isNotEmpty(state.name)) {
-      newErrors.name = 'Name is required';
+      newErrors.name = tv('nameRequired');
     }
 
     if (!isValidEmail(state.email)) {
-      newErrors.email = 'Please enter a valid email address';
+      newErrors.email = tv('emailInvalid');
     }
 
     if (!isValidPhoneNumber(state.phoneNumber)) {
-      newErrors.phoneNumber = 'Please enter a valid phone number';
+      newErrors.phoneNumber = tv('phoneInvalid');
     }
 
     setErrors(newErrors);
@@ -65,7 +68,7 @@ export function StepBasicInfo({
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
-              Enter your details to continue
+              {t('basicInfo.title')}
             </Text>
           </View>
         </View>
@@ -83,26 +86,26 @@ export function StepBasicInfo({
         {/* Form Fields */}
         <View style={styles.form}>
           <Input
-            label="Name"
+            label={t('basicInfo.nameLabel')}
             value={state.name}
             onChangeText={(value) => {
               dispatch({ type: 'UPDATE_FIELD', field: 'name', value });
               setErrors((prev) => ({ ...prev, name: '' }));
             }}
-            placeholder="Enter your full name"
+            placeholder={t('basicInfo.namePlaceholder')}
             error={errors.name}
             autoCapitalize="words"
             autoComplete="name"
           />
 
           <Input
-            label="Email"
+            label={t('basicInfo.emailLabel')}
             value={state.email}
             onChangeText={(value) => {
               dispatch({ type: 'UPDATE_FIELD', field: 'email', value });
               setErrors((prev) => ({ ...prev, email: '' }));
             }}
-            placeholder="Enter your email address"
+            placeholder={t('basicInfo.emailPlaceholder')}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
@@ -110,7 +113,7 @@ export function StepBasicInfo({
           />
 
           <PhoneInput
-            label="Phone number"
+            label={t('basicInfo.phoneLabel')}
             countryCode={state.phoneCountryCode}
             onCountryCodeChange={(value) =>
               dispatch({ type: 'UPDATE_FIELD', field: 'phoneCountryCode', value })
@@ -127,7 +130,7 @@ export function StepBasicInfo({
         {/* Continue Button */}
         <View style={styles.footer}>
           <Button
-            title="Continue"
+            title={t('common:buttons.continue')}
             onPress={validateAndContinue}
             disabled={isLoading}
             loading={isLoading}

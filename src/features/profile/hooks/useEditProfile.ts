@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
 import { showToast } from '@/components/ui/Toast';
@@ -21,6 +22,7 @@ interface ProfileForm {
 }
 
 export function useEditProfile() {
+  const { t } = useTranslation(['profile', 'validation', 'common']);
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const { upload, isUploading } = useMediaUpload();
@@ -66,22 +68,28 @@ export function useEditProfile() {
   const validate = useCallback((): boolean => {
     const newErrors: typeof errors = {};
 
-    if (!form.displayName.trim()) newErrors.displayName = 'Display name is required';
-    if (!form.username.trim()) newErrors.username = 'Username is required';
+    if (!form.displayName.trim())
+      newErrors.displayName = t('validation:displayNameRequired');
+    if (!form.username.trim()) newErrors.username = t('validation:usernameRequired');
 
     if (user?.role === 'representative') {
-      if (!form.artistName.trim()) newErrors.artistName = 'Artist name is required';
-      if (!form.inmateNumber.trim()) newErrors.inmateNumber = 'Inmate number is required';
-      if (!form.relationship) newErrors.relationship = 'Relationship is required';
+      if (!form.artistName.trim())
+        newErrors.artistName = t('validation:artistNameRequired');
+      if (!form.inmateNumber.trim())
+        newErrors.inmateNumber = t('validation:inmateNumberRequired');
+      if (!form.relationship)
+        newErrors.relationship = t('validation:relationshipRequired');
     }
 
     if (user?.role === 'artist') {
-      if (!form.artistName.trim()) newErrors.artistName = 'Artist name is required';
-      if (!form.inmateNumber.trim()) newErrors.inmateNumber = 'Inmate number is required';
+      if (!form.artistName.trim())
+        newErrors.artistName = t('validation:artistNameRequired');
+      if (!form.inmateNumber.trim())
+        newErrors.inmateNumber = t('validation:inmateNumberRequired');
     }
 
     if (form.artistEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.artistEmail)) {
-      newErrors.artistEmail = 'Invalid email address';
+      newErrors.artistEmail = t('validation:emailInvalid');
     }
 
     setErrors(newErrors);
@@ -104,7 +112,7 @@ export function useEditProfile() {
           'avatar'
         );
         if (!publicId) {
-          setErrors({ submit: 'Failed to upload avatar' });
+          setErrors({ submit: t('common:toasts.failedToUploadAvatar') });
           return false;
         }
         avatarPublicId = publicId;
@@ -135,10 +143,11 @@ export function useEditProfile() {
       }
 
       await updateProfile(data);
-      showToast('Profile updated');
+      showToast(t('common:toasts.profileUpdated'));
       return true;
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to update profile';
+      const msg =
+        error instanceof Error ? error.message : t('common:errors.profileUpdateFailed');
       setErrors({ submit: msg });
       return false;
     } finally {

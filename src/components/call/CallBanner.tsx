@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
 import { ProjectPickerSheet } from './ProjectPickerSheet';
@@ -11,6 +12,7 @@ import { ProjectPickerSheet } from './ProjectPickerSheet';
 // Red floating CTA above tab bar. Visible during an active connected call.
 
 export function CallBanner() {
+  const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -62,10 +64,10 @@ export function CallBanner() {
         </Animated.View>
         <View style={bannerStyles.textContainer}>
           <Text variant="small" style={bannerStyles.title}>
-            Tap to Record
+            {t('banner.tapToRecord')}
           </Text>
           <Text variant="small" style={bannerStyles.subtitle}>
-            Call in progress
+            {t('banner.callInProgress')}
           </Text>
         </View>
         <Ionicons name="mic" size={18} color="#FFF" />
@@ -116,13 +118,13 @@ const bannerStyles = StyleSheet.create({
   textContainer: {},
   title: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 13,
     lineHeight: 17,
   },
   subtitle: {
     color: 'rgba(255, 255, 255, 0.85)',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 10,
     lineHeight: 14,
   },

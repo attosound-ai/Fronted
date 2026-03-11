@@ -27,10 +27,7 @@ export interface RulerMark {
 
 const NICE_INTERVALS_MS = [500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000];
 
-export function generateRulerMarks(
-  totalDurationMs: number,
-  zoom: number,
-): RulerMark[] {
+export function generateRulerMarks(totalDurationMs: number, zoom: number): RulerMark[] {
   const pixelsPerMs = 0.1 * zoom;
   const targetSpacingPx = 80;
   const targetMs = targetSpacingPx / pixelsPerMs;
@@ -71,9 +68,7 @@ function formatRulerLabel(ms: number): string {
   if (ms === 0) return '0s';
   const totalSeconds = ms / 1000;
   if (totalSeconds < 60) {
-    return totalSeconds % 1 === 0
-      ? `${totalSeconds}s`
-      : `${totalSeconds.toFixed(1)}s`;
+    return totalSeconds % 1 === 0 ? `${totalSeconds}s` : `${totalSeconds.toFixed(1)}s`;
   }
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;

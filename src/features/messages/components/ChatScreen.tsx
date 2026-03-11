@@ -10,6 +10,7 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
@@ -34,6 +35,7 @@ export function ChatScreen({
   participantName,
   participantId,
 }: ChatScreenProps) {
+  const { t } = useTranslation('messages');
   const user = useAuthStore((s) => s.user);
   const userId = user ? String(user.id) : '';
 
@@ -65,7 +67,7 @@ export function ChatScreen({
 
   useEffect(() => {
     if (sendError) {
-      showToast('Failed to send message');
+      showToast(t('chat.errorFailedToSend'));
     }
   }, [sendError]);
 
@@ -153,7 +155,7 @@ export function ChatScreen({
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text variant="body" style={styles.emptyText}>
-                No messages yet. Say hello!
+                {t('chat.emptyMessages')}
               </Text>
             </View>
           }
@@ -164,9 +166,7 @@ export function ChatScreen({
                   <ActivityIndicator size="small" color={COLORS.white} />
                 </View>
               ) : null}
-              {isParticipantTyping ? (
-                <TypingIndicator name={participantName} />
-              ) : null}
+              {isParticipantTyping ? <TypingIndicator name={participantName} /> : null}
             </>
           }
           windowSize={10}
@@ -175,11 +175,7 @@ export function ChatScreen({
           showsVerticalScrollIndicator={false}
         />
       )}
-      <ChatInputBar
-        onSend={handleSend}
-        isSending={isSending}
-        onTyping={sendTyping}
-      />
+      <ChatInputBar onSend={handleSend} isSending={isSending} onTyping={sendTyping} />
     </KeyboardAvoidingView>
   );
 }

@@ -1,28 +1,30 @@
 import { View, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { showToast } from '@/components/ui/Toast';
 import { ProfileSection } from './ProfileSection';
 import { ProfileInfoRow } from './ProfileInfoRow';
 import { useBridgeNumber } from '../hooks/useBridgeNumber';
 
-function statusDisplay(status: string): { text: string; color: string } {
-  switch (status) {
-    case 'assigned':
-      return { text: 'Active', color: '#10B981' };
-    case 'provisioning':
-      return { text: 'Provisioning...', color: '#F59E0B' };
-    case 'failed':
-      return { text: 'Failed', color: '#EF4444' };
-    default:
-      return { text: status, color: '#888888' };
-  }
-}
-
 export function ProfileBridgeNumberSection() {
+  const { t } = useTranslation('profile');
   const { bridgeNumber, status, isLoading } = useBridgeNumber();
 
   if (!isLoading && !bridgeNumber && status !== 'provisioning') return null;
+
+  function statusDisplay(s: string): { text: string; color: string } {
+    switch (s) {
+      case 'assigned':
+        return { text: t('bridgeNumber.statusActive'), color: '#10B981' };
+      case 'provisioning':
+        return { text: t('bridgeNumber.statusProvisioning'), color: '#F59E0B' };
+      case 'failed':
+        return { text: t('bridgeNumber.statusFailed'), color: '#EF4444' };
+      default:
+        return { text: s, color: '#888888' };
+    }
+  }
 
   const { text: statusText, color: statusColor } = statusDisplay(status);
 
@@ -31,7 +33,7 @@ export function ProfileBridgeNumberSection() {
     try {
       const ExpoClipboard = require('expo-clipboard');
       await ExpoClipboard.setStringAsync(bridgeNumber);
-      showToast('Copied to clipboard');
+      showToast(t('bridgeNumber.copiedToast'));
     } catch {
       await Share.share({ message: bridgeNumber });
     }
@@ -41,8 +43,8 @@ export function ProfileBridgeNumberSection() {
     if (!bridgeNumber) return;
     try {
       await Share.share({
-        message: `My ATTO Bridge Number: ${bridgeNumber}`,
-        title: 'ATTO Bridge Number',
+        message: t('bridgeNumber.shareMessage', { number: bridgeNumber }),
+        title: t('bridgeNumber.shareTitle'),
       });
     } catch {
       // User cancelled share
@@ -50,15 +52,19 @@ export function ProfileBridgeNumberSection() {
   };
 
   return (
-    <ProfileSection title="Bridge Number">
+    <ProfileSection title={t('bridgeNumber.sectionTitle')}>
       <ProfileInfoRow
         icon="call-outline"
-        label="Number"
-        value={isLoading ? 'Loading...' : (bridgeNumber ?? 'Not assigned')}
+        label={t('bridgeNumber.numberLabel')}
+        value={
+          isLoading
+            ? t('bridgeNumber.numberLoading')
+            : (bridgeNumber ?? t('bridgeNumber.numberNotAssigned'))
+        }
       />
       <ProfileInfoRow
         icon="pulse-outline"
-        label="Status"
+        label={t('bridgeNumber.statusLabel')}
         value={statusText}
         valueColor={statusColor}
         showDivider={!!bridgeNumber}
@@ -71,7 +77,7 @@ export function ProfileBridgeNumberSection() {
             activeOpacity={0.7}
           >
             <Ionicons name="copy-outline" size={16} color="#3B82F6" />
-            <Text style={styles.actionText}>Copy</Text>
+            <Text style={styles.actionText}>{t('bridgeNumber.copyButton')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
@@ -79,7 +85,7 @@ export function ProfileBridgeNumberSection() {
             activeOpacity={0.7}
           >
             <Ionicons name="share-outline" size={16} color="#3B82F6" />
-            <Text style={styles.actionText}>Share</Text>
+            <Text style={styles.actionText}>{t('bridgeNumber.shareButton')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -105,7 +111,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: '#3B82F6',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 13,
   },
 });

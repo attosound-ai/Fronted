@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, ScrollView, StyleSheet } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
@@ -8,6 +8,7 @@ import { Toast } from '@/components/ui/Toast';
 import { useAuthStore } from '@/stores/authStore';
 import {
   ProfileHero,
+  ProfileContentTabs,
   ProfileAccountSection,
   ProfileSecuritySection,
   ProfileArtistSection,
@@ -24,8 +25,20 @@ export default function ProfileScreen() {
   const logout = useAuthStore((s) => s.logout);
   const hasEntitlement = useSubscriptionStore((s) => s.hasEntitlement);
 
+  const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
+
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchSubscription();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchSubscription]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -48,17 +61,37 @@ export default function ProfileScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#FFF"
+          />
+        }
       >
-        <ProfileHero user={user} onEditProfile={() => router.push('/edit-profile')} />
-        <ProfileAccountSection user={user} />
-        <ProfileSecuritySection user={user} />
-        {user.role === 'artist' && <ProfileArtistSection user={user} />}
-        {user.role === 'representative' && <ProfileRepresentativeSection user={user} />}
-        {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
-        <ProfileSubscriptionSection />
-        <ProfileActionsSection onLogout={() => setLogoutVisible(true)} />
+        {/* Hero — padded section */}
+        <View style={styles.heroSection}>
+          <ProfileHero user={user} onEditProfile={() => router.push('/edit-profile')} />
+        </View>
+
+        {/* Content tabs — posts / saved / settings */}
+        <ProfileContentTabs
+          userId={user.id}
+          settingsContent={
+            <>
+              <ProfileAccountSection user={user} />
+              <ProfileSecuritySection user={user} />
+              {user.role === 'artist' && <ProfileArtistSection user={user} />}
+              {user.role === 'representative' && (
+                <ProfileRepresentativeSection user={user} />
+              )}
+              {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
+              <ProfileSubscriptionSection />
+              <ProfileActionsSection onLogout={() => setLogoutVisible(true)} />
+            </>
+          }
+        />
       </ScrollView>
 
       <LogoutBottomSheet
@@ -87,9 +120,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 24,
-    gap: 24,
-    paddingBottom: 48,
+  heroSection: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
 });

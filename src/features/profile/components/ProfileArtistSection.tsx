@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { ProfileSection } from './ProfileSection';
 import { ProfileInfoRow } from './ProfileInfoRow';
 import type { User } from '@/types';
@@ -7,22 +8,26 @@ interface ProfileArtistSectionProps {
 }
 
 export function ProfileArtistSection({ user }: ProfileArtistSectionProps) {
+  const { t } = useTranslation('profile');
+
   return (
-    <ProfileSection title="Artist Details">
+    <ProfileSection title={t('artist.sectionTitle')}>
       <ProfileInfoRow
         icon="musical-notes-outline"
-        label="Artist Name"
-        value={user.artistName ?? 'Not set'}
+        label={t('artist.artistNameLabel')}
+        value={user.artistName ?? t('artist.artistNameNotSet')}
       />
       <ProfileInfoRow
         icon="id-card-outline"
-        label="Inmate Number"
-        value={user.inmateNumber ?? 'Not set'}
+        label={t('artist.inmateNumberLabel')}
+        value={user.inmateNumber ?? t('artist.inmateNumberNotSet')}
       />
       <ProfileInfoRow
         icon="checkmark-circle-outline"
-        label="Verified"
-        value={user.profileVerified ? 'Yes' : 'Pending'}
+        label={t('artist.verifiedLabel')}
+        value={
+          user.profileVerified ? t('artist.verifiedYes') : t('artist.verifiedPending')
+        }
         valueColor={user.profileVerified ? '#10B981' : '#F59E0B'}
         showDivider={false}
       />

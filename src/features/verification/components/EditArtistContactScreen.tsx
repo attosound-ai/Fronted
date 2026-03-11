@@ -3,6 +3,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -11,11 +12,7 @@ import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Toast } from '@/components/ui/Toast';
 import { useEditArtistContact } from '../hooks/useEditArtistContact';
 
-const RELATIONSHIP_OPTIONS = [
-  { label: 'Family', value: 'family' },
-  { label: 'Friend', value: 'friend' },
-  { label: 'Manager', value: 'manager' },
-];
+// RELATIONSHIP_OPTIONS is defined inside the component so labels can be translated
 
 /**
  * EditArtistContactScreen — Form for editing representative's artist contact info.
@@ -24,6 +21,12 @@ const RELATIONSHIP_OPTIONS = [
  * Open/Closed: Uses existing UI components, extensible via new fields.
  */
 export function EditArtistContactScreen() {
+  const { t } = useTranslation('feed');
+  const RELATIONSHIP_OPTIONS = [
+    { label: t('verification.relationshipFamily'), value: 'family' },
+    { label: t('verification.relationshipFriend'), value: 'friend' },
+    { label: t('verification.relationshipManager'), value: 'manager' },
+  ];
   const { form, errors, isSubmitting, updateField, save } = useEditArtistContact();
 
   const handleSave = async () => {
@@ -39,7 +42,7 @@ export function EditArtistContactScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text variant="h2" style={styles.headerTitle}>
-          Edit Artist Contact
+          {t('verification.editTitle')}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -53,8 +56,8 @@ export function EditArtistContactScreen() {
         bottomOffset={16}
       >
         <Select
-          label="Relationship"
-          placeholder="Select relationship"
+          label={t('verification.labelRelationship')}
+          placeholder={t('verification.placeholderRelationship')}
           options={RELATIONSHIP_OPTIONS}
           value={form.relationship || null}
           onChange={(value) => updateField('relationship', value)}
@@ -62,33 +65,33 @@ export function EditArtistContactScreen() {
         />
 
         <Input
-          label="Artist Name"
+          label={t('verification.labelArtistName')}
           value={form.artistName}
           onChangeText={(text) => updateField('artistName', text)}
-          placeholder="Enter artist name"
+          placeholder={t('verification.placeholderArtistName')}
           error={errors.artistName}
         />
 
         <Input
-          label="Inmate Number"
+          label={t('verification.labelInmateNumber')}
           value={form.inmateNumber}
           onChangeText={(text) => updateField('inmateNumber', text)}
-          placeholder="Enter inmate number"
+          placeholder={t('verification.placeholderInmateNumber')}
           error={errors.inmateNumber}
         />
 
         <Input
-          label="Artist Email"
+          label={t('verification.labelArtistEmail')}
           value={form.artistEmail}
           onChangeText={(text) => updateField('artistEmail', text)}
-          placeholder="Enter artist email (optional)"
+          placeholder={t('verification.placeholderArtistEmail')}
           keyboardType="email-address"
           autoCapitalize="none"
           error={errors.artistEmail}
         />
 
         <PhoneInput
-          label="Artist Contact Number"
+          label={t('verification.labelArtistPhone')}
           countryCode={form.artistPhoneCountryCode}
           onCountryCodeChange={(code) => updateField('artistPhoneCountryCode', code)}
           phoneNumber={form.artistPhone}
@@ -99,8 +102,7 @@ export function EditArtistContactScreen() {
         <View style={styles.warningContainer}>
           <Ionicons name="warning-outline" size={16} color="#F59E0B" />
           <Text variant="small" style={styles.warningText}>
-            Changing artist contact information will cancel your current authorization and
-            require re-verification.
+            {t('verification.warningReauthorize')}
           </Text>
         </View>
 
@@ -111,7 +113,7 @@ export function EditArtistContactScreen() {
         )}
 
         <Button
-          title="Save and reauthorize"
+          title={t('verification.saveButton')}
           onPress={handleSave}
           loading={isSubmitting}
           style={styles.saveButton}

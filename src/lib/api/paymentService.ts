@@ -18,7 +18,7 @@ export const paymentService = {
   async createCheckout(planId: string, email: string): Promise<CheckoutResponse> {
     const response = await apiClient.post<ApiResponse<CheckoutResponse>>(
       API_ENDPOINTS.PAYMENTS.CHECKOUT,
-      { planId, email },
+      { planId, email }
     );
     return response.data.data;
   },
@@ -26,21 +26,21 @@ export const paymentService = {
   async confirmPayment(paymentIntentId: string): Promise<BridgeNumberResult> {
     const response = await apiClient.post<ApiResponse<BridgeNumberResult>>(
       API_ENDPOINTS.PAYMENTS.CONFIRM,
-      { paymentIntentId },
+      { paymentIntentId }
     );
     return response.data.data;
   },
 
   async getBridgeNumber(): Promise<BridgeNumberResult> {
     const response = await apiClient.get<ApiResponse<BridgeNumberResult>>(
-      API_ENDPOINTS.PAYMENTS.BRIDGE_NUMBER,
+      API_ENDPOINTS.PAYMENTS.BRIDGE_NUMBER
     );
     return response.data.data;
   },
 
   async getMySubscription(): Promise<UserSubscription> {
     const response = await apiClient.get<ApiResponse<UserSubscription>>(
-      API_ENDPOINTS.PAYMENTS.MY_SUBSCRIPTION,
+      API_ENDPOINTS.PAYMENTS.MY_SUBSCRIPTION
     );
     return response.data.data;
   },
@@ -51,18 +51,18 @@ export const paymentService = {
 
   async getPlans(): Promise<SubscriptionPlan[]> {
     const response = await apiClient.get<ApiResponse<SubscriptionPlan[]>>(
-      API_ENDPOINTS.PAYMENTS.PLANS,
+      API_ENDPOINTS.PAYMENTS.PLANS
     );
     return response.data.data;
   },
 
   async upgradeSubscription(
     targetPlan: PlanId,
-    email: string,
+    email: string
   ): Promise<CheckoutResponse> {
     const response = await apiClient.post<ApiResponse<CheckoutResponse>>(
       API_ENDPOINTS.PAYMENTS.UPGRADE,
-      { targetPlan, email },
+      { targetPlan, email }
     );
     return response.data.data;
   },

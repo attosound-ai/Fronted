@@ -3,13 +3,14 @@ import { BackHandler, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 
 import { useAuthStore } from '@/stores/authStore';
 import { authService } from '@/lib/api/authService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { mediaService } from '@/lib/media/mediaService';
-import { ProgressBar } from '@/components/ui';
+import { ProgressBar, LanguageSelectorButton } from '@/components/ui';
 import type { Role } from '@/types';
 import type { RegistrationWizardState, RegistrationAction } from '@/types/registration';
 
@@ -66,6 +67,7 @@ function wizardReducer(
 }
 
 export default function RegisterScreen() {
+  const { t } = useTranslation('common');
   const user = useAuthStore((s) => s.user);
 
   // If returning with a pending registration, resume at Step 4 (profile setup)
@@ -153,7 +155,7 @@ export default function RegisterScreen() {
       await completeRegistration(dto);
       router.replace('/(tabs)');
     } catch (error: unknown) {
-      setApiError(getErrorMessage(error, 'Registration failed'));
+      setApiError(getErrorMessage(error, t('errors.registrationFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -171,7 +173,7 @@ export default function RegisterScreen() {
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.OTP_SENT);
       goNext();
     } catch (error: unknown) {
-      setApiError(getErrorMessage(error, 'Failed to send verification code'));
+      setApiError(getErrorMessage(error, t('errors.sendOtpFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -210,7 +212,7 @@ export default function RegisterScreen() {
 
       goNext();
     } catch (error: unknown) {
-      setApiError(getErrorMessage(error, 'Verification failed'));
+      setApiError(getErrorMessage(error, t('errors.verificationFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -233,8 +235,8 @@ export default function RegisterScreen() {
           );
         } catch (uploadError: unknown) {
           const msg =
-            uploadError instanceof Error ? uploadError.message : 'Upload failed';
-          setApiError(`Could not upload your photo: ${msg}`);
+            uploadError instanceof Error ? uploadError.message : t('errors.generic');
+          setApiError(t('errors.uploadFailed', { message: msg }));
           return;
         }
       }
@@ -246,7 +248,7 @@ export default function RegisterScreen() {
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.PROFILE_SETUP);
       setShowRepQuestion(true);
     } catch (error: unknown) {
-      setApiError(getErrorMessage(error, 'Failed to update profile'));
+      setApiError(getErrorMessage(error, t('errors.profileUpdateFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -285,7 +287,7 @@ export default function RegisterScreen() {
       await completeRegistration(dto);
       goNext(); // Advance to step 10 (now just informational)
     } catch (error: unknown) {
-      setApiError(getErrorMessage(error, 'Registration failed'));
+      setApiError(getErrorMessage(error, t('errors.registrationFailed')));
     } finally {
       setIsLoading(false);
     }
@@ -350,6 +352,7 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LanguageSelectorButton style={styles.languageButton} />
       {isRepFlow && (
         <View style={styles.progressContainer}>
           <ProgressBar steps={REP_TOTAL} currentStep={repStep} />
@@ -364,6 +367,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  languageButton: {
+    position: 'absolute',
+    top: 56,
+    right: 16,
+    zIndex: 10,
   },
   progressContainer: {
     paddingHorizontal: 24,

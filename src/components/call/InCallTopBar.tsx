@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
@@ -18,6 +19,7 @@ function formatElapsed(seconds: number): string {
 }
 
 export function InCallTopBar() {
+  const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -119,7 +121,7 @@ const styles = StyleSheet.create({
   },
   timer: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
   controls: {

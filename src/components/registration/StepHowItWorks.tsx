@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -13,12 +14,8 @@ import { Button } from '@/components/ui/Button';
  * <StepHowItWorks state={state} dispatch={dispatch} onNext={handleNext} onBack={handleBack} />
  */
 export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
-  const bulletPoints = [
-    'You act on behalf of the artist',
-    'You must have their explicit consent',
-    'All actions are logged for transparency',
-    'The artist can revoke representation at any time',
-  ];
+  const { t } = useTranslation(['registration', 'common']);
+  const bulletPoints = t('howItWorks.bullets', { returnObjects: true }) as string[];
 
   return (
     <View style={styles.container}>
@@ -39,16 +36,13 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
             </TouchableOpacity>
           )}
           <Text variant="h1" style={styles.title} numberOfLines={2}>
-            How artist representation works
+            {t('howItWorks.title')}
           </Text>
         </View>
 
         {/* Main content */}
         <View style={styles.content}>
-          <Text style={styles.paragraph}>
-            As a representative, you will manage this account on behalf of the artist.
-            {'\n'}You will be responsible for publishing content, managing interactions, and handling communications related to the artist's profile.
-          </Text>
+          <Text style={styles.paragraph}>{t('howItWorks.paragraph')}</Text>
 
           {/* Bullet points */}
           <View style={styles.bulletContainer}>
@@ -67,7 +61,7 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
 
       {/* Bottom button */}
       <View style={styles.footer}>
-        <Button title="Continue" onPress={onNext} />
+        <Button title={t('common:buttons.continue')} onPress={onNext} />
       </View>
     </View>
   );
@@ -97,7 +91,7 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 17,
     color: '#FFFFFF',
   },
@@ -105,7 +99,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paragraph: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 16,
     lineHeight: 24,
     color: '#CCCCCC',
@@ -128,7 +122,7 @@ const styles = StyleSheet.create({
   },
   bulletText: {
     flex: 1,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     lineHeight: 22,
     color: '#FFFFFF',

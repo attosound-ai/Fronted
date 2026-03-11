@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { Text } from '@/components/ui/Text';
 
 interface CreateActionSheetProps {
@@ -12,62 +11,51 @@ interface CreateActionSheetProps {
 }
 
 export function CreateActionSheet({ visible, onClose }: CreateActionSheetProps) {
-  const [comingSoonVisible, setComingSoonVisible] = useState(false);
-
+  const { t } = useTranslation('feed');
   const handleProjects = () => {
     onClose();
     router.push('/(tabs)/projects');
   };
 
   const handleUploadPost = () => {
-    setComingSoonVisible(true);
+    onClose();
+    router.push('/create-post');
   };
 
   return (
-    <>
-      <BottomSheet visible={visible} onClose={onClose} title="Create">
-        {/* Projects option */}
-        <Pressable style={styles.option} onPress={handleProjects}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="folder-outline" size={22} color="#FFF" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text variant="body" style={styles.optionTitle}>
-              Projects
-            </Text>
-            <Text variant="caption" style={styles.optionSubtitle}>
-              Open your audio projects
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#555" />
-        </Pressable>
+    <BottomSheet visible={visible} onClose={onClose} title={t('header.createSheetTitle')}>
+      {/* Projects option */}
+      <Pressable style={styles.option} onPress={handleProjects}>
+        <View style={styles.iconCircle}>
+          <Ionicons name="folder-outline" size={22} color="#FFF" />
+        </View>
+        <View style={styles.textContainer}>
+          <Text variant="body" style={styles.optionTitle}>
+            {t('header.createOptionProjectsTitle')}
+          </Text>
+          <Text variant="caption" style={styles.optionSubtitle}>
+            {t('header.createOptionProjectsSubtitle')}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#555" />
+      </Pressable>
 
-        {/* Upload Post option */}
-        <Pressable style={styles.option} onPress={handleUploadPost}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="cloud-upload-outline" size={22} color="#FFF" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text variant="body" style={styles.optionTitle}>
-              Upload Post
-            </Text>
-            <Text variant="caption" style={styles.optionSubtitle}>
-              Share with your audience
-            </Text>
-          </View>
-          <View style={styles.badge}>
-            <Text variant="caption" style={styles.badgeText}>
-              Coming Soon
-            </Text>
-          </View>
-        </Pressable>
-      </BottomSheet>
-
-      <ComingSoonModal
-        visible={comingSoonVisible}
-        onClose={() => setComingSoonVisible(false)}
-      />
-    </>
+      {/* Upload Post option */}
+      <Pressable style={styles.option} onPress={handleUploadPost}>
+        <View style={styles.iconCircle}>
+          <Ionicons name="cloud-upload-outline" size={22} color="#FFF" />
+        </View>
+        <View style={styles.textContainer}>
+          <Text variant="body" style={styles.optionTitle}>
+            {t('header.createOptionUploadTitle')}
+          </Text>
+          <Text variant="caption" style={styles.optionSubtitle}>
+            {t('header.createOptionUploadSubtitle')}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#555" />
+      </Pressable>
+    </BottomSheet>
   );
 }
 
@@ -94,22 +82,11 @@ const styles = StyleSheet.create({
   optionTitle: {
     color: '#FFF',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   optionSubtitle: {
     color: '#888',
     fontSize: 12,
     marginTop: 2,
-  },
-  badge: {
-    backgroundColor: '#222',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    color: '#888',
-    fontSize: 10,
-    fontFamily: 'Poppins_500Medium',
   },
 });

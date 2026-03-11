@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   FlatList,
@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Toast, showToast } from '@/components/ui/Toast';
@@ -18,10 +20,13 @@ import { useProjectDetail } from '../hooks/useProjectDetail';
 import { useDeleteProject } from '../hooks/useProjects';
 import { usePreloadEditor } from '@/features/timeline/hooks/usePreloadEditor';
 import { EditorLoadingModal } from '@/features/timeline/components/EditorLoadingModal';
+import { useCreatePostStore } from '@/stores/createPostStore';
 import type { AudioSegment } from '@/types/call';
+import type { ExportResult } from '@/types/project';
 
 interface ProjectDetailScreenProps {
   projectId: string;
+  publishMode?: boolean;
 }
 
 function formatDuration(ms: number): string {
@@ -31,25 +36,31 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
+export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectDetailScreenProps) {
+  const { t } = useTranslation('projects');
   const queryClient = useQueryClient();
   const { data, isLoading } = useProjectDetail(projectId);
   const deleteProject = useDeleteProject();
   const [editorOpen, setEditorOpen] = useState(false);
-  const { isPreloading, progress, preloadEditor } = usePreloadEditor(
-    data?.clips ?? [],
-  );
+  const { isPreloading, progress, preloadEditor } = usePreloadEditor(data?.clips ?? []);
+  const setPendingAudio = useCreatePostStore((s) => s.setPendingAudio);
+
+  // In publish mode, auto-open the editor once data is loaded
+  useEffect(() => {
+    if (!publishMode || !data || editorOpen || isPreloading) return;
+    preloadEditor().then(() => setEditorOpen(true));
+  }, [publishMode, data, editorOpen, isPreloading, preloadEditor]);
 
   const handleDelete = useCallback(() => {
-    Alert.alert('Delete Project', 'Are you sure? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('detail.deleteAlertTitle'), t('detail.deleteAlertMessage'), [
+      { text: t('detail.deleteAlertCancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('detail.deleteAlertConfirm'),
         style: 'destructive',
         onPress: () => {
           deleteProject.mutate(projectId, {
             onSuccess: () => router.back(),
-            onError: () => showToast('Failed to delete project'),
+            onError: () => showToast(t('detail.errorDeleteFailed')),
           });
         },
       },
@@ -62,7 +73,8 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
         <Ionicons name="mic" size={20} color="#3B82F6" />
         <View style={styles.segmentInfo}>
           <Text variant="body" style={styles.segmentLabel}>
-            {item.label || `Recording ${item.segmentIndex + 1}`}
+            {item.label ||
+              t('detail.segmentDefaultLabel', { index: item.segmentIndex + 1 })}
           </Text>
           <Text variant="caption" style={styles.segmentMeta}>
             {formatDuration(item.durationMs)}
@@ -70,7 +82,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
         </View>
       </View>
     ),
-    [],
+    []
   );
 
   if (isLoading) {
@@ -88,7 +100,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
           <Text variant="body" style={{ color: '#666' }}>
-            Project not found
+            {t('detail.projectNotFound')}
           </Text>
         </View>
       </SafeAreaView>
@@ -100,6 +112,22 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
   if (editorOpen) {
     const TimelineEditor =
       require('@/features/timeline/components/TimelineEditor').TimelineEditor;
+
+    const handlePublish = async (result: ExportResult, durationMs: number) => {
+      const localUri = `${FileSystem.cacheDirectory}export_${projectId}_${Date.now()}.wav`;
+      await FileSystem.downloadAsync(result.downloadUrl, localUri);
+      setPendingAudio({
+        uri: localUri,
+        fileName: `${project.name}.wav`,
+        durationMs,
+      });
+      if (publishMode) {
+        router.back();
+      } else {
+        router.push('/create-post');
+      }
+    };
+
     return (
       <TimelineEditor
         projectId={projectId}
@@ -111,6 +139,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
           await queryClient.refetchQueries({ queryKey: ['project', projectId] });
           setEditorOpen(false);
         }}
+        onPublish={handlePublish}
       />
     );
   }
@@ -139,7 +168,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
       <View style={styles.statsRow}>
         <View style={styles.stat}>
           <Text variant="caption" style={styles.statLabel}>
-            Tracks
+            {t('detail.statTracks')}
           </Text>
           <Text variant="body" style={styles.statValue}>
             {segments.length}
@@ -147,7 +176,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
         </View>
         <View style={styles.stat}>
           <Text variant="caption" style={styles.statLabel}>
-            Clips
+            {t('detail.statClips')}
           </Text>
           <Text variant="body" style={styles.statValue}>
             {clips.length}
@@ -155,7 +184,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
         </View>
         <View style={styles.stat}>
           <Text variant="caption" style={styles.statLabel}>
-            Status
+            {t('detail.statStatus')}
           </Text>
           <Text variant="body" style={styles.statValue}>
             {project.status}
@@ -165,7 +194,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
 
       <View style={styles.sectionHeader}>
         <Text variant="body" style={styles.sectionTitle}>
-          Audio Segments
+          {t('detail.sectionAudioSegments')}
         </Text>
       </View>
 
@@ -178,7 +207,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
         ListEmptyComponent={
           <View style={styles.emptySegments}>
             <Text variant="body" style={{ color: '#666' }}>
-              No segments yet. Record during a call to add audio.
+              {t('detail.emptySegments')}
             </Text>
           </View>
         }
@@ -186,7 +215,7 @@ export function ProjectDetailScreen({ projectId }: ProjectDetailScreenProps) {
 
       <View style={styles.footer}>
         <Button
-          title="Open Editor"
+          title={t('detail.openEditorButton')}
           onPress={async () => {
             await preloadEditor();
             setEditorOpen(true);
@@ -256,7 +285,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   sectionHeader: {
     paddingHorizontal: 16,
@@ -265,7 +294,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: '#888',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 13,
     textTransform: 'uppercase',
   },

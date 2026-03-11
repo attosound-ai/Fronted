@@ -1,7 +1,36 @@
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import type { Post, ApiResponse } from '@/types';
-import type { FeedResponse, CreatePostDTO } from '../types';
+import type { FeedResponse, CreatePostDTO, FeedApiResponse, FeedApiPost } from '../types';
+
+/** Map a backend FeedApiPost into the frontend Post shape. */
+function mapApiPost(raw: FeedApiPost): Post {
+  return {
+    id: raw.id,
+    content: raw.textContent || '',
+    images: raw.contentType === 'image' ? raw.filePaths : [],
+    author: {
+      id: Number(raw.author?.id) || 0,
+      username: raw.author?.username || 'unknown',
+      displayName: raw.author?.displayName || raw.author?.username || 'Unknown',
+      avatar: raw.author?.avatar || null,
+    } as Post['author'],
+    likesCount: raw.interactions?.likesCount ?? 0,
+    commentsCount: raw.interactions?.commentsCount ?? 0,
+    isLiked: raw.interactions?.isLiked ?? false,
+    createdAt: raw.createdAt || '',
+    updatedAt: raw.updatedAt || raw.createdAt || '',
+    contentType: raw.contentType,
+    textContent: raw.textContent,
+    filePaths: raw.filePaths,
+    metadata: raw.metadata,
+    tags: raw.tags,
+    sharesCount: raw.interactions?.sharesCount ?? 0,
+    repostsCount: raw.interactions?.repostsCount ?? 0,
+    isBookmarked: raw.interactions?.isBookmarked ?? false,
+    isReposted: raw.interactions?.isReposted ?? false,
+  };
+}
 
 /**
  * FeedService - Servicio de API para el feed
@@ -12,14 +41,21 @@ import type { FeedResponse, CreatePostDTO } from '../types';
  */
 export const feedService = {
   /**
-   * Obtiene el feed paginado
+   * Obtiene el feed paginado.
+   * Normalizes the backend { success, data, meta } shape into PaginatedResponse<Post>.
    */
   async getFeed(cursor?: string): Promise<FeedResponse> {
-    const response = await apiClient.get<FeedResponse>(
-      API_ENDPOINTS.POSTS.FEED,
-      { params: { cursor } }
-    );
-    return response.data;
+    const response = await apiClient.get<FeedApiResponse>(API_ENDPOINTS.POSTS.FEED, {
+      params: { cursor },
+    });
+    const body = response.data;
+    return {
+      data: (body.data || []).map(mapApiPost),
+      nextCursor:
+        body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
+      hasMore: body.meta?.hasMore ?? false,
+      total: body.data?.length ?? 0,
+    };
   },
 
   /**
@@ -27,7 +63,7 @@ export const feedService = {
    */
   async getPost(postId: string): Promise<Post> {
     const response = await apiClient.get<ApiResponse<Post>>(
-      API_ENDPOINTS.POSTS.DETAIL(postId),
+      API_ENDPOINTS.POSTS.DETAIL(postId)
     );
     return response.data.data;
   },
@@ -36,11 +72,11 @@ export const feedService = {
    * Crea un nuevo post
    */
   async createPost(data: CreatePostDTO): Promise<Post> {
-    const response = await apiClient.post<ApiResponse<Post>>(
+    const response = await apiClient.post<ApiResponse<FeedApiPost>>(
       API_ENDPOINTS.POSTS.CREATE,
       data
     );
-    return response.data.data;
+    return mapApiPost(response.data.data);
   },
 
   /**
@@ -61,6 +97,78 @@ export const feedService = {
    * Elimina un post
    */
   async deletePost(postId: string): Promise<void> {
-    await apiClient.delete(API_ENDPOINTS.POSTS.DETAIL(postId));
+    await apiClient.delete(API_ENDPOINTS.POSTS.DELETE(postId));
+  },
+
+  async bookmarkPost(postId: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.POSTS.BOOKMARK(postId));
+  },
+
+  async unbookmarkPost(postId: string): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.POSTS.BOOKMARK(postId));
+  },
+
+  async repost(postId: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.POSTS.REPOST(postId));
+  },
+
+  async unrepost(postId: string): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.POSTS.REPOST(postId));
+  },
+
+  async getBookmarks(page = 1, limit = 20) {
+    const response = await apiClient.get(API_ENDPOINTS.POSTS.BOOKMARKS_LIST, {
+      params: { page, limit },
+    });
+    return response.data;
+  },
+
+  async getReelsFeed(cursor?: string): Promise<FeedResponse> {
+    const response = await apiClient.get<FeedApiResponse>(API_ENDPOINTS.POSTS.REELS, {
+      params: { cursor },
+    });
+    const body = response.data;
+    return {
+      data: (body.data || []).map(mapApiPost),
+      nextCursor: body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
+      hasMore: body.meta?.hasMore ?? false,
+      total: body.data?.length ?? 0,
+    };
+  },
+
+  async recordReelView(postId: string, watchMs: number, replays: number): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.POSTS.REELS_VIEW, { postId, watchMs, replays });
+  },
+
+  async getUserPosts(userId: number, cursor?: string): Promise<FeedResponse> {
+    const response = await apiClient.get<FeedApiResponse>(
+      API_ENDPOINTS.POSTS.USER_POSTS(userId),
+      {
+        params: { cursor },
+      }
+    );
+    const body = response.data;
+    return {
+      data: (body.data || []).map(mapApiPost),
+      nextCursor:
+        body.meta?.nextCursor == null ? undefined : String(body.meta.nextCursor),
+      hasMore: body.meta?.hasMore ?? false,
+      total: body.data?.length ?? 0,
+    };
+  },
+
+  async getComments(postId: string, page = 1, limit = 20) {
+    const response = await apiClient.get(API_ENDPOINTS.POSTS.COMMENTS(postId), {
+      params: { page, limit },
+    });
+    return response.data;
+  },
+
+  async addComment(postId: string, text: string, parentId?: string) {
+    const response = await apiClient.post(API_ENDPOINTS.POSTS.COMMENTS(postId), {
+      comment: text,
+      parentId,
+    });
+    return response.data;
   },
 };

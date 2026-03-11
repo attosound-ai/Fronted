@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, Checkbox } from '@/components/ui';
 import { StepProps } from '@/types/registration';
@@ -19,6 +20,8 @@ export function StepCredentials({
   isLoading,
   apiError,
 }: StepProps) {
+  const { t } = useTranslation(['registration', 'common']);
+  const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -28,20 +31,19 @@ export function StepCredentials({
     const newErrors: Record<string, string> = {};
 
     if (!isStrongPassword(state.password)) {
-      newErrors.password =
-        'Password must be at least 8 characters with uppercase, lowercase, and a number';
+      newErrors.password = tv('passwordWeak');
     }
 
     if (confirmPassword !== state.password) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = tv('passwordMismatch');
     }
 
     if (!state.confirmLegalAge) {
-      newErrors.confirmLegalAge = 'You must confirm you are of legal age';
+      newErrors.confirmLegalAge = tv('legalAgeRequired');
     }
 
     if (!state.acceptTerms) {
-      newErrors.acceptTerms = 'You must accept the Terms and Conditions';
+      newErrors.acceptTerms = tv('termsRequired');
     }
 
     setErrors(newErrors);
@@ -73,7 +75,7 @@ export function StepCredentials({
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
-              Create your password
+              {t('credentials.title')}
             </Text>
           </View>
         </View>
@@ -92,13 +94,13 @@ export function StepCredentials({
         <View style={styles.form}>
           <View>
             <Input
-              label="Password"
+              label={t('credentials.passwordLabel')}
               value={state.password}
               onChangeText={(value: string) => {
                 dispatch({ type: 'UPDATE_FIELD', field: 'password', value });
                 setErrors((prev) => ({ ...prev, password: '' }));
               }}
-              placeholder="Create a password (min 8 characters)"
+              placeholder={t('credentials.passwordPlaceholder')}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="new-password"
@@ -119,13 +121,13 @@ export function StepCredentials({
 
           <View>
             <Input
-              label="Confirm Password"
+              label={t('credentials.confirmLabel')}
               value={confirmPassword}
               onChangeText={(value: string) => {
                 setConfirmPassword(value);
                 setErrors((prev) => ({ ...prev, confirmPassword: '' }));
               }}
-              placeholder="Repeat your password"
+              placeholder={t('credentials.confirmPlaceholder')}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoComplete="new-password"
@@ -154,7 +156,7 @@ export function StepCredentials({
               dispatch({ type: 'UPDATE_FIELD', field: 'confirmLegalAge', value });
               setErrors((prev) => ({ ...prev, confirmLegalAge: '' }));
             }}
-            label="I confirm that I am of legal age to use this platform."
+            label={t('credentials.legalAgeCheckbox')}
             error={errors.confirmLegalAge}
           />
 
@@ -166,13 +168,13 @@ export function StepCredentials({
             }}
             label={
               <Text variant="small" style={styles.checkboxLabel}>
-                I have read and agree to the{' '}
+                {t('credentials.termsPrefix')}{' '}
                 <Text
                   variant="small"
                   style={styles.linkText}
                   onPress={() => Linking.openURL('https://attosound.com/terms')}
                 >
-                  Terms and Conditions
+                  {t('credentials.termsLink')}
                 </Text>
                 .
               </Text>
@@ -184,7 +186,7 @@ export function StepCredentials({
         {/* Continue Button */}
         <View style={styles.footer}>
           <Button
-            title="Continue"
+            title={t('common:buttons.continue')}
             onPress={validateAndContinue}
             disabled={isLoading}
             loading={isLoading}

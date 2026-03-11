@@ -7,14 +7,17 @@ import { PostEngagement } from './PostEngagement';
 
 interface FeedPostCardProps {
   post: FeedPost;
+  isVisible?: boolean;
   onLike?: (postId: string) => void;
   onFollow?: (userId: number) => void;
   onComment?: () => void;
+  onRepost?: () => void;
   onShare?: () => void;
   onBookmark?: () => void;
   onProfilePress?: (author: PostAuthor) => void;
   onShowSupport?: () => void;
   onReport?: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -24,14 +27,17 @@ interface FeedPostCardProps {
  */
 export function FeedPostCard({
   post,
+  isVisible,
   onLike,
   onFollow,
   onComment,
+  onRepost,
   onShare,
   onBookmark,
   onProfilePress,
   onShowSupport,
   onReport,
+  onDelete,
 }: FeedPostCardProps) {
   const handleDoubleTapLike = () => {
     if (!post.isLiked) {
@@ -39,20 +45,38 @@ export function FeedPostCard({
     }
   };
 
+  const isReel = post.type === 'reel';
+
   return (
     <View style={styles.container}>
-      <PostHeader
-        author={post.author}
-        onFollow={onFollow}
+      {!isReel && (
+        <PostHeader
+          author={post.author}
+          isBookmarked={post.isBookmarked}
+          onFollow={onFollow}
+          onProfilePress={onProfilePress}
+          onBookmark={onBookmark}
+          onReport={onReport}
+          onDelete={onDelete}
+        />
+      )}
+      <PostMedia
+        post={post}
+        onDoubleTap={handleDoubleTapLike}
+        isVisible={isVisible}
+        onLike={onLike}
+        onComment={onComment}
+        onShare={onShare}
         onProfilePress={onProfilePress}
+        onFollow={onFollow}
         onBookmark={onBookmark}
         onReport={onReport}
       />
-      <PostMedia post={post} onDoubleTap={handleDoubleTapLike} />
       <PostActions
         post={post}
         onLike={onLike}
         onComment={onComment}
+        onRepost={onRepost}
         onShare={onShare}
         onShowSupport={onShowSupport}
       />

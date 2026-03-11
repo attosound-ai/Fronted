@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Avatar } from './Avatar';
 import { Text } from './Text';
 
@@ -52,6 +53,7 @@ const ANIMATION_DURATION = 300;
 const VISIBLE_DURATION = 4000;
 
 export function MessageNotificationBanner(): React.ReactElement | null {
+  const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<MessageNotificationData | null>(null);
   const [visible, setVisible] = useState(false);
@@ -154,7 +156,7 @@ export function MessageNotificationBanner(): React.ReactElement | null {
         onPress={handlePress}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`New message from ${data.senderName}: ${data.message}`}
+        accessibilityLabel={`${t('header.title')} ${data.senderName}: ${data.message}`}
       >
         <Avatar uri={data.senderAvatar} size="sm" />
         <View style={styles.textContainer}>

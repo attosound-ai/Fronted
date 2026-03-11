@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -17,8 +18,10 @@ interface ConversationItemProps {
 }
 
 function ConversationItemInner({ conversation, onPress }: ConversationItemProps) {
+  const { t } = useTranslation('messages');
   const { avatarUri, displayName } = useParticipantProfile(conversation.participantId);
-  const name = conversation.participantName || displayName || 'User';
+  const name =
+    conversation.participantName || displayName || t('conversation.fallbackUserName');
 
   return (
     <TouchableOpacity
@@ -28,7 +31,14 @@ function ConversationItemInner({ conversation, onPress }: ConversationItemProps)
       }
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${name}${conversation.unreadCount > 0 ? `, ${conversation.unreadCount} unread` : ''}`}
+      accessibilityLabel={
+        conversation.unreadCount > 0
+          ? t('conversation.unreadAccessibility', {
+              name,
+              count: conversation.unreadCount,
+            })
+          : name
+      }
     >
       <Avatar uri={avatarUri} size="md" />
       <View style={styles.content}>
@@ -110,7 +120,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: COLORS.white,
     fontSize: 11,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     lineHeight: 14,
   },
 });

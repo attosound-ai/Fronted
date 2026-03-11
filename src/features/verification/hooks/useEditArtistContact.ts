@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { showToast } from '@/components/ui/Toast';
 
@@ -17,6 +18,7 @@ interface ArtistContactForm {
  * Single Responsibility: Handles validation, submission, and error state.
  */
 export function useEditArtistContact() {
+  const { t } = useTranslation(['validation', 'common']);
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
 
@@ -51,12 +53,14 @@ export function useEditArtistContact() {
   const validate = useCallback((): boolean => {
     const newErrors: typeof errors = {};
 
-    if (!form.relationship) newErrors.relationship = 'Relationship is required';
-    if (!form.artistName.trim()) newErrors.artistName = 'Artist name is required';
-    if (!form.inmateNumber.trim()) newErrors.inmateNumber = 'Inmate number is required';
+    if (!form.relationship) newErrors.relationship = t('validation:relationshipRequired');
+    if (!form.artistName.trim())
+      newErrors.artistName = t('validation:artistNameRequired');
+    if (!form.inmateNumber.trim())
+      newErrors.inmateNumber = t('validation:inmateNumberRequired');
 
     if (form.artistEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.artistEmail)) {
-      newErrors.artistEmail = 'Invalid email address';
+      newErrors.artistEmail = t('validation:emailInvalid');
     }
 
     setErrors(newErrors);
@@ -80,10 +84,11 @@ export function useEditArtistContact() {
         artistEmail: form.artistEmail || undefined,
         artistPhone: fullPhone,
       });
-      showToast('Artist contact updated');
+      showToast(t('common:toasts.artistContactUpdated'));
       return true;
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to update';
+      const msg =
+        error instanceof Error ? error.message : t('common:toasts.failedToUpdate');
       setErrors({ submit: msg });
       return false;
     } finally {

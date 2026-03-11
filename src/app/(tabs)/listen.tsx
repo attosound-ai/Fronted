@@ -1,5 +1,5 @@
-import { ProjectListScreen } from '@/features/projects/components/ProjectListScreen';
+import { ReelsFeed } from '@/features/feed/components/ReelsFeed';
 
 export default function ListenScreen() {
-  return <ProjectListScreen />;
+  return <ReelsFeed />;
 }

@@ -178,7 +178,9 @@ export function useTwilioVoice() {
       const message =
         error instanceof Error ? error.message : 'Voice registration failed';
       console.error('[TwilioVoice] Registration FAILED:', message);
-      Sentry.captureException(error, { tags: { feature: 'twilio-voice', step: 'register' } });
+      Sentry.captureException(error, {
+        tags: { feature: 'twilio-voice', step: 'register' },
+      });
       setRegistered(false, message);
     }
   }, [setRegistered]);
@@ -236,7 +238,9 @@ export function useTwilioVoice() {
         await registerDevice();
       } catch (err) {
         console.error('[TwilioVoice] Setup FAILED:', err);
-        Sentry.captureException(err, { tags: { feature: 'twilio-voice', step: 'setup' } });
+        Sentry.captureException(err, {
+          tags: { feature: 'twilio-voice', step: 'setup' },
+        });
       }
     };
     setup();

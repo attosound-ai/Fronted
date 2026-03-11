@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface ArtistInfoCardProps {
@@ -12,6 +13,7 @@ interface ArtistInfoCardProps {
  * ArtistInfoCard — Inline row displaying artist name, email and edit action.
  */
 export function ArtistInfoCard({ artistName, email, onEdit }: ArtistInfoCardProps) {
+  const { t } = useTranslation('feed');
   return (
     <View style={styles.container}>
       <View style={styles.info}>
@@ -44,7 +46,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 13,
     lineHeight: 18,
   },

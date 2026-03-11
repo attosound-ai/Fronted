@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
 import { useConversations } from '../hooks/useConversations';
@@ -17,6 +18,7 @@ import { EmptyConversations } from './EmptyConversations';
 import type { ChatConversation } from '../types';
 
 export function ConversationList() {
+  const { t } = useTranslation('messages');
   const { conversations, isLoading, isRefreshing, error, refresh } = useConversations();
 
   const handleConversationPress = useCallback(
@@ -56,7 +58,7 @@ export function ConversationList() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <ConversationsHeader onNewMessage={handleNewMessage} />
         <View style={styles.error}>
-          <Text variant="h2">Error loading messages</Text>
+          <Text variant="h2">{t('error.loadingMessages')}</Text>
           <Text variant="body" style={styles.errorText}>
             {error.message}
           </Text>

@@ -1,7 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, Platform, Keyboard } from 'react-native';
+import {
+  View,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Keyboard,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '@/constants/theme';
 
 interface ChatInputBarProps {
@@ -13,6 +21,7 @@ interface ChatInputBarProps {
 const TYPING_DEBOUNCE_MS = 2000;
 
 export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps) {
+  const { t } = useTranslation('messages');
   const [text, setText] = useState('');
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -76,13 +85,15 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
 
   const canSend = text.trim().length > 0 && !isSending;
 
-  const bottomPadding = keyboardVisible ? SPACING.xs : Math.max(insets.bottom, SPACING.sm);
+  const bottomPadding = keyboardVisible
+    ? SPACING.xs
+    : Math.max(insets.bottom, SPACING.sm);
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPadding }]}>
       <TextInput
         style={styles.input}
-        placeholder="Type a message..."
+        placeholder={t('chat.inputPlaceholder')}
         placeholderTextColor={COLORS.gray[500]}
         value={text}
         onChangeText={handleChangeText}
@@ -90,14 +101,14 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
         maxLength={2000}
         returnKeyType={Platform.OS === 'ios' ? 'default' : 'send'}
         blurOnSubmit={false}
-        accessibilityLabel="Message input"
+        accessibilityLabel={t('chat.inputAccessibilityLabel')}
       />
       <TouchableOpacity
         onPress={handleSend}
         disabled={!canSend}
         style={[styles.sendButton, canSend && styles.sendButtonActive]}
         accessibilityRole="button"
-        accessibilityLabel="Send message"
+        accessibilityLabel={t('chat.sendAccessibilityLabel')}
       >
         <Ionicons
           name="send"
@@ -133,7 +144,7 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     minHeight: 40,
     color: COLORS.white,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
   },
   sendButton: {

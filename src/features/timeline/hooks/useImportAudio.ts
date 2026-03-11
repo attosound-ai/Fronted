@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as DocumentPicker from 'expo-document-picker';
 import { showToast } from '@/components/ui/Toast';
 import { projectService } from '@/lib/api/projectService';
@@ -16,6 +17,7 @@ export function useImportAudio({
   activeLaneIndex,
   addClip,
 }: UseImportAudioOptions) {
+  const { t } = useTranslation('common');
   const [isImporting, setIsImporting] = useState(false);
 
   const importAudio = useCallback(async () => {
@@ -51,10 +53,10 @@ export function useImportAudio({
 
       // Convert server clip to local and add to timeline
       addClip(serverClipToLocal(clip));
-      showToast('Audio imported');
+      showToast(t('toasts.audioImported'));
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      showToast(`Import failed: ${msg}`);
+      showToast(t('toasts.importFailed', { message: msg }));
     } finally {
       setIsImporting(false);
     }

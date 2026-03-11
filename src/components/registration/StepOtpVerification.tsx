@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { Text, Button, OtpInput } from '@/components/ui';
 import { StepProps } from '@/types/registration';
@@ -21,6 +22,7 @@ export function StepOtpVerification({
   isLoading,
   apiError,
 }: StepProps) {
+  const { t } = useTranslation(['registration', 'common', 'validation']);
   const countdown = useCountdown();
   const [isResending, setIsResending] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export function StepOtpVerification({
       dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value: '' });
       countdown.start(COOLDOWN_SECONDS);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to resend code';
+      const message = error instanceof Error ? error.message : t('otp.resendFailed');
       setOtpError(message);
     } finally {
       setIsResending(false);
@@ -58,7 +60,7 @@ export function StepOtpVerification({
 
   const handleContinue = () => {
     if (state.otpCode.length !== 6) {
-      setOtpError('Please enter the complete 6-digit code');
+      setOtpError(t('validation:otpIncomplete'));
       return;
     }
     onNext();
@@ -75,7 +77,7 @@ export function StepOtpVerification({
       >
         {/* Title */}
         <Text variant="h2" style={styles.title}>
-          Enter the code we sent to your phone
+          {t('otp.title')}
         </Text>
 
         {/* Phone display */}
@@ -123,17 +125,17 @@ export function StepOtpVerification({
             ]}
           >
             {isResending
-              ? 'Sending...'
+              ? t('otp.sending')
               : countdown.isActive
-                ? `Resend code (${countdown.remaining}s)`
-                : 'Resend code'}
+                ? t('otp.resendCodeCountdown', { seconds: countdown.remaining })
+                : t('otp.resendCode')}
           </Text>
         </TouchableOpacity>
 
         {/* Continue Button */}
         <View style={styles.buttonContainer}>
           <Button
-            title="Continue"
+            title={t('common:buttons.continue')}
             onPress={handleContinue}
             disabled={isLoading}
             loading={isLoading}
@@ -189,7 +191,7 @@ const styles = StyleSheet.create({
   },
   resendText: {
     color: '#3B82F6',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   resendTextDisabled: {
     color: '#666666',

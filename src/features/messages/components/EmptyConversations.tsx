@@ -1,17 +1,19 @@
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 
 export function EmptyConversations() {
+  const { t } = useTranslation('messages');
   return (
     <View style={styles.container}>
       <Ionicons name="chatbubbles-outline" size={48} color={COLORS.gray[500]} />
       <Text variant="h2" style={styles.title}>
-        No messages yet
+        {t('empty.title')}
       </Text>
       <Text variant="body" style={styles.subtitle}>
-        Start a conversation
+        {t('empty.subtitle')}
       </Text>
     </View>
   );

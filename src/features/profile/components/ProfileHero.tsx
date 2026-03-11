@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { formatCount } from '@/utils/formatters';
@@ -11,6 +12,8 @@ interface ProfileHeroProps {
 }
 
 export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -37,7 +40,9 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
       {user.role !== 'listener' && (
         <View style={styles.badge}>
           <Text variant="caption" style={styles.badgeText}>
-            {user.role === 'artist' ? 'Artist' : 'Representative'}
+            {user.role === 'artist'
+              ? t('hero.roleBadgeArtist')
+              : t('hero.roleBadgeRepresentative')}
           </Text>
           {user.profileVerified && (
             <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />
@@ -49,19 +54,19 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
         <View style={styles.stat}>
           <Text variant="h2">{formatCount(user.postsCount)}</Text>
           <Text variant="caption" style={styles.statLabel}>
-            Posts
+            {t('hero.statPosts')}
           </Text>
         </View>
         <View style={styles.stat}>
           <Text variant="h2">{formatCount(user.followersCount)}</Text>
           <Text variant="caption" style={styles.statLabel}>
-            Followers
+            {t('hero.statFollowers')}
           </Text>
         </View>
         <View style={styles.stat}>
           <Text variant="h2">{formatCount(user.followingCount)}</Text>
           <Text variant="caption" style={styles.statLabel}>
-            Following
+            {t('hero.statFollowing')}
           </Text>
         </View>
       </View>
@@ -72,7 +77,7 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
         style={styles.editButton}
       >
         <Text variant="body" style={styles.editButtonText}>
-          Edit Profile
+          {t('hero.editProfile')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -141,7 +146,7 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
 });

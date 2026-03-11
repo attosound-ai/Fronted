@@ -3,6 +3,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -14,14 +15,15 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { useEditProfile } from '../hooks/useEditProfile';
 import { EditProfileHeader } from './EditProfileHeader';
 
-const RELATIONSHIP_OPTIONS = [
-  { label: 'Family', value: 'family' },
-  { label: 'Friend', value: 'friend' },
-  { label: 'Manager', value: 'manager' },
-];
-
 export function EditProfileScreen() {
+  const { t } = useTranslation('profile');
   const user = useAuthStore((s) => s.user);
+
+  const RELATIONSHIP_OPTIONS = [
+    { label: t('edit.relationshipFamily'), value: 'family' },
+    { label: t('edit.relationshipFriend'), value: 'friend' },
+    { label: t('edit.relationshipManager'), value: 'manager' },
+  ];
   const { form, errors, isSubmitting, updateField, setAvatar, save } = useEditProfile();
   const { pickFromGallery } = useImagePicker();
 
@@ -67,27 +69,27 @@ export function EditProfileScreen() {
 
         {/* Common Fields */}
         <Input
-          label="Display Name"
+          label={t('edit.displayNameLabel')}
           value={form.displayName}
           onChangeText={(text) => updateField('displayName', text)}
-          placeholder="Enter display name"
+          placeholder={t('edit.displayNamePlaceholder')}
           error={errors.displayName}
         />
 
         <Input
-          label="Username"
+          label={t('edit.usernameLabel')}
           value={form.username}
           onChangeText={(text) => updateField('username', text)}
-          placeholder="Enter username"
+          placeholder={t('edit.usernamePlaceholder')}
           autoCapitalize="none"
           error={errors.username}
         />
 
         <Input
-          label="Bio"
+          label={t('edit.bioLabel')}
           value={form.bio}
           onChangeText={(text) => updateField('bio', text)}
-          placeholder="Tell us about yourself"
+          placeholder={t('edit.bioPlaceholder')}
           multiline
           numberOfLines={3}
           style={styles.bioInput}
@@ -97,17 +99,17 @@ export function EditProfileScreen() {
         {user.role === 'artist' && (
           <>
             <Input
-              label="Artist Name"
+              label={t('edit.artistNameLabel')}
               value={form.artistName}
               onChangeText={(text) => updateField('artistName', text)}
-              placeholder="Enter artist name"
+              placeholder={t('edit.artistNamePlaceholder')}
               error={errors.artistName}
             />
             <Input
-              label="Inmate Number"
+              label={t('edit.inmateNumberLabel')}
               value={form.inmateNumber}
               onChangeText={(text) => updateField('inmateNumber', text)}
-              placeholder="Enter inmate number"
+              placeholder={t('edit.inmateNumberPlaceholder')}
               error={errors.inmateNumber}
             />
           </>
@@ -119,13 +121,13 @@ export function EditProfileScreen() {
             <View style={styles.warningContainer}>
               <Ionicons name="warning-outline" size={16} color="#F59E0B" />
               <Text variant="small" style={styles.warningText}>
-                Changing artist info will require re-verification.
+                {t('edit.warningReVerification')}
               </Text>
             </View>
 
             <Select
-              label="Relationship"
-              placeholder="Select relationship"
+              label={t('edit.relationshipLabel')}
+              placeholder={t('edit.relationshipPlaceholder')}
               options={RELATIONSHIP_OPTIONS}
               value={form.relationship || null}
               onChange={(value) => updateField('relationship', value)}
@@ -133,40 +135,40 @@ export function EditProfileScreen() {
             />
 
             <Input
-              label="Artist Name"
+              label={t('edit.artistNameLabel')}
               value={form.artistName}
               onChangeText={(text) => updateField('artistName', text)}
-              placeholder="Enter artist name"
+              placeholder={t('edit.artistNamePlaceholder')}
               error={errors.artistName}
             />
 
             <Input
-              label="Inmate Number"
+              label={t('edit.inmateNumberLabel')}
               value={form.inmateNumber}
               onChangeText={(text) => updateField('inmateNumber', text)}
-              placeholder="Enter inmate number"
+              placeholder={t('edit.inmateNumberPlaceholder')}
               error={errors.inmateNumber}
             />
 
             <Input
-              label="Inmate State"
+              label={t('edit.inmateStateLabel')}
               value={form.inmateState}
               onChangeText={(text) => updateField('inmateState', text)}
-              placeholder="Enter inmate state"
+              placeholder={t('edit.inmateStatePlaceholder')}
             />
 
             <Input
-              label="Artist Email"
+              label={t('edit.artistEmailLabel')}
               value={form.artistEmail}
               onChangeText={(text) => updateField('artistEmail', text)}
-              placeholder="Enter artist email (optional)"
+              placeholder={t('edit.artistEmailPlaceholder')}
               keyboardType="email-address"
               autoCapitalize="none"
               error={errors.artistEmail}
             />
 
             <PhoneInput
-              label="Artist Phone"
+              label={t('edit.artistPhoneLabel')}
               countryCode={form.artistPhoneCountryCode}
               onCountryCodeChange={(code) => updateField('artistPhoneCountryCode', code)}
               phoneNumber={form.artistPhone}

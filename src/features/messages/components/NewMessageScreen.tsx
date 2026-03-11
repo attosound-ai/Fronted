@@ -10,6 +10,7 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -18,6 +19,7 @@ import { messageService } from '../services/messageService';
 import type { User } from '@/types';
 
 export function NewMessageScreen() {
+  const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -48,7 +50,7 @@ export function NewMessageScreen() {
         });
       } catch (err: unknown) {
         const message =
-          err instanceof Error ? err.message : 'Failed to start conversation';
+          err instanceof Error ? err.message : t('newMessage.errorFailedToStart');
         setError(message);
         setIsCreating(false);
       }
@@ -63,7 +65,9 @@ export function NewMessageScreen() {
         onPress={() => handleSelectUser(item)}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Message ${item.displayName || item.username}`}
+        accessibilityLabel={t('newMessage.messageUserAccessibility', {
+          name: item.displayName || item.username,
+        })}
       >
         <Avatar uri={item.avatar} size="md" />
         <View style={styles.userInfo}>
@@ -86,11 +90,11 @@ export function NewMessageScreen() {
           onPress={handleBack}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('newMessage.backAccessibilityLabel')}
         >
           <Ionicons name="chevron-back" size={28} color={COLORS.white} />
         </TouchableOpacity>
-        <Text variant="h2">New Message</Text>
+        <Text variant="h2">{t('newMessage.headerTitle')}</Text>
       </View>
       <View style={styles.searchContainer}>
         <Ionicons
@@ -101,13 +105,13 @@ export function NewMessageScreen() {
         />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search users..."
+          placeholder={t('newMessage.searchPlaceholder')}
           placeholderTextColor={COLORS.gray[500]}
           value={query}
           onChangeText={setQuery}
           autoFocus
           returnKeyType="search"
-          accessibilityLabel="Search users"
+          accessibilityLabel={t('newMessage.searchAccessibilityLabel')}
         />
       </View>
       {isLoading && (
@@ -119,7 +123,7 @@ export function NewMessageScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
           <Text variant="caption" style={styles.creatingText}>
-            Creating conversation...
+            {t('newMessage.creatingConversation')}
           </Text>
         </View>
       )}
@@ -171,7 +175,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.sm + 2,
     color: COLORS.white,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
   },
   loadingContainer: {

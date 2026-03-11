@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 
@@ -8,14 +9,15 @@ interface ConversationsHeaderProps {
 }
 
 export function ConversationsHeader({ onNewMessage }: ConversationsHeaderProps) {
+  const { t } = useTranslation('messages');
   return (
     <View style={styles.container}>
-      <Text variant="h1">Messages</Text>
+      <Text variant="h1">{t('header.title')}</Text>
       <TouchableOpacity
         onPress={onNewMessage}
         style={styles.button}
         accessibilityRole="button"
-        accessibilityLabel="New message"
+        accessibilityLabel={t('header.newMessageAccessibility')}
       >
         <Ionicons name="create-outline" size={24} color={COLORS.white} />
       </TouchableOpacity>

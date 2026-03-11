@@ -12,6 +12,7 @@ import {
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { formatCount } from '@/utils/formatters';
@@ -37,7 +38,11 @@ interface PublicProfileScreenProps {
   fallbackAuthor?: FallbackAuthor;
 }
 
-export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScreenProps) {
+export function PublicProfileScreen({
+  userId,
+  fallbackAuthor,
+}: PublicProfileScreenProps) {
+  const { t } = useTranslation('profile');
   const numericId = Number(userId);
   const { user, isLoading, error, toggleFollow, isToggling } = useUserProfile(userId);
   const [previewPost, setPreviewPost] = useState<FeedPost | null>(null);
@@ -66,7 +71,7 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
         <Header />
         <View style={styles.centered}>
           <Text variant="body" style={styles.errorText}>
-            Could not load profile
+            {t('publicProfile.errorLoadFailed')}
           </Text>
         </View>
       </SafeAreaView>
@@ -109,9 +114,13 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
           {role && role !== 'listener' && (
             <View style={styles.badge}>
               <Text variant="caption" style={styles.badgeText}>
-                {role === 'artist' ? 'Artist' : 'Representative'}
+                {role === 'artist'
+                  ? t('publicProfile.roleBadgeArtist')
+                  : t('publicProfile.roleBadgeRepresentative')}
               </Text>
-              {isVerified && <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />}
+              {isVerified && (
+                <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />
+              )}
             </View>
           )}
 
@@ -119,7 +128,7 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
             <View style={styles.badge}>
               <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />
               <Text variant="caption" style={styles.badgeText}>
-                Verified
+                {t('publicProfile.roleBadgeVerified')}
               </Text>
             </View>
           )}
@@ -128,19 +137,19 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
             <View style={styles.stat}>
               <Text variant="h2">{formatCount(postsCount)}</Text>
               <Text variant="caption" style={styles.statLabel}>
-                Posts
+                {t('publicProfile.statPosts')}
               </Text>
             </View>
             <View style={styles.stat}>
               <Text variant="h2">{formatCount(followersCount)}</Text>
               <Text variant="caption" style={styles.statLabel}>
-                Followers
+                {t('publicProfile.statFollowers')}
               </Text>
             </View>
             <View style={styles.stat}>
               <Text variant="h2">{formatCount(followingCount)}</Text>
               <Text variant="caption" style={styles.statLabel}>
-                Following
+                {t('publicProfile.statFollowing')}
               </Text>
             </View>
           </View>
@@ -154,9 +163,14 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
             >
               <Text
                 variant="body"
-                style={[styles.followButtonText, isFollowing && styles.followingButtonText]}
+                style={[
+                  styles.followButtonText,
+                  isFollowing && styles.followingButtonText,
+                ]}
               >
-                {isFollowing ? 'Following' : 'Follow'}
+                {isFollowing
+                  ? t('publicProfile.followingButton')
+                  : t('publicProfile.followButton')}
               </Text>
             </TouchableOpacity>
           )}
@@ -168,7 +182,11 @@ export function PublicProfileScreen({ userId, fallbackAuthor }: PublicProfileScr
             <View style={styles.gridDivider} />
             <View style={styles.grid}>
               {userPosts.map((post) => (
-                <PostTile key={post.id} post={post} onPress={() => setPreviewPost(post)} />
+                <PostTile
+                  key={post.id}
+                  post={post}
+                  onPress={() => setPreviewPost(post)}
+                />
               ))}
             </View>
           </>
@@ -245,13 +263,15 @@ function getPostThumbnail(post: FeedPost): string | null {
 }
 
 function Header() {
+  const { t } = useTranslation('profile');
+
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
         <Ionicons name="arrow-back" size={24} color="#FFF" />
       </TouchableOpacity>
       <Text variant="h2" style={styles.headerTitle}>
-        Profile
+        {t('publicProfile.headerTitle')}
       </Text>
       <View style={{ width: 24 }} />
     </View>
@@ -337,7 +357,7 @@ const styles = StyleSheet.create({
   },
   followButtonText: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
   followingButtonText: {

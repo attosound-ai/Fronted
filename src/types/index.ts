@@ -163,7 +163,7 @@ export interface Login2FAResponse {
   maskedTarget: string;
 }
 
-// Post
+// Post (supports both legacy placeholder shape and backend FeedPostDto)
 export interface Post {
   id: string;
   content: string;
@@ -174,6 +174,16 @@ export interface Post {
   isLiked: boolean;
   createdAt: string;
   updatedAt: string;
+  // Fields from backend FeedPostDto
+  contentType?: string;
+  textContent?: string;
+  filePaths?: string[];
+  metadata?: Record<string, string>;
+  tags?: string[];
+  sharesCount?: number;
+  repostsCount?: number;
+  isBookmarked?: boolean;
+  isReposted?: boolean;
 }
 
 // Comentario

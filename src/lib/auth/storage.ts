@@ -66,10 +66,6 @@ export const authStorage = {
 
   // Limpiar todo
   async clearAll(): Promise<void> {
-    await Promise.all([
-      this.removeToken(),
-      this.removeRefreshToken(),
-      this.removeUser(),
-    ]);
+    await Promise.all([this.removeToken(), this.removeRefreshToken(), this.removeUser()]);
   },
 };

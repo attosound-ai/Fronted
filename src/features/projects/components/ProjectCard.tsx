@@ -1,5 +1,6 @@
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { Project } from '@/types/project';
 
@@ -24,6 +25,7 @@ function formatDate(dateStr: string): string {
 }
 
 export function ProjectCard({ project, onPress }: ProjectCardProps) {
+  const { t } = useTranslation('projects');
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
@@ -38,7 +40,8 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
         </Text>
         <View style={styles.meta}>
           <Text variant="caption" style={styles.metaText}>
-            {project.segmentCount} track{project.segmentCount !== 1 ? 's' : ''}
+            {project.segmentCount}{' '}
+            {project.segmentCount !== 1 ? t('card.trackPlural') : t('card.trackSingular')}
           </Text>
           <View style={styles.dot} />
           <Text variant="caption" style={styles.metaText}>
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: '#FFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   meta: {
     flexDirection: 'row',

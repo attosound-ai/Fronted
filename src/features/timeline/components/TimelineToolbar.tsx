@@ -1,5 +1,6 @@
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface TimelineToolbarProps {
@@ -18,6 +19,8 @@ interface TimelineToolbarProps {
   onImport?: () => void;
   isImporting?: boolean;
   onVolumePress?: () => void;
+  onPublish?: () => void;
+  isPublishing?: boolean;
 }
 
 interface ToolButtonProps {
@@ -91,7 +94,10 @@ export function TimelineToolbar({
   onImport,
   isImporting = false,
   onVolumePress,
+  onPublish,
+  isPublishing = false,
 }: TimelineToolbarProps) {
+  const { t } = useTranslation('projects');
   return (
     <View style={styles.container}>
       {/* Recording button row */}
@@ -101,14 +107,16 @@ export function TimelineToolbar({
             <Pressable style={styles.stopRecordButton} onPress={onStopRecord}>
               <Ionicons name="stop-circle" size={18} color="#FFF" />
               <Text variant="caption" style={styles.stopRecordText}>
-                Stop {formatElapsed(recordingElapsed)}
+                {t('timeline.toolStopRecording', {
+                  elapsed: formatElapsed(recordingElapsed),
+                })}
               </Text>
             </Pressable>
           ) : (
             <Pressable style={styles.recordButton} onPress={onRecord}>
               <View style={styles.recordDot} />
               <Text variant="caption" style={styles.recordText}>
-                Record
+                {t('timeline.toolRecord')}
               </Text>
             </Pressable>
           )}
@@ -116,10 +124,10 @@ export function TimelineToolbar({
       )}
 
       <View style={styles.row}>
-        <ToolButton icon="cut" label="Split" onPress={onSplit} />
+        <ToolButton icon="cut" label={t('timeline.toolSplit')} onPress={onSplit} />
         <ToolButton
           icon="trash-outline"
-          label="Delete"
+          label={t('timeline.toolDelete')}
           onPress={onDelete}
           disabled={!hasSelection}
           color="#EF4444"
@@ -127,19 +135,29 @@ export function TimelineToolbar({
         {onVolumePress && (
           <ToolButton
             icon="volume-medium"
-            label="Volume"
+            label={t('timeline.toolVolume')}
             onPress={onVolumePress}
             disabled={!hasSelection}
           />
         )}
-        <ToolButton icon="arrow-undo" label="Undo" onPress={onUndo} disabled={!canUndo} />
-        <ToolButton icon="arrow-redo" label="Redo" onPress={onRedo} disabled={!canRedo} />
+        <ToolButton
+          icon="arrow-undo"
+          label={t('timeline.toolUndo')}
+          onPress={onUndo}
+          disabled={!canUndo}
+        />
+        <ToolButton
+          icon="arrow-redo"
+          label={t('timeline.toolRedo')}
+          onPress={onRedo}
+          disabled={!canRedo}
+        />
       </View>
       <View style={styles.row}>
         {onImport && (
           <ToolButton
             icon="folder-open-outline"
-            label={isImporting ? 'Importing...' : 'Import'}
+            label={isImporting ? t('timeline.toolImporting') : t('timeline.toolImport')}
             onPress={onImport}
             disabled={isImporting}
             variant="outlined"
@@ -147,10 +165,28 @@ export function TimelineToolbar({
         )}
         <ToolButton
           icon="download-outline"
-          label="Export"
+          label={t('timeline.toolExport')}
           onPress={onExport}
           variant="outlined"
         />
+        {onPublish && (
+          <Pressable
+            onPress={onPublish}
+            disabled={isPublishing}
+            style={[styles.publishButton, isPublishing && styles.buttonDisabled]}
+          >
+            {isPublishing ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
+            )}
+            <Text style={styles.publishLabel}>
+              {isPublishing
+                ? t('timeline.toolPublishing', 'Publicando...')
+                : t('timeline.toolPublish', 'Publicar')}
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -190,7 +226,7 @@ const styles = StyleSheet.create({
   recordText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   stopRecordButton: {
     flexDirection: 'row',
@@ -205,7 +241,7 @@ const styles = StyleSheet.create({
   stopRecordText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   row: {
     flexDirection: 'row',
@@ -232,10 +268,25 @@ const styles = StyleSheet.create({
   outlinedLabel: {
     color: '#000',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   buttonDisabled: {
     opacity: 0.4,
+  },
+  publishButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  publishLabel: {
+    color: '#FFF',
+    fontSize: 12,
+    fontFamily: 'Archivo_600SemiBold',
   },
   label: {
     color: '#999',

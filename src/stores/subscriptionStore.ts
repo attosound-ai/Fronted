@@ -62,5 +62,5 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
     getPlan: () => normalizePlan(get().subscription?.plan ?? 'connect_free'),
 
     clear: () => set({ subscription: null, isLoading: false }),
-  }),
+  })
 );

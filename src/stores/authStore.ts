@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as Sentry from '@sentry/react-native';
+import i18n from '@/lib/i18n';
 import { authService } from '@/lib/api/authService';
 import { authStorage } from '@/lib/auth/storage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -163,7 +164,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);
       useSubscriptionStore.getState().fetchSubscription();
     } catch (error: unknown) {
-      const message = getErrorMessage(error, 'Invalid credentials');
+      const message = getErrorMessage(error, i18n.t('common:toasts.invalidCredentials'));
       set({ isAuthenticating: false, error: message });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_FAILED, { error: message });
       throw error;

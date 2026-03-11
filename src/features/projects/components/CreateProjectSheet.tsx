@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +19,7 @@ export function CreateProjectSheet({
   onSubmit,
   isLoading,
 }: CreateProjectSheetProps) {
+  const { t } = useTranslation('projects');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
@@ -38,17 +40,17 @@ export function CreateProjectSheet({
     <BottomSheet visible={visible} onClose={handleClose}>
       <View style={styles.container}>
         <Text variant="h3" style={styles.title}>
-          New Project
+          {t('create.sheetTitle')}
         </Text>
         <Input
-          placeholder="Project name"
+          placeholder={t('create.namePlaceholder')}
           value={name}
           onChangeText={setName}
           maxLength={200}
           autoFocus
         />
         <Input
-          placeholder="Description (optional)"
+          placeholder={t('create.descriptionPlaceholder')}
           value={description}
           onChangeText={setDescription}
           multiline
@@ -56,7 +58,7 @@ export function CreateProjectSheet({
           style={styles.descriptionInput}
         />
         <Button
-          title="Create"
+          title={t('create.createButton')}
           onPress={handleSubmit}
           disabled={!name.trim() || isLoading}
           loading={isLoading}

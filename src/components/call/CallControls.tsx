@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -21,24 +22,25 @@ export function CallControls({
   onToggleCapture,
   onHangUp,
 }: CallControlsProps) {
+  const { t } = useTranslation('calls');
   return (
     <View style={styles.container}>
       <View style={styles.row}>
         <ControlButton
           icon={isMuted ? 'mic-off' : 'mic'}
-          label={isMuted ? 'Unmute' : 'Mute'}
+          label={isMuted ? t('active.unmute') : t('active.mute')}
           active={isMuted}
           onPress={onToggleMute}
         />
         <ControlButton
           icon={isOnHold ? 'play' : 'pause'}
-          label={isOnHold ? 'Resume' : 'Hold'}
+          label={isOnHold ? t('active.resume') : t('active.hold')}
           active={isOnHold}
           onPress={onToggleHold}
         />
         <ControlButton
           icon={isCapturing ? 'stop-circle' : 'radio-button-on'}
-          label={isCapturing ? 'Stop' : 'Capture'}
+          label={isCapturing ? t('active.stop') : t('active.capture')}
           active={isCapturing}
           activeColor="#EF4444"
           onPress={onToggleCapture}
@@ -97,7 +99,7 @@ const styles = StyleSheet.create({
   controlLabel: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
   },
   hangUpButton: {
     width: 64,

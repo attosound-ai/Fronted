@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   },
   message: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 14,
     lineHeight: 20,
     flexShrink: 1,

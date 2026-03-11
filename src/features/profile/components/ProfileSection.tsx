@@ -32,11 +32,7 @@ export function ProfileSection({
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        onPress={toggle}
-        activeOpacity={0.7}
-        style={styles.header}
-      >
+      <TouchableOpacity onPress={toggle} activeOpacity={0.7} style={styles.header}>
         <Text variant="h3" style={styles.title}>
           {title}
         </Text>

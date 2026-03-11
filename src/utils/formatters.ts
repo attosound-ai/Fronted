@@ -1,47 +1,54 @@
 /**
- * Formatters - Funciones puras de formateo
+ * Formatters - Pure formatting functions
  *
- * Principio SOLID:
- * - Single Responsibility: Solo formatean datos
- * - Funciones puras: sin side effects
+ * Uses i18n.language for locale-aware formatting.
  */
 
+import i18n from '@/lib/i18n';
+
+function getLocale(): string {
+  return i18n.language || 'en';
+}
+
 /**
- * Formatea una fecha relativa (hace X tiempo)
+ * Formats a relative time string (e.g. "now", "5m", "3h")
  */
 export function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (diffInSeconds < 60) return 'now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
-  if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 604800)}sem`;
+  const t = i18n.getFixedT(getLocale(), 'common');
 
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  if (diffInSeconds < 60) return t('time.now');
+  if (diffInSeconds < 3600)
+    return `${Math.floor(diffInSeconds / 60)}${t('time.minuteShort')}`;
+  if (diffInSeconds < 86400)
+    return `${Math.floor(diffInSeconds / 3600)}${t('time.hourShort')}`;
+  if (diffInSeconds < 604800)
+    return `${Math.floor(diffInSeconds / 86400)}${t('time.dayShort')}`;
+  if (diffInSeconds < 2592000)
+    return `${Math.floor(diffInSeconds / 604800)}${t('time.weekShort')}`;
+
+  return date.toLocaleDateString(getLocale(), { day: 'numeric', month: 'short' });
 }
 
 /**
- * Formatea un número grande (1K, 1M, etc.)
+ * Formats a large number using locale-aware compact notation
  */
 export function formatCount(count: number): string {
-  if (count >= 1000000) {
-    return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
-  }
   if (count >= 1000) {
-    return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    return new Intl.NumberFormat(getLocale(), { notation: 'compact' }).format(count);
   }
   return count.toString();
 }
 
 /**
- * Formatea una fecha completa
+ * Formats a full date string
  */
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString('es-ES', {
+  return date.toLocaleDateString(getLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

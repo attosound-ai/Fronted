@@ -38,9 +38,7 @@ export function Checkbox({
             disabled && styles.boxDisabled,
           ]}
         >
-          {checked && (
-            <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-          )}
+          {checked && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
         </View>
 
         {label && (

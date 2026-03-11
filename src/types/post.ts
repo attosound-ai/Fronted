@@ -6,7 +6,7 @@
  * - Interface Segregation: Components consume only what they need
  */
 
-export type PostType = 'audio' | 'video' | 'image' | 'text';
+export type PostType = 'audio' | 'video' | 'image' | 'text' | 'reel';
 
 export interface PostAuthor {
   id: number;
@@ -27,6 +27,8 @@ export interface FeedPost {
   audioUrl?: string;
   videoUrl?: string;
   images?: string[];
+  thumbnailUrl?: string;
+  duration?: number;
   // Content
   title?: string;
   description?: string;
@@ -36,6 +38,8 @@ export interface FeedPost {
   sharesCount: number;
   repostsCount: number;
   isLiked: boolean;
+  isBookmarked?: boolean;
+  isReposted?: boolean;
   // Meta
   createdAt: string;
 }

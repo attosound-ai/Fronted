@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 interface CaptureIndicatorProps {
   isCapturing: boolean;
 }
 
 export function CaptureIndicator({ isCapturing }: CaptureIndicatorProps) {
+  const { t } = useTranslation('calls');
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function CaptureIndicator({ isCapturing }: CaptureIndicatorProps) {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.dot, { opacity: pulseAnim }]} />
-      <Text style={styles.text}>Capturing Audio</Text>
+      <Text style={styles.text}>{t('active.capturingAudio')}</Text>
     </View>
   );
 }
@@ -62,6 +64,6 @@ const styles = StyleSheet.create({
   text: {
     color: '#EF4444',
     fontSize: 14,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
 });

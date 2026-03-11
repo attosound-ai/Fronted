@@ -222,14 +222,20 @@ export function useTimelinePlayback({
       (async () => {
         try {
           // 1. Sync all lane players (load sources + seek)
-          await Promise.all(lanes.map((lane) => syncLanePlayer(lane, playbackPositionMs)));
+          await Promise.all(
+            lanes.map((lane) => syncLanePlayer(lane, playbackPositionMs))
+          );
           if (cancelled) return;
 
           // 2. Wait for all players to be loaded (with timeout fallback)
           await Promise.all(
             lanes.map((lane) => {
               const player = playersRef.current.get(lane);
-              const clipExists = findClipOnLane(clipsRef.current, playbackPositionMs, lane);
+              const clipExists = findClipOnLane(
+                clipsRef.current,
+                playbackPositionMs,
+                lane
+              );
               if (player && clipExists) return waitForLoaded(player);
               return Promise.resolve(true);
             })

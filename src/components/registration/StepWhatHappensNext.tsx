@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -13,10 +14,10 @@ import { Button } from '@/components/ui/Button';
  * <StepWhatHappensNext state={state} dispatch={dispatch} onNext={handleNext} onBack={handleBack} />
  */
 export const StepWhatHappensNext: React.FC<StepProps> = ({ onNext, onBack }) => {
-  const callFeatures = [
-    'Securely stored in a dedicated folder within your profile',
-    'Available for you to listen, download or post them to at any time',
-  ];
+  const { t } = useTranslation(['registration', 'common']);
+  const callFeatures = t('whatHappensNext.callFeatures', {
+    returnObjects: true,
+  }) as string[];
 
   return (
     <View style={styles.container}>
@@ -37,7 +38,7 @@ export const StepWhatHappensNext: React.FC<StepProps> = ({ onNext, onBack }) => 
             </TouchableOpacity>
           )}
           <Text variant="h1" style={styles.title}>
-            What happens next?
+            {t('whatHappensNext.title')}
           </Text>
         </View>
 
@@ -45,17 +46,21 @@ export const StepWhatHappensNext: React.FC<StepProps> = ({ onNext, onBack }) => 
         <View style={styles.content}>
           {/* Section 1: Verify Artist Consent */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Verify Artist Consent</Text>
+            <Text style={styles.sectionTitle}>
+              {t('whatHappensNext.verifyConsentTitle')}
+            </Text>
             <Text style={styles.paragraph}>
-              We will contact the artist directly to verify their consent for you to act as their representative. This is a crucial step to ensure the artist's rights and wishes are respected.
+              {t('whatHappensNext.verifyConsentParagraph')}
             </Text>
           </View>
 
           {/* Section 2: How calls work */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>How calls work</Text>
+            <Text style={styles.sectionTitle}>
+              {t('whatHappensNext.howCallsWorkTitle')}
+            </Text>
             <Text style={styles.paragraph}>
-              All consent verification calls are automatically recorded for legal compliance and your protection. These recordings serve as official documentation of the artist's approval.
+              {t('whatHappensNext.howCallsWorkParagraph')}
             </Text>
 
             {/* Bullet points */}
@@ -72,8 +77,18 @@ export const StepWhatHappensNext: React.FC<StepProps> = ({ onNext, onBack }) => 
           {/* Highlighted info box */}
           <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-              These recordings are private and accessible{' '}
-              <Text style={styles.boldText}>only from your account</Text>.
+              {(() => {
+                const raw = t('whatHappensNext.recordingsPrivate');
+                const match = raw.match(/^(.*?)<bold>(.*?)<\/bold>(.*)$/s);
+                if (!match) return raw;
+                return (
+                  <>
+                    {match[1]}
+                    <Text style={styles.boldText}>{match[2]}</Text>
+                    {match[3]}
+                  </>
+                );
+              })()}
             </Text>
           </View>
         </View>
@@ -84,7 +99,7 @@ export const StepWhatHappensNext: React.FC<StepProps> = ({ onNext, onBack }) => 
 
       {/* Bottom button */}
       <View style={styles.footer}>
-        <Button title="Continue" onPress={onNext} />
+        <Button title={t('common:buttons.continue')} onPress={onNext} />
       </View>
     </View>
   );
@@ -114,7 +129,7 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 20,
     color: '#FFFFFF',
   },
@@ -126,12 +141,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 18,
     color: '#FFFFFF',
   },
   paragraph: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     lineHeight: 22,
     color: '#CCCCCC',
@@ -154,7 +169,7 @@ const styles = StyleSheet.create({
   },
   bulletText: {
     flex: 1,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     lineHeight: 22,
     color: '#FFFFFF',
@@ -167,13 +182,13 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   infoText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 15,
     lineHeight: 22,
     color: '#CCCCCC',
   },
   boldText: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     color: '#FFFFFF',
   },
   spacer: {

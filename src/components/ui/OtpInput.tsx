@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 20,
     color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   cellFilled: {
     borderColor: '#FFFFFF',

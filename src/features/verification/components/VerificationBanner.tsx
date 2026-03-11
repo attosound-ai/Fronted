@@ -1,5 +1,6 @@
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
@@ -14,6 +15,7 @@ import { ArtistInfoCard } from './ArtistInfoCard';
  * Always shows OTP input fields (auto-sends OTP on mount).
  */
 export function VerificationBanner() {
+  const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
   const hasBridgeNumber = useSubscriptionStore((s) => s.hasEntitlement('bridge_number'));
 
@@ -21,7 +23,12 @@ export function VerificationBanner() {
     useVerification();
 
   // Only show for unverified representatives with a paid plan that includes bridge_number
-  if (!user || user.role !== 'representative' || user.profileVerified || !hasBridgeNumber) {
+  if (
+    !user ||
+    user.role !== 'representative' ||
+    user.profileVerified ||
+    !hasBridgeNumber
+  ) {
     return null;
   }
 
@@ -35,10 +42,10 @@ export function VerificationBanner() {
   return (
     <View style={styles.container}>
       <Text variant="body" style={styles.title}>
-        Authorization pending
+        {t('verification.bannerTitle')}
       </Text>
       <Text variant="caption" style={styles.subtitle}>
-        Enter Artist code to get consent
+        {t('verification.bannerSubtitle')}
       </Text>
 
       {/* OTP fields — always visible */}
@@ -76,7 +83,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     lineHeight: 20,
   },

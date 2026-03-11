@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   },
   // Text styles
   text: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   primaryText: {
     color: '#000000',

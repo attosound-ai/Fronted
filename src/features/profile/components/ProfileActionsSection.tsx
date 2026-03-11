@@ -1,4 +1,5 @@
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface ProfileActionsSectionProps {
@@ -6,6 +7,8 @@ interface ProfileActionsSectionProps {
 }
 
 export function ProfileActionsSection({ onLogout }: ProfileActionsSectionProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -13,7 +16,7 @@ export function ProfileActionsSection({ onLogout }: ProfileActionsSectionProps) 
         activeOpacity={0.7}
         style={styles.logoutButton}
       >
-        <Text style={styles.logoutText}>Log Out</Text>
+        <Text style={styles.logoutText}>{t('actions.logout')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -33,7 +36,7 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#EF4444',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
 });

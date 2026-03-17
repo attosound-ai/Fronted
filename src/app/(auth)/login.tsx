@@ -162,7 +162,16 @@ export default function LoginScreen() {
     } catch {
       haptic('error');
     }
-  }, [identifier, password, login, clearError, t, isAddMode, addAccount, switchToAccount]);
+  }, [
+    identifier,
+    password,
+    login,
+    clearError,
+    t,
+    isAddMode,
+    addAccount,
+    switchToAccount,
+  ]);
 
   const handleVerify2FA = useCallback(async () => {
     if (otpCode.length !== 6) return;
@@ -264,7 +273,9 @@ export default function LoginScreen() {
               title={t('login.signIn')}
               onPress={handleLogin}
               loading={isAuthenticating}
-              disabled={isAuthenticating || identifier.trim().length < 3 || password.length < 3}
+              disabled={
+                isAuthenticating || identifier.trim().length < 3 || password.length < 3
+              }
             />
 
             <TouchableOpacity
@@ -340,13 +351,15 @@ export default function LoginScreen() {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
           bounces={false}
           showsVerticalScrollIndicator={false}
         >
           {step === 'credentials' && (
-            <Animated.View style={[styles.logoSection, { height: logoContainerHeight }]}>
+            <Animated.View
+              style={[styles.logoSection, { height: logoContainerHeight }]}
+            >
               <Animated.View
                 style={{
                   transform: [
@@ -373,26 +386,25 @@ export default function LoginScreen() {
             <View style={{ flex: 5 }} />
           </View>
 
+          {step === 'credentials' && (
+            <TouchableOpacity
+              style={styles.signUpRow}
+              onPress={() => {
+                haptic('light');
+                router.push('/(auth)/register');
+              }}
+              activeOpacity={0.6}
+            >
+              <Text variant="caption" style={styles.helpText}>
+                {t('welcome.noAccount')}{' '}
+              </Text>
+              <Text variant="caption" style={styles.signUpLink}>
+                {t('welcome.signUp')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {step === 'credentials' && (
-        <TouchableOpacity
-          style={[styles.signUpRow, { bottom: insets.bottom + 16 }]}
-          onPress={() => {
-            haptic('light');
-            router.push('/(auth)/register');
-          }}
-          activeOpacity={0.6}
-        >
-          <Text variant="caption" style={styles.helpText}>
-            {t('welcome.noAccount')}{' '}
-          </Text>
-          <Text variant="caption" style={styles.signUpLink}>
-            {t('welcome.signUp')}
-          </Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 }
@@ -462,16 +474,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_700Bold',
   },
   signUpRow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    flexWrap: 'wrap',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    zIndex: 10,
+    paddingVertical: 20,
   },
   signUpLink: {
     color: '#FFFFFF',

@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
@@ -30,6 +30,7 @@ type Step = 'credentials' | '2fa';
 
 export default function LoginScreen() {
   const { t } = useTranslation('auth');
+  const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isAddMode = mode === 'add';
   const addAccount = useAccountStore((s) => s.addAccount);
@@ -377,7 +378,7 @@ export default function LoginScreen() {
 
       {step === 'credentials' && (
         <TouchableOpacity
-          style={styles.signUpRow}
+          style={[styles.signUpRow, { bottom: insets.bottom + 16 }]}
           onPress={() => {
             haptic('light');
             router.push('/(auth)/register');
@@ -461,12 +462,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_700Bold',
   },
   signUpRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     flexWrap: 'wrap',
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingVertical: 12,
+    zIndex: 10,
   },
   signUpLink: {
     color: '#FFFFFF',

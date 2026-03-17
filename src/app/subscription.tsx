@@ -9,7 +9,6 @@ import {
   UIManager,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +17,7 @@ import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useAccountStore } from '@/stores/accountStore';
 import { paymentService } from '@/lib/api/paymentService';
 import type { PlanId } from '@/types/registration';
 
@@ -63,19 +63,19 @@ export default function SubscriptionScreen() {
       priceAmount: 139,
       features: t('plans.record_pro.features', { returnObjects: true }) as string[],
     },
-    {
-      id: 'connect_pro',
-      name: t('plans.connect_pro.name'),
-      price: t('plans.connect_pro.price'),
-      priceAmount: 1999,
-      features: t('plans.connect_pro.features', { returnObjects: true }) as string[],
-    },
   ];
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const user = useAuthStore((s) => s.user);
+  const accounts = useAccountStore((s) => s.accounts);
+
+  // If user is a representative, find the managed artist to pay on their behalf
+  const managedArtist =
+    user?.role === 'representative'
+      ? accounts.find((a) => a.user.id !== user.id && a.user.isManagedAccount)
+      : undefined;
   const [isProcessing, setIsProcessing] = useState(false);
   const [activePlan, setActivePlan] = useState<PlanId | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<PlanId | null>(null);
@@ -93,7 +93,8 @@ export default function SubscriptionScreen() {
     try {
       const { clientSecret, paymentIntentId } = await paymentService.upgradeSubscription(
         planId,
-        user.email
+        user.email,
+        managedArtist ? String(managedArtist.user.id) : undefined
       );
 
       const { error: initError } = await initPaymentSheet({
@@ -119,7 +120,7 @@ export default function SubscriptionScreen() {
 
       await paymentService.confirmPayment(paymentIntentId).catch(() => {});
       await fetchSubscription();
-      Alert.alert(t('errorTitle'), t('successUpgrade'));
+      Alert.alert(t('successTitle'), t('successUpgrade'));
     } catch {
       Alert.alert(t('errorTitle'), t('errorUpgradeFailed'));
     } finally {
@@ -148,17 +149,7 @@ export default function SubscriptionScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text variant="h3" style={styles.headerTitle}>
-          {t('headerTitle')}
-        </Text>
-        <View style={styles.backButton} />
-      </View>
-
+    <View style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -235,7 +226,7 @@ export default function SubscriptionScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -243,25 +234,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    color: '#FFF',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 17,
   },
   content: {
     paddingHorizontal: 16,

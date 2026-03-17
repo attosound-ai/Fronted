@@ -22,6 +22,7 @@ import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { paymentService } from '@/lib/api/paymentService';
 import { getErrorMessage } from '@/utils/formatters';
+import { haptic } from '@/lib/haptics/hapticService';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -126,13 +127,7 @@ const AVATAR_INSTRUCTIONS_HTML = `<!DOCTYPE html>
 
 // ─── Avatar Card ──────────────────────────────────────────────────────────────
 
-function AvatarCard({
-  onGetStarted,
-  disabled,
-}: {
-  onGetStarted: () => void;
-  disabled: boolean;
-}) {
+function AvatarCard() {
   const [expanded, setExpanded] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
@@ -176,7 +171,7 @@ function AvatarCard({
       {/* Header row */}
       <View style={avatarStyles.header}>
         <View style={avatarStyles.iconWrap}>
-          <Ionicons name="person-circle-outline" size={28} color="#A78BFA" />
+          <Ionicons name="person-circle-outline" size={28} color="#FFFFFF" />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={avatarStyles.title}>ATTO Avatar</Text>
@@ -189,22 +184,19 @@ function AvatarCard({
       {/* Price row */}
       <View style={avatarStyles.priceRow}>
         <View style={avatarStyles.pricePill}>
-          <Ionicons name="pricetag-outline" size={12} color="#A78BFA" />
+          <Ionicons name="pricetag-outline" size={12} color="#999999" />
           <Text style={avatarStyles.priceText}>From $3/clip</Text>
         </View>
         <View style={avatarStyles.pricePill}>
-          <Ionicons name="layers-outline" size={12} color="#A78BFA" />
+          <Ionicons name="layers-outline" size={12} color="#999999" />
           <Text style={avatarStyles.priceText}>Packs from $20</Text>
         </View>
       </View>
 
-      <Button
-        title="Get Started"
-        onPress={onGetStarted}
-        disabled={disabled}
-        size="sm"
-        style={avatarStyles.cta}
-      />
+      <View style={avatarStyles.comingSoon}>
+        <Ionicons name="time-outline" size={13} color="#888888" />
+        <Text style={avatarStyles.comingSoonText}>Coming soon</Text>
+      </View>
 
       <TouchableOpacity
         onPress={handleSharePDF}
@@ -213,10 +205,10 @@ function AvatarCard({
         style={avatarStyles.shareButton}
       >
         {isSharing ? (
-          <ActivityIndicator size="small" color="#A78BFA" />
+          <ActivityIndicator size="small" color="#FFFFFF" />
         ) : (
           <>
-            <Ionicons name="share-outline" size={15} color="#A78BFA" />
+            <Ionicons name="share-outline" size={15} color="#FFFFFF" />
             <Text style={avatarStyles.shareButtonText}>Share Instructions (PDF)</Text>
           </>
         )}
@@ -325,7 +317,7 @@ function AvatarCard({
  * Step 8: Subscription Plans
  * Presents 2 paid plan cards + ATTO Avatar card with Stripe Payment Sheet integration
  */
-export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = ({
+export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUserId?: number }> = ({
   state,
   dispatch,
   onNext,
@@ -333,6 +325,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
   onSkip,
   isLoading,
   apiError,
+  forUserId,
 }) => {
   const { t } = useTranslation(['registration', 'common']);
 
@@ -360,10 +353,13 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
     setPaymentError(null);
 
     try {
+      console.log('[Subscription] Creating checkout for plan:', planId, 'forUserId:', forUserId);
       const { clientSecret, paymentIntentId } = await paymentService.createCheckout(
         planId,
-        state.email
+        state.email,
+        forUserId ? String(forUserId) : undefined
       );
+      console.log('[Subscription] Checkout created, initializing payment sheet...');
 
       const { error: initError } = await initPaymentSheet({
         paymentIntentClientSecret: clientSecret,
@@ -373,18 +369,23 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
       });
 
       if (initError) {
+        console.error('[Subscription] Payment sheet init error:', initError);
         setPaymentError(initError.message);
+        haptic('error');
         return;
       }
 
+      console.log('[Subscription] Presenting payment sheet...');
       const { error: presentError } = await presentPaymentSheet();
 
       if (presentError) {
         if (presentError.code === 'Canceled') return;
         setPaymentError(presentError.message);
+        haptic('error');
         return;
       }
 
+      await haptic('success');
       setPaymentCompleted(true);
       dispatch({ type: 'UPDATE_FIELD', field: 'selectedPlan', value: planId });
 
@@ -404,6 +405,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
       await onNext();
     } catch (error: unknown) {
       setPaymentError(getErrorMessage(error, t('common:errors.paymentFailed')));
+      haptic('error');
     } finally {
       setIsProcessing(false);
       setActivePlan(null);
@@ -411,6 +413,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
   };
 
   const handleContinueWithout = () => {
+    haptic('light');
     dispatch({ type: 'UPDATE_FIELD', field: 'selectedPlan', value: 'none' });
     if (onSkip) onSkip();
   };
@@ -481,7 +484,10 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
                   }
                   onPress={
                     paymentCompleted && activePlan === plan.id
-                      ? () => onNext()
+                      ? () => {
+                          haptic('light');
+                          onNext();
+                        }
                       : () => handleSubscribe(plan.id)
                   }
                   disabled={busy && activePlan !== plan.id}
@@ -526,11 +532,11 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void }> = (
         })}
 
         {/* Avatar card */}
-        <AvatarCard onGetStarted={handleContinueWithout} disabled={busy} />
+        <AvatarCard />
 
         {(paymentError || apiError) && (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={16} color="#EF4444" />
+            <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
             <Text style={styles.errorText}>{paymentError || apiError}</Text>
           </View>
         )}
@@ -690,9 +696,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2D1515',
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
@@ -701,7 +707,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'Archivo_400Regular',
     fontSize: 13,
-    color: '#EF4444',
+    color: '#FFFFFF',
   },
   disclaimerBox: {
     backgroundColor: '#111111',
@@ -736,9 +742,9 @@ const styles = StyleSheet.create({
 
 const avatarStyles = StyleSheet.create({
   card: {
-    backgroundColor: '#0D0A1A',
-    borderWidth: 1.5,
-    borderColor: '#4C1D95',
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#222222',
     borderRadius: 12,
     marginBottom: 16,
     marginTop: 6,
@@ -748,7 +754,7 @@ const avatarStyles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -757,7 +763,7 @@ const avatarStyles = StyleSheet.create({
   newBadgeText: {
     fontFamily: 'Archivo_700Bold',
     fontSize: 9,
-    color: '#FFF',
+    color: '#000000',
     letterSpacing: 1,
   },
   header: {
@@ -772,7 +778,7 @@ const avatarStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#1E1033',
+    backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -797,7 +803,7 @@ const avatarStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#1E1033',
+    backgroundColor: '#222222',
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -805,12 +811,24 @@ const avatarStyles = StyleSheet.create({
   priceText: {
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 12,
-    color: '#A78BFA',
+    color: '#FFFFFF',
   },
-  cta: {
+  comingSoon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     marginHorizontal: 20,
     marginBottom: 4,
-    backgroundColor: '#7C3AED',
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333333',
+  },
+  comingSoonText: {
+    fontFamily: 'Archivo_500Medium',
+    fontSize: 14,
+    color: '#888888',
   },
   shareButton: {
     flexDirection: 'row',
@@ -824,7 +842,7 @@ const avatarStyles = StyleSheet.create({
   shareButtonText: {
     fontFamily: 'Archivo_500Medium',
     fontSize: 13,
-    color: '#A78BFA',
+    color: '#FFFFFF',
   },
   toggle: {
     flexDirection: 'row',
@@ -852,7 +870,7 @@ const avatarStyles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#333333',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
@@ -861,12 +879,12 @@ const avatarStyles = StyleSheet.create({
   stepNumText: {
     fontFamily: 'Archivo_700Bold',
     fontSize: 12,
-    color: '#E9D5FF',
+    color: '#FFFFFF',
   },
   stepTitle: {
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
-    color: '#E9D5FF',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   stepNote: {
@@ -888,27 +906,27 @@ const avatarStyles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#555555',
   },
   angleText: {
     fontFamily: 'Archivo_400Regular',
     fontSize: 12,
-    color: '#C4B5FD',
+    color: '#CCCCCC',
   },
   address: {
     fontFamily: 'Archivo_500Medium',
     fontSize: 12,
-    color: '#E9D5FF',
+    color: '#FFFFFF',
     lineHeight: 20,
   },
   divider: {
     height: 1,
-    backgroundColor: '#1E1033',
+    backgroundColor: '#222222',
   },
   packsTitle: {
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 13,
-    color: '#A78BFA',
+    color: '#FFFFFF',
     marginTop: 14,
     marginBottom: 8,
   },
@@ -918,7 +936,7 @@ const avatarStyles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E1033',
+    borderBottomColor: '#222222',
   },
   packLabel: {
     fontFamily: 'Archivo_400Regular',

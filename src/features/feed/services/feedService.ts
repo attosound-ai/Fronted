@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post, ApiResponse } from '@/types';
 import type { FeedResponse, CreatePostDTO, FeedApiResponse, FeedApiPost } from '../types';
 
@@ -8,7 +9,10 @@ function mapApiPost(raw: FeedApiPost): Post {
   return {
     id: raw.id,
     content: raw.textContent || '',
-    images: raw.contentType === 'image' ? raw.filePaths : [],
+    images:
+      raw.contentType === 'image'
+        ? raw.filePaths.map((fp) => cloudinaryUrl(fp, 'feed') ?? fp)
+        : [],
     author: {
       id: Number(raw.author?.id) || 0,
       username: raw.author?.username || 'unknown',
@@ -121,6 +125,19 @@ export const feedService = {
       params: { page, limit },
     });
     return response.data;
+  },
+
+  async getExploreFeed(cursor?: string): Promise<FeedResponse> {
+    const response = await apiClient.get<FeedApiResponse>(API_ENDPOINTS.POSTS.EXPLORE, {
+      params: { cursor },
+    });
+    const body = response.data;
+    return {
+      data: (body.data || []).map(mapApiPost),
+      nextCursor: body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
+      hasMore: body.meta?.hasMore ?? false,
+      total: body.data?.length ?? 0,
+    };
   },
 
   async getReelsFeed(cursor?: string): Promise<FeedResponse> {

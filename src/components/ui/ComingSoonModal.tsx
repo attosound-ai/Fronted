@@ -6,9 +6,18 @@ import { Text } from './Text';
 interface ComingSoonModalProps {
   visible: boolean;
   onClose: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+  title?: string;
+  description?: string;
 }
 
-export function ComingSoonModal({ visible, onClose }: ComingSoonModalProps) {
+export function ComingSoonModal({
+  visible,
+  onClose,
+  icon,
+  title,
+  description,
+}: ComingSoonModalProps) {
   const { t } = useTranslation('common');
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -19,18 +28,18 @@ export function ComingSoonModal({ visible, onClose }: ComingSoonModalProps) {
           </TouchableOpacity>
 
           <Ionicons
-            name="construct-outline"
+            name={icon ?? 'construct-outline'}
             size={56}
             color="#3B82F6"
             style={styles.icon}
           />
 
           <Text variant="h2" style={styles.title}>
-            {t('comingSoon.title')}
+            {title ?? t('comingSoon.title')}
           </Text>
 
           <Text variant="body" style={styles.description}>
-            {t('comingSoon.description')}
+            {description ?? t('comingSoon.description')}
           </Text>
         </View>
       </View>

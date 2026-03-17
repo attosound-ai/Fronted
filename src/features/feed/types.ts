@@ -5,6 +5,16 @@
 import type { Post, PaginatedResponse } from '@/types';
 import type { PostType } from '@/types/post';
 
+export interface PickedMedia {
+  uri: string;
+  fileName: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailUri?: string;
+}
+
 export interface CreatePostDTO {
   textContent: string;
   contentType: PostType;

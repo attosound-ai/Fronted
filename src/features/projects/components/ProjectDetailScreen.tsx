@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   FlatList,
   StyleSheet,
-  Pressable,
+  TouchableOpacity,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -42,14 +42,16 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
   const { data, isLoading } = useProjectDetail(projectId);
   const deleteProject = useDeleteProject();
   const [editorOpen, setEditorOpen] = useState(false);
+  const editorWasOpened = useRef(false);
   const { isPreloading, progress, preloadEditor } = usePreloadEditor(data?.clips ?? []);
   const setPendingAudio = useCreatePostStore((s) => s.setPendingAudio);
 
-  // In publish mode, auto-open the editor once data is loaded
+  // In publish mode, auto-open the editor ONCE when data is loaded
   useEffect(() => {
-    if (!publishMode || !data || editorOpen || isPreloading) return;
+    if (!publishMode || !data || editorWasOpened.current || isPreloading) return;
+    editorWasOpened.current = true;
     preloadEditor().then(() => setEditorOpen(true));
-  }, [publishMode, data, editorOpen, isPreloading, preloadEditor]);
+  }, [publishMode, data, isPreloading, preloadEditor]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(t('detail.deleteAlertTitle'), t('detail.deleteAlertMessage'), [
@@ -147,9 +149,21 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </Pressable>
+        <TouchableOpacity
+          onPress={() => {
+            console.log('[ProjectDetail] X pressed, canGoBack:', router.canGoBack());
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+          style={styles.backButton}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.5}
+        >
+          <Ionicons name="close" size={24} color="#FFF" />
+        </TouchableOpacity>
         <View style={styles.headerTitle}>
           <Text variant="h3" style={styles.title} numberOfLines={1}>
             {project.name}
@@ -160,9 +174,9 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
             </Text>
           ) : null}
         </View>
-        <Pressable onPress={handleDelete} style={styles.deleteButton}>
+        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
           <Ionicons name="trash-outline" size={22} color="#EF4444" />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>

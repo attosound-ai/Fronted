@@ -1,10 +1,18 @@
 import { useState, useCallback } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet } from 'react-native';
+import {
+  View,
+  ScrollView,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { Text } from '@/components/ui/Text';
 import { Toast } from '@/components/ui/Toast';
+import { AccountSwitcherBottomSheet } from '@/components/ui/AccountSwitcherBottomSheet';
 import { useAuthStore } from '@/stores/authStore';
 import {
   ProfileHero,
@@ -27,6 +35,7 @@ export default function ProfileScreen() {
 
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
 
+  const [switcherVisible, setSwitcherVisible] = useState(false);
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -44,7 +53,7 @@ export default function ProfileScreen() {
     setIsLoggingOut(true);
     try {
       await logout();
-      router.replace('/(auth)/welcome');
+      router.replace('/(auth)/login');
     } finally {
       setIsLoggingOut(false);
       setLogoutVisible(false);
@@ -56,7 +65,14 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text variant="h2">@{user.username}</Text>
+        <TouchableOpacity
+          onPress={() => setSwitcherVisible(true)}
+          activeOpacity={0.7}
+          style={styles.headerButton}
+        >
+          <Text variant="h2">@{user.username}</Text>
+          <Ionicons name="chevron-down" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -94,6 +110,11 @@ export default function ProfileScreen() {
         />
       </ScrollView>
 
+      <AccountSwitcherBottomSheet
+        visible={switcherVisible}
+        onClose={() => setSwitcherVisible(false)}
+      />
+
       <LogoutBottomSheet
         visible={logoutVisible}
         onClose={() => setLogoutVisible(false)}
@@ -116,6 +137,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: '#222222',
+  },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   scrollView: {
     flex: 1,

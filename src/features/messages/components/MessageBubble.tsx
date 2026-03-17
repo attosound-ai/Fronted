@@ -17,18 +17,18 @@ function MessageBubbleInner({ message, isOwn }: MessageBubbleProps) {
   return (
     <View style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}>
       <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-        <Text variant="body" style={styles.content}>
+        <Text variant="body" style={[styles.content, isOwn && styles.contentOwn]}>
           {message.content}
         </Text>
         <View style={styles.meta}>
-          <Text variant="small" style={styles.time}>
+          <Text variant="small" style={[styles.time, isOwn && styles.timeOwn]}>
             {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
           </Text>
           {isOwn && (
             <Ionicons
               name={message.isRead ? 'checkmark-done' : 'checkmark'}
               size={14}
-              color={message.isRead ? '#60A5FA' : 'rgba(255,255,255,0.5)'}
+              color={message.isRead ? COLORS.black : 'rgba(0,0,0,0.35)'}
               style={styles.readIcon}
             />
           )}
@@ -43,7 +43,7 @@ export const MessageBubble = memo(MessageBubbleInner);
 const styles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.md,
   },
   wrapperOwn: {
     alignItems: 'flex-end',
@@ -58,15 +58,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   bubbleOwn: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.white,
     borderBottomRightRadius: 4,
   },
   bubbleOther: {
-    backgroundColor: COLORS.background.secondary,
+    backgroundColor: COLORS.gray[800],
     borderBottomLeftRadius: 4,
   },
   content: {
     color: COLORS.white,
+  },
+  contentOwn: {
+    color: COLORS.black,
   },
   meta: {
     flexDirection: 'row',
@@ -77,6 +80,9 @@ const styles = StyleSheet.create({
   },
   time: {
     color: 'rgba(255,255,255,0.6)',
+  },
+  timeOwn: {
+    color: 'rgba(0,0,0,0.45)',
   },
   readIcon: {
     marginLeft: 2,

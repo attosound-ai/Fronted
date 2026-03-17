@@ -6,6 +6,7 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { useFollowStore } from '@/stores/followStore';
 import type { User } from '@/types';
 
 interface UserSearchCardProps {
@@ -13,17 +14,22 @@ interface UserSearchCardProps {
 }
 
 export function UserSearchCard({ user }: UserSearchCardProps) {
-  const [isFollowing, setIsFollowing] = useState(user.isFollowing ?? false);
+  const { setFollowed, getIsFollowing } = useFollowStore();
+  const isFollowing = getIsFollowing(user.id, user.isFollowing ?? false);
   const [isToggling, setIsToggling] = useState(false);
 
   const handleFollow = async () => {
     setIsToggling(true);
     const prev = isFollowing;
-    setIsFollowing(!prev);
+    setFollowed(user.id, !prev);
     try {
-      await apiClient.post(API_ENDPOINTS.USERS.FOLLOW(user.id));
+      if (prev) {
+        await apiClient.delete(API_ENDPOINTS.USERS.FOLLOW(user.id));
+      } else {
+        await apiClient.post(API_ENDPOINTS.USERS.FOLLOW(user.id));
+      }
     } catch {
-      setIsFollowing(prev);
+      setFollowed(user.id, prev);
     } finally {
       setIsToggling(false);
     }

@@ -27,9 +27,21 @@
           "voip",
           "audio",
           "fetch",
+          "remote-notification",
+          "voip",
+          "audio",
+          "fetch",
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleLocalizations": [
+          "en",
+          "es",
+          "pt-BR",
+          "en",
+          "es",
+          "pt-BR"
+        ]
       }
     },
     "android": {
@@ -40,6 +52,13 @@
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan",
       "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.CAMERA",
         "android.permission.READ_CONTACTS",
         "android.permission.WRITE_CONTACTS",
         "android.permission.RECORD_AUDIO",
@@ -72,7 +91,16 @@
       "expo-contacts",
       "expo-asset",
       "expo-audio",
-      ["expo-localization", { "supportedLocales": ["en", "es", "pt-BR"] }],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": [
+            "en",
+            "es",
+            "pt-BR"
+          ]
+        }
+      ],
       [
         "@sentry/react-native/expo",
         {
@@ -80,13 +108,20 @@
           "project": "react-native"
         }
       ],
-      "expo-video"
+      "expo-video",
+      "react-native-bottom-tabs"
     ],
     "extra": {
       "router": {},
       "eas": {
         "projectId": "c12991cf-7f27-4433-8b57-0c67648f8d6a"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c12991cf-7f27-4433-8b57-0c67648f8d6a"
     }
   }
 }

@@ -2,12 +2,10 @@ import { useCallback, useState } from 'react';
 import {
   View,
   FlatList,
-  TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
@@ -64,8 +62,15 @@ function toFeedPost(post: Post): FeedPost {
 // ---------------------------------------------------------------------------
 
 export default function BookmarksScreen() {
-  const { bookmarks, isLoading, isRefreshing, refresh, loadMore, isFetchingMore, hasMore } =
-    useBookmarks();
+  const {
+    bookmarks,
+    isLoading,
+    isRefreshing,
+    refresh,
+    loadMore,
+    isFetchingMore,
+    hasMore,
+  } = useBookmarks();
 
   const { toggleBookmark, toggleRepost } = useEngagement();
 
@@ -130,21 +135,7 @@ export default function BookmarksScreen() {
   }, [isLoading]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={8}
-        >
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Saved</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      {/* Loading state */}
+    <View style={styles.container}>
       {isLoading && bookmarks.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FFF" />
@@ -166,7 +157,9 @@ export default function BookmarksScreen() {
           ListFooterComponent={renderFooter}
           ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={feedPosts.length === 0 ? styles.emptyContainer : undefined}
+          contentContainerStyle={
+            feedPosts.length === 0 ? styles.emptyContainer : undefined
+          }
         />
       )}
 
@@ -181,7 +174,7 @@ export default function BookmarksScreen() {
       {sharePost && (
         <ShareSheet visible onClose={() => setSharePost(null)} post={sharePost} />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -189,27 +182,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222222',
-  },
-  backButton: {
-    padding: 6,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 17,
-  },
-  headerSpacer: {
-    width: 36,
   },
   loadingContainer: {
     flex: 1,

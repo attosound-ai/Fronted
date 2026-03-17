@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { phoenixSocket } from '@/lib/api/phoenixSocket';
@@ -22,15 +22,18 @@ function extractString(value: unknown): string {
 export function useUserChannel() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
   const isSocketConnected = useChatStore((s) => s.isSocketConnected);
-  const joinedRef = useRef(false);
 
   useEffect(() => {
-    if (!user || !isSocketConnected || joinedRef.current) return;
+    if (!userId || !isSocketConnected) return;
 
-    const userId = String(user.id);
+    // Small delay to ensure socket is fully connected after account switch
+    const timer = setTimeout(() => {
+      if (!phoenixSocket.isConnected()) return;
 
-    const channel = phoenixSocket.joinUserChannel(userId, {
+      const uid = String(userId);
+      const channel = phoenixSocket.joinUserChannel(uid, {
       onConversationUpdated: (payload: Record<string, unknown>) => {
         queryClient.invalidateQueries({
           queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
@@ -41,10 +44,15 @@ export function useUserChannel() {
         const lastMessage =
           typeof payload.last_message === 'string' ? payload.last_message : '';
 
-        // Don't show notification for own messages or if already in that chat
-        if (senderId === userId) return;
+        // Don't count own messages or messages in the active chat
+        if (senderId === uid) return;
         const activeChat = useChatStore.getState().activeConversationId;
         if (activeChat === conversationId) return;
+
+        // Increment unread badge immediately (don't wait for query refetch)
+        useChatStore.getState().setTotalUnread(
+          useChatStore.getState().totalUnread + 1
+        );
 
         // Fetch sender profile from cache or network, then show banner
         const numericSenderId = Number(senderId);
@@ -81,12 +89,11 @@ export function useUserChannel() {
           });
       },
     });
-
-    if (channel) joinedRef.current = true;
+    }, 500);
 
     return () => {
+      clearTimeout(timer);
       phoenixSocket.leaveUserChannel();
-      joinedRef.current = false;
     };
-  }, [user, isSocketConnected, queryClient]);
+  }, [userId, isSocketConnected, queryClient]);
 }

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Text, Button, Input, PhoneInput } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isNotEmpty, isValidEmail, isValidPhoneNumber } from '@/utils/validators';
+import { haptic } from '@/lib/haptics/hapticService';
 
 /**
  * StepBasicInfo - Step 1 of registration wizard
@@ -42,7 +43,10 @@ export function StepBasicInfo({
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
+      haptic('light');
       onNext();
+    } else {
+      haptic('error');
     }
   };
 
@@ -76,7 +80,7 @@ export function StepBasicInfo({
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#EF4444" />
+            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -175,16 +179,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2A1515',
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 24,
   },
   errorBannerText: {
-    color: '#EF4444',
+    color: '#FFFFFF',
     flex: 1,
   },
   form: {

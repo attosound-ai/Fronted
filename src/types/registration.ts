@@ -35,7 +35,21 @@ export interface RegistrationWizardState {
   inmateState: string;
   consentToRecording: boolean;
 
-  // Step 9: Subscription
+  // Steps 8-10: Artist Account Setup (only if isRepresentative === true)
+  artistEmail: string;
+  artistPassword: string;
+  artistConfirmPassword: string;
+  artistUsername: string;
+  artistDisplayName: string;
+  artistPhoneCountryCode: string;
+  artistPhoneNumber: string;
+  artistAvatarUri: string | null;
+
+  // Steps 11-12: Artist Type & Genres
+  artistTypes: string[];
+  artistGenres: string[];
+
+  // Step 13: Subscription
   selectedPlan: 'record' | 'record_pro' | 'connect_pro' | 'none' | null;
 
   // Step 10: Bridge Number (assigned by backend after payment)
@@ -61,10 +75,13 @@ export interface StepProps {
 // OTP DTOs
 export interface SendOtpDTO {
   phone: string;
+  email?: string;
+  locale?: string;
 }
 
 export interface VerifyOtpDTO {
   phone: string;
+  email?: string;
   code: string;
 }
 

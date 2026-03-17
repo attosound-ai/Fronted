@@ -16,6 +16,7 @@ import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { paymentService } from '@/lib/api/paymentService';
+import { haptic } from '@/lib/haptics/hapticService';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 40; // ~2 minutes
@@ -146,12 +147,12 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         <View style={styles.numberContainer}>
           {provisioning ? (
             <View style={styles.provisioningContainer}>
-              <ActivityIndicator size="large" color="#3B82F6" />
+              <ActivityIndicator size="large" color="#FFFFFF" />
               <Text style={styles.provisioningText}>{t('bridgeNumber.assigning')}</Text>
             </View>
           ) : provisioningFailed ? (
             <View style={styles.provisioningContainer}>
-              <Ionicons name="alert-circle-outline" size={40} color="#EF4444" />
+              <Ionicons name="alert-circle-outline" size={40} color="#FFFFFF" />
               <Text style={styles.failedText}>{t('bridgeNumber.purchaseFailed')}</Text>
             </View>
           ) : (
@@ -255,7 +256,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
       {/* Error */}
       {apiError && (
         <View style={styles.errorBox}>
-          <Ionicons name="alert-circle" size={16} color="#EF4444" />
+          <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
           <Text style={styles.errorText}>{apiError}</Text>
         </View>
       )}
@@ -268,7 +269,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
               ? t('bridgeNumber.assigningButton')
               : t('common:buttons.continue')
           }
-          onPress={onNext}
+          onPress={() => { haptic('light'); onNext(); }}
           disabled={isLoading || provisioning}
           loading={isLoading || provisioning}
         />
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
   failedText: {
     fontFamily: 'Archivo_400Regular',
     fontSize: 15,
-    color: '#EF4444',
+    color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -407,9 +408,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2D1515',
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 24,
@@ -419,7 +420,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'Archivo_400Regular',
     fontSize: 13,
-    color: '#EF4444',
+    color: '#FFFFFF',
   },
   footer: {
     paddingHorizontal: 24,

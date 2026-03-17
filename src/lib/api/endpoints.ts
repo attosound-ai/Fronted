@@ -18,10 +18,13 @@ export const API_ENDPOINTS = {
     RESET_PASSWORD: '/auth/reset-password',
     ME: '/auth/me',
     CHECK_PHONE: '/auth/check-phone',
+    CHECK_USERNAME: '/auth/check-username',
+    CHECK_EMAIL: '/auth/check-email',
     LOGIN_2FA: '/auth/login/2fa',
     ENABLE_2FA: '/auth/2fa/enable',
     CONFIRM_2FA: '/auth/2fa/confirm',
     DISABLE_2FA: '/auth/2fa/disable',
+    SWITCH_ACCOUNT: '/auth/switch-account',
   },
 
   OTP: {
@@ -39,12 +42,14 @@ export const API_ENDPOINTS = {
     DISCOVER: '/users/discover',
     VERIFICATION_SEND_OTP: '/users/me/verification/send-otp',
     VERIFICATION_VERIFY: '/users/me/verification/verify',
+    LINKED_ACCOUNTS: '/users/me/linked-accounts',
   },
 
   POSTS: {
     FEED: '/posts/feed',
     REELS: '/posts/reels',
     REELS_VIEW: '/posts/reels/view',
+    EXPLORE: '/posts/explore',
     SEARCH: '/content/search',
     CREATE: '/posts',
     DETAIL: (postId: string) => `/posts/${postId}`,

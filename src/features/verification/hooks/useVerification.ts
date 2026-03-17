@@ -59,6 +59,10 @@ export function useVerification() {
       if (otpError) setOtpError(null);
 
       // Auto-submit when all 6 digits are entered
+      if (code.length === 6 && !bridgePhone) {
+        setOtpError('Bridge number not available. Please restart the app or contact support.');
+        return;
+      }
       if (code.length === 6 && bridgePhone) {
         setIsVerifying(true);
         verificationService
@@ -84,6 +88,7 @@ export function useVerification() {
 
   return {
     bridgePhone,
+    hasBridgePhone: bridgePhone !== '',
     otpCode,
     otpError,
     isVerifying,

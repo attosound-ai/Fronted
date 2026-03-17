@@ -16,6 +16,7 @@ interface PostMediaProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -35,6 +36,7 @@ export function PostMedia({
   onFollow,
   onBookmark,
   onReport,
+  onDelete,
 }: PostMediaProps) {
   switch (post.type) {
     case 'audio':
@@ -52,6 +54,7 @@ export function PostMedia({
           onFollow={onFollow}
           onBookmark={onBookmark}
           onReport={onReport}
+          onDelete={onDelete}
         />
       );
     case 'text':

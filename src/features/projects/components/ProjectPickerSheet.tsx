@@ -1,9 +1,19 @@
-import { ScrollView, TouchableOpacity, View, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import {
+  ScrollView,
+  TouchableOpacity,
+  View,
+  TextInput,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
-import { useProjects } from '../hooks/useProjects';
+import { Button } from '@/components/ui/Button';
+import { useProjects, useCreateProject } from '../hooks/useProjects';
+import { haptic } from '@/lib/haptics/hapticService';
 
 interface ProjectPickerSheetProps {
   visible: boolean;
@@ -22,12 +32,87 @@ function formatDuration(ms?: number): string {
 export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPickerSheetProps) {
   const { t } = useTranslation('projects');
   const { data: projects, isLoading } = useProjects();
+  const createProject = useCreateProject();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  const handleCreate = () => {
+    if (!newName.trim()) return;
+    haptic('light');
+    createProject.mutate(
+      { name: newName.trim() },
+      {
+        onSuccess: (project) => {
+          setNewName('');
+          setShowCreate(false);
+          onClose();
+          onSelect(project.id);
+        },
+      }
+    );
+  };
+
+  const handleClose = () => {
+    setShowCreate(false);
+    setNewName('');
+    onClose();
+  };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={t('picker.title', 'Mis Proyectos')}>
+    <BottomSheet visible={visible} onClose={handleClose} title={t('picker.title', 'Mis Proyectos')}>
+      {/* Create new project section */}
+      {showCreate ? (
+        <View style={styles.createSection}>
+          <TextInput
+            style={styles.createInput}
+            placeholder={t('picker.namePlaceholder', 'Project name')}
+            placeholderTextColor="#666666"
+            value={newName}
+            onChangeText={setNewName}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <View style={styles.createButtons}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowCreate(false);
+                setNewName('');
+              }}
+            >
+              <Text style={styles.cancelText}>{t('picker.cancel', 'Cancel')}</Text>
+            </TouchableOpacity>
+            <Button
+              title={t('picker.create', 'Create')}
+              onPress={handleCreate}
+              disabled={!newName.trim() || createProject.isPending}
+              loading={createProject.isPending}
+            />
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.newProjectRow}
+          onPress={() => setShowCreate(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.newIconWrap}>
+            <Ionicons name="add" size={20} color="#FFFFFF" />
+          </View>
+          <Text style={styles.newProjectText}>
+            {t('picker.newProject', 'New project')}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Separator */}
+      {(projects?.length ?? 0) > 0 && <View style={styles.separator} />}
+
+      {/* Project list */}
       {isLoading ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#3B82F6" />
+          <ActivityIndicator color="#FFFFFF" />
         </View>
       ) : !projects?.length ? (
         <View style={styles.center}>
@@ -47,7 +132,7 @@ export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPicker
               }}
             >
               <View style={styles.iconWrap}>
-                <Ionicons name="musical-notes" size={20} color="#3B82F6" />
+                <Ionicons name="musical-notes" size={20} color="#FFFFFF" />
               </View>
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -82,6 +167,60 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 14,
   },
+  newProjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  newIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#333333',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newProjectText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Archivo_500Medium',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#222222',
+    marginVertical: 4,
+  },
+  createSection: {
+    gap: 12,
+    paddingVertical: 8,
+  },
+  createInput: {
+    backgroundColor: '#111111',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#222222',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Archivo_400Regular',
+  },
+  createButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  cancelText: {
+    color: '#888888',
+    fontSize: 15,
+    fontFamily: 'Archivo_500Medium',
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -94,7 +233,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',
   },

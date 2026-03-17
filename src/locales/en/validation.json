@@ -14,5 +14,10 @@
   "stateRequired": "Please select a state",
   "consentRequired": "You must agree to call recording",
   "usernameRequired": "Username is required",
-  "inmateNumberRequired": "Inmate number is required"
+  "inmateNumberRequired": "Inmate number is required",
+  "passwordMatch": "Passwords match",
+  "strengthLength": "8+ characters",
+  "strengthUpper": "Uppercase letter",
+  "strengthLower": "Lowercase letter",
+  "strengthNumber": "Number"
 }

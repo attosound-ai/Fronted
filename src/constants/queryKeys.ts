@@ -17,6 +17,7 @@ export const QUERY_KEYS = {
     ALL: ['feed'] as const,
     INFINITE: ['feed', 'infinite'] as const,
     REELS: ['feed', 'reels'] as const,
+    EXPLORE: ['feed', 'explore'] as const,
     POST: (id: string) => ['feed', 'post', id] as const,
     COMMENTS: (postId: string) => ['feed', 'comments', postId] as const,
     BOOKMARKS: ['feed', 'bookmarks'] as const,

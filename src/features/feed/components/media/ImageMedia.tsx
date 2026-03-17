@@ -54,7 +54,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     lastTap.current = now;
   }, [onDoubleTap, heartScale, heartOpacity]);
 
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const onMomentumEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     setActiveIndex(index);
   }, []);
@@ -76,8 +76,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
+        onMomentumScrollEnd={onMomentumEnd}
       />
 
       {images.length > 1 && (

@@ -27,6 +27,9 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
   connectSocket: async () => {
     if (get().isSocketConnected) return;
+    phoenixSocket.onConnectionChange = (connected) => {
+      set({ isSocketConnected: connected });
+    };
     await phoenixSocket.connect();
     set({ isSocketConnected: phoenixSocket.isConnected() });
   },

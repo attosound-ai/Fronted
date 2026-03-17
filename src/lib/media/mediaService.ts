@@ -103,7 +103,12 @@ async function uploadToCloudinary(
       }
     };
 
-    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onerror = () => {
+      console.error('[Upload] XHR error:', xhr.status, xhr.statusText, xhr.responseText);
+      reject(new Error(`Network error during upload (${xhr.status})`));
+    };
+    xhr.timeout = 30000;
+    xhr.ontimeout = () => reject(new Error('Upload timed out'));
     xhr.send(formData);
   });
 }

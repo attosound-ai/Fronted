@@ -57,6 +57,7 @@
   },
   "successUpgrade": "Your subscription has been upgraded!",
   "successCancelled": "Your subscription has been cancelled.",
+  "successTitle": "Done",
   "errorTitle": "Error",
   "errorUpgradeFailed": "Failed to process upgrade. Please try again.",
   "errorCancelFailed": "Failed to cancel. Please try again.",

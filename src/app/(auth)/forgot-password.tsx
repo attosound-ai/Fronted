@@ -17,7 +17,7 @@ import { isValidEmail, isStrongPassword } from '@/utils/validators';
 type Step = 'email' | 'reset';
 
 export default function ForgotPasswordScreen() {
-  const { t } = useTranslation('auth');
+  const { t, i18n } = useTranslation('auth');
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -42,14 +42,14 @@ export default function ForgotPasswordScreen() {
 
     try {
       setIsLoading(true);
-      await authService.forgotPassword({ email: email.trim().toLowerCase() });
+      await authService.forgotPassword({ email: email.trim().toLowerCase(), locale: i18n.language });
     } catch {
       // Always advance to prevent email enumeration
     } finally {
       setIsLoading(false);
       setStep('reset');
     }
-  }, [email]);
+  }, [email, i18n.language]);
 
   const handleReset = useCallback(async () => {
     setOtpError('');

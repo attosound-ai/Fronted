@@ -1,35 +1,49 @@
 import { useState } from 'react';
-import { View, Image, TouchableOpacity, StyleSheet, Modal, TouchableWithoutFeedback } from 'react-native';
+import {
+  View,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  TouchableWithoutFeedback,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { CreateActionSheet } from './CreateActionSheet';
+import { useAuthStore } from '@/stores/authStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 const ATTO_LOGO_URI =
   'https://res.cloudinary.com/dxzcutnlp/image/upload/v1771017624/Property_1_Variant4_vq9shb.png';
 
 export function FeedHeader() {
-  const canUpload = useSubscriptionStore((s) => s.subscription?.entitlements?.includes('record_upload') ?? false);
-  const [comingSoonVisible, setComingSoonVisible] = useState(false);
+  const user = useAuthStore((s) => s.user);
+  const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
+  const isArtistWithPlan = user?.role === 'artist' && hasRecordUpload;
+
+  const [comingSoonFeature, setComingSoonFeature] = useState<
+    'store' | 'info' | 'notifications' | null
+  >(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
-
-  const showComingSoon = () => setComingSoonVisible(true);
 
   return (
     <View style={styles.container}>
       <View style={styles.leftIcons}>
-        {canUpload && (
-          <TouchableOpacity
-            onPress={() => setActionSheetVisible(true)}
-            style={styles.iconButton}
-          >
-            <Ionicons name="add" size={28} color="#FFF" />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity onPress={showComingSoon} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={() =>
+            isArtistWithPlan ? setActionSheetVisible(true) : router.push('/create-post')
+          }
+          style={styles.iconButton}
+        >
+          <Ionicons name="add" size={28} color="#FFF" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setComingSoonFeature('store')}
+          style={styles.iconButton}
+        >
           <Ionicons name="bag-outline" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -44,23 +58,49 @@ export function FeedHeader() {
       </TouchableOpacity>
 
       <View style={styles.rightIcons}>
-        <TouchableOpacity onPress={showComingSoon} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={() => setComingSoonFeature('info')}
+          style={styles.iconButton}
+        >
           <Ionicons name="information-circle-outline" size={26} color="#FFF" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={showComingSoon} style={styles.iconButton}>
+        <TouchableOpacity
+          onPress={() => setComingSoonFeature('notifications')}
+          style={styles.iconButton}
+        >
           <Ionicons name="notifications-outline" size={26} color="#FFF" />
         </TouchableOpacity>
       </View>
 
       <ComingSoonModal
-        visible={comingSoonVisible}
-        onClose={() => setComingSoonVisible(false)}
+        visible={comingSoonFeature !== null}
+        onClose={() => setComingSoonFeature(null)}
+        icon={
+          comingSoonFeature === 'store'
+            ? 'bag-handle-outline'
+            : comingSoonFeature === 'info'
+              ? 'information-circle-outline'
+              : 'notifications-outline'
+        }
+        title={
+          comingSoonFeature === 'store'
+            ? 'Atto Store'
+            : comingSoonFeature === 'info'
+              ? 'About Atto'
+              : 'Notifications'
+        }
+        description={
+          comingSoonFeature === 'store'
+            ? 'Shop exclusive merch from your favorite artists. Drops, collabs, and limited editions — all in one place.'
+            : comingSoonFeature === 'info'
+              ? 'Learn more about Atto Sound, our mission, and how we connect artists with the world.'
+              : 'Stay in the loop — likes, comments, follows, and messages. All your activity in one place.'
+        }
       />
       <CreateActionSheet
         visible={actionSheetVisible}
         onClose={() => setActionSheetVisible(false)}
       />
-
       <Modal
         visible={dropdownVisible}
         transparent
@@ -116,8 +156,8 @@ const styles = StyleSheet.create({
   logoSubtext: {
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
-    fontSize: 9,
-    letterSpacing: 4,
+    fontSize: 7,
+    letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
   modalOverlay: {

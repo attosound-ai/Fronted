@@ -6,6 +6,7 @@ import type {
   ApiResponse,
   AuthResponse,
   CompleteRegistrationDTO,
+  CompleteRegistrationResponse,
   Disable2FADTO,
   Enable2FADTO,
   ForgotPasswordDTO,
@@ -81,12 +82,29 @@ export const authService = {
     return response.data.data;
   },
 
-  async completeRegistration(data: CompleteRegistrationDTO): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+  async completeRegistration(
+    data: CompleteRegistrationDTO
+  ): Promise<CompleteRegistrationResponse> {
+    const response = await apiClient.post<ApiResponse<CompleteRegistrationResponse>>(
       API_ENDPOINTS.AUTH.COMPLETE_REGISTRATION,
       data
     );
     return response.data.data;
+  },
+
+  async switchAccount(targetUserId: number): Promise<AuthResponse> {
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(
+      API_ENDPOINTS.AUTH.SWITCH_ACCOUNT,
+      { targetUserId }
+    );
+    return response.data.data;
+  },
+
+  async getLinkedAccounts(): Promise<User[]> {
+    const response = await apiClient.get<ApiResponse<{ accounts: User[] }>>(
+      API_ENDPOINTS.USERS.LINKED_ACCOUNTS
+    );
+    return response.data.data.accounts;
   },
 
   async updateProfile(data: UpdateProfileDTO): Promise<User> {
@@ -99,6 +117,24 @@ export const authService = {
 
   async checkPhone(phone: string): Promise<void> {
     await apiClient.get(API_ENDPOINTS.AUTH.CHECK_PHONE, { params: { phone } });
+  },
+
+  async checkUsername(username: string): Promise<boolean> {
+    try {
+      await apiClient.get(API_ENDPOINTS.AUTH.CHECK_USERNAME, { params: { username } });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async checkEmail(email: string): Promise<boolean> {
+    try {
+      await apiClient.get(API_ENDPOINTS.AUTH.CHECK_EMAIL, { params: { email } });
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   async sendOtp(data: SendOtpDTO): Promise<void> {

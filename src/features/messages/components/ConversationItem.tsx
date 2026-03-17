@@ -40,7 +40,7 @@ function ConversationItemInner({ conversation, onPress }: ConversationItemProps)
           : name
       }
     >
-      <Avatar uri={avatarUri} size="md" />
+      <Avatar uri={avatarUri} size="md" fallbackText={name} />
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text variant="h3" numberOfLines={1} style={styles.name}>

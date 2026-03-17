@@ -1,19 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
-import { Text, Button, OtpInput } from '@/components/ui';
+import { Text, OtpInput } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { authService } from '@/lib/api/authService';
 import { useCountdown } from '@/hooks/useCountdown';
+import { haptic } from '@/lib/haptics/hapticService';
 
 const COOLDOWN_SECONDS = 60;
 
 /**
  * StepOtpVerification - Step 2 of registration wizard
- * Verifies phone via 6-digit OTP code
+ * Verifies phone + email via 6-digit OTP code
  */
 export function StepOtpVerification({
   state,
@@ -22,22 +23,39 @@ export function StepOtpVerification({
   isLoading,
   apiError,
 }: StepProps) {
-  const { t } = useTranslation(['registration', 'common', 'validation']);
+  const { t, i18n } = useTranslation(['registration', 'common', 'validation']);
   const countdown = useCountdown();
   const [isResending, setIsResending] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
 
-  // Start countdown immediately — the SMS was just sent in Step 1
+  // Start countdown immediately — the OTP was just sent in Step 1
   useEffect(() => {
     countdown.start(COOLDOWN_SECONDS);
   }, []);
 
-  // Clear local error when code reaches 6 digits
+  // Auto-advance when state.otpCode reaches 6 digits (works with both manual input and iOS AutoFill)
+  const hasAdvancedRef = useRef(false);
   useEffect(() => {
-    if (state.otpCode.length === 6) {
+    if (state.otpCode.length === 6 && !hasAdvancedRef.current && !isLoading) {
       setOtpError(null);
+      hasAdvancedRef.current = true;
+      haptic('light');
+      // Small delay so the user sees the last digit fill in
+      const timer = setTimeout(() => onNext(), 200);
+      return () => clearTimeout(timer);
     }
-  }, [state.otpCode]);
+    if (state.otpCode.length < 6) {
+      hasAdvancedRef.current = false;
+    }
+  }, [state.otpCode, onNext, isLoading]);
+
+  const handleOtpChange = useCallback(
+    (value: string) => {
+      dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value });
+      setOtpError(null);
+    },
+    [dispatch]
+  );
 
   const handleResendCode = async () => {
     if (countdown.isActive || isResending) return;
@@ -47,7 +65,7 @@ export function StepOtpVerification({
 
     try {
       const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
-      await authService.sendOtp({ phone: fullPhone });
+      await authService.sendOtp({ phone: fullPhone, email: state.email, locale: i18n.language });
       dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value: '' });
       countdown.start(COOLDOWN_SECONDS);
     } catch (error: unknown) {
@@ -58,13 +76,8 @@ export function StepOtpVerification({
     }
   };
 
-  const handleContinue = () => {
-    if (state.otpCode.length !== 6) {
-      setOtpError(t('validation:otpIncomplete'));
-      return;
-    }
-    onNext();
-  };
+  const maskedEmail = maskEmail(state.email);
+  const maskedPhone = maskPhone(state.phoneCountryCode, state.phoneNumber);
 
   return (
     <View style={styles.container}>
@@ -80,16 +93,23 @@ export function StepOtpVerification({
           {t('otp.title')}
         </Text>
 
-        {/* Phone display */}
-        <Text variant="body" style={styles.emailText}>
-          {state.phoneCountryCode}
-          {state.phoneNumber}
-        </Text>
+        {/* Destinations — single row */}
+        <View style={styles.destinationsRow}>
+          <Ionicons name="call-outline" size={14} color="#888888" />
+          <Text variant="small" style={styles.destinationText}>
+            {maskedPhone}
+          </Text>
+          <Text variant="small" style={styles.separator}>|</Text>
+          <Ionicons name="mail-outline" size={14} color="#888888" />
+          <Text variant="small" style={styles.destinationText}>
+            {maskedEmail}
+          </Text>
+        </View>
 
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#EF4444" />
+            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -101,10 +121,7 @@ export function StepOtpVerification({
           <OtpInput
             length={6}
             value={state.otpCode}
-            onChange={(value) => {
-              dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value });
-              setOtpError(null);
-            }}
+            onChange={handleOtpChange}
             error={otpError || undefined}
             autoFocus
           />
@@ -131,19 +148,25 @@ export function StepOtpVerification({
                 : t('otp.resendCode')}
           </Text>
         </TouchableOpacity>
-
-        {/* Continue Button */}
-        <View style={styles.buttonContainer}>
-          <Button
-            title={t('common:buttons.continue')}
-            onPress={handleContinue}
-            disabled={isLoading}
-            loading={isLoading}
-          />
-        </View>
       </KeyboardAwareScrollView>
     </View>
   );
+}
+
+/** Masks an email: dav***@gmail.com */
+function maskEmail(email: string): string {
+  if (!email) return '';
+  const [local, domain] = email.split('@');
+  if (!domain) return email;
+  const visible = local.slice(0, 3);
+  return `${visible}***@${domain}`;
+}
+
+/** Masks a phone: +57***0022 */
+function maskPhone(countryCode: string, number: string): string {
+  if (!number) return countryCode;
+  const last4 = number.slice(-4);
+  return `${countryCode}***${last4}`;
 }
 
 const styles = StyleSheet.create({
@@ -159,27 +182,36 @@ const styles = StyleSheet.create({
   title: {
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  emailText: {
-    color: '#888888',
-    textAlign: 'center',
+  destinationsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     marginBottom: 32,
+  },
+  destinationText: {
+    color: '#888888',
+  },
+  separator: {
+    color: '#333333',
+    marginHorizontal: 2,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2A1515',
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 24,
   },
   errorBannerText: {
-    color: '#EF4444',
+    color: '#FFFFFF',
     flex: 1,
   },
   otpContainer: {
@@ -190,13 +222,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   resendText: {
-    color: '#3B82F6',
+    color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
   },
   resendTextDisabled: {
     color: '#666666',
-  },
-  buttonContainer: {
-    marginTop: 32,
   },
 });

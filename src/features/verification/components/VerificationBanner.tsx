@@ -19,7 +19,7 @@ export function VerificationBanner() {
   const user = useAuthStore((s) => s.user);
   const hasBridgeNumber = useSubscriptionStore((s) => s.hasEntitlement('bridge_number'));
 
-  const { otpCode, otpError, isVerifying, isFetchingBridge, handleOtpChange } =
+  const { otpCode, otpError, isVerifying, isFetchingBridge, hasBridgePhone, handleOtpChange } =
     useVerification();
 
   // Only show for unverified representatives with a paid plan that includes bridge_number
@@ -48,10 +48,14 @@ export function VerificationBanner() {
         {t('verification.bannerSubtitle')}
       </Text>
 
-      {/* OTP fields — always visible */}
+      {/* OTP fields */}
       <View style={styles.otpSection}>
         {isFetchingBridge ? (
           <ActivityIndicator color="#666" size="small" />
+        ) : !hasBridgePhone ? (
+          <Text variant="caption" style={styles.noBridgeText}>
+            Bridge number not set up. Please complete your subscription or contact support.
+          </Text>
         ) : (
           <>
             <OtpInput
@@ -97,5 +101,10 @@ const styles = StyleSheet.create({
   },
   spinner: {
     marginTop: 8,
+  },
+  noBridgeText: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

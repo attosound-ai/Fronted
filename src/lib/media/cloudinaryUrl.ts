@@ -18,8 +18,8 @@ const PRESETS: Record<string, string> = {
 
   // Content images — responsive widths
   thumb: 'c_limit,w_300,f_auto,q_auto',
-  feed: 'c_limit,w_750,f_auto,q_auto',
-  full: 'c_limit,w_1500,f_auto,q_auto',
+  feed: 'c_limit,w_1500,f_auto,q_auto',
+  full: 'c_limit,w_2000,f_auto,q_auto',
 
   // Chat images
   chat_sm: 'c_limit,w_400,f_auto,q_auto',

@@ -42,6 +42,7 @@ type ShowFn = (data: MessageNotificationData) => void;
 let _show: ShowFn | null = null;
 
 export function showMessageNotification(data: MessageNotificationData): void {
+  import('@/lib/haptics/hapticService').then(({ haptic }) => haptic('success'));
   _show?.(data);
 }
 
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#555555',
     borderRadius: 16,
     padding: 12,
     gap: 12,

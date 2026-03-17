@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import type { FeedPost, PostAuthor } from '@/types/post';
 import { PostHeader } from './PostHeader';
@@ -25,7 +26,7 @@ interface FeedPostCardProps {
  *
  * Composition: PostHeader → PostMedia → PostActions → PostEngagement
  */
-export function FeedPostCard({
+function FeedPostCardInner({
   post,
   isVisible,
   onLike,
@@ -46,32 +47,49 @@ export function FeedPostCard({
   };
 
   const isReel = post.type === 'reel';
+  const isAudio = post.type === 'audio';
+
+  const header = !isReel ? (
+    <PostHeader
+      author={post.author}
+      isBookmarked={post.isBookmarked}
+      onFollow={onFollow}
+      onProfilePress={onProfilePress}
+      onBookmark={onBookmark}
+      onReport={onReport}
+      onDelete={onDelete}
+    />
+  ) : null;
+
+  const media = (
+    <PostMedia
+      post={post}
+      onDoubleTap={handleDoubleTapLike}
+      isVisible={isVisible}
+      onLike={onLike}
+      onComment={onComment}
+      onShare={onShare}
+      onProfilePress={onProfilePress}
+      onFollow={onFollow}
+      onBookmark={onBookmark}
+      onReport={onReport}
+      onDelete={onDelete}
+    />
+  );
 
   return (
     <View style={styles.container}>
-      {!isReel && (
-        <PostHeader
-          author={post.author}
-          isBookmarked={post.isBookmarked}
-          onFollow={onFollow}
-          onProfilePress={onProfilePress}
-          onBookmark={onBookmark}
-          onReport={onReport}
-          onDelete={onDelete}
-        />
+      {isAudio ? (
+        <View style={styles.audioWrapper}>
+          {header}
+          {media}
+        </View>
+      ) : (
+        <>
+          {header}
+          {media}
+        </>
       )}
-      <PostMedia
-        post={post}
-        onDoubleTap={handleDoubleTapLike}
-        isVisible={isVisible}
-        onLike={onLike}
-        onComment={onComment}
-        onShare={onShare}
-        onProfilePress={onProfilePress}
-        onFollow={onFollow}
-        onBookmark={onBookmark}
-        onReport={onReport}
-      />
       <PostActions
         post={post}
         onLike={onLike}
@@ -85,9 +103,27 @@ export function FeedPostCard({
   );
 }
 
+export const FeedPostCard = memo(FeedPostCardInner, (prev, next) => {
+  const pi = prev.post.interactions;
+  const ni = next.post.interactions;
+  return (
+    prev.post.id === next.post.id &&
+    pi?.likesCount === ni?.likesCount &&
+    pi?.commentsCount === ni?.commentsCount &&
+    pi?.isLiked === ni?.isLiked &&
+    pi?.isBookmarked === ni?.isBookmarked &&
+    pi?.isReposted === ni?.isReposted &&
+    prev.post.author?.isFollowing === next.post.author?.isFollowing &&
+    prev.isVisible === next.isVisible
+  );
+});
+
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#000',
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  audioWrapper: {
+    backgroundColor: '#1A1A1A',
   },
 });

@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
+  DeviceEventEmitter,
   FlatList,
   RefreshControl,
   ActivityIndicator,
@@ -18,9 +19,12 @@ import { useFeed } from '../hooks/useFeed';
 import { useEngagement } from '../hooks/useEngagement';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import { FeedPostCard } from './FeedPostCard';
+import { AdCard } from './AdCard';
 import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
 import { PLACEHOLDER_POSTS } from '../constants/placeholderPosts';
+import { DEMO_ADS } from '../constants/adPosts';
+import { injectAds } from '../utils/injectAds';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import type { Post } from '@/types';
 
@@ -50,9 +54,9 @@ function toFeedPost(post: Post): FeedPost {
       avatar: post.author.avatar,
       isFollowing: false,
     },
-    images: type === 'image' ? files : undefined,
+    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
     audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined) : undefined,
-    videoUrl: type === 'video' || type === 'reel' ? files[0] : undefined,
+    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
@@ -92,12 +96,27 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   const { toggleBookmark, toggleRepost } = useEngagement();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
 
-  // Video auto-play: track which post IDs are currently visible
+  const flatListRef = useRef<FlatList<FeedPost>>(null);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('feedScrollToTop', () => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Video auto-play: track visible post IDs.
+  // Ref holds the truth (read during render). State update is deferred via
+  // InteractionManager so it never interrupts scroll animations.
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const visibleIdsRef = useRef<Set<string>>(new Set());
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      setVisibleIds(new Set(viewableItems.map((v) => v.item?.id).filter(Boolean)));
+      const next = new Set(viewableItems.map((v) => v.item?.id).filter(Boolean));
+      visibleIdsRef.current = next;
+      // Defer state update so it never interrupts scroll momentum
+      setTimeout(() => setVisibleIds(next), 0);
     }
   );
 
@@ -118,10 +137,16 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
     });
   }, []);
 
-  const feedPosts: FeedPost[] = [...posts.map(toFeedPost), ...PLACEHOLDER_POSTS].map((p) => ({
-    ...p,
-    author: { ...p.author, isFollowing: getIsFollowing(p.author.id, p.author.isFollowing) },
-  }));
+  const feedPosts = useMemo(() => {
+    const realPosts = posts.map(toFeedPost).map((p) => ({
+      ...p,
+      author: { ...p.author, isFollowing: getIsFollowing(p.author.id, p.author.isFollowing) },
+    }));
+    const feedWithAds = injectAds(realPosts, DEMO_ADS);
+    const realAdCount = Math.floor(realPosts.length / 2);
+    const placeholdersWithAds = injectAds(PLACEHOLDER_POSTS, DEMO_ADS, 1, realAdCount);
+    return [...feedWithAds, ...placeholdersWithAds];
+  }, [posts, getIsFollowing]);
 
   const handleFollow = useCallback(
     (userId: number) => {
@@ -132,11 +157,21 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
 
   const renderPost = useCallback(
     ({ item }: { item: FeedPost }) => {
+      if (item.isAd) {
+        return (
+          <AdCard
+            post={item}
+            isVisible={visibleIdsRef.current.has(item.id)}
+            onComment={() => setCommentsPostId(item.id)}
+            onShare={() => setSharePost(item)}
+          />
+        );
+      }
       const isPlaceholder = item.id.startsWith('placeholder-');
       return (
         <FeedPostCard
           post={item}
-          isVisible={visibleIds.has(item.id)}
+          isVisible={visibleIdsRef.current.has(item.id)}
           onLike={isPlaceholder ? undefined : toggleLike}
           onFollow={isPlaceholder ? undefined : handleFollow}
           onComment={isPlaceholder ? undefined : () => setCommentsPostId(item.id)}
@@ -148,7 +183,7 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
         />
       );
     },
-    [toggleLike, handleFollow, toggleRepost, toggleBookmark, handleProfilePress, visibleIds, deletePost]
+    [toggleLike, handleFollow, toggleRepost, toggleBookmark, handleProfilePress, deletePost]
   );
 
   const renderFooter = useCallback(() => {
@@ -165,6 +200,19 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
       loadMore();
     }
   }, [hasMore, isFetchingMore, loadMore]);
+
+  const keyExtractor = useCallback((item: FeedPost) => item.id, []);
+
+  const refreshCtrl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={isRefreshing}
+        onRefresh={refresh}
+        tintColor={COLORS.white}
+      />
+    ),
+    [isRefreshing, refresh]
+  );
 
   if (isLoading && posts.length === 0) {
     return (
@@ -202,23 +250,28 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   return (
     <>
       <FlatList
+        ref={flatListRef}
         data={feedPosts}
         renderItem={renderPost}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeaderComponent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={refresh}
-            tintColor={COLORS.white}
-          />
-        }
+        refreshControl={refreshCtrl}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+        directionalLockEnabled
+        extraData={visibleIds}
         viewabilityConfig={viewabilityConfig.current}
         onViewableItemsChanged={onViewableItemsChanged.current}
+        removeClippedSubviews
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        initialNumToRender={5}
+        updateCellsBatchingPeriod={100}
       />
 
       {commentsPostId && (

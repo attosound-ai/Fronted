@@ -14,6 +14,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { authService } from '@/lib/api/authService';
 import { isNotEmpty, isValidInmateNumber } from '@/utils/validators';
 import { getErrorMessage } from '@/utils/formatters';
+import { haptic } from '@/lib/haptics/hapticService';
 
 const AVAILABLE_STATES: SelectOption[] = [{ label: 'Connecticut', value: 'CT' }];
 
@@ -77,8 +78,12 @@ export const StepConsentForm: React.FC<StepProps> = ({
   };
 
   const handleContinue = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+      haptic('error');
+      return;
+    }
 
+    haptic('light');
     setLookupLoading(true);
     setLookupError(null);
     try {
@@ -87,6 +92,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
       setShowInmateModal(true);
     } catch (error: unknown) {
       setLookupError(getErrorMessage(error, t('consentForm.lookupFailed')));
+      haptic('error');
     } finally {
       setLookupLoading(false);
     }
@@ -103,6 +109,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
       dispatch({ type: 'UPDATE_FIELD', field: 'artistName', value: formatted });
     }
     setShowInmateModal(false);
+    haptic('success');
     onNext();
   };
 
@@ -213,7 +220,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
 
           {lookupError && (
             <View style={styles.lookupErrorContainer}>
-              <Ionicons name="alert-circle" size={18} color="#EF4444" />
+              <Ionicons name="alert-circle" size={18} color="#FFFFFF" />
               <Text variant="small" style={styles.lookupErrorText}>
                 {lookupError}
               </Text>
@@ -363,7 +370,7 @@ const styles = StyleSheet.create({
     marginTop: -12,
   },
   lookupErrorText: {
-    color: '#EF4444',
+    color: '#FFFFFF',
     flex: 1,
   },
   checkboxLabel: {
@@ -381,15 +388,15 @@ const styles = StyleSheet.create({
   errorContainer: {
     marginTop: 16,
     padding: 12,
-    backgroundColor: '#2D1515',
+    backgroundColor: '#111111',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
   },
   errorText: {
     fontFamily: 'Archivo_400Regular',
     fontSize: 14,
-    color: '#EF4444',
+    color: '#FFFFFF',
   },
   buttonWrapper: {
     marginTop: 14,

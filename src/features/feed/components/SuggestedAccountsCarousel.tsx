@@ -82,6 +82,7 @@ export function SuggestedAccountsCarousel() {
     <View style={styles.container}>
       <FlatList
         horizontal
+        nestedScrollEnabled
         data={isLoading ? skeletons : users}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.list}

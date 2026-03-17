@@ -10,7 +10,6 @@ import {
   StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -56,25 +55,23 @@ export function PublicProfileScreen({
 
   if (isLoading && !fallbackAuthor) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Header />
+      <View style={styles.container}>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#FFF" />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!profile && !showFallback) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Header />
+      <View style={styles.container}>
         <View style={styles.centered}>
           <Text variant="body" style={styles.errorText}>
             {t('publicProfile.errorLoadFailed')}
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -91,8 +88,7 @@ export function PublicProfileScreen({
   const isFollowing = profile?.isFollowing ?? false;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Header />
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Avatar uri={avatar} size="xl" />
@@ -218,7 +214,7 @@ export function PublicProfileScreen({
           </ScrollView>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -262,36 +258,10 @@ function getPostThumbnail(post: FeedPost): string | null {
   return null;
 }
 
-function Header() {
-  const { t } = useTranslation('profile');
-
-  return (
-    <View style={styles.header}>
-      <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-        <Ionicons name="arrow-back" size={24} color="#FFF" />
-      </TouchableOpacity>
-      <Text variant="h2" style={styles.headerTitle}>
-        {t('publicProfile.headerTitle')}
-      </Text>
-      <View style={{ width: 24 }} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    fontSize: 16,
   },
   centered: {
     flex: 1,

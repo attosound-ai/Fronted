@@ -33,35 +33,30 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
 
     const animation = Animated.loop(
       Animated.sequence([
-        // 0% → 12.5% — scale up to 1.07
         Animated.timing(pulse, {
           toValue: 1.07,
           duration: 150,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        // 12.5% → 20% — back to 1
         Animated.timing(pulse, {
           toValue: 1,
           duration: 90,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        // 20% → 29% — scale up to 1.042
         Animated.timing(pulse, {
           toValue: 1.042,
           duration: 108,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        // 29% → 38% — back to 1
         Animated.timing(pulse, {
           toValue: 1,
           duration: 108,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        // 38% → 100% — hold at 1
         Animated.delay(744),
       ])
     );
@@ -102,7 +97,7 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
           />
         ))}
         {/* Inner faders — animated with pulse */}
-        <AnimatedG style={{ transform: [{ scale: animated ? pulse : 1 }] }}>
+        <AnimatedG style={{ transform: [{ scaleY: animated ? pulse : 1 }] }}>
           {FADERS.slice(1, -1).map((f, i) => (
             <Line
               key={`c${i}`}

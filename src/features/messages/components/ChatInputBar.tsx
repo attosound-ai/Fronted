@@ -86,7 +86,7 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
   const canSend = text.trim().length > 0 && !isSending;
 
   const bottomPadding = keyboardVisible
-    ? SPACING.xs
+    ? SPACING.md
     : Math.max(insets.bottom, SPACING.sm);
 
   return (

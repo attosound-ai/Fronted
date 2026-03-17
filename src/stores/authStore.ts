@@ -16,6 +16,7 @@ import type {
   TokenPair,
   TwoFactorMethod,
 } from '@/types';
+import { useAccountStore } from './accountStore';
 
 interface Pending2FA {
   tempToken: string;
@@ -38,7 +39,7 @@ interface AuthActions {
   login: (credentials: LoginDTO) => Promise<void>;
   register: (data: RegisterDTO) => Promise<void>;
   preRegister: (data: PreRegisterDTO) => Promise<void>;
-  completeRegistration: (data: CompleteRegistrationDTO) => Promise<void>;
+  completeRegistration: (data: CompleteRegistrationDTO) => Promise<number | null>;
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<TokenPair | null>;
@@ -99,6 +100,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         });
         analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
         useSubscriptionStore.getState().fetchSubscription();
+        useAccountStore.getState().loadAccounts();
       } catch {
         // Token expired — try refresh
         const newTokens = await get().refreshTokens();
@@ -238,7 +240,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       set({ isAuthenticating: true, error: null });
 
-      const { user, tokens } = await authService.completeRegistration(data);
+      const result = await authService.completeRegistration(data);
+      const { user, tokens, linkedAccount } = result;
 
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
@@ -251,6 +254,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isAuthenticating: false,
       });
 
+      // Persist both accounts when a managed artist was created
+      if (linkedAccount) {
+        const { addAccount } = useAccountStore.getState();
+        await addAccount({ user, tokens });
+        await addAccount({ user: linkedAccount.user, tokens: linkedAccount.tokens });
+      }
+
       analytics.identify(user);
       Sentry.setUser({
         id: String(user.id),
@@ -259,6 +269,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.COMPLETED, { role: user.role });
+
+      return linkedAccount?.user?.id ?? null;
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to complete registration';
@@ -297,6 +309,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       analytics.reset();
       Sentry.setUser(null);
       useSubscriptionStore.getState().clear();
+      await useAccountStore.getState().clearAll();
       await authStorage.clearAll();
       set({ ...initialState, isLoading: false });
     }

@@ -10,6 +10,7 @@ import {
   type NativeScrollEvent,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -38,6 +39,9 @@ export function ChatScreen({
   const { t } = useTranslation('messages');
   const user = useAuthStore((s) => s.user);
   const userId = user ? String(user.id) : '';
+  const insets = useSafeAreaInsets();
+  // Approximate header height: safeArea top + xs padding + row (~44) + sm padding
+  const headerHeight = insets.top + SPACING.xs + 44 + SPACING.sm;
 
   const {
     messages,
@@ -115,13 +119,18 @@ export function ChatScreen({
   );
 
   const renderFooter = useCallback(() => {
-    if (!isFetchingMore) return null;
     return (
-      <View style={styles.footer}>
-        <ActivityIndicator color={COLORS.white} />
+      <View>
+        {isFetchingMore && (
+          <View style={styles.footer}>
+            <ActivityIndicator color={COLORS.white} />
+          </View>
+        )}
+        {/* Spacer so oldest messages don't hide behind the blur header */}
+        <View style={{ height: headerHeight }} />
       </View>
     );
-  }, [isFetchingMore]);
+  }, [isFetchingMore, headerHeight]);
 
   if (!user) return null;
 
@@ -131,50 +140,52 @@ export function ChatScreen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      <ChatHeader
-        participantName={participantName}
-        participantId={participantId || ''}
-        onBack={handleBack}
-      />
-      {isLoading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={COLORS.white} />
-        </View>
-      ) : (
-        <FlatList
-          style={styles.list}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.messageId}
-          inverted
-          keyboardDismissMode="interactive"
-          onEndReached={handleEndReached}
-          onEndReachedThreshold={0.3}
-          onScrollEndDrag={handleScrollEndDrag}
-          ListFooterComponent={renderFooter}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text variant="body" style={styles.emptyText}>
-                {t('chat.emptyMessages')}
-              </Text>
-            </View>
-          }
-          ListHeaderComponent={
-            <>
-              {pullRefreshing ? (
-                <View style={styles.pullRefresh}>
-                  <ActivityIndicator size="small" color={COLORS.white} />
-                </View>
-              ) : null}
-              {isParticipantTyping ? <TypingIndicator name={participantName} /> : null}
-            </>
-          }
-          windowSize={10}
-          maxToRenderPerBatch={10}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
+      <View style={styles.body}>
+        <ChatHeader
+          participantName={participantName}
+          participantId={participantId || ''}
+          onBack={handleBack}
         />
-      )}
+        {isLoading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" color={COLORS.white} />
+          </View>
+        ) : (
+          <FlatList
+            style={styles.list}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.messageId}
+            inverted
+            keyboardDismissMode="interactive"
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.3}
+            onScrollEndDrag={handleScrollEndDrag}
+            ListFooterComponent={renderFooter}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text variant="body" style={styles.emptyText}>
+                  {t('chat.emptyMessages')}
+                </Text>
+              </View>
+            }
+            ListHeaderComponent={
+              <>
+                {pullRefreshing ? (
+                  <View style={styles.pullRefresh}>
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  </View>
+                ) : null}
+                {isParticipantTyping ? <TypingIndicator name={participantName} /> : null}
+              </>
+            }
+            windowSize={10}
+            maxToRenderPerBatch={10}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
       <ChatInputBar onSend={handleSend} isSending={isSending} onTyping={sendTyping} />
     </KeyboardAvoidingView>
   );
@@ -184,6 +195,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.black,
+  },
+  body: {
+    flex: 1,
   },
   list: {
     flex: 1,

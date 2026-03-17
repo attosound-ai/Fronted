@@ -25,11 +25,14 @@ export interface User {
   artistEmail?: string;
   artistPhone?: string;
   consentToRecording?: boolean;
+  artistTypes?: string[];
+  artistGenres?: string[];
   profileVerified: boolean;
   twoFactorEnabled: boolean;
   twoFactorMethod: 'sms' | 'email' | '';
   registrationStatus: 'pending' | 'completed';
   representativeId?: number;
+  isManagedAccount?: boolean;
   followersCount: number;
   followingCount: number;
   postsCount: number;
@@ -45,6 +48,7 @@ export interface LoginDTO {
 
 export interface ForgotPasswordDTO {
   email: string;
+  locale?: string;
 }
 
 export interface ResetPasswordDTO {
@@ -90,6 +94,17 @@ export interface CompleteRegistrationDTO {
     relationship: string;
     consentToRecording: boolean;
   };
+  managedArtistFields?: {
+    email: string;
+    password: string;
+    username: string;
+    displayName: string;
+    phoneCountryCode?: string;
+    phoneNumber?: string;
+    avatar?: string;
+    artistTypes?: string[];
+    artistGenres?: string[];
+  };
 }
 
 // Update profile DTO
@@ -133,6 +148,13 @@ export interface TokenPair {
 export interface AuthResponse {
   user: User;
   tokens: TokenPair;
+}
+
+// Extended response from complete-registration when role = representative
+export interface CompleteRegistrationResponse {
+  user: User;
+  tokens: TokenPair;
+  linkedAccount?: { user: User; tokens: TokenPair };
 }
 
 // 2FA Types

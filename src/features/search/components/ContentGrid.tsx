@@ -9,18 +9,24 @@ const CELL_SIZE = (SCREEN_WIDTH - 4) / 3; // 3 columns with 2px gaps
 
 interface ContentGridProps {
   posts: Post[];
+  onEndReached?: () => void;
+  ListFooterComponent?: React.ReactElement | null;
 }
 
 function GridCell({ post }: { post: Post }) {
-  const thumbnail =
-    post.metadata?.thumbnailUrl ??
-    (post.filePaths?.[0]
-      ? cloudinaryUrl(post.filePaths[0], 'thumb', post.contentType === 'video' ? 'video' : 'image')
-      : null);
-
   const isVideo = post.contentType === 'video' || post.contentType === 'reel';
   const isAudio = post.contentType === 'audio';
   const isText = post.contentType === 'text';
+
+  const thumbnail =
+    post.metadata?.thumbnailUrl ??
+    (post.filePaths?.[0]
+      ? cloudinaryUrl(
+          post.filePaths[0],
+          isVideo ? 'video_thumb' : 'thumb',
+          isVideo ? 'video' : 'image',
+        )
+      : null);
   const textPreview = post.textContent ?? post.content;
 
   const handlePress = () => {
@@ -55,7 +61,7 @@ function GridCell({ post }: { post: Post }) {
   );
 }
 
-export function ContentGrid({ posts }: ContentGridProps) {
+export function ContentGrid({ posts, onEndReached, ListFooterComponent }: ContentGridProps) {
   return (
     <FlatList
       data={posts}
@@ -65,6 +71,9 @@ export function ContentGrid({ posts }: ContentGridProps) {
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       columnWrapperStyle={styles.row}
       showsVerticalScrollIndicator={false}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.3}
+      ListFooterComponent={ListFooterComponent}
     />
   );
 }

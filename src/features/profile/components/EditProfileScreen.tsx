@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { Select } from '@/components/ui/Select';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Avatar } from '@/components/ui/Avatar';
 import { Toast } from '@/components/ui/Toast';
+import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useEditProfile } from '../hooks/useEditProfile';
@@ -26,6 +28,8 @@ export function EditProfileScreen() {
   ];
   const { form, errors, isSubmitting, updateField, setAvatar, save } = useEditProfile();
   const { pickFromGallery } = useImagePicker();
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [pendingUri, setPendingUri] = useState<string | null>(null);
 
   const handleSave = async () => {
     const success = await save();
@@ -34,7 +38,21 @@ export function EditProfileScreen() {
 
   const handlePickAvatar = async () => {
     const uri = await pickFromGallery();
-    if (uri) setAvatar(uri);
+    if (uri) {
+      setPendingUri(uri);
+      setShowCropModal(true);
+    }
+  };
+
+  const handleCropDone = (croppedUri: string) => {
+    setAvatar(croppedUri);
+    setShowCropModal(false);
+    setPendingUri(null);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropModal(false);
+    setPendingUri(null);
   };
 
   if (!user) return null;
@@ -185,6 +203,13 @@ export function EditProfileScreen() {
       </KeyboardAwareScrollView>
 
       <Toast />
+
+      <ImageCropModal
+        visible={showCropModal}
+        imageUri={pendingUri}
+        onCrop={handleCropDone}
+        onCancel={handleCropCancel}
+      />
     </SafeAreaView>
   );
 }

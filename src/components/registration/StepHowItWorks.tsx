@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
+import { haptic } from '@/lib/haptics/hapticService';
 
 /**
  * Step 5: How Artist Representation Works
@@ -61,7 +62,7 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
 
       {/* Bottom button */}
       <View style={styles.footer}>
-        <Button title={t('common:buttons.continue')} onPress={onNext} />
+        <Button title={t('common:buttons.continue')} onPress={() => { haptic('light'); onNext(); }} />
       </View>
     </View>
   );

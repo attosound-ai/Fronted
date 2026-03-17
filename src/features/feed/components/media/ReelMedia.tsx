@@ -20,6 +20,7 @@ interface ReelMediaProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onDelete?: () => void;
 }
 
 export function ReelMedia({
@@ -29,10 +30,12 @@ export function ReelMedia({
   onFollow,
   onBookmark,
   onReport,
+  onDelete,
 }: ReelMediaProps) {
   const { t } = useTranslation('feed');
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const isOwnPost = currentUserId !== undefined && String(post.author.id) === String(currentUserId);
+  const isOwnPost =
+    currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const [isMuted, setIsMuted] = useState(true);
   const [menuVisible, setMenuVisible] = useState(false);
 
@@ -89,9 +92,7 @@ export function ReelMedia({
           activeOpacity={0.7}
         >
           <Avatar uri={post.author.avatar} size="sm" />
-          <Text style={styles.authorName}>
-            {post.author.displayName.toUpperCase()}
-          </Text>
+          <Text style={styles.authorName}>{post.author.displayName.toUpperCase()}</Text>
           {post.author.isVerified && (
             <Ionicons name="checkmark-circle" size={14} color="#FFF" />
           )}
@@ -137,11 +138,7 @@ export function ReelMedia({
         onPress={toggleMute}
         activeOpacity={0.7}
       >
-        <Ionicons
-          name={isMuted ? 'volume-mute' : 'volume-high'}
-          size={18}
-          color="#FFF"
-        />
+        <Ionicons name={isMuted ? 'volume-mute' : 'volume-high'} size={18} color="#FFF" />
       </TouchableOpacity>
 
       {/* Options bottom sheet */}
@@ -181,6 +178,25 @@ export function ReelMedia({
           </View>
           <Text style={styles.menuTextDanger}>{t('post.menuReport')}</Text>
         </TouchableOpacity>
+
+        {isOwnPost && (
+          <>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                setMenuVisible(false);
+                onDelete?.();
+              }}
+            >
+              <View style={styles.menuIcon}>
+                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+              </View>
+              <Text style={styles.menuTextDanger}>Delete post</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </BottomSheet>
     </View>
   );

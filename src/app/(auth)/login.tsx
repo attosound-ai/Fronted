@@ -1,30 +1,86 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Keyboard, Animated } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, useFocusEffect } from 'expo-router';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Animated,
+  Easing,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
+import { useAccountStore } from '@/stores/accountStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { LanguageSelectorButton } from '@/components/ui/LanguageSelectorButton';
+import { Logo } from '@/components/ui/Logo';
 import { useAuthStore } from '@/stores/authStore';
+import { haptic } from '@/lib/haptics/hapticService';
 
-type Step = 'identifier' | 'password' | '2fa';
+type Step = 'credentials' | '2fa';
 
 export default function LoginScreen() {
   const { t } = useTranslation('auth');
-  const [step, setStep] = useState<Step>('identifier');
-  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isAddMode = mode === 'add';
+  const addAccount = useAccountStore((s) => s.addAccount);
+  const switchToAccount = useAccountStore((s) => s.switchToAccount);
+  const [step, setStep] = useState<Step>('credentials');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [identifierError, setIdentifierError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const keyboardProgress = useRef(new Animated.Value(0)).current;
+  const { height: screenHeight } = useWindowDimensions();
+  // iPhone 17 Pro / 16 Pro = 874pt. Threshold 930 covers all non-Max iPhones.
+  // 150pt container: waveform SVG content sits within 24–94pt of the 160pt bounding box
+  // so nothing gets clipped visually. Moves the KAV 34pt higher → clears the keyboard.
+  const logoBaseHeight = screenHeight < 930 ? 150 : 184;
+
+  // Animate logo section: taller when keyboard hidden (pushes form down),
+  // original height when keyboard open (no visual change).
+  const logoContainerHeight = keyboardProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [logoBaseHeight + 80, logoBaseHeight],
+  });
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      const duration = e.duration > 0 ? e.duration : 250;
+      Animated.timing(keyboardProgress, {
+        toValue: 1,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    });
+    const onHide = Keyboard.addListener(hideEvent, (e) => {
+      const duration = e.duration > 0 ? e.duration : 250;
+      Animated.timing(keyboardProgress, {
+        toValue: 0,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    });
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [keyboardProgress]);
 
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
@@ -43,105 +99,115 @@ export default function LoginScreen() {
     }, [clearError])
   );
 
-  const animateTransition = useCallback(
-    (dir: 'forward' | 'back') => {
-      const startY = dir === 'forward' ? 30 : -20;
-      opacity.setValue(0);
-      translateY.setValue(startY);
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    },
-    [opacity, translateY]
-  );
-
-  const goTo = useCallback((nextStep: Step, dir: 'forward' | 'back') => {
-    setDirection(dir);
-    setStep(nextStep);
-  }, []);
-
-  useEffect(() => {
-    animateTransition(direction);
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  const animateIn = useCallback(() => {
+    opacity.setValue(0);
+    translateY.setValue(30);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, [opacity, translateY]);
 
   // Transition to 2FA step when pending2FA is set
   useEffect(() => {
-    if (pending2FA && step === 'password') {
-      goTo('2fa', 'forward');
+    if (pending2FA && step === 'credentials') {
+      setStep('2fa');
+      animateIn();
     }
-  }, [pending2FA, step, goTo]);
-
-  const handleContinue = useCallback(() => {
-    setIdentifierError('');
-    clearError();
-    if (!identifier.trim()) {
-      setIdentifierError(t('login.identifierError'));
-      return;
-    }
-    Keyboard.dismiss();
-    goTo('password', 'forward');
-  }, [identifier, clearError, goTo]);
+  }, [pending2FA, step, animateIn]);
 
   const handleLogin = useCallback(async () => {
+    setIdentifierError('');
     setPasswordError('');
     clearError();
+
+    let valid = true;
+    if (!identifier.trim()) {
+      setIdentifierError(t('login.identifierError'));
+      valid = false;
+    }
     if (password.length < 8) {
       setPasswordError(t('login.passwordError'));
+      valid = false;
+    }
+    if (!valid) {
+      haptic('error');
       return;
     }
+
     try {
+      // In add mode, persist the CURRENT account before login overwrites it
+      if (isAddMode) {
+        const prev = useAuthStore.getState();
+        if (prev.user && prev.tokens) {
+          await addAccount({ user: prev.user, tokens: prev.tokens });
+        }
+      }
+
       await login({ identifier: identifier.trim(), password });
+
       if (!useAuthStore.getState().pending2FA) {
+        await haptic('light');
+        if (isAddMode) {
+          // Now persist the NEW account and switch to it
+          const { user: newUser, tokens: newTokens } = useAuthStore.getState();
+          if (newUser && newTokens) {
+            await addAccount({ user: newUser, tokens: newTokens });
+            await switchToAccount(newUser.id);
+          }
+        }
         router.replace('/(tabs)');
       }
     } catch {
-      // error displayed via authStore.error
+      haptic('error');
     }
-  }, [identifier, password, login, clearError]);
+  }, [identifier, password, login, clearError, t, isAddMode, addAccount, switchToAccount]);
 
   const handleVerify2FA = useCallback(async () => {
     if (otpCode.length !== 6) return;
     clearError();
     try {
+      // In add mode, persist current account before 2FA overwrites it
+      if (isAddMode) {
+        const prev = useAuthStore.getState();
+        if (prev.user && prev.tokens) {
+          await addAccount({ user: prev.user, tokens: prev.tokens });
+        }
+      }
+
       await verify2FALogin(otpCode);
+      await haptic('light');
+
+      if (isAddMode) {
+        const { user: newUser, tokens: newTokens } = useAuthStore.getState();
+        if (newUser && newTokens) {
+          await addAccount({ user: newUser, tokens: newTokens });
+          await switchToAccount(newUser.id);
+        }
+      }
       router.replace('/(tabs)');
     } catch {
-      // error displayed via authStore.error
+      haptic('error');
     }
-  }, [otpCode, verify2FALogin, clearError]);
+  }, [otpCode, verify2FALogin, clearError, isAddMode, addAccount, switchToAccount]);
 
   const handleBack = useCallback(() => {
     clearError();
-    if (step === 'identifier') {
+    if (step === 'credentials') {
       router.back();
-    } else if (step === 'password') {
-      setPasswordError('');
-      goTo('identifier', 'back');
     } else if (step === '2fa') {
       setOtpCode('');
       clearPending2FA();
-      goTo('password', 'back');
+      setStep('credentials');
+      animateIn();
     }
-  }, [step, clearError, clearPending2FA, goTo]);
+  }, [step, clearError, clearPending2FA, animateIn]);
 
   const renderStep = () => {
     switch (step) {
-      case 'identifier':
+      case 'credentials':
         return (
           <View style={styles.form}>
-            <Text variant="h1" style={styles.title}>
-              {t('login.identifierTitle')}
-            </Text>
-
             {authError && (
               <Text variant="small" style={styles.apiError}>
                 {authError}
@@ -159,35 +225,10 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
-              autoFocus
               error={identifierError}
-              onSubmitEditing={handleContinue}
+              onSubmitEditing={() => {}}
               returnKeyType="next"
             />
-
-            <Button
-              title={t('login.continue')}
-              onPress={handleContinue}
-              disabled={!identifier.trim()}
-            />
-          </View>
-        );
-
-      case 'password':
-        return (
-          <View style={styles.form}>
-            <Text variant="h1" style={styles.title}>
-              {t('login.passwordTitle')}
-            </Text>
-            <Text variant="caption" style={styles.subtitle}>
-              {identifier}
-            </Text>
-
-            {authError && (
-              <Text variant="small" style={styles.apiError}>
-                {authError}
-              </Text>
-            )}
 
             <View>
               <Input
@@ -201,7 +242,6 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
-                autoFocus
                 error={passwordError}
                 onSubmitEditing={handleLogin}
                 returnKeyType="done"
@@ -223,12 +263,12 @@ export default function LoginScreen() {
               title={t('login.signIn')}
               onPress={handleLogin}
               loading={isAuthenticating}
-              disabled={isAuthenticating}
+              disabled={isAuthenticating || identifier.trim().length < 3 || password.length < 3}
             />
 
             <TouchableOpacity
-              onPress={() => router.push('/(auth)/forgot-password')}
               style={styles.forgotRow}
+              onPress={() => router.push('/(auth)/forgot-password')}
             >
               <Text variant="caption" style={styles.forgotLink}>
                 {t('login.forgotPassword')}
@@ -279,28 +319,79 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={handleBack}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
-      <LanguageSelectorButton style={styles.languageButton} />
+      <View style={styles.header}>
+        {step === '2fa' ? (
+          <TouchableOpacity
+            onPress={handleBack}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
+        <LanguageSelectorButton />
+      </View>
 
-      <KeyboardAwareScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        bottomOffset={16}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Animated.View
-          style={[styles.stepContainer, { opacity, transform: [{ translateY }] }]}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          bounces={false}
+          showsVerticalScrollIndicator={false}
         >
-          {renderStep()}
-        </Animated.View>
-      </KeyboardAwareScrollView>
+          {step === 'credentials' && (
+            <Animated.View style={[styles.logoSection, { height: logoContainerHeight }]}>
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      scale: keyboardProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 0.4],
+                        extrapolate: 'clamp',
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Logo size={160} animated />
+              </Animated.View>
+            </Animated.View>
+          )}
+
+          <View style={styles.keyboardInner}>
+            <View style={{ flex: 1 }} />
+            <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+              {renderStep()}
+            </Animated.View>
+            <View style={{ flex: 5 }} />
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {step === 'credentials' && (
+        <TouchableOpacity
+          style={styles.signUpRow}
+          onPress={() => {
+            haptic('light');
+            router.push('/(auth)/register');
+          }}
+          activeOpacity={0.6}
+        >
+          <Text variant="caption" style={styles.helpText}>
+            {t('welcome.noAccount')}{' '}
+          </Text>
+          <Text variant="caption" style={styles.signUpLink}>
+            {t('welcome.signUp')}
+          </Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -310,38 +401,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 80,
-  },
-  stepContainer: {
+  keyboardAvoid: {
     flex: 1,
   },
-  backButton: {
-    position: 'absolute',
-    top: 56,
-    left: 16,
-    zIndex: 10,
-    padding: 4,
+  scrollContent: {
+    flexGrow: 1,
   },
-  languageButton: {
-    position: 'absolute',
-    top: 56,
-    right: 16,
-    zIndex: 10,
+  keyboardInner: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  logoSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   form: {
     gap: 16,
-  },
-  title: {
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#888888',
-    marginTop: -8,
-    marginBottom: 8,
   },
   apiError: {
     color: '#EF4444',
@@ -361,6 +445,32 @@ const styles = StyleSheet.create({
   forgotLink: {
     color: '#FFFFFF',
     fontFamily: 'Archivo_500Medium',
+  },
+  helpRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  helpText: {
+    color: '#888888',
+  },
+  helpLink: {
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_700Bold',
+  },
+  signUpRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  signUpLink: {
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_700Bold',
   },
   shieldIcon: {
     alignItems: 'center',

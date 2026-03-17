@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#FFFFFF',
     fontFamily: 'Archivo_500Medium',
-    fontSize: 13,
+    fontSize: 11,
   },
   option: {
     flexDirection: 'row',

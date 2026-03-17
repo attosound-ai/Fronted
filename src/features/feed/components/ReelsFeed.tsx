@@ -27,6 +27,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { useReelsFeed } from '../hooks/useReelsFeed';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import { feedService } from '../services/feedService';
+import { DEMO_ADS } from '../constants/adPosts';
+import { injectAds } from '../utils/injectAds';
 import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
 import { formatCount } from '@/utils/formatters';
@@ -61,9 +63,9 @@ function toFeedPost(post: Post): FeedPost {
       avatar: post.author.avatar,
       isFollowing: false,
     },
-    images: type === 'image' ? files : undefined,
-    audioUrl: type === 'audio' ? files[0] : undefined,
-    videoUrl: type === 'video' || type === 'reel' ? files[0] : undefined,
+    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
+    audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? files[0]) : undefined,
+    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
@@ -264,6 +266,81 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
   );
 }
 
+// ─── AdReelItem ───────────────────────────────────────────────────────────────
+
+interface AdReelItemProps {
+  post: FeedPost;
+  isActive: boolean;
+}
+
+/**
+ * AdReelItem — Full-screen ad in the reels feed.
+ * Same layout as ReelItem but without social actions or author row.
+ */
+function AdReelItem({ post, isActive }: AdReelItemProps) {
+  const [isMuted, setIsMuted] = useState(true);
+
+  const player = useVideoPlayer(post.videoUrl ?? null, (p) => {
+    p.loop = true;
+    p.muted = true;
+  });
+
+  useEffect(() => {
+    if (!player) return;
+    if (isActive) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [isActive, player]);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      player.muted = !prev;
+      return !prev;
+    });
+  }, [player]);
+
+  return (
+    <View style={styles.reelContainer}>
+      {post.videoUrl ? (
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          nativeControls={false}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.noVideoPlaceholder]}>
+          <Ionicons name="film-outline" size={56} color="#555" />
+        </View>
+      )}
+
+      {/* Gradient scrim */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.6)']}
+        style={styles.bottomScrim}
+        pointerEvents="none"
+      />
+
+      {/* Sponsored badge — top-right */}
+      <View style={styles.adSponsoredBadge}>
+        <Ionicons name="megaphone-outline" size={12} color="#CCC" />
+        <Text style={styles.adSponsoredText}>Sponsored</Text>
+      </View>
+
+      {/* Mute toggle */}
+      <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={12}>
+        <Ionicons
+          name={isMuted ? 'volume-mute' : 'volume-high'}
+          size={20}
+          color="#FFF"
+        />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ─── ReelsFeed ────────────────────────────────────────────────────────────────
 
 /**
@@ -287,10 +364,11 @@ export function ReelsFeed() {
   const reelStartRef = useRef<number>(Date.now());
   const activePostIdRef = useRef<string | null>(null);
 
-  const displayPosts: FeedPost[] = posts.map(toFeedPost).map((p) => ({
+  const realPosts = posts.map(toFeedPost).map((p) => ({
     ...p,
     author: { ...p.author, isFollowing: getIsFollowing(p.author.id, p.author.isFollowing) },
   }));
+  const displayPosts: FeedPost[] = injectAds(realPosts, DEMO_ADS);
 
   // Viewability config — a reel is "active" when >= 80% is visible
   const viewabilityConfig = useRef({
@@ -330,19 +408,24 @@ export function ReelsFeed() {
   );
 
   const renderItem = useCallback(
-    ({ item, index }: { item: FeedPost; index: number }) => (
-      <ReelItem
-        post={item}
-        isActive={index === activeIndex}
-        currentUserId={currentUserId}
-        onLike={toggleLike}
-        onBookmark={toggleBookmark}
-        onFollow={handleFollow}
-        onComment={setCommentsPostId}
-        onShare={setSharePost}
-      />
-    ),
-    [activeIndex, toggleLike, toggleBookmark, handleFollow]
+    ({ item, index }: { item: FeedPost; index: number }) => {
+      if (item.isAd) {
+        return <AdReelItem post={item} isActive={index === activeIndex} />;
+      }
+      return (
+        <ReelItem
+          post={item}
+          isActive={index === activeIndex}
+          currentUserId={currentUserId}
+          onLike={toggleLike}
+          onBookmark={toggleBookmark}
+          onFollow={handleFollow}
+          onComment={setCommentsPostId}
+          onShare={setSharePost}
+        />
+      );
+    },
+    [activeIndex, currentUserId, toggleLike, toggleBookmark, handleFollow]
   );
 
   const renderFooter = useCallback(() => {
@@ -551,6 +634,26 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+
+  // ── Ad reel badge ──
+  adSponsoredBadge: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  adSponsoredText: {
+    color: '#CCC',
+    fontSize: 12,
+    fontFamily: 'Archivo_500Medium',
+    letterSpacing: 0.3,
   },
 
   // ── Loading / empty states ──

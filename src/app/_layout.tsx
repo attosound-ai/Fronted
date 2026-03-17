@@ -23,6 +23,7 @@ import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { BugReportFAB } from '@/components/BugReportFAB';
+import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
 Sentry.init({
@@ -170,13 +171,34 @@ function RootLayout() {
                 <StatusBar style="light" />
                 <Stack
                   screenOptions={{
-                    headerShown: false,
+                    headerShown: true,
+                    headerStyle: { backgroundColor: '#000000' },
+                    headerTintColor: '#FFFFFF',
+                    headerTitleStyle: {
+                      fontFamily: 'Archivo_600SemiBold',
+                      fontSize: 17,
+                    },
+                    headerShadowVisible: false,
+                    headerBackTitleVisible: false,
                     contentStyle: { backgroundColor: '#000000' },
                     animation: 'slide_from_right',
+                    fullScreenGestureEnabled: true,
+                    animationDuration: 300,
                   }}
                 >
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen
+                    name="(auth)"
+                    options={{ headerShown: false, animation: 'fade' }}
+                  />
+                  <Stack.Screen
+                    name="(tabs)"
+                    options={{
+                      headerShown: false,
+                      animation: 'fade',
+                      gestureEnabled: false,
+                      fullScreenGestureEnabled: false,
+                    }}
+                  />
                   <Stack.Screen
                     name="edit-artist-contact"
                     options={{
@@ -221,7 +243,7 @@ function RootLayout() {
                   <Stack.Screen
                     name="new-message"
                     options={{
-                      headerShown: false,
+                      title: 'New Message',
                       presentation: 'modal',
                       animation: 'slide_from_bottom',
                     }}
@@ -236,14 +258,14 @@ function RootLayout() {
                   <Stack.Screen
                     name="user/[id]"
                     options={{
-                      headerShown: false,
+                      title: 'Profile',
                       animation: 'slide_from_right',
                     }}
                   />
                   <Stack.Screen
                     name="subscription"
                     options={{
-                      headerShown: false,
+                      title: 'Subscription',
                       presentation: 'modal',
                       animation: 'slide_from_bottom',
                     }}
@@ -256,11 +278,40 @@ function RootLayout() {
                       animation: 'slide_from_bottom',
                     }}
                   />
+                  <Stack.Screen
+                    name="post/[id]"
+                    options={{
+                      title: 'Post',
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="bookmarks"
+                    options={{
+                      title: 'Saved',
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="following"
+                    options={{
+                      title: 'Following',
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="projects"
+                    options={{
+                      headerShown: false,
+                      animation: 'slide_from_right',
+                    }}
+                  />
                   <Stack.Screen name="+not-found" />
                 </Stack>
                 <InCallTopBar />
                 <CallBanner />
                 <BugReportFAB />
+                <AccountSwitchOverlay />
               </SafeAreaProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

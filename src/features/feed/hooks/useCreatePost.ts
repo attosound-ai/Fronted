@@ -5,7 +5,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import type { PostType } from '@/types/post';
-import type { PickedMedia } from '../components/create/MediaPicker';
+import type { PickedMedia } from '../types';
 
 interface CreatePostParams {
   postType: PostType;

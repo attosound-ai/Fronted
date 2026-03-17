@@ -4,8 +4,7 @@ import {
   TextInput,
   StyleSheet,
   Animated,
-  NativeSyntheticEvent,
-  TextInputKeyPressEventData,
+  Pressable,
 } from 'react-native';
 
 import { Text } from './Text';
@@ -18,6 +17,14 @@ interface OtpInputProps {
   autoFocus?: boolean;
 }
 
+/**
+ * OtpInput — single hidden TextInput with visual digit cells.
+ *
+ * Uses one hidden TextInput that captures all keystrokes, avoiding the
+ * "same digit won't trigger onChangeText" bug of per-cell TextInputs.
+ * Tapping any cell focuses the hidden input. Swipe-to-dismiss works
+ * because there's only one input and the parent can set keyboardDismissMode.
+ */
 export function OtpInput({
   length = 6,
   value,
@@ -25,7 +32,7 @@ export function OtpInput({
   error,
   autoFocus = true,
 }: OtpInputProps) {
-  const inputRefs = useRef<(TextInput | null)[]>([]);
+  const hiddenInputRef = useRef<TextInput>(null);
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const digits = value.split('').concat(Array(length).fill('')).slice(0, length);
 
@@ -40,69 +47,51 @@ export function OtpInput({
     }
   }, [error, shakeAnim]);
 
-  const handleChange = (text: string, index: number) => {
-    // Handle paste of full code
-    if (text.length > 1) {
-      const pastedDigits = text.replaceAll(/\D/g, '').slice(0, length);
-      onChange(pastedDigits);
-      const focusIndex = Math.min(pastedDigits.length, length - 1);
-      inputRefs.current[focusIndex]?.focus();
-      return;
-    }
-
-    const newDigits = [...digits];
-    newDigits[index] = text.replaceAll(/\D/g, '');
-    const newCode = newDigits.join('').slice(0, length);
-    onChange(newCode);
-
-    if (text && index < length - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
+  const handleChange = (text: string) => {
+    const cleaned = text.replaceAll(/\D/g, '').slice(0, length);
+    onChange(cleaned);
   };
 
-  const handleKeyPress = (
-    e: NativeSyntheticEvent<TextInputKeyPressEventData>,
-    index: number
-  ) => {
-    if (e.nativeEvent.key === 'Backspace' && !digits[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-      const newDigits = [...digits];
-      newDigits[index - 1] = '';
-      onChange(newDigits.join(''));
-    }
+  const focusInput = () => {
+    hiddenInputRef.current?.focus();
   };
 
   return (
     <View>
-      <Animated.View
-        style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
-      >
-        {Array.from({ length }).map((_, index) => {
-          return (
-            <TextInput
+      {/* Hidden input that captures all keyboard events */}
+      <TextInput
+        ref={hiddenInputRef}
+        value={value}
+        onChangeText={handleChange}
+        keyboardType="number-pad"
+        maxLength={length}
+        autoFocus={autoFocus}
+        caretHidden
+        textContentType="oneTimeCode"
+        autoComplete="one-time-code"
+        style={styles.hiddenInput}
+      />
+
+      {/* Visual cells — tap anywhere to focus the hidden input */}
+      <Pressable onPress={focusInput}>
+        <Animated.View
+          style={[styles.container, { transform: [{ translateX: shakeAnim }] }]}
+        >
+          {Array.from({ length }).map((_, index) => (
+            <View
               key={index}
-              ref={(ref) => {
-                inputRefs.current[index] = ref;
-              }}
               style={[
                 styles.cell,
                 digits[index] ? styles.cellFilled : null,
                 error ? styles.cellError : null,
+                index === value.length ? styles.cellActive : null,
               ]}
-              value={digits[index]}
-              onChangeText={(text) => handleChange(text, index)}
-              onKeyPress={(e) => handleKeyPress(e, index)}
-              keyboardType="number-pad"
-              maxLength={index === 0 ? length : 1}
-              autoFocus={autoFocus && index === 0}
-              selectTextOnFocus
-              caretHidden
-              textContentType="oneTimeCode"
-              autoComplete={index === 0 ? 'one-time-code' : 'off'}
-            />
-          );
-        })}
-      </Animated.View>
+            >
+              <Text style={styles.cellText}>{digits[index]}</Text>
+            </View>
+          ))}
+        </Animated.View>
+      </Pressable>
 
       {error && (
         <Text variant="small" style={styles.error}>
@@ -114,6 +103,12 @@ export function OtpInput({
 }
 
 const styles = StyleSheet.create({
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 0,
+    width: 0,
+  },
   container: {
     flexDirection: 'row',
     gap: 8,
@@ -125,19 +120,26 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
     borderRadius: 8,
     backgroundColor: '#111111',
-    textAlign: 'center',
-    fontSize: 20,
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_600SemiBold',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cellFilled: {
     borderColor: '#FFFFFF',
   },
+  cellActive: {
+    borderColor: '#888888',
+  },
   cellError: {
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
+  },
+  cellText: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_600SemiBold',
+    textAlign: 'center',
   },
   error: {
-    color: '#EF4444',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginTop: 8,
   },

@@ -166,6 +166,11 @@ export function useTwilioVoice() {
     if (Platform.OS === 'ios' && !pushKitReady) {
       return;
     }
+    // Re-check auth at call time — the session may have been invalidated while
+    // waiting for PushKit init (3-second iOS delay) or between interval ticks.
+    if (!useAuthStore.getState().isAuthenticated) {
+      return;
+    }
 
     try {
       const { token } = await telephonyService.getVoiceToken();

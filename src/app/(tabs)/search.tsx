@@ -14,6 +14,7 @@ import { UserSearchCard } from '@/features/search/components/UserSearchCard';
 import { ContentGrid } from '@/features/search/components/ContentGrid';
 import { useUserSearch } from '@/features/search/hooks/useUserSearch';
 import { useContentSearch } from '@/features/search/hooks/useContentSearch';
+import { useExploreGrid } from '@/features/search/hooks/useExploreGrid';
 
 type SearchTab = 'people' | 'content';
 
@@ -47,6 +48,12 @@ export default function SearchScreen() {
 
   const { data: users = [], isLoading: loadingUsers } = useUserSearch(debouncedQuery);
   const { data: posts = [], isLoading: loadingContent } = useContentSearch(debouncedQuery);
+  const {
+    posts: explorePosts,
+    isLoading: isLoadingExplore,
+    isFetchingMore,
+    loadMore,
+  } = useExploreGrid();
 
   const tabs: { id: SearchTab; label: string }[] = [
     { id: 'people', label: t('search.tabPeople', 'People') },
@@ -55,7 +62,7 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Search bar */}
+      {/* Search bar — always visible */}
       <View style={styles.searchRow}>
         <SearchBar
           value={rawQuery}
@@ -64,76 +71,97 @@ export default function SearchScreen() {
         />
       </View>
 
-      {/* Tab bar */}
-      <View style={styles.tabBar}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-            onPress={() => setActiveTab(tab.id)}
-            activeOpacity={0.7}
-          >
-            <Text
-              variant="body"
-              style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Results */}
-      {activeTab === 'people' && (
+      {/* State: no query → Explore grid */}
+      {rawQuery.length === 0 && (
         <>
-          {loadingUsers && debouncedQuery.length > 0 ? (
+          {isLoadingExplore ? (
             <View style={styles.centered}>
               <ActivityIndicator color="#FFF" />
             </View>
-          ) : users.length > 0 ? (
-            <FlatList
-              data={users}
-              keyExtractor={(u) => String(u.id)}
-              renderItem={({ item }: { item: (typeof users)[number] }) => <UserSearchCard user={item} />}
-              showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={styles.divider} />}
-            />
-          ) : debouncedQuery.length > 0 ? (
-            <View style={styles.centered}>
-              <Text variant="body" style={styles.emptyText}>
-                {t('search.noResults', 'No results for "{{query}}"', { query: debouncedQuery })}
-              </Text>
-            </View>
           ) : (
-            <View style={styles.centered}>
-              <Text variant="body" style={styles.hintText}>
-                {t('search.hintPeople', 'Search for people by name or username')}
-              </Text>
-            </View>
+            <ContentGrid
+              posts={explorePosts}
+              onEndReached={loadMore}
+              ListFooterComponent={
+                isFetchingMore ? (
+                  <ActivityIndicator color="#555" style={styles.footerSpinner} />
+                ) : null
+              }
+            />
           )}
         </>
       )}
 
-      {activeTab === 'content' && (
+      {/* State: with query → Search results with tabs */}
+      {rawQuery.length > 0 && (
         <>
-          {loadingContent && debouncedQuery.length > 0 ? (
-            <View style={styles.centered}>
-              <ActivityIndicator color="#FFF" />
-            </View>
-          ) : posts.length > 0 ? (
-            <ContentGrid posts={posts} />
-          ) : debouncedQuery.length > 0 ? (
-            <View style={styles.centered}>
-              <Text variant="body" style={styles.emptyText}>
-                {t('search.noResults', 'No results for "{{query}}"', { query: debouncedQuery })}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.centered}>
-              <Text variant="body" style={styles.hintText}>
-                {t('search.hintContent', 'Search posts by caption or tags')}
-              </Text>
-            </View>
+          {/* Tab bar */}
+          <View style={styles.tabBar}>
+            {tabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  variant="body"
+                  style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* People tab */}
+          {activeTab === 'people' && (
+            <>
+              {loadingUsers && debouncedQuery.length > 0 ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator color="#FFF" />
+                </View>
+              ) : users.length > 0 ? (
+                <FlatList
+                  data={users}
+                  keyExtractor={(u) => String(u.id)}
+                  renderItem={({ item }: { item: (typeof users)[number] }) => (
+                    <UserSearchCard user={item} />
+                  )}
+                  showsVerticalScrollIndicator={false}
+                  ItemSeparatorComponent={() => <View style={styles.divider} />}
+                />
+              ) : debouncedQuery.length > 0 ? (
+                <View style={styles.centered}>
+                  <Text variant="body" style={styles.emptyText}>
+                    {t('search.noResults', 'No results for "{{query}}"', {
+                      query: debouncedQuery,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
+
+          {/* Content tab */}
+          {activeTab === 'content' && (
+            <>
+              {loadingContent && debouncedQuery.length > 0 ? (
+                <View style={styles.centered}>
+                  <ActivityIndicator color="#FFF" />
+                </View>
+              ) : posts.length > 0 ? (
+                <ContentGrid posts={posts} />
+              ) : debouncedQuery.length > 0 ? (
+                <View style={styles.centered}>
+                  <Text variant="body" style={styles.emptyText}>
+                    {t('search.noResults', 'No results for "{{query}}"', {
+                      query: debouncedQuery,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+            </>
           )}
         </>
       )}
@@ -189,8 +217,7 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-  hintText: {
-    color: '#444',
-    textAlign: 'center',
+  footerSpinner: {
+    padding: 16,
   },
 });

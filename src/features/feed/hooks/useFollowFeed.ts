@@ -1,38 +1,35 @@
-import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { useFollowStore } from '@/stores/followStore';
 
 /**
  * Manages optimistic follow/unfollow state for feed lists.
- * Keeps a local override map so the UI reflects changes instantly
- * without waiting for a feed refresh.
+ * Uses the global followStore so state is shared across feed, reels, and profiles.
  */
 export function useFollowFeed() {
-  // userId → isFollowing override (set after user taps Follow/Unfollow)
-  const [followStates, setFollowStates] = useState<Record<number, boolean>>({});
+  const { setFollowed, getIsFollowing } = useFollowStore();
 
   const { mutate } = useMutation({
-    mutationFn: ({ userId }: { userId: number }) =>
-      apiClient.post(API_ENDPOINTS.USERS.FOLLOW(userId)),
+    mutationFn: ({ userId, isFollowing }: { userId: number; isFollowing: boolean }) =>
+      isFollowing
+        ? apiClient.delete(API_ENDPOINTS.USERS.FOLLOW(userId))
+        : apiClient.post(API_ENDPOINTS.USERS.FOLLOW(userId)),
   });
 
   const toggleFollow = (userId: number, currentIsFollowing: boolean) => {
-    setFollowStates((prev) => ({ ...prev, [userId]: !currentIsFollowing }));
+    // Optimistic update in global store
+    setFollowed(userId, !currentIsFollowing);
     mutate(
-      { userId },
+      { userId, isFollowing: currentIsFollowing },
       {
         onError: () => {
           // Revert on API failure
-          setFollowStates((prev) => ({ ...prev, [userId]: currentIsFollowing }));
+          setFollowed(userId, currentIsFollowing);
         },
       }
     );
   };
-
-  /** Returns the effective isFollowing state, preferring the local override. */
-  const getIsFollowing = (userId: number, fallback: boolean) =>
-    followStates[userId] ?? fallback;
 
   return { toggleFollow, getIsFollowing };
 }

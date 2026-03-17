@@ -3,12 +3,11 @@ import {
   View,
   FlatList,
   TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -20,15 +19,10 @@ import type { User } from '@/types';
 
 export function NewMessageScreen() {
   const { t } = useTranslation('messages');
-  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { results, isLoading } = useUserSearch(query);
-
-  const handleBack = useCallback(() => {
-    router.back();
-  }, []);
 
   const handleSelectUser = useCallback(
     async (user: User) => {
@@ -84,18 +78,7 @@ export function NewMessageScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={t('newMessage.backAccessibilityLabel')}
-        >
-          <Ionicons name="chevron-back" size={28} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text variant="h2">{t('newMessage.headerTitle')}</Text>
-      </View>
+    <View style={styles.container}>
       <View style={styles.searchContainer}>
         <Ionicons
           name="search-outline"
@@ -148,16 +131,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.black,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.md,
-    gap: SPACING.sm,
-  },
-  backButton: {
-    padding: SPACING.xs,
   },
   searchContainer: {
     flexDirection: 'row',

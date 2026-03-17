@@ -15,10 +15,10 @@ export interface BridgeNumberResult {
  * Does NOT manage state or Stripe SDK — that is the component's job.
  */
 export const paymentService = {
-  async createCheckout(planId: string, email: string): Promise<CheckoutResponse> {
+  async createCheckout(planId: string, email: string, forUserId?: string): Promise<CheckoutResponse> {
     const response = await apiClient.post<ApiResponse<CheckoutResponse>>(
       API_ENDPOINTS.PAYMENTS.CHECKOUT,
-      { planId, email }
+      { planId, email, ...(forUserId && { forUserId }) }
     );
     return response.data.data;
   },
@@ -58,11 +58,12 @@ export const paymentService = {
 
   async upgradeSubscription(
     targetPlan: PlanId,
-    email: string
+    email: string,
+    forUserId?: string
   ): Promise<CheckoutResponse> {
     const response = await apiClient.post<ApiResponse<CheckoutResponse>>(
       API_ENDPOINTS.PAYMENTS.UPGRADE,
-      { targetPlan, email }
+      { targetPlan, email, ...(forUserId && { forUserId }) }
     );
     return response.data.data;
   },

@@ -1,5 +1,10 @@
-import { View, FlatList, TouchableOpacity, Image, ActivityIndicator, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  FlatList,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +29,9 @@ export default function FollowingScreen() {
   const { data, isLoading, isError } = useQuery({
     queryKey: QUERY_KEYS.USERS.FOLLOWING(Number(currentUserId)),
     queryFn: async () => {
-      const res = await apiClient.get(API_ENDPOINTS.USERS.FOLLOWING(Number(currentUserId)));
+      const res = await apiClient.get(
+        API_ENDPOINTS.USERS.FOLLOWING(Number(currentUserId))
+      );
       return (res.data?.data ?? res.data ?? []) as FollowingUser[];
     },
     enabled: !!currentUserId,
@@ -58,16 +65,7 @@ export default function FollowingScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Following</Text>
-        <View style={styles.backButton} />
-      </View>
-
+    <View style={styles.container}>
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color="#FFF" size="large" />
@@ -91,7 +89,7 @@ export default function FollowingScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -99,23 +97,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#111',
-  },
-  backButton: {
-    width: 36,
-  },
-  title: {
-    color: '#FFF',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 17,
   },
   list: {
     paddingTop: 8,

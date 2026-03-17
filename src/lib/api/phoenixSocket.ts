@@ -13,6 +13,7 @@ class PhoenixSocketManager {
   private socket: Socket | null = null;
   private readonly channels = new Map<string, Channel>();
   private userChannel: Channel | null = null;
+  onConnectionChange?: (connected: boolean) => void;
 
   /** Build the WebSocket URL from the REST API base URL. */
   private getSocketUrl(): string {
@@ -21,17 +22,21 @@ class PhoenixSocketManager {
     return `${wsBase}/socket`;
   }
 
-  /** Connect to the Phoenix WebSocket server. Resolves once the socket is open. */
-  async connect(): Promise<void> {
+  /** Connect to the Phoenix WebSocket server. Resolves once the socket is open.
+   *  @param forUserId — explicit user ID to authenticate with (used during account switch)
+   */
+  async connect(forUserId?: string): Promise<void> {
     if (this.socket?.isConnected()) return;
 
     const token = await authStorage.getToken();
     if (!token) return;
 
-    // Lazy-import to avoid circular deps at module-load time
-    const { useAuthStore } = await import('@/stores/authStore');
-    const user = useAuthStore.getState().user;
-    const userId = user ? String(user.id) : undefined;
+    let userId = forUserId;
+    if (!userId) {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const user = useAuthStore.getState().user;
+      userId = user ? String(user.id) : undefined;
+    }
 
     return new Promise<void>((resolve) => {
       this.socket = new Socket(this.getSocketUrl(), {
@@ -40,7 +45,19 @@ class PhoenixSocketManager {
         heartbeatIntervalMs: 30_000,
       });
 
-      this.socket.onOpen(() => resolve());
+      this.socket.onOpen(() => {
+        resolve();
+        this.onConnectionChange?.(true);
+        // Re-join user channel after auto-reconnect
+        if (this.userChannel) {
+          this.userChannel.rejoinUntilConnected();
+        }
+      });
+
+      this.socket.onClose(() => {
+        this.onConnectionChange?.(false);
+      });
+
       this.socket.connect();
 
       // Fallback: resolve after 10s so the app isn't blocked if the server is slow

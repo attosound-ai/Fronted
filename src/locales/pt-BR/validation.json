@@ -14,5 +14,10 @@
   "stateRequired": "Selecione um estado",
   "consentRequired": "Você deve concordar com a gravação da chamada",
   "usernameRequired": "O nome de usuário é obrigatório",
-  "inmateNumberRequired": "O número do detento é obrigatório"
+  "inmateNumberRequired": "O número do detento é obrigatório",
+  "passwordMatch": "As senhas coincidem",
+  "strengthLength": "8+ caracteres",
+  "strengthUpper": "Letra maiúscula",
+  "strengthLower": "Letra minúscula",
+  "strengthNumber": "Número"
 }

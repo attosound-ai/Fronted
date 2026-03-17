@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Pressable, Alert, Modal } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -395,9 +395,9 @@ export function TimelineEditor({
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={handleClose} style={styles.closeButton}>
+        <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.5} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="close" size={24} color="#FFF" />
-        </Pressable>
+        </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text variant="body" style={styles.headerTitle}>
             {t('timeline.editorTitle')}
@@ -423,9 +423,9 @@ export function TimelineEditor({
             </Text>
           </View>
         </View>
-        <Pressable onPress={handlePlayPause} style={styles.playButton}>
+        <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
           <Ionicons name={state.isPlaying ? 'pause' : 'play'} size={22} color="#FFF" />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {/* Position display */}
@@ -524,7 +524,7 @@ export function TimelineEditor({
             const meta = state.laneMeta[i];
             const color = meta?.color ?? '#555';
             return (
-              <Pressable
+              <TouchableOpacity
                 key={i}
                 onPress={() => {
                   setActiveLane(i);
@@ -548,10 +548,10 @@ export function TimelineEditor({
                 >
                   {meta?.name || String(i + 1)}
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             );
           })}
-          <Pressable
+          <TouchableOpacity
             onPress={addLane}
             style={[
               styles.stickyAddButton,
@@ -559,7 +559,7 @@ export function TimelineEditor({
             ]}
           >
             <Ionicons name="add" size={14} color="#666" />
-          </Pressable>
+          </TouchableOpacity>
         </View>
 
         {state.clips.length === 0 && (
@@ -597,17 +597,17 @@ export function TimelineEditor({
         animationType="fade"
         onRequestClose={() => setVolumeModalVisible(false)}
       >
-        <Pressable
+        <TouchableOpacity
           style={styles.modalOverlay}
           onPress={() => setVolumeModalVisible(false)}
         >
-          <Pressable style={styles.volumeModal} onPress={() => {}}>
+          <TouchableOpacity style={styles.volumeModal} onPress={() => {}}>
             <Text variant="body" style={styles.volumeModalTitle}>
               {t('timeline.volumeModalTitle')}
             </Text>
             <View style={styles.volumeSliderRow}>
               <Ionicons name="volume-low" size={18} color="#888" />
-              <Pressable
+              <TouchableOpacity
                 style={styles.volumeTrack}
                 onPress={(e) => {
                   if (!state.selectedClipId) return;
@@ -625,7 +625,7 @@ export function TimelineEditor({
                     },
                   ]}
                 />
-              </Pressable>
+              </TouchableOpacity>
               <Ionicons name="volume-high" size={18} color="#888" />
             </View>
             <Text variant="caption" style={styles.volumePercent}>
@@ -636,16 +636,16 @@ export function TimelineEditor({
               )}
               %
             </Text>
-            <Pressable
+            <TouchableOpacity
               style={styles.volumeDoneButton}
               onPress={() => setVolumeModalVisible(false)}
             >
               <Text variant="caption" style={styles.volumeDoneText}>
                 {t('timeline.volumeDoneButton')}
               </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <Toast />

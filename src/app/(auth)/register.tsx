@@ -1,4 +1,4 @@
-import { useReducer, useState, useCallback } from 'react';
+import { useReducer, useState, useCallback, useEffect } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 
 import { useAuthStore } from '@/stores/authStore';
+import { useCountryByIP } from '@/hooks/useCountryByIP';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { authService } from '@/lib/api/authService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -17,6 +18,8 @@ import type { RegistrationWizardState, RegistrationAction } from '@/types/regist
 
 import {
   StepBasicInfo,
+  StepName,
+  StepDateOfBirth,
   StepCredentials,
   StepOtpVerification,
   StepProfileSetup,
@@ -34,11 +37,12 @@ import { getGenresForSelectedTypes } from '@/constants/artistData';
 import { getErrorMessage } from '@/utils/formatters';
 
 const initialWizardState: RegistrationWizardState = {
+  identifierMode: 'email',
   name: '',
   email: '',
   phoneCountryCode: '+1',
   phoneNumber: '',
-  confirmLegalAge: false,
+  dateOfBirth: '',
   acceptTerms: false,
   otpCode: '',
   otpVerified: false,
@@ -87,8 +91,8 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
 
-  // If returning with a pending registration, resume at Step 4 (profile setup)
-  const initialStep = user?.registrationStatus === 'pending' ? 4 : 1;
+  // If returning with a pending registration, resume at Step 6 (profile setup)
+  const initialStep = user?.registrationStatus === 'pending' ? 6 : 1;
 
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [state, dispatch] = useReducer(wizardReducer, {
@@ -101,12 +105,20 @@ export default function RegisterScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [showRepQuestion, setShowRepQuestion] = useState(false);
+
+  // Auto-detect country code from IP
+  const { dial: detectedDial } = useCountryByIP();
+  useEffect(() => {
+    if (detectedDial) {
+      dispatch({ type: 'UPDATE_FIELD', field: 'phoneCountryCode', value: detectedDial });
+    }
+  }, [detectedDial]);
   const [artistAvatarPublicId, setArtistAvatarPublicId] = useState<string | undefined>();
   const [artistUserId, setArtistUserId] = useState<number | null>(null);
 
-  // Progress bar for representative flow (steps 6-10)
-  const REP_START = 6;
-  const REP_END = 14;
+  // Progress bar for representative flow (steps 8-16)
+  const REP_START = 8;
+  const REP_END = 16;
   const REP_TOTAL = REP_END - REP_START + 1;
   const isRepFlow = currentStep >= REP_START && currentStep <= REP_END;
   const repStep = isRepFlow ? currentStep - REP_START + 1 : 0;
@@ -144,11 +156,11 @@ export default function RegisterScreen() {
   const goBack = () => {
     setApiError(null);
     setCurrentStep((s) => {
-      if (s === 6) return 4;
-      // If going back from subscription (13), check if genres were skipped
-      if (s === 13) {
+      if (s === 8) return 6; // Rep flow back → profile setup
+      // If going back from subscription (15), check if genres were skipped
+      if (s === 15) {
         const grouped = getGenresForSelectedTypes(state.artistTypes);
-        return grouped.length === 0 ? 11 : 12;
+        return grouped.length === 0 ? 13 : 14;
       }
       return Math.max(1, s - 1);
     });
@@ -200,14 +212,17 @@ export default function RegisterScreen() {
     }
   };
 
-  // Step 2 → Check phone availability, send OTP, then advance to OTP screen
+  // Step 4 → Send OTP to active identifier, then advance to OTP screen
   const handleCredentialsNext = async () => {
     setIsLoading(true);
     setApiError(null);
     try {
-      const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
-      await authService.checkPhone(fullPhone);
-      await authService.sendOtp({ phone: fullPhone, email: state.email, locale: i18n.language });
+      if (state.identifierMode === 'phone') {
+        const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
+        await authService.sendOtp({ phone: fullPhone, locale: i18n.language });
+      } else {
+        await authService.sendOtp({ email: state.email, locale: i18n.language });
+      }
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.STARTED);
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.OTP_SENT);
       goNext();
@@ -218,35 +233,39 @@ export default function RegisterScreen() {
     }
   };
 
-  // Step 3 → Verify OTP, then pre-register user in DB, then advance
+  // Step 5 → Verify OTP, then pre-register user in DB, then advance
   const handleOtpNext = async () => {
     setIsLoading(true);
     setApiError(null);
     try {
-      const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
-      await authService.verifyOtp({
-        phone: fullPhone,
-        email: state.email,
+      // Verify OTP with the active identifier
+      const verifyPayload: { code: string; phone?: string; email?: string } = {
         code: state.otpCode,
-      });
+      };
+      if (state.identifierMode === 'phone') {
+        verifyPayload.phone = `${state.phoneCountryCode}${state.phoneNumber}`;
+      } else {
+        verifyPayload.email = state.email;
+      }
+      await authService.verifyOtp(verifyPayload);
       dispatch({ type: 'UPDATE_FIELD', field: 'otpVerified', value: true });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.OTP_VERIFIED);
 
-      // Use a temporary username for pre-register; user picks their real one in Step 4
+      // Use a temporary username for pre-register; user picks their real one in Step 6
       const tempUsername = generateUsername(state.name);
 
       // Pre-register: creates user in DB with status "pending" and returns JWT
       await preRegister({
-        email: state.email,
+        ...(state.email && { email: state.email }),
         password: state.password,
-        displayName: state.displayName || state.name,
+        displayName: state.name,
         username: tempUsername,
-        phoneCountryCode: state.phoneCountryCode,
-        phoneNumber: state.phoneNumber,
+        ...(state.phoneNumber && {
+          phoneCountryCode: state.phoneCountryCode,
+          phoneNumber: state.phoneNumber,
+        }),
+        ...(state.dateOfBirth && { dateOfBirth: state.dateOfBirth }),
       });
-
-      // Clear displayName so the user enters it fresh in Step 4
-      dispatch({ type: 'UPDATE_FIELD', field: 'displayName', value: '' });
 
       goNext();
     } catch (error: unknown) {
@@ -280,7 +299,7 @@ export default function RegisterScreen() {
       }
 
       await updateProfile({
-        displayName: state.displayName,
+        displayName: state.name,
         username: state.username,
         ...(avatarPublicId && { avatar: avatarPublicId }),
       });
@@ -301,8 +320,10 @@ export default function RegisterScreen() {
       role: isRep ? 'representative' : 'listener',
     });
     if (isRep) {
-      setCurrentStep(6); // Skip to HowItWorks
+      console.log('[Register] Rep chose YES → going to step 8 (HowItWorks)');
+      setCurrentStep(8); // Skip to HowItWorks
     } else {
+      console.log('[Register] Rep chose NO → completing as listener');
       handleCompleteRegistration('listener');
     }
   };
@@ -352,7 +373,7 @@ export default function RegisterScreen() {
       console.log('[Register] completeRegistration done, artistId:', linkedArtistId);
       setArtistUserId(linkedArtistId);
       console.log('[Register] Moving to step 13 (subscription)...');
-      setCurrentStep(13);
+      setCurrentStep(15);
       console.log('[Register] Step 13 set successfully');
     } catch (error: unknown) {
       console.error('[Register] handleCreateArtistThenPay FAILED:', error);
@@ -376,20 +397,28 @@ export default function RegisterScreen() {
           );
           setArtistAvatarPublicId(publicId);
         } catch (uploadError: unknown) {
-          const msg = uploadError instanceof Error ? uploadError.message : t('errors.generic');
+          const msg =
+            uploadError instanceof Error ? uploadError.message : t('errors.generic');
           setApiError(t('errors.uploadFailed', { message: msg }));
           return;
         }
       }
+      console.log('[Register] ArtistSetupNext → goNext() to step', currentStep + 1);
       goNext();
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Step 13 → After payment succeeds, just advance to bridge number
+  // Step 13 → After payment succeeds, advance to bridge number
   const handleSubscriptionPaid = () => {
-    goNext(); // Advance to step 14 (bridge number)
+    goNext();
+  };
+
+  // Skip subscription → go straight to feed (no bridge number for free plan)
+  const handleSubscriptionSkip = () => {
+    useSubscriptionStore.getState().fetchSubscription();
+    router.replace('/(tabs)');
   };
 
   // Step 12 → Bridge number displayed, registration already complete
@@ -408,6 +437,10 @@ export default function RegisterScreen() {
           <StepBasicInfo {...commonProps} onNext={goNext} onBack={() => router.back()} />
         );
       case 2:
+        return <StepName {...commonProps} onNext={goNext} onBack={goBack} />;
+      case 3:
+        return <StepDateOfBirth {...commonProps} onNext={goNext} onBack={goBack} />;
+      case 4:
         return (
           <StepCredentials
             {...commonProps}
@@ -415,11 +448,11 @@ export default function RegisterScreen() {
             onBack={goBack}
           />
         );
-      case 3:
+      case 5:
         return (
           <StepOtpVerification {...commonProps} onNext={handleOtpNext} onBack={goBack} />
         );
-      case 4:
+      case 6:
         return (
           <StepProfileSetup
             {...commonProps}
@@ -429,15 +462,15 @@ export default function RegisterScreen() {
             onRepChoice={handleRepChoice}
           />
         );
-      case 6:
-        return <StepHowItWorks {...commonProps} onNext={goNext} onBack={goBack} />;
-      case 7:
-        return <StepConsentForm {...commonProps} onNext={goNext} onBack={goBack} />;
       case 8:
-        return <StepArtistBasicInfo {...commonProps} onNext={goNext} onBack={goBack} />;
+        return <StepHowItWorks {...commonProps} onNext={goNext} onBack={goBack} />;
       case 9:
-        return <StepArtistPassword {...commonProps} onNext={goNext} onBack={goBack} />;
+        return <StepConsentForm {...commonProps} onNext={goNext} onBack={goBack} />;
       case 10:
+        return <StepArtistBasicInfo {...commonProps} onNext={goNext} onBack={goBack} />;
+      case 11:
+        return <StepArtistPassword {...commonProps} onNext={goNext} onBack={goBack} />;
+      case 12:
         return (
           <StepArtistProfile
             {...commonProps}
@@ -445,21 +478,33 @@ export default function RegisterScreen() {
             onBack={goBack}
           />
         );
-      case 11:
-        return <StepArtistTypes {...commonProps} onNext={handleArtistTypesNext} onBack={goBack} />;
-      case 12:
-        return <StepArtistGenres {...commonProps} onNext={handleCreateArtistThenPay} onBack={goBack} />;
       case 13:
+        return (
+          <StepArtistTypes
+            {...commonProps}
+            onNext={handleArtistTypesNext}
+            onBack={goBack}
+          />
+        );
+      case 14:
+        return (
+          <StepArtistGenres
+            {...commonProps}
+            onNext={handleCreateArtistThenPay}
+            onBack={goBack}
+          />
+        );
+      case 15:
         return (
           <StepSubscription
             {...commonProps}
             onNext={handleSubscriptionPaid}
             onBack={goBack}
-            onSkip={() => goNext()}
+            onSkip={handleSubscriptionSkip}
             forUserId={artistUserId ?? undefined}
           />
         );
-      case 14:
+      case 16:
         return <StepBridgeNumber {...commonProps} onNext={handleBridgeNumberNext} />;
       default:
         return null;

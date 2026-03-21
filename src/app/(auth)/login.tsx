@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
@@ -30,7 +30,6 @@ type Step = 'credentials' | '2fa';
 
 export default function LoginScreen() {
   const { t } = useTranslation('auth');
-  const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isAddMode = mode === 'add';
   const addAccount = useAccountStore((s) => s.addAccount);
@@ -47,13 +46,13 @@ export default function LoginScreen() {
   // iPhone 17 Pro / 16 Pro = 874pt. Threshold 930 covers all non-Max iPhones.
   // 150pt container: waveform SVG content sits within 24–94pt of the 160pt bounding box
   // so nothing gets clipped visually. Moves the KAV 34pt higher → clears the keyboard.
-  const logoBaseHeight = screenHeight < 930 ? 150 : 184;
+  const logoBaseHeight = screenHeight < 930 ? 180 : 210;
 
   // Animate logo section: taller when keyboard hidden (pushes form down),
   // original height when keyboard open (no visual change).
   const logoContainerHeight = keyboardProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [logoBaseHeight + 80, logoBaseHeight],
+    outputRange: [logoBaseHeight + 180, logoBaseHeight - 30],
   });
 
   useEffect(() => {
@@ -109,14 +108,6 @@ export default function LoginScreen() {
     ]).start();
   }, [opacity, translateY]);
 
-  // Transition to 2FA step when pending2FA is set
-  useEffect(() => {
-    if (pending2FA && step === 'credentials') {
-      setStep('2fa');
-      animateIn();
-    }
-  }, [pending2FA, step, animateIn]);
-
   const handleLogin = useCallback(async () => {
     setIdentifierError('');
     setPasswordError('');
@@ -158,6 +149,9 @@ export default function LoginScreen() {
           }
         }
         router.replace('/(tabs)');
+      } else {
+        setStep('2fa');
+        animateIn();
       }
     } catch {
       haptic('error');
@@ -168,6 +162,7 @@ export default function LoginScreen() {
     login,
     clearError,
     t,
+    animateIn,
     isAddMode,
     addAccount,
     switchToAccount,
@@ -282,10 +277,19 @@ export default function LoginScreen() {
               style={styles.forgotRow}
               onPress={() => router.push('/(auth)/forgot-password')}
             >
-              <Text variant="caption" style={styles.forgotLink}>
-                {t('login.forgotPassword')}
-              </Text>
+              <Text style={styles.forgotLink}>{t('login.forgotPassword')}</Text>
             </TouchableOpacity>
+
+            <View style={{ marginTop: 40 }}>
+              <Button
+                title={t('login.createAccount')}
+                variant="outline"
+                onPress={() => {
+                  haptic('light');
+                  router.push('/(auth)/register');
+                }}
+              />
+            </View>
           </View>
         );
 
@@ -331,18 +335,19 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        {step === '2fa' ? (
+      <View
+        style={[styles.header, step === '2fa' && { justifyContent: 'space-between' }]}
+      >
+        {step === '2fa' && (
           <TouchableOpacity
             onPress={handleBack}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 24 }} />
         )}
         <LanguageSelectorButton />
+        {step === '2fa' && <View style={{ width: 24 }} />}
       </View>
 
       <KeyboardAvoidingView
@@ -357,9 +362,7 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
         >
           {step === 'credentials' && (
-            <Animated.View
-              style={[styles.logoSection, { height: logoContainerHeight }]}
-            >
+            <Animated.View style={[styles.logoSection, { height: logoContainerHeight }]}>
               <Animated.View
                 style={{
                   transform: [
@@ -373,36 +376,16 @@ export default function LoginScreen() {
                   ],
                 }}
               >
-                <Logo size={160} animated />
+                <Logo size={220} animated />
               </Animated.View>
             </Animated.View>
           )}
 
           <View style={styles.keyboardInner}>
-            <View style={{ flex: 1 }} />
             <Animated.View style={{ opacity, transform: [{ translateY }] }}>
               {renderStep()}
             </Animated.View>
-            <View style={{ flex: 5 }} />
           </View>
-
-          {step === 'credentials' && (
-            <TouchableOpacity
-              style={styles.signUpRow}
-              onPress={() => {
-                haptic('light');
-                router.push('/(auth)/register');
-              }}
-              activeOpacity={0.6}
-            >
-              <Text variant="caption" style={styles.helpText}>
-                {t('welcome.noAccount')}{' '}
-              </Text>
-              <Text variant="caption" style={styles.signUpLink}>
-                {t('welcome.signUp')}
-              </Text>
-            </TouchableOpacity>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -432,13 +415,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 8,
   },
   form: {
-    gap: 16,
+    gap: 10,
   },
   apiError: {
     color: '#EF4444',
@@ -451,13 +434,29 @@ const styles = StyleSheet.create({
     bottom: 16,
     justifyContent: 'center',
   },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#333333',
+  },
+  dividerText: {
+    color: '#666666',
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 13,
+  },
   forgotRow: {
-    alignSelf: 'flex-end',
-    marginTop: 4,
+    alignSelf: 'center',
+    marginTop: 8,
   },
   forgotLink: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_500Medium',
+    color: '#888888',
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 14,
   },
   helpRow: {
     flexDirection: 'row',
@@ -479,6 +478,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
+    backgroundColor: '#000000',
   },
   signUpLink: {
     color: '#FFFFFF',

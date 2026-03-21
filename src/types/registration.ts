@@ -5,15 +5,18 @@ export type RepresentativeRelationship = 'family' | 'friend' | 'manager';
 
 // All wizard form data accumulated across steps
 export interface RegistrationWizardState {
-  // Step 1: Basic Info
-  name: string;
+  // Step 1: Identifier (email or phone)
+  identifierMode: 'email' | 'phone';
   email: string;
   phoneCountryCode: string;
   phoneNumber: string;
 
-  // Step 2: Credentials & Consent
+  // Step 2: Name
+  name: string;
+
+  // Step 3: Credentials & Consent
   password: string;
-  confirmLegalAge: boolean;
+  dateOfBirth: string;
   acceptTerms: boolean;
 
   // Step 3: OTP
@@ -74,13 +77,13 @@ export interface StepProps {
 
 // OTP DTOs
 export interface SendOtpDTO {
-  phone: string;
+  phone?: string;
   email?: string;
   locale?: string;
 }
 
 export interface VerifyOtpDTO {
-  phone: string;
+  phone?: string;
   email?: string;
   code: string;
 }

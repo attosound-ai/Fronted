@@ -134,6 +134,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
       >
         {/* Header */}
         <View style={styles.header}>
@@ -249,31 +250,31 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
           </View>
         </View>
 
-        {/* Spacer to push button to bottom */}
-        <View style={styles.spacer} />
-      </ScrollView>
+        {/* Spacer */}
+        <View style={{ height: 40 }} />
 
-      {/* Error */}
-      {apiError && (
-        <View style={styles.errorBox}>
-          <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
-          <Text style={styles.errorText}>{apiError}</Text>
+        {/* Error */}
+        {apiError && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
+            <Text style={styles.errorText}>{apiError}</Text>
+          </View>
+        )}
+
+        {/* Bottom button */}
+        <View style={styles.buttonWrapper}>
+          <Button
+            title={
+              provisioning
+                ? t('bridgeNumber.assigningButton')
+                : t('common:buttons.continue')
+            }
+            onPress={() => { haptic('light'); onNext(); }}
+            disabled={isLoading || provisioning}
+            loading={isLoading || provisioning}
+          />
         </View>
-      )}
-
-      {/* Bottom button */}
-      <View style={styles.footer}>
-        <Button
-          title={
-            provisioning
-              ? t('bridgeNumber.assigningButton')
-              : t('common:buttons.continue')
-          }
-          onPress={() => { haptic('light'); onNext(); }}
-          disabled={isLoading || provisioning}
-          loading={isLoading || provisioning}
-        />
-      </View>
+      </ScrollView>
 
       <Toast />
     </View>
@@ -289,9 +290,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 40,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
@@ -400,9 +401,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#CCCCCC',
   },
-  spacer: {
-    flex: 1,
-    minHeight: 40,
+  buttonWrapper: {
+    marginBottom: 16,
   },
   errorBox: {
     flexDirection: 'row',
@@ -421,13 +421,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#FFFFFF',
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: '#000000',
-    borderTopWidth: 1,
-    borderTopColor: '#222222',
   },
 });

@@ -64,8 +64,12 @@ export function StepOtpVerification({
     setOtpError(null);
 
     try {
-      const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
-      await authService.sendOtp({ phone: fullPhone, email: state.email, locale: i18n.language });
+      if (state.identifierMode === 'phone') {
+        const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
+        await authService.sendOtp({ phone: fullPhone, locale: i18n.language });
+      } else {
+        await authService.sendOtp({ email: state.email, locale: i18n.language });
+      }
       dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value: '' });
       countdown.start(COOLDOWN_SECONDS);
     } catch (error: unknown) {
@@ -93,17 +97,23 @@ export function StepOtpVerification({
           {t('otp.title')}
         </Text>
 
-        {/* Destinations — single row */}
+        {/* Destination — show only the active identifier */}
         <View style={styles.destinationsRow}>
-          <Ionicons name="call-outline" size={14} color="#888888" />
-          <Text variant="small" style={styles.destinationText}>
-            {maskedPhone}
-          </Text>
-          <Text variant="small" style={styles.separator}>|</Text>
-          <Ionicons name="mail-outline" size={14} color="#888888" />
-          <Text variant="small" style={styles.destinationText}>
-            {maskedEmail}
-          </Text>
+          {state.identifierMode === 'phone' ? (
+            <>
+              <Ionicons name="call-outline" size={14} color="#888888" />
+              <Text variant="small" style={styles.destinationText}>
+                {maskedPhone}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="mail-outline" size={14} color="#888888" />
+              <Text variant="small" style={styles.destinationText}>
+                {maskedEmail}
+              </Text>
+            </>
+          )}
         </View>
 
         {/* API Error Banner */}

@@ -49,10 +49,6 @@ export function StepCredentials({
       newErrors.confirmPassword = tv('passwordMismatch');
     }
 
-    if (!state.confirmLegalAge) {
-      newErrors.confirmLegalAge = tv('legalAgeRequired');
-    }
-
     if (!state.acceptTerms) {
       newErrors.acceptTerms = tv('termsRequired');
     }
@@ -147,9 +143,12 @@ export function StepCredentials({
                   <Ionicons
                     name={met ? 'checkmark-circle' : 'ellipse-outline'}
                     size={14}
-                    color={met ? '#FFFFFF' : '#555555'}
+                    color={met ? '#22C55E' : '#555555'}
                   />
-                  <Text variant="small" style={[styles.strengthText, met && styles.strengthMet]}>
+                  <Text
+                    variant="small"
+                    style={[styles.strengthText, met && styles.strengthMet]}
+                  >
                     {label}
                   </Text>
                 </View>
@@ -169,7 +168,11 @@ export function StepCredentials({
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoComplete="new-password"
-              error={bothFilled && !passwordsMatch ? tv('passwordMismatch') : errors.confirmPassword}
+              error={
+                bothFilled && !passwordsMatch
+                  ? tv('passwordMismatch')
+                  : errors.confirmPassword
+              }
             />
             <TouchableOpacity
               style={styles.eyeToggle}
@@ -189,20 +192,6 @@ export function StepCredentials({
               {tv('passwordMatch')}
             </Text>
           )}
-
-          {/* Spacer */}
-          <View style={styles.spacer} />
-
-          {/* Checkboxes */}
-          <Checkbox
-            checked={state.confirmLegalAge}
-            onToggle={(value) => {
-              dispatch({ type: 'UPDATE_FIELD', field: 'confirmLegalAge', value });
-              setErrors((prev) => ({ ...prev, confirmLegalAge: '' }));
-            }}
-            label={t('credentials.legalAgeCheckbox')}
-            error={errors.confirmLegalAge}
-          />
 
           <Checkbox
             checked={state.acceptTerms}
@@ -290,9 +279,6 @@ const styles = StyleSheet.create({
   form: {
     gap: 4,
   },
-  spacer: {
-    height: 8,
-  },
   checkboxLabel: {
     color: '#CCCCCC',
     lineHeight: 20,
@@ -325,10 +311,10 @@ const styles = StyleSheet.create({
     color: '#555555',
   },
   strengthMet: {
-    color: '#FFFFFF',
+    color: '#22C55E',
   },
   matchSuccess: {
-    color: '#FFFFFF',
+    color: '#22C55E',
     marginTop: -12,
     marginBottom: 8,
   },

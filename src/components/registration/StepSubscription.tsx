@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  LayoutAnimation,
   UIManager,
   Platform,
   ActivityIndicator,
@@ -132,7 +131,7 @@ function AvatarCard() {
   const [isSharing, setIsSharing] = useState(false);
 
   const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    // LayoutAnimation removed — crashes on RN 0.81.5 New Architecture
     setExpanded((v) => !v);
   };
 
@@ -163,56 +162,37 @@ function AvatarCard() {
 
   return (
     <View style={avatarStyles.card}>
-      {/* NEW badge */}
-      <View style={avatarStyles.newBadge}>
-        <Text style={avatarStyles.newBadgeText}>NEW</Text>
+      {/* Top row: badges */}
+      <View style={avatarStyles.topRow}>
+        <View style={avatarStyles.comingSoonBadge}>
+          <Text style={avatarStyles.comingSoonBadgeText}>COMING SOON</Text>
+        </View>
+        <View style={avatarStyles.newBadge}>
+          <Text style={avatarStyles.newBadgeText}>NEW</Text>
+        </View>
       </View>
 
       {/* Header row */}
       <View style={avatarStyles.header}>
-        <View style={avatarStyles.iconWrap}>
-          <Ionicons name="person-circle-outline" size={28} color="#FFFFFF" />
-        </View>
         <View style={{ flex: 1 }}>
           <Text style={avatarStyles.title}>ATTO Avatar</Text>
           <Text style={avatarStyles.subtitle}>
             AI video messages posted on your behalf
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={handleSharePDF}
+          disabled={isSharing}
+          activeOpacity={0.7}
+          hitSlop={8}
+        >
+          {isSharing ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Ionicons name="share-outline" size={26} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
       </View>
-
-      {/* Price row */}
-      <View style={avatarStyles.priceRow}>
-        <View style={avatarStyles.pricePill}>
-          <Ionicons name="pricetag-outline" size={12} color="#999999" />
-          <Text style={avatarStyles.priceText}>From $3/clip</Text>
-        </View>
-        <View style={avatarStyles.pricePill}>
-          <Ionicons name="layers-outline" size={12} color="#999999" />
-          <Text style={avatarStyles.priceText}>Packs from $20</Text>
-        </View>
-      </View>
-
-      <View style={avatarStyles.comingSoon}>
-        <Ionicons name="time-outline" size={13} color="#888888" />
-        <Text style={avatarStyles.comingSoonText}>Coming soon</Text>
-      </View>
-
-      <TouchableOpacity
-        onPress={handleSharePDF}
-        disabled={isSharing}
-        activeOpacity={0.7}
-        style={avatarStyles.shareButton}
-      >
-        {isSharing ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        ) : (
-          <>
-            <Ionicons name="share-outline" size={15} color="#FFFFFF" />
-            <Text style={avatarStyles.shareButtonText}>Share Instructions (PDF)</Text>
-          </>
-        )}
-      </TouchableOpacity>
 
       {/* Expandable instructions */}
       <TouchableOpacity onPress={toggle} activeOpacity={0.7} style={avatarStyles.toggle}>
@@ -317,16 +297,9 @@ function AvatarCard() {
  * Step 8: Subscription Plans
  * Presents 2 paid plan cards + ATTO Avatar card with Stripe Payment Sheet integration
  */
-export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUserId?: number }> = ({
-  state,
-  dispatch,
-  onNext,
-  onBack,
-  onSkip,
-  isLoading,
-  apiError,
-  forUserId,
-}) => {
+export const StepSubscription: React.FC<
+  StepProps & { onSkip?: () => void; forUserId?: number }
+> = ({ state, dispatch, onNext, onBack, onSkip, isLoading, apiError, forUserId }) => {
   const { t } = useTranslation(['registration', 'common']);
 
   const planKey = (id: PlanId): 'record' | 'recordPro' | 'connectPro' => {
@@ -343,7 +316,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUs
   const [expandedPlan, setExpandedPlan] = useState<PlanId | null>(null);
 
   const toggleExpand = (planId: PlanId) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    // LayoutAnimation removed — crashes on RN 0.81.5 New Architecture
     setExpandedPlan((prev) => (prev === planId ? null : planId));
   };
 
@@ -353,7 +326,12 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUs
     setPaymentError(null);
 
     try {
-      console.log('[Subscription] Creating checkout for plan:', planId, 'forUserId:', forUserId);
+      console.log(
+        '[Subscription] Creating checkout for plan:',
+        planId,
+        'forUserId:',
+        forUserId
+      );
       const { clientSecret, paymentIntentId } = await paymentService.createCheckout(
         planId,
         state.email,
@@ -366,6 +344,8 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUs
         merchantDisplayName: 'ATTO Sound',
         style: 'alwaysDark',
         returnURL: 'atto://stripe-redirect',
+        applePay: { merchantCountryCode: 'US' },
+        googlePay: { merchantCountryCode: 'US', testEnv: true },
       });
 
       if (initError) {
@@ -426,6 +406,7 @@ export const StepSubscription: React.FC<StepProps & { onSkip?: () => void; forUs
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
       >
         <View style={styles.headerRow}>
           {onBack ? (
@@ -750,15 +731,30 @@ const avatarStyles = StyleSheet.create({
     marginTop: 6,
     overflow: 'hidden',
   },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+  },
+  comingSoonBadge: {
+    backgroundColor: '#222222',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  comingSoonBadgeText: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 9,
+    color: '#888888',
+    letterSpacing: 1,
+  },
   newBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    zIndex: 1,
   },
   newBadgeText: {
     fontFamily: 'Archivo_700Bold',
@@ -771,16 +767,8 @@ const avatarStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 20,
+    paddingTop: 12,
     paddingBottom: 12,
-    paddingRight: 60,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#222222',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   title: {
     fontFamily: 'Archivo_700Bold',
@@ -792,57 +780,6 @@ const avatarStyles = StyleSheet.create({
     fontSize: 13,
     color: '#9CA3AF',
     marginTop: 2,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  pricePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#222222',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  priceText: {
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 12,
-    color: '#FFFFFF',
-  },
-  comingSoon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginHorizontal: 20,
-    marginBottom: 4,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333333',
-  },
-  comingSoonText: {
-    fontFamily: 'Archivo_500Medium',
-    fontSize: 14,
-    color: '#888888',
-  },
-  shareButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginHorizontal: 20,
-    marginTop: 8,
-    paddingVertical: 10,
-  },
-  shareButtonText: {
-    fontFamily: 'Archivo_500Medium',
-    fontSize: 13,
-    color: '#FFFFFF',
   },
   toggle: {
     flexDirection: 'row',

@@ -10,61 +10,57 @@ import { haptic } from '@/lib/haptics/hapticService';
 /**
  * Step 5: How Artist Representation Works
  * Informational step explaining representative responsibilities
- *
- * Usage:
- * <StepHowItWorks state={state} dispatch={dispatch} onNext={handleNext} onBack={handleBack} />
  */
 export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
   const { t } = useTranslation(['registration', 'common']);
   const bulletPoints = t('howItWorks.bullets', { returnObjects: true }) as string[];
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          {onBack && (
-            <TouchableOpacity
-              onPress={onBack}
-              style={styles.backButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-          <Text variant="h1" style={styles.title} numberOfLines={2}>
-            {t('howItWorks.title')}
-          </Text>
-        </View>
-
-        {/* Main content */}
-        <View style={styles.content}>
-          <Text style={styles.paragraph}>{t('howItWorks.paragraph')}</Text>
-
-          {/* Bullet points */}
-          <View style={styles.bulletContainer}>
-            {bulletPoints.map((point, index) => (
-              <View key={index} style={styles.bulletRow}>
-                <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>{point}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Spacer to push button to bottom */}
-        <View style={styles.spacer} />
-      </ScrollView>
-
-      {/* Bottom button */}
-      <View style={styles.footer}>
-        <Button title={t('common:buttons.continue')} onPress={() => { haptic('light'); onNext(); }} />
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="always"
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        {onBack && (
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+        <Text variant="h1" style={styles.title} numberOfLines={2}>
+          {t('howItWorks.title')}
+        </Text>
       </View>
-    </View>
+
+      {/* Main content */}
+      <Text style={styles.paragraph}>{t('howItWorks.paragraph')}</Text>
+
+      <View style={styles.bulletContainer}>
+        {bulletPoints.map((point, index) => (
+          <View key={index} style={styles.bulletRow}>
+            <View style={styles.bulletDot} />
+            <Text style={styles.bulletText}>{point}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Button — in natural flow, no flex tricks */}
+      <View style={styles.buttonWrapper}>
+        <Button
+          title={t('common:buttons.continue')}
+          onPress={() => {
+            haptic('light');
+            onNext();
+          }}
+        />
+      </View>
+    </ScrollView>
   );
 };
 
@@ -73,13 +69,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 16,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
@@ -95,9 +88,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 17,
     color: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
   },
   paragraph: {
     fontFamily: 'Archivo_400Regular',
@@ -128,15 +118,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#FFFFFF',
   },
-  spacer: {
-    height: 40,
-  },
-  footer: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    paddingBottom: 32,
-    backgroundColor: '#000000',
-    borderTopWidth: 1,
-    borderTopColor: '#222222',
+  buttonWrapper: {
+    marginTop: 40,
   },
 });

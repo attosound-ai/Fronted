@@ -40,7 +40,6 @@ export function StepProfileSetup({
   onRepChoice,
 }: StepProfileSetupProps) {
   const { t } = useTranslation(['registration', 'common', 'validation']);
-  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showCropModal, setShowCropModal] = useState(false);
@@ -50,9 +49,9 @@ export function StepProfileSetup({
 
   const { pickFromGallery, takePhoto } = useImagePicker();
 
-  // Generate username suggestions from display name
+  // Generate username suggestions from name
   const suggestions = useMemo(() => {
-    const name = state.displayName.trim();
+    const name = state.name.trim();
     if (name.length < 2) return [];
     // Normalize: remove accents/diacritics, lowercase, strip non-alphanumeric
     const normalized = name
@@ -65,41 +64,36 @@ export function StepProfileSetup({
     const baseUnderscore = normalized.replaceAll(/\s+/g, '_');
     const baseNoSep = normalized.replaceAll(/\s+/g, '');
     const rand = Math.floor(Math.random() * 100);
-    return [...new Set([
-      base,
-      baseUnderscore,
-      `${baseNoSep}${rand}`,
-    ])].filter((s) => isValidUsername(s));
-  }, [state.displayName]);
+    return [...new Set([base, baseUnderscore, `${baseNoSep}${rand}`])].filter((s) =>
+      isValidUsername(s)
+    );
+  }, [state.name]);
 
   // Debounced username availability check
-  const checkUsername = useCallback(
-    (username: string) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+  const checkUsername = useCallback((username: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-      const cleaned = username.toLowerCase().trim();
+    const cleaned = username.toLowerCase().trim();
 
-      if (!cleaned) {
-        setUsernameStatus('idle');
-        return;
-      }
+    if (!cleaned) {
+      setUsernameStatus('idle');
+      return;
+    }
 
-      if (!isValidUsername(cleaned)) {
-        setUsernameStatus('invalid');
-        return;
-      }
+    if (!isValidUsername(cleaned)) {
+      setUsernameStatus('invalid');
+      return;
+    }
 
-      if (cleaned === lastCheckedRef.current) return;
+    if (cleaned === lastCheckedRef.current) return;
 
-      setUsernameStatus('checking');
-      debounceRef.current = setTimeout(async () => {
-        lastCheckedRef.current = cleaned;
-        const available = await authService.checkUsername(cleaned);
-        setUsernameStatus(available ? 'available' : 'taken');
-      }, 400);
-    },
-    []
-  );
+    setUsernameStatus('checking');
+    debounceRef.current = setTimeout(async () => {
+      lastCheckedRef.current = cleaned;
+      const available = await authService.checkUsername(cleaned);
+      setUsernameStatus(available ? 'available' : 'taken');
+    }, 400);
+  }, []);
 
   useEffect(() => {
     checkUsername(state.username);
@@ -149,11 +143,6 @@ export function StepProfileSetup({
   };
 
   const validateAndContinue = () => {
-    if (!isNotEmpty(state.displayName)) {
-      setDisplayNameError(t('validation:displayNameRequired'));
-      haptic('error');
-      return;
-    }
     if (!isNotEmpty(state.username) || !isValidUsername(state.username)) {
       haptic('error');
       return;
@@ -162,7 +151,8 @@ export function StepProfileSetup({
       haptic('error');
       return;
     }
-    setDisplayNameError(null);
+    // Auto-set displayName from name
+    dispatch({ type: 'UPDATE_FIELD', field: 'displayName', value: state.name });
     haptic('light');
     onNext();
   };
@@ -217,10 +207,7 @@ export function StepProfileSetup({
         ? '#888888'
         : '#222222';
 
-  const canContinue =
-    isNotEmpty(state.displayName) &&
-    isValidUsername(state.username) &&
-    usernameStatus === 'available';
+  const canContinue = isValidUsername(state.username) && usernameStatus === 'available';
 
   return (
     <KeyboardAwareScrollView
@@ -252,11 +239,11 @@ export function StepProfileSetup({
             <Image source={{ uri: state.avatarUri }} style={styles.avatarCircle} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Ionicons name="camera" size={32} color="#666666" />
+              <Ionicons name="camera" size={56} color="#666666" />
             </View>
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={14} color="#000000" />
+            <Ionicons name="camera" size={18} color="#000000" />
           </View>
         </TouchableOpacity>
         {!state.avatarUri && (
@@ -268,40 +255,9 @@ export function StepProfileSetup({
 
       {/* Form */}
       <View style={styles.formArea}>
-        {/* Display Name (Nickname) */}
-        <View>
-          <View
-            style={[
-              styles.inputWrapper,
-              displayNameError && { borderColor: '#FFFFFF' },
-            ]}
-          >
-            <TextInput
-              value={state.displayName}
-              onChangeText={(value) => {
-                dispatch({ type: 'UPDATE_FIELD', field: 'displayName', value });
-                setDisplayNameError(null);
-              }}
-              placeholder={t('profileSetup.displayNamePlaceholder')}
-              placeholderTextColor="#666666"
-              style={styles.textInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="off"
-            />
-          </View>
-          {displayNameError && (
-            <Text variant="small" style={styles.errorText}>
-              {displayNameError}
-            </Text>
-          )}
-        </View>
-
         {/* Username (@handle) */}
         <View>
-          <View
-            style={[styles.usernameWrapper, { borderColor: usernameBorderColor }]}
-          >
+          <View style={[styles.usernameWrapper, { borderColor: usernameBorderColor }]}>
             <Text style={styles.atPrefix}>@</Text>
             <TextInput
               value={state.username}
@@ -398,7 +354,7 @@ export function StepProfileSetup({
       </BottomSheet>
 
       {/* Representative Question Bottom Sheet */}
-      <BottomSheet visible={!!showRepQuestion} onClose={() => {}}>
+      <BottomSheet visible={!!showRepQuestion} onClose={() => { onRepChoice?.(false); }}>
         <View style={styles.repContent}>
           <Text variant="h2" style={styles.repTitle}>
             {t('profileSetup.repQuestion')}
@@ -475,15 +431,15 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatarCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: '#1A1A1A',
   },
   avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: '#333333',
@@ -493,12 +449,12 @@ const styles = StyleSheet.create({
   },
   avatarBadge: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: 4,
+    right: 4,
     backgroundColor: '#FFFFFF',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -534,11 +490,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#111111',
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#222222',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     gap: 4,
   },
   atPrefix: {

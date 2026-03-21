@@ -61,6 +61,7 @@ export function StepArtistGenres({
       style={styles.container}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="always"
     >
       <Text variant="h2" style={styles.title}>
         {t('artistGenres.title')}

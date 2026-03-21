@@ -1,4 +1,6 @@
 export { StepBasicInfo } from './StepBasicInfo';
+export { StepName } from './StepName';
+export { StepDateOfBirth } from './StepDateOfBirth';
 export { StepCredentials } from './StepCredentials';
 export { StepOtpVerification } from './StepOtpVerification';
 export { StepProfileSetup } from './StepProfileSetup';

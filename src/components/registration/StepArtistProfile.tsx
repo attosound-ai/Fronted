@@ -114,7 +114,6 @@ export function StepArtistProfile({
   const handleCropCancel = () => { setShowCropModal(false); setPendingUri(null); };
 
   const canContinue =
-    isNotEmpty(state.artistDisplayName) &&
     isValidUsername(state.artistUsername) &&
     usernameStatus === 'available';
 
@@ -152,11 +151,11 @@ export function StepArtistProfile({
             <Image source={{ uri: state.artistAvatarUri }} style={styles.avatarCircle} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Ionicons name="camera" size={32} color="#666666" />
+              <Ionicons name="camera" size={56} color="#666666" />
             </View>
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={14} color="#000000" />
+            <Ionicons name="camera" size={18} color="#000000" />
           </View>
         </TouchableOpacity>
         {!state.artistAvatarUri && (
@@ -165,20 +164,6 @@ export function StepArtistProfile({
       </View>
 
       <View style={styles.formArea}>
-        {/* Display Name */}
-        <View style={styles.inputWrapper}>
-          <TextInput
-            value={state.artistDisplayName}
-            onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistDisplayName', value: v })}
-            placeholder={t('artistAccountSetup.displayNamePlaceholder')}
-            placeholderTextColor="#666666"
-            style={styles.textInput}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="off"
-          />
-        </View>
-
         {/* Username */}
         <View>
           <View style={[styles.usernameWrapper, { borderColor: borderFor }]}>
@@ -265,14 +250,14 @@ const styles = StyleSheet.create({
   errorBannerText: { color: '#FFFFFF', flex: 1 },
   avatarSection: { alignItems: 'center', paddingTop: 8, paddingBottom: 8, gap: 10 },
   avatarTouchable: { position: 'relative' },
-  avatarCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#1A1A1A' },
-  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#1A1A1A', borderWidth: 2, borderColor: '#333333', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-  avatarBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#FFFFFF', width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#000000' },
+  avatarCircle: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#1A1A1A' },
+  avatarPlaceholder: { width: 180, height: 180, borderRadius: 90, backgroundColor: '#1A1A1A', borderWidth: 2, borderColor: '#333333', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  avatarBadge: { position: 'absolute', bottom: 4, right: 4, backgroundColor: '#FFFFFF', width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#000000' },
   avatarHint: { color: '#666666' },
   formArea: { paddingHorizontal: 24, paddingTop: 16, gap: 16 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 8, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 16, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 18, paddingVertical: 18, gap: 8 },
   textInput: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Archivo_400Regular', padding: 0, flex: 1 },
-  usernameWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 8, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
+  usernameWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 16, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 18, paddingVertical: 18, gap: 4 },
   atPrefix: { color: '#888888', fontSize: 16, fontFamily: 'Archivo_500Medium' },
   usernameInput: { flex: 1, color: '#FFFFFF', fontSize: 16, fontFamily: 'Archivo_400Regular', padding: 0 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },

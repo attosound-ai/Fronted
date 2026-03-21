@@ -88,7 +88,7 @@ export function StepArtistPassword({
                 [strengthChecks.number, tv('strengthNumber')],
               ] as [boolean, string][]).map(([met, label]) => (
                 <View key={label} style={styles.strengthRow}>
-                  <Ionicons name={met ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={met ? '#FFFFFF' : '#555555'} />
+                  <Ionicons name={met ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={met ? '#22C55E' : '#555555'} />
                   <Text variant="small" style={[styles.strengthText, met && styles.strengthMet]}>{label}</Text>
                 </View>
               ))}
@@ -141,11 +141,11 @@ const styles = StyleSheet.create({
   errorBannerText: { color: '#FFFFFF', flex: 1 },
   formArea: { paddingHorizontal: 24, gap: 20 },
   textInput: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Archivo_400Regular', padding: 0 },
-  passwordWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 8, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+  passwordWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 16, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 18, paddingVertical: 18, gap: 8 },
   strengthContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, width: '45%' },
   strengthText: { color: '#555555' },
-  strengthMet: { color: '#FFFFFF' },
-  matchSuccess: { color: '#FFFFFF', marginTop: 6 },
+  strengthMet: { color: '#22C55E' },
+  matchSuccess: { color: '#22C55E', marginTop: 6 },
   matchError: { color: '#888888', marginTop: 6 },
 });

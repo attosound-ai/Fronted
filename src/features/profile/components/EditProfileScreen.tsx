@@ -81,7 +81,7 @@ export function EditProfileScreen() {
             <Avatar uri={form.avatarUri} size="xl" />
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={14} color="#FFFFFF" />
+            <Ionicons name="camera" size={14} color="#000000" />
           </View>
         </TouchableOpacity>
 
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     width: 28,
     height: 28,
     borderRadius: 14,

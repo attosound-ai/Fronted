@@ -76,7 +76,7 @@ export function ProfileBridgeNumberSection() {
             onPress={handleCopy}
             activeOpacity={0.7}
           >
-            <Ionicons name="copy-outline" size={16} color="#3B82F6" />
+            <Ionicons name="copy-outline" size={16} color="#FFFFFF" />
             <Text style={styles.actionText}>{t('bridgeNumber.copyButton')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -84,7 +84,7 @@ export function ProfileBridgeNumberSection() {
             onPress={handleShare}
             activeOpacity={0.7}
           >
-            <Ionicons name="share-outline" size={16} color="#3B82F6" />
+            <Ionicons name="share-outline" size={16} color="#FFFFFF" />
             <Text style={styles.actionText}>{t('bridgeNumber.shareButton')}</Text>
           </TouchableOpacity>
         </View>
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A2A4A',
   },
   actionText: {
-    color: '#3B82F6',
+    color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 13,
   },

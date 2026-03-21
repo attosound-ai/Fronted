@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   saveText: {
-    color: '#3B82F6',
+    color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },

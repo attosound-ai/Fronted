@@ -121,7 +121,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
           <Switch
             value={is2FAEnabled}
             onValueChange={handleToggle}
-            trackColor={{ false: '#333333', true: '#3B82F6' }}
+            trackColor={{ false: '#333333', true: '#FFFFFF' }}
             thumbColor="#FFFFFF"
           />
         </View>

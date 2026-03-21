@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { Toast } from '@/components/ui/Toast';
 import { AccountSwitcherBottomSheet } from '@/components/ui/AccountSwitcherBottomSheet';
 import { useAuthStore } from '@/stores/authStore';
+import { useUserProfile } from '@/features/profile/hooks/useUserProfile';
 import {
   ProfileHero,
   ProfileContentTabs,
@@ -29,8 +30,11 @@ import { ProfileSubscriptionSection } from '@/features/profile/components/Profil
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 export default function ProfileScreen() {
-  const user = useAuthStore((s) => s.user);
+  const authUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  // Fetch real counts from social-service
+  const { user: enrichedUser } = useUserProfile(String(authUser?.id ?? 0));
+  const user = enrichedUser ?? authUser;
   const hasEntitlement = useSubscriptionStore((s) => s.hasEntitlement);
 
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);

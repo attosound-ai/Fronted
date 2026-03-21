@@ -76,7 +76,7 @@ export function PublicProfileScreen({
   }
 
   // Merge: full profile from API, or minimal fallback from navigation params
-  const displayName = profile?.displayName ?? fallbackAuthor!.displayName;
+  const displayName = (profile?.displayName || profile?.artistName || profile?.username) ?? fallbackAuthor!.displayName;
   const username = profile?.username ?? fallbackAuthor!.username;
   const avatar = profile?.avatar ?? fallbackAuthor?.avatar ?? null;
   const isVerified = profile?.profileVerified ?? fallbackAuthor?.isVerified ?? false;
@@ -303,17 +303,20 @@ const styles = StyleSheet.create({
   },
   stats: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
     marginTop: 8,
     gap: 40,
   },
   stat: {
+    flex: 1,
     alignItems: 'center',
   },
   statLabel: {
     color: '#888',
   },
   followButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
@@ -326,7 +329,7 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   followButtonText: {
-    color: '#FFF',
+    color: '#000000',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },

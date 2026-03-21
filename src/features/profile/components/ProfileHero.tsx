@@ -23,12 +23,16 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
       >
         <Avatar uri={user.avatar} size="xl" />
         <View style={styles.avatarBadge}>
-          <Ionicons name="camera" size={14} color="#FFF" />
+          <Ionicons name="camera" size={14} color="#000" />
         </View>
       </TouchableOpacity>
 
       <Text variant="h2" style={styles.name}>
-        {user.displayName.toUpperCase()}
+        {(user.displayName || user.artistName || user.username).toUpperCase()}
+      </Text>
+
+      <Text variant="caption" style={styles.username}>
+        @{user.username}
       </Text>
 
       {user.bio && (
@@ -96,7 +100,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -107,6 +111,9 @@ const styles = StyleSheet.create({
   },
   name: {
     marginTop: 8,
+  },
+  username: {
+    color: '#888',
   },
   bio: {
     color: '#888888',
@@ -126,10 +133,13 @@ const styles = StyleSheet.create({
   },
   stats: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
     marginTop: 8,
     gap: 40,
   },
   stat: {
+    flex: 1,
     alignItems: 'center',
   },
   statLabel: {

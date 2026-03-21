@@ -11,13 +11,15 @@ interface ShareSheetProps {
   visible: boolean;
   onClose: () => void;
   post: FeedPost;
+  onShareTracked?: () => void;
 }
 
-export function ShareSheet({ visible, onClose, post }: ShareSheetProps) {
+export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareSheetProps) {
   const { t } = useTranslation('feed');
   const postUrl = `https://atto.sound/post/${post.id}`;
 
   const handleShareExternal = () => {
+    onShareTracked?.();
     onClose();
     // Wait for the Modal dismiss animation (~300ms) before presenting
     // the native share sheet — iOS blocks two overlapping presentations.
@@ -28,6 +30,7 @@ export function ShareSheet({ visible, onClose, post }: ShareSheetProps) {
   };
 
   const handleCopyLink = async () => {
+    onShareTracked?.();
     await Clipboard.setStringAsync(postUrl);
     showToast(t('post.linkCopied'));
     onClose();

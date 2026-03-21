@@ -4,7 +4,7 @@
  * Single Responsibility: Renders only the reels feed experience.
  * Open/Closed: Reel item UI is encapsulated in ReelItem — easy to extend without
  *   touching the list logic.
- * Dependency Inversion: Consumes useFeed / useEngagement abstractions.
+ * Dependency Inversion: Consumes useReelsFeed / useInteractions abstractions.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,10 +22,13 @@ import {
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
 import { useReelsFeed } from '../hooks/useReelsFeed';
+import { useInteractions } from '../hooks/useInteractions';
 import { useFollowFeed } from '../hooks/useFollowFeed';
+import { useFollowStore } from '@/stores/followStore';
 import { feedService } from '../services/feedService';
 import { DEMO_ADS } from '../constants/adPosts';
 import { injectAds } from '../utils/injectAds';
@@ -61,7 +64,7 @@ function toFeedPost(post: Post): FeedPost {
       username: post.author.username,
       displayName: post.author.displayName,
       avatar: post.author.avatar,
-      isFollowing: false,
+      isFollowing: post.isFollowingAuthor ?? false,
     },
     images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
     audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? files[0]) : undefined,
@@ -77,6 +80,7 @@ function toFeedPost(post: Post): FeedPost {
     isBookmarked: post.isBookmarked,
     isReposted: post.isReposted,
     createdAt: post.createdAt,
+    isFollowingAuthor: post.isFollowingAuthor,
   };
 }
 
@@ -101,6 +105,7 @@ interface ReelItemProps {
  * scrolled away. This prevents audio overlap and conserves resources.
  */
 function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment, onShare, onFollow }: ReelItemProps) {
+  const { t } = useTranslation('feed');
   const isOwnPost = currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const [isMuted, setIsMuted] = useState(true);
   const [captionExpanded, setCaptionExpanded] = useState(false);
@@ -245,6 +250,11 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
               <Text style={styles.followText}>+ Follow</Text>
             </TouchableOpacity>
           )}
+          {!isOwnPost && (
+            <Text style={styles.reelFeedLabel}>
+              {post.author.isFollowing ? t('post.following') : t('post.suggestedForYou')}
+            </Text>
+          )}
         </View>
 
         {/* Description */}
@@ -352,10 +362,22 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
  *      screen is never blank.
  */
 export function ReelsFeed() {
-  const { posts, isLoading, isFetchingMore, hasMore, loadMore, toggleLike, toggleBookmark } =
+  const { posts, isLoading, isFetchingMore, hasMore, loadMore } =
     useReelsFeed();
+  const { toggleLike, toggleBookmark, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
+  const followedUsers = useFollowStore((s) => s.followedUsers);
+  const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
   const currentUserId = useAuthStore((s) => s.user?.id);
+
+  // Hydrate follow store from API data on reels load
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const entries = posts
+      .filter((p) => p.isFollowingAuthor !== undefined)
+      .map((p) => ({ userId: Number(p.author.id), isFollowing: p.isFollowingAuthor! }));
+    if (entries.length > 0) hydrateFromApi(entries);
+  }, [posts, hydrateFromApi]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
@@ -497,7 +519,12 @@ export function ReelsFeed() {
     )}
 
     {sharePost && (
-      <ShareSheet visible onClose={() => setSharePost(null)} post={sharePost} />
+      <ShareSheet
+        visible
+        onClose={() => setSharePost(null)}
+        post={sharePost}
+        onShareTracked={() => trackShare(sharePost.id)}
+      />
     )}
     </>
   );
@@ -625,6 +652,11 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 12,
     fontFamily: 'Archivo_600SemiBold',
+  },
+  reelFeedLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    marginLeft: 8,
   },
   description: {
     color: '#FFF',

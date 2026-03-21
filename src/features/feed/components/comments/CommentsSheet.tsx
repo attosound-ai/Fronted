@@ -1,18 +1,23 @@
 import { useState, useRef } from 'react';
 import {
   View,
-  FlatList,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
   Dimensions,
 } from 'react-native';
+import Animated, {
+  useAnimatedScrollHandler,
+  useAnimatedProps,
+  useDerivedValue,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { BottomSheet } from '@/components/ui/BottomSheet';
+import { BottomSheet, useBottomSheetScroll } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { useComments, type Comment } from '../../hooks/useComments';
+import { usePostChannel } from '../../hooks/usePostChannel';
 import { CommentItem } from './CommentItem';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -35,15 +40,36 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
     isAddingComment,
   } = useComments(postId);
 
+  usePostChannel(visible ? postId : null);
+
+  const sheetScroll = useBottomSheetScroll();
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      if (sheetScroll) {
+        sheetScroll.contentScrollY.value = event.contentOffset.y;
+      }
+    },
+  });
+
+  const scrollEnabled = useDerivedValue(() => {
+    return sheetScroll ? !sheetScroll.isDragging.value : true;
+  });
+
+  const animatedScrollProps = useAnimatedProps(() => ({
+    scrollEnabled: scrollEnabled.value,
+  }));
+
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
   const inputRef = useRef<TextInput>(null);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    await addComment(trimmed, replyTo?.id);
+    // Fire-and-forget: optimistic update handles UI instantly
+    addComment(trimmed, replyTo?.id);
     setText('');
     setReplyTo(null);
   };
@@ -67,10 +93,10 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
             {t('post.noCommentsYet')}
           </Text>
         ) : (
-          <FlatList
+          <Animated.FlatList
             data={comments}
             renderItem={renderComment}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item: Comment) => item.id}
             onEndReached={() => hasMore && loadMore()}
             onEndReachedThreshold={0.3}
             ListFooterComponent={
@@ -78,6 +104,9 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
             }
             showsVerticalScrollIndicator={false}
             style={styles.list}
+            onScroll={scrollHandler}
+            scrollEventThrottle={16}
+            animatedProps={animatedScrollProps}
           />
         )}
       </View>
@@ -112,9 +141,9 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
           hitSlop={8}
         >
           {isAddingComment ? (
-            <ActivityIndicator color="#3B82F6" size="small" />
+            <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Ionicons name="send" size={22} color={text.trim() ? '#3B82F6' : '#555'} />
+            <Ionicons name="send" size={22} color={text.trim() ? '#FFFFFF' : '#555'} />
           )}
         </TouchableOpacity>
       </View>

@@ -52,7 +52,7 @@ export function PostActions({
             <MaterialCommunityIcons
               name={post.isLiked ? 'thumb-up' : 'thumb-up-outline'}
               size={26}
-              color={post.isLiked ? '#2078F4' : '#FFF'}
+              color="#FFFFFF"
             />
           </Animated.View>
           {post.likesCount > 0 && (
@@ -81,7 +81,7 @@ export function PostActions({
           activeOpacity={0.7}
           style={styles.actionItem}
         >
-          <Feather name="repeat" size={24} color={post.isReposted ? '#22C55E' : '#FFF'} />
+          <Feather name="repeat" size={24} color="#FFF" />
           {post.repostsCount > 0 && (
             <Text style={[styles.metricText, post.isReposted && styles.repostedText]}>
               {formatCount(post.repostsCount)}
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_500Medium',
   },
   repostedText: {
-    color: '#22C55E',
+    color: '#FFF',
   },
   heartContainer: {
     width: 34,

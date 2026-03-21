@@ -33,34 +33,46 @@ export function PostHeader({
   const isOwnPost = currentUserId !== undefined && String(author.id) === String(currentUserId);
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.authorInfo}
-        onPress={() => onProfilePress?.(author)}
-        activeOpacity={0.7}
-      >
-        <Avatar uri={author.avatar} size="sm" />
-        <Text variant="body" style={styles.username}>
-          {author.displayName.toUpperCase()}
-        </Text>
-        {author.isVerified && <MaterialIcons name="verified" size={13} color="#3B82F6" />}
-      </TouchableOpacity>
-
-      <View style={styles.spacer} />
-
+    <View>
       {!isOwnPost && !author.isFollowing && (
-        <TouchableOpacity
-          onPress={() => onFollow?.(author.id)}
-          activeOpacity={0.7}
-          style={styles.followButton}
-        >
-          <Text variant="body" style={styles.followText}>
-            {t('post.followButton')}
-          </Text>
-        </TouchableOpacity>
+        <Text variant="small" style={styles.suggestedLabel}>
+          {t('post.suggestedForYou')}
+        </Text>
       )}
+      <View style={styles.container}>
+        <TouchableOpacity
+          style={styles.authorInfo}
+          onPress={() => onProfilePress?.(author)}
+          activeOpacity={0.7}
+        >
+          <Avatar uri={author.avatar} size="sm" />
+          <Text variant="body" style={styles.username}>
+            {author.displayName.toUpperCase()}
+          </Text>
+          {author.isVerified && <MaterialIcons name="verified" size={13} color="#3B82F6" />}
+        </TouchableOpacity>
 
-      <TouchableOpacity
+        <View style={styles.spacer} />
+
+        {!isOwnPost && !author.isFollowing && (
+          <TouchableOpacity
+            onPress={() => onFollow?.(author.id)}
+            activeOpacity={0.7}
+            style={styles.followButton}
+          >
+            <Text variant="body" style={styles.followText}>
+              {t('post.followButton')}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {!isOwnPost && author.isFollowing && (
+          <Text variant="small" style={styles.feedLabel}>
+            {t('post.following')}
+          </Text>
+        )}
+
+        <TouchableOpacity
         onPress={() => setMenuVisible(true)}
         activeOpacity={0.7}
         style={styles.optionsButton}
@@ -128,6 +140,7 @@ export function PostHeader({
           </>
         )}
       </BottomSheet>
+      </View>
     </View>
   );
 }
@@ -143,6 +156,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  suggestedLabel: {
+    color: '#888888',
+    fontSize: 11,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  feedLabel: {
+    color: '#888888',
+    fontSize: 11,
+    marginHorizontal: 24,
   },
   username: {
     color: '#FFF',

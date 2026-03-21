@@ -33,6 +33,7 @@ function mapApiPost(raw: FeedApiPost): Post {
     repostsCount: raw.interactions?.repostsCount ?? 0,
     isBookmarked: raw.interactions?.isBookmarked ?? false,
     isReposted: raw.interactions?.isReposted ?? false,
+    isFollowingAuthor: raw.isFollowingAuthor,
   };
 }
 
@@ -78,7 +79,8 @@ export const feedService = {
   async createPost(data: CreatePostDTO): Promise<Post> {
     const response = await apiClient.post<ApiResponse<FeedApiPost>>(
       API_ENDPOINTS.POSTS.CREATE,
-      data
+      data,
+      { timeout: 60000 },
     );
     return mapApiPost(response.data.data);
   },
@@ -118,6 +120,10 @@ export const feedService = {
 
   async unrepost(postId: string): Promise<void> {
     await apiClient.delete(API_ENDPOINTS.POSTS.REPOST(postId));
+  },
+
+  async sharePost(postId: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.POSTS.SHARE(postId));
   },
 
   async getBookmarks(page = 1, limit = 20) {

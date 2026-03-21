@@ -42,6 +42,8 @@ export interface FeedPost {
   isReposted?: boolean;
   // Meta
   createdAt: string;
+  /** true if viewer follows the author, false = "Suggested for you" */
+  isFollowingAuthor?: boolean;
   // Ads
   isAd?: boolean;
 }

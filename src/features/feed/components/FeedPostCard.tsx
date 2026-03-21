@@ -104,15 +104,15 @@ function FeedPostCardInner({
 }
 
 export const FeedPostCard = memo(FeedPostCardInner, (prev, next) => {
-  const pi = prev.post.interactions;
-  const ni = next.post.interactions;
   return (
     prev.post.id === next.post.id &&
-    pi?.likesCount === ni?.likesCount &&
-    pi?.commentsCount === ni?.commentsCount &&
-    pi?.isLiked === ni?.isLiked &&
-    pi?.isBookmarked === ni?.isBookmarked &&
-    pi?.isReposted === ni?.isReposted &&
+    prev.post.likesCount === next.post.likesCount &&
+    prev.post.commentsCount === next.post.commentsCount &&
+    prev.post.sharesCount === next.post.sharesCount &&
+    prev.post.repostsCount === next.post.repostsCount &&
+    prev.post.isLiked === next.post.isLiked &&
+    prev.post.isBookmarked === next.post.isBookmarked &&
+    prev.post.isReposted === next.post.isReposted &&
     prev.post.author?.isFollowing === next.post.author?.isFollowing &&
     prev.isVisible === next.isVisible
   );

@@ -23,8 +23,10 @@ export function useFollowFeed() {
     mutate(
       { userId, isFollowing: currentIsFollowing },
       {
-        onError: () => {
-          // Revert on API failure
+        onError: (error: any) => {
+          // 409 = already following/unfollowed — state is correct, don't revert
+          if (error?.response?.status === 409) return;
+          // Revert on real API failure
           setFollowed(userId, currentIsFollowing);
         },
       }

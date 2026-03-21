@@ -132,7 +132,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
               <MaterialCommunityIcons
                 name={isLiked ? 'thumb-up' : 'thumb-up-outline'}
                 size={26}
-                color={isLiked ? '#2078F4' : '#FFF'}
+                color="#FFF"
               />
             </Animated.View>
             {likesCount > 0 && (
@@ -153,7 +153,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleRepost} activeOpacity={0.7} style={styles.actionItem}>
-            <Feather name="repeat" size={24} color={isReposted ? '#22C55E' : '#FFF'} />
+            <Feather name="repeat" size={24} color="#FFF" />
             {repostsCount > 0 && (
               <RNText style={[styles.metricText, isReposted && styles.repostedText]}>
                 {formatCount(repostsCount)}
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_500Medium',
   },
   repostedText: {
-    color: '#22C55E',
+    color: '#FFF',
   },
 
   // Engagement (outside video)

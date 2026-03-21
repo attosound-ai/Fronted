@@ -16,8 +16,9 @@ import { Text } from '@/components/ui/Text';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { COLORS, SPACING } from '@/constants/theme';
 import { useFeed } from '../hooks/useFeed';
-import { useEngagement } from '../hooks/useEngagement';
+import { useInteractions } from '../hooks/useInteractions';
 import { useFollowFeed } from '../hooks/useFollowFeed';
+import { useFollowStore } from '@/stores/followStore';
 import { FeedPostCard } from './FeedPostCard';
 import { AdCard } from './AdCard';
 import { CommentsSheet } from './comments/CommentsSheet';
@@ -52,7 +53,7 @@ function toFeedPost(post: Post): FeedPost {
       username: post.author.username,
       displayName: post.author.displayName,
       avatar: post.author.avatar,
-      isFollowing: false,
+      isFollowing: post.isFollowingAuthor ?? false,
     },
     images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
     audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined) : undefined,
@@ -68,6 +69,7 @@ function toFeedPost(post: Post): FeedPost {
     isBookmarked: post.isBookmarked,
     isReposted: post.isReposted,
     createdAt: post.createdAt,
+    isFollowingAuthor: post.isFollowingAuthor,
   };
 }
 
@@ -89,14 +91,24 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
     error,
     refresh,
     loadMore,
-    toggleLike,
     deletePost,
   } = useFeed();
 
-  const { toggleBookmark, toggleRepost } = useEngagement();
+  const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
+  const followedUsers = useFollowStore((s) => s.followedUsers);
+  const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
 
   const flatListRef = useRef<FlatList<FeedPost>>(null);
+
+  // Hydrate follow store from API data on feed load
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const entries = posts
+      .filter((p) => p.isFollowingAuthor !== undefined)
+      .map((p) => ({ userId: Number(p.author.id), isFollowing: p.isFollowingAuthor! }));
+    if (entries.length > 0) hydrateFromApi(entries);
+  }, [posts, hydrateFromApi]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('feedScrollToTop', () => {
@@ -146,7 +158,7 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
     const realAdCount = Math.floor(realPosts.length / 2);
     const placeholdersWithAds = injectAds(PLACEHOLDER_POSTS, DEMO_ADS, 1, realAdCount);
     return [...feedWithAds, ...placeholdersWithAds];
-  }, [posts, getIsFollowing]);
+  }, [posts, getIsFollowing, followedUsers]);
 
   const handleFollow = useCallback(
     (userId: number) => {
@@ -283,7 +295,12 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
       )}
 
       {sharePost && (
-        <ShareSheet visible onClose={() => setSharePost(null)} post={sharePost} />
+        <ShareSheet
+          visible
+          onClose={() => setSharePost(null)}
+          post={sharePost}
+          onShareTracked={() => trackShare(sharePost.id)}
+        />
       )}
     </>
   );

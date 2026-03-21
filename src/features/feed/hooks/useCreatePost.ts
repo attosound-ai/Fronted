@@ -68,7 +68,7 @@ export function useCreatePost() {
     },
     onSuccess: (newPost, variables) => {
       // Prepend the new post to the feed cache so it appears immediately
-      queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, (old: any) => {
+      queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE(userId), (old: any) => {
         if (!old?.pages?.length) return old;
         return {
           ...old,
@@ -78,10 +78,13 @@ export function useCreatePost() {
           ],
         };
       });
-      // Also invalidate user posts grid on profile
+      // Also invalidate user posts grid + profile counters
       if (userId) {
         queryClient.invalidateQueries({
           queryKey: QUERY_KEYS.FEED.USER_POSTS(userId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.USERS.PROFILE(userId),
         });
       }
       analytics.capture(ANALYTICS_EVENTS.FEED.POST_CREATED, {

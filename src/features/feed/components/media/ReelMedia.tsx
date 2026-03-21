@@ -110,6 +110,12 @@ export function ReelMedia({
           </TouchableOpacity>
         )}
 
+        {!isOwnPost && (
+          <Text style={styles.reelFeedLabel}>
+            {post.author.isFollowing ? t('post.following') : t('post.suggestedForYou')}
+          </Text>
+        )}
+
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => setMenuVisible(true)}
@@ -242,6 +248,11 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 13,
     fontFamily: 'Archivo_600SemiBold',
+  },
+  reelFeedLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    marginHorizontal: 24,
   },
   spacer: {
     flex: 1,

@@ -60,6 +60,7 @@ export interface FeedApiPost {
     isBookmarked: boolean;
     isReposted: boolean;
   };
+  isFollowingAuthor?: boolean;
 }
 
 export type FeedResponse = PaginatedResponse<Post>;

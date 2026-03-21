@@ -9,16 +9,22 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated from 'react-native-reanimated';
+import { GestureDetector, GestureHandlerRootView, Gesture } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 
 import { Text } from '@/components/ui/Text';
-import { useImageCrop } from '@/hooks/useImageCrop';
-import { imageCropService } from '@/lib/media/imageCropService';
+import { imageCropService, CropRegion } from '@/lib/media/imageCropService';
 import { haptic } from '@/lib/haptics/hapticService';
 
 const CIRCLE_PADDING = 40;
 const OVERLAY_COLOR = 'rgba(0,0,0,0.72)';
+const MIN_SCALE = 1;
+const MAX_SCALE = 5;
 
 interface ImageCropModalProps {
   visible: boolean;
@@ -28,10 +34,11 @@ interface ImageCropModalProps {
 }
 
 /**
- * ImageCropModal — full-screen modal for circular avatar cropping.
+ * ImageCropModal — circular avatar cropping.
  *
- * Shows the image behind a circular overlay. The user drags and pinches
- * to position the photo within the circle, then taps Apply to crop.
+ * The image is initially scaled so its SHORT side = circleSize.
+ * The user can then pan (to slide the long side) and pinch to zoom.
+ * The crop region maps exactly to what's visible inside the circle.
  */
 export function ImageCropModal({
   visible,
@@ -40,48 +47,154 @@ export function ImageCropModal({
   onCancel,
 }: ImageCropModalProps) {
   const { width: screenWidth } = useWindowDimensions();
-  const containerSize = screenWidth;
   const circleSize = screenWidth - CIRCLE_PADDING * 2;
+  const containerSize = screenWidth;
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [imageDimensions, setImageDimensions] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
 
-  const { gesture, animatedStyle, computeCrop, reset } = useImageCrop(
-    containerSize,
-    circleSize
-  );
+  // Gesture shared values
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedX = useSharedValue(0);
+  const savedY = useSharedValue(0);
+  // Base display size (set when image loads)
+  const baseW = useSharedValue(0);
+  const baseH = useSharedValue(0);
 
-  // Reset gesture state and fetch image dimensions each time modal opens
+  // Reset when modal opens
   useEffect(() => {
     if (visible && imageUri) {
-      reset();
-      setImageDimensions(null);
+      scale.value = 1;
+      translateX.value = 0;
+      translateY.value = 0;
+      savedScale.value = 1;
+      savedX.value = 0;
+      savedY.value = 0;
+      setImgDims(null);
       Image.getSize(
         imageUri,
-        (width, height) => setImageDimensions({ width, height }),
+        (w, h) => {
+          setImgDims({ w, h });
+          // Scale so short side = circleSize
+          const aspect = w / h;
+          if (aspect >= 1) {
+            // landscape: height = circleSize, width = circleSize * aspect
+            baseW.value = circleSize * aspect;
+            baseH.value = circleSize;
+          } else {
+            // portrait: width = circleSize, height = circleSize / aspect
+            baseW.value = circleSize;
+            baseH.value = circleSize / aspect;
+          }
+        },
         () => {}
       );
     }
-  }, [visible, imageUri, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, imageUri]);
+
+  /** Clamp so the image always covers the circle */
+  const clamp = (tx: number, ty: number, s: number) => {
+    'worklet';
+    const imgW = baseW.value * s;
+    const imgH = baseH.value * s;
+    const maxX = Math.max(0, (imgW - circleSize) / 2);
+    const maxY = Math.max(0, (imgH - circleSize) / 2);
+    return {
+      x: Math.max(-maxX, Math.min(maxX, tx)),
+      y: Math.max(-maxY, Math.min(maxY, ty)),
+    };
+  };
+
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      'worklet';
+      scale.value = Math.max(MIN_SCALE, Math.min(MAX_SCALE, savedScale.value * e.scale));
+    })
+    .onEnd(() => {
+      'worklet';
+      savedScale.value = scale.value;
+      const c = clamp(translateX.value, translateY.value, scale.value);
+      translateX.value = withSpring(c.x, { damping: 20, stiffness: 200 });
+      translateY.value = withSpring(c.y, { damping: 20, stiffness: 200 });
+      savedX.value = c.x;
+      savedY.value = c.y;
+    });
+
+  const pan = Gesture.Pan()
+    .onUpdate((e) => {
+      'worklet';
+      const c = clamp(savedX.value + e.translationX, savedY.value + e.translationY, scale.value);
+      translateX.value = c.x;
+      translateY.value = c.y;
+    })
+    .onEnd(() => {
+      'worklet';
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+    });
+
+  const gesture = Gesture.Simultaneous(pan, pinch);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: baseW.value,
+    height: baseH.value,
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
 
   const handleApply = useCallback(async () => {
-    if (!imageUri || !imageDimensions) return;
+    if (!imageUri || !imgDims) return;
     setIsProcessing(true);
     haptic('light');
     try {
-      const region = computeCrop(imageDimensions.width, imageDimensions.height);
+      const s = scale.value;
+      const tx = translateX.value;
+      const ty = translateY.value;
+      const bw = baseW.value;
+      const bh = baseH.value;
+
+      // Pixels per display point
+      const pxPerPtX = imgDims.w / bw;
+      const pxPerPtY = imgDims.h / bh;
+
+      // The circle center is at (0, 0) in our coordinate system (image centered).
+      // With translate (tx, ty) and scale s, the image's top-left in circle-centered coords:
+      //   imgLeft = -(bw * s / 2) + tx
+      //   imgTop  = -(bh * s / 2) + ty
+      // The circle's top-left is at (-circleSize/2, -circleSize/2)
+      // Circle top-left relative to image top-left:
+      //   relX = -circleSize/2 - imgLeft = -circleSize/2 + bw*s/2 - tx
+      //   relY = -circleSize/2 - imgTop  = -circleSize/2 + bh*s/2 - ty
+      // In unscaled image display coords: divide by s
+      // Then convert to pixels: multiply by pxPerPt
+
+      const relX = ((-circleSize / 2) + (bw * s) / 2 - tx) / s;
+      const relY = ((-circleSize / 2) + (bh * s) / 2 - ty) / s;
+      const cropDisplaySize = circleSize / s;
+
+      const region: CropRegion = {
+        originX: Math.max(0, relX * pxPerPtX),
+        originY: Math.max(0, relY * pxPerPtY),
+        width: Math.min(cropDisplaySize * pxPerPtX, imgDims.w),
+        height: Math.min(cropDisplaySize * pxPerPtY, imgDims.h),
+      };
+
       const croppedUri = await imageCropService.cropSquare(imageUri, region);
       onCrop(croppedUri);
     } catch {
-      // Fallback: pass original URI if crop fails
       onCrop(imageUri);
     } finally {
       setIsProcessing(false);
     }
-  }, [imageUri, imageDimensions, computeCrop, onCrop]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUri, imgDims, onCrop]);
 
   const handleCancel = useCallback(() => {
     haptic('selection');
@@ -90,7 +203,6 @@ export function ImageCropModal({
 
   if (!imageUri) return null;
 
-  // Circle is centered within the square container
   const circleOffset = (containerSize - circleSize) / 2;
 
   return (
@@ -104,24 +216,15 @@ export function ImageCropModal({
               onPress={handleCancel}
               disabled={isProcessing}
             >
-              <Text variant="body" style={styles.cancelText}>
-                Cancel
-              </Text>
+              <Text variant="body" style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-
-            <Text variant="body" style={styles.headerTitle}>
-              Position Photo
-            </Text>
-
+            <Text variant="body" style={styles.headerTitle}>Position Photo</Text>
             <View style={styles.headerButton}>
               {isProcessing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <TouchableOpacity onPress={handleApply} disabled={!imageDimensions}>
-                  <Text
-                    variant="body"
-                    style={[styles.applyText, !imageDimensions && styles.dimmed]}
-                  >
+                <TouchableOpacity onPress={handleApply} disabled={!imgDims}>
+                  <Text variant="body" style={[styles.applyText, !imgDims && styles.dimmed]}>
                     Apply
                   </Text>
                 </TouchableOpacity>
@@ -137,53 +240,21 @@ export function ImageCropModal({
             ]}
           >
             <GestureDetector gesture={gesture}>
-              <Animated.View
-                style={[{ width: containerSize, height: containerSize }, animatedStyle]}
-              >
-                <Image
+              <View style={{ width: containerSize, height: containerSize, justifyContent: 'center', alignItems: 'center' }}>
+                <Animated.Image
                   source={{ uri: imageUri }}
-                  style={{ width: containerSize, height: containerSize }}
+                  style={animatedStyle}
                   resizeMode="cover"
                 />
-              </Animated.View>
+              </View>
             </GestureDetector>
 
-            {/* Dark overlay: 4 rectangles around circular cutout */}
+            {/* Dark overlay with circular cutout */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              {/* Top */}
-              <View
-                style={[
-                  styles.overlayRect,
-                  { top: 0, left: 0, right: 0, height: circleOffset },
-                ]}
-              />
-              {/* Bottom */}
-              <View
-                style={[
-                  styles.overlayRect,
-                  { top: circleOffset + circleSize, left: 0, right: 0, bottom: 0 },
-                ]}
-              />
-              {/* Left */}
-              <View
-                style={[
-                  styles.overlayRect,
-                  { top: circleOffset, left: 0, width: circleOffset, height: circleSize },
-                ]}
-              />
-              {/* Right */}
-              <View
-                style={[
-                  styles.overlayRect,
-                  {
-                    top: circleOffset,
-                    left: circleOffset + circleSize,
-                    right: 0,
-                    height: circleSize,
-                  },
-                ]}
-              />
-              {/* Circle border */}
+              <View style={[styles.overlayRect, { top: 0, left: 0, right: 0, height: circleOffset }]} />
+              <View style={[styles.overlayRect, { top: circleOffset + circleSize, left: 0, right: 0, bottom: 0 }]} />
+              <View style={[styles.overlayRect, { top: circleOffset, left: 0, width: circleOffset, height: circleSize }]} />
+              <View style={[styles.overlayRect, { top: circleOffset, left: circleOffset + circleSize, right: 0, height: circleSize }]} />
               <View
                 style={{
                   position: 'absolute',
@@ -198,31 +269,17 @@ export function ImageCropModal({
               />
             </View>
 
-            {/* Loading state while Image.getSize fetches dimensions */}
-            {!imageDimensions && (
+            {!imgDims && (
               <View style={styles.loadingOverlay} pointerEvents="none">
                 <ActivityIndicator size="large" color="#FFFFFF" />
               </View>
             )}
           </View>
 
-          {/* Bottom action */}
           <View style={styles.bottomArea}>
             <Text variant="small" style={styles.hintText}>
               Drag and pinch to position your photo
             </Text>
-            <TouchableOpacity
-              style={[styles.doneButton, (!imageDimensions || isProcessing) && styles.doneButtonDisabled]}
-              onPress={handleApply}
-              disabled={!imageDimensions || isProcessing}
-              activeOpacity={0.7}
-            >
-              {isProcessing ? (
-                <ActivityIndicator size="small" color="#000000" />
-              ) : (
-                <Text style={styles.doneButtonText}>Done</Text>
-              )}
-            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </GestureHandlerRootView>
@@ -231,79 +288,17 @@ export function ImageCropModal({
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-  },
-  headerButton: {
-    width: 80,
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_600SemiBold',
-  },
-  cancelText: {
-    color: '#888888',
-  },
-  applyText: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_600SemiBold',
-  },
-  dimmed: {
-    opacity: 0.4,
-  },
-  imageContainer: {
-    overflow: 'hidden',
-  },
-  overlayRect: {
-    position: 'absolute',
-    backgroundColor: OVERLAY_COLOR,
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bottomArea: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    gap: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  hintText: {
-    color: '#666666',
-    textAlign: 'center',
-  },
-  doneButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    width: '100%',
-    alignItems: 'center',
-  },
-  doneButtonDisabled: {
-    opacity: 0.3,
-  },
-  doneButtonText: {
-    color: '#000000',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 16,
-  },
+  root: { flex: 1, backgroundColor: '#000000' },
+  safeArea: { flex: 1, backgroundColor: '#000000', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 8, paddingVertical: 12 },
+  headerButton: { width: 80, alignItems: 'center', paddingVertical: 4 },
+  headerTitle: { color: '#FFFFFF', fontFamily: 'Archivo_600SemiBold' },
+  cancelText: { color: '#888888' },
+  applyText: { color: '#FFFFFF', fontFamily: 'Archivo_600SemiBold' },
+  dimmed: { opacity: 0.4 },
+  imageContainer: { overflow: 'hidden' },
+  overlayRect: { position: 'absolute', backgroundColor: OVERLAY_COLOR },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  bottomArea: { paddingHorizontal: 24, paddingVertical: 16, width: '100%', alignItems: 'center' },
+  hintText: { color: '#666666', textAlign: 'center' },
 });

@@ -38,7 +38,7 @@ export function Checkbox({
             disabled && styles.boxDisabled,
           ]}
         >
-          {checked && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          {checked && <Ionicons name="checkmark" size={14} color="#000000" />}
         </View>
 
         {label && (
@@ -84,8 +84,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   boxChecked: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   boxError: {
     borderColor: '#EF4444',

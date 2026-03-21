@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
   },
   trigger: {
     backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     borderWidth: 1,
     borderColor: '#222222',
     flexDirection: 'row',

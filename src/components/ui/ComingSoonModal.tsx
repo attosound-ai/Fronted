@@ -30,7 +30,7 @@ export function ComingSoonModal({
           <Ionicons
             name={icon ?? 'construct-outline'}
             size={56}
-            color="#3B82F6"
+            color="#FFF"
             style={styles.icon}
           />
 

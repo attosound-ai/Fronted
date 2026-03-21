@@ -56,9 +56,9 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     fontSize: 15,
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',

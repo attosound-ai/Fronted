@@ -4,8 +4,11 @@ import {
   RefreshControl,
   ActivityIndicator,
   View,
+  ScrollView,
+  TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -57,12 +60,26 @@ export function ConversationList() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <ConversationsHeader onNewMessage={handleNewMessage} />
-        <View style={styles.error}>
-          <Text variant="h2">{t('error.loadingMessages')}</Text>
+        <ScrollView
+          contentContainerStyle={styles.error}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refresh}
+              tintColor={COLORS.white}
+            />
+          }
+        >
+          <Ionicons name="cloud-offline-outline" size={40} color="#555" />
+          <Text variant="h2" style={styles.errorTitle}>{t('error.loadingMessages')}</Text>
           <Text variant="body" style={styles.errorText}>
             {error.message}
           </Text>
-        </View>
+          <TouchableOpacity style={styles.retryButton} onPress={refresh} activeOpacity={0.7}>
+            <Ionicons name="refresh" size={18} color="#000" />
+            <Text style={styles.retryText}>{t('error.retry', { defaultValue: 'Retry' })}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -101,10 +118,31 @@ const styles = StyleSheet.create({
   error: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: SPACING.lg,
+    gap: 8,
+  },
+  errorTitle: {
+    color: COLORS.white,
+    marginTop: 8,
   },
   errorText: {
     color: COLORS.gray[500],
-    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  retryText: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 14,
+    color: '#000',
   },
 });

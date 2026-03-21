@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   FlatList,
@@ -12,6 +12,8 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
+import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
@@ -19,6 +21,7 @@ import { showToast } from '@/components/ui/Toast';
 import { useChat } from '../hooks/useChat';
 import { useRealtimeChat } from '../hooks/useRealtimeChat';
 import { useChatStore } from '../stores/chatStore';
+import { messageService } from '../services/messageService';
 import { ChatHeader } from './ChatHeader';
 import { MessageBubble } from './MessageBubble';
 import { ChatInputBar } from './ChatInputBar';
@@ -37,6 +40,7 @@ export function ChatScreen({
   participantId,
 }: ChatScreenProps) {
   const { t } = useTranslation('messages');
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const userId = user ? String(user.id) : '';
   const insets = useSafeAreaInsets();
@@ -48,48 +52,61 @@ export function ChatScreen({
     isLoading,
     isFetchingMore,
     hasMore,
-    sendMessage,
+    sendMessageAsync,
     isSending,
     loadMore,
-    sendError,
     refresh,
   } = useChat(conversationId);
 
   // WebSocket real-time layer
   const { sendViaSocket, markRead, sendTyping } = useRealtimeChat(conversationId);
 
+  // Force refetch on mount to pick up messages received while screen was unmounted
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (!didMount.current) {
+      didMount.current = true;
+      refresh();
+    }
+  }, [refresh]);
+
   // Typing state for this conversation
   const typingUsers = useChatStore((s) => s.typingUsers[conversationId]);
   const isParticipantTyping = typingUsers ? typingUsers.size > 0 : false;
 
-  // Mark messages as read when screen is focused and new messages arrive
+  // Mark messages as read via REST (reliable) + WebSocket (real-time broadcast).
   useEffect(() => {
-    if (messages.length > 0) {
-      markRead();
-    }
-  }, [messages.length, markRead]);
+    if (messages.length === 0 || !conversationId) return;
 
-  useEffect(() => {
-    if (sendError) {
-      showToast(t('chat.errorFailedToSend'));
-    }
-  }, [sendError]);
+    // REST call — works even if WebSocket isn't connected yet
+    messageService.markRead(conversationId).then(() => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS });
+    }).catch(() => {});
+
+    // Also try WebSocket so the other participant gets the read receipt in real-time
+    markRead();
+  }, [messages.length, conversationId, markRead, queryClient]);
 
   const handleSend = useCallback(
     async (content: string) => {
       try {
         await sendViaSocket(content);
       } catch {
-        // Fallback to REST if WebSocket fails
-        sendMessage(content);
+        try {
+          await sendMessageAsync(content);
+        } catch {
+          showToast(t('chat.errorFailedToSend'));
+        }
       }
     },
-    [sendViaSocket, sendMessage]
+    [sendViaSocket, sendMessageAsync, t]
   );
 
   const handleBack = useCallback(() => {
+    // Refresh conversation list on exit so unread badges update
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS });
     router.back();
-  }, []);
+  }, [queryClient]);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isFetchingMore) {

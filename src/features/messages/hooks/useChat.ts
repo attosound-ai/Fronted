@@ -83,6 +83,7 @@ export function useChat(conversationId: string) {
     refresh: refetch,
     loadMore: fetchNextPage,
     sendMessage: (content: string) => sendMutation.mutate(content),
+    sendMessageAsync: (content: string) => sendMutation.mutateAsync(content),
     isSending: sendMutation.isPending,
     sendError: sendMutation.error as Error | null,
     isSendError: sendMutation.isError,

@@ -76,6 +76,10 @@ export const messageService = {
     return mapMessage(response.data.data);
   },
 
+  async markRead(chatId: string): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.MESSAGES.MARK_READ(chatId));
+  },
+
   async createConversation(dto: CreateConversationDTO): Promise<string> {
     const response = await apiClient.post<
       ApiSuccessResponse<{ conversation_id: string }>

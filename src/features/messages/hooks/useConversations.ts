@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { messageService } from '../services/messageService';
 import { useChatStore } from '../stores/chatStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useMountEffect } from '@/hooks';
 import type { ChatConversation } from '../types';
 
 export function useConversations() {
@@ -11,9 +12,9 @@ export function useConversations() {
   const setTotalUnread = useChatStore((s) => s.setTotalUnread);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
-  useEffect(() => {
+  useMountEffect(() => {
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.CONVERSATIONS_VIEWED);
-  }, []);
+  });
 
   const { data, isLoading, refetch, error } = useQuery({
     queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
@@ -23,13 +24,15 @@ export function useConversations() {
     retry: 2,
   });
 
-  // Sync total unread count to Zustand so the tab badge can read it
+  const totalUnread = useMemo(
+    () => (data ? data.reduce((sum, c) => sum + c.unreadCount, 0) : 0),
+    [data]
+  );
+
+  // Sync to Zustand for tab badge — intentional cross-store bridge
   useEffect(() => {
-    if (data) {
-      const total = data.reduce((sum, c) => sum + c.unreadCount, 0);
-      setTotalUnread(total);
-    }
-  }, [data, setTotalUnread]);
+    setTotalUnread(totalUnread);
+  }, [totalUnread, setTotalUnread]);
 
   const manualRefresh = useCallback(async () => {
     setIsManualRefreshing(true);

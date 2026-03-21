@@ -72,7 +72,7 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
   const renderSegment = useCallback(
     ({ item }: { item: AudioSegment & { downloadUrl: string } }) => (
       <View style={styles.segmentCard}>
-        <Ionicons name="mic" size={20} color="#3B82F6" />
+        <Ionicons name="mic" size={20} color="#FFFFFF" />
         <View style={styles.segmentInfo}>
           <Text variant="body" style={styles.segmentLabel}>
             {item.label ||

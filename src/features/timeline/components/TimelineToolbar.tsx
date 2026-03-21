@@ -178,7 +178,7 @@ export function TimelineToolbar({
             {isPublishing ? (
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
-              <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
+              <Ionicons name="cloud-upload-outline" size={16} color="#000" />
             )}
             <Text style={styles.publishLabel}>
               {isPublishing
@@ -277,14 +277,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 16,
     gap: 6,
   },
   publishLabel: {
-    color: '#FFF',
+    color: '#000',
     fontSize: 12,
     fontFamily: 'Archivo_600SemiBold',
   },

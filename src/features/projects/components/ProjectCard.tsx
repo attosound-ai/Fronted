@@ -32,7 +32,7 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
       onPress={onPress}
     >
       <View style={styles.iconContainer}>
-        <Ionicons name="musical-notes" size={24} color="#3B82F6" />
+        <Ionicons name="musical-notes" size={24} color="#FFFFFF" />
       </View>
       <View style={styles.info}>
         <Text variant="body" style={styles.name} numberOfLines={1}>

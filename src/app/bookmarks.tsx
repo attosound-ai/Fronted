@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
 import { useBookmarks } from '@/features/feed/hooks/useBookmarks';
-import { useEngagement } from '@/features/feed/hooks/useEngagement';
+import { useInteractions } from '@/features/feed/hooks/useInteractions';
 import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet';
 import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
@@ -38,7 +38,7 @@ function toFeedPost(post: Post): FeedPost {
       username: post.author.username,
       displayName: post.author.displayName,
       avatar: post.author.avatar,
-      isFollowing: false,
+      isFollowing: post.isFollowingAuthor ?? false,
     },
     images: type === 'image' ? files : undefined,
     audioUrl: type === 'audio' ? files[0] : undefined,
@@ -54,6 +54,7 @@ function toFeedPost(post: Post): FeedPost {
     isBookmarked: post.isBookmarked,
     isReposted: post.isReposted,
     createdAt: post.createdAt,
+    isFollowingAuthor: post.isFollowingAuthor,
   };
 }
 
@@ -72,7 +73,7 @@ export default function BookmarksScreen() {
     hasMore,
   } = useBookmarks();
 
-  const { toggleBookmark, toggleRepost } = useEngagement();
+  const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
 
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
@@ -96,6 +97,7 @@ export default function BookmarksScreen() {
     ({ item }: { item: FeedPost }) => (
       <FeedPostCard
         post={item}
+        onLike={() => toggleLike(item.id)}
         onComment={() => setCommentsPostId(item.id)}
         onRepost={() => toggleRepost(item.id)}
         onShare={() => setSharePost(item)}
@@ -103,7 +105,7 @@ export default function BookmarksScreen() {
         onProfilePress={handleProfilePress}
       />
     ),
-    [toggleRepost, toggleBookmark, handleProfilePress]
+    [toggleLike, toggleRepost, toggleBookmark, handleProfilePress]
   );
 
   const renderFooter = useCallback(() => {
@@ -172,7 +174,12 @@ export default function BookmarksScreen() {
       )}
 
       {sharePost && (
-        <ShareSheet visible onClose={() => setSharePost(null)} post={sharePost} />
+        <ShareSheet
+          visible
+          onClose={() => setSharePost(null)}
+          post={sharePost}
+          onShareTracked={() => trackShare(sharePost.id)}
+        />
       )}
     </View>
   );

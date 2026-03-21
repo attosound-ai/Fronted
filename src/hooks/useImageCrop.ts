@@ -78,14 +78,10 @@ export function useImageCrop(containerSize: number, circleSize: number) {
 
   /**
    * Compute the crop region in original image pixels.
-   * Called from JS thread when user presses Apply.
    *
-   * Math: the Animated.View (containerSize × containerSize) displays the image with resizeMode=cover.
-   * With transform { scale: s, translateX: tx, translateY: ty }, what image pixels are visible
-   * inside the circle (circleSize × circleSize centered in container)?
-   *
-   *   imagePixelAtCircleEdgeX = origW/2 - (circleSize/2 + tx) * origW / (containerSize * s)
-   *   cropSize = circleSize * origW / (containerSize * s)
+   * resizeMode="cover" scales the image so the SHORTER side fills containerSize.
+   * The longer side overflows and is centered. We must account for this when
+   * mapping screen-space gestures back to original-image pixels.
    */
   const computeCrop = useCallback(
     (origW: number, origH: number): CropRegion => {
@@ -93,11 +89,43 @@ export function useImageCrop(containerSize: number, circleSize: number) {
       const tx = translateX.value;
       const ty = translateY.value;
 
-      const cropW = (circleSize * origW) / (containerSize * s);
-      const cropH = (circleSize * origH) / (containerSize * s);
+      // resizeMode="cover": scale so shorter axis fills containerSize
+      const imageAspect = origW / origH;
+      let displayW: number;
+      let displayH: number;
+      if (imageAspect > 1) {
+        // landscape: height fills container, width overflows
+        displayH = containerSize;
+        displayW = containerSize * imageAspect;
+      } else {
+        // portrait or square: width fills container, height overflows
+        displayW = containerSize;
+        displayH = containerSize / imageAspect;
+      }
 
-      const originX = origW / 2 - (circleSize / 2 + tx) * (origW / (containerSize * s));
-      const originY = origH / 2 - (circleSize / 2 + ty) * (origH / (containerSize * s));
+      // Pixels per screen point at current scale
+      const pxPerPtX = origW / (displayW * s);
+      const pxPerPtY = origH / (displayH * s);
+
+      // Circle center in container coords = (containerSize/2, containerSize/2)
+      // Image center in container coords = (containerSize/2, containerSize/2) before gestures
+      // With translate, image center moves by (tx, ty) in screen pts
+      // Circle top-left in image-display coords:
+      const circleLeft = (containerSize - circleSize) / 2;
+      const circleTop = (containerSize - circleSize) / 2;
+
+      // Image display origin (top-left of the displayed image in container coords)
+      const imgDisplayLeft = (containerSize - displayW * s) / 2 + tx * s;
+      const imgDisplayTop = (containerSize - displayH * s) / 2 + ty * s;
+
+      // Circle position relative to scaled image
+      const relX = (circleLeft - imgDisplayLeft) / s;
+      const relY = (circleTop - imgDisplayTop) / s;
+
+      const cropW = (circleSize / s) * pxPerPtX;
+      const cropH = (circleSize / s) * pxPerPtY;
+      const originX = relX * pxPerPtX;
+      const originY = relY * pxPerPtY;
 
       return {
         originX: Math.max(0, Math.min(originX, origW - cropW)),

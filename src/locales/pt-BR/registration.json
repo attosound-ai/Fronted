@@ -1,11 +1,22 @@
 {
   "basicInfo": {
-    "title": "Informe seus dados para continuar",
+    "title": "Crie sua conta",
     "nameLabel": "Nome",
     "namePlaceholder": "Digite seu nome completo",
     "emailLabel": "E-mail",
     "emailPlaceholder": "Digite seu endereço de e-mail",
-    "phoneLabel": "Número de telefone"
+    "phoneLabel": "Número de telefone",
+    "usePhone": "Criar conta com número de telefone",
+    "useEmail": "Criar conta com e-mail"
+  },
+  "name": {
+    "title": "Qual é o seu nome?",
+    "subtitle": "Isso ajuda as pessoas a encontrá-lo e reconhecê-lo",
+    "placeholder": "Digite seu nome completo"
+  },
+  "dateOfBirth": {
+    "title": "Quando você nasceu?",
+    "subtitle": "Você deve ter pelo menos 18 anos para usar o Atto"
   },
   "credentials": {
     "title": "Crie sua senha",
@@ -13,7 +24,7 @@
     "passwordPlaceholder": "Crie uma senha (mín. 8 caracteres)",
     "confirmLabel": "Confirmar Senha",
     "confirmPlaceholder": "Repita sua senha",
-    "legalAgeCheckbox": "Confirmo que tenho idade legal para usar esta plataforma.",
+    "dobLabel": "Data de Nascimento",
     "termsPrefix": "Li e concordo com os",
     "termsLink": "Termos e Condições"
   },

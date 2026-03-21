@@ -8,6 +8,8 @@
   },
   "post": {
     "followButton": "Seguir",
+    "following": "Siguiendo",
+    "suggestedForYou": "Sugerido para ti",
     "menuSave": "Guardar",
     "menuUnsave": "Quitar guardado",
     "menuReport": "Reportar",

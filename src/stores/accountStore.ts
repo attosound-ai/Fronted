@@ -13,6 +13,7 @@ import {
   setActiveAccountId,
   getActiveAccountId,
 } from '@/lib/auth/storage';
+import { queryClient } from '@/lib/queryClient';
 import type { TokenPair, User } from '@/types';
 
 export interface AccountEntry {
@@ -62,13 +63,16 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
 
   /**
    * Switch active session to the given userId.
-   * Updates the shadow keys (auth_token / refresh_token / user_data) that the
-   * Axios interceptor always reads — no changes to the interceptor needed.
+   *
+   * Optimistic, non-blocking design (Instagram-style):
+   *  Phase A — Synchronous swap (~50ms): write cached tokens, update state, end animation
+   *  Phase B — Fire-and-forget: getMe, fetchSubscription, WebSocket reconnect in parallel
+   *  Phase C — Error handling: if Phase A fails, rollback
    */
   switchToAccount: async (userId: number) => {
     const { accounts, activeAccountId } = get();
 
-    // Save current state for rollback if anything fails
+    // Save rollback state
     const prevToken = await authStorage.getToken();
     const prevRefreshToken = await authStorage.getRefreshToken();
     const prevUser = await authStorage.getUser();
@@ -87,6 +91,7 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     try {
       let entry = accounts.find((a) => a.user.id === userId);
 
+      // Cold case: entry not in memory — only blocking call
       if (!entry) {
         const { user, tokens } = await authService.switchAccount(userId);
         entry = { user, tokens };
@@ -98,11 +103,13 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         }
       }
 
-      // Write shadow keys so the interceptor picks them up
-      await authStorage.setToken(entry.tokens.accessToken);
-      await authStorage.setRefreshToken(entry.tokens.refreshToken);
-      await authStorage.setUser(entry.user);
-      await setActiveAccountId(userId);
+      // ── Phase A: Synchronous swap (target: <50ms) ──
+      await Promise.all([
+        authStorage.setToken(entry.tokens.accessToken),
+        authStorage.setRefreshToken(entry.tokens.refreshToken),
+        authStorage.setUser(entry.user),
+        setActiveAccountId(userId),
+      ]);
 
       set({
         activeAccountId: userId,
@@ -110,34 +117,45 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           activeAccountId !== userId ? activeAccountId : get().previousAccountId,
       });
 
-      // Reconnect WebSocket with explicit new userId
-      try {
-        const { phoenixSocket } = await import('@/lib/api/phoenixSocket');
-        phoenixSocket.disconnect();
-        await phoenixSocket.connect(String(userId));
-      } catch {
-        // Non-fatal: socket will reconnect later
-      }
+      // Invalidate non-scoped query caches (feed is already scoped by userId)
+      queryClient.removeQueries({ queryKey: ['messages'] });
+      queryClient.removeQueries({ queryKey: ['notifications'] });
+      queryClient.removeQueries({ queryKey: ['projects'] });
+      queryClient.removeQueries({ queryKey: ['payments'] });
 
-      // Sync authStore
+      // Sync authStore with cached user immediately
       const { useAuthStore } = await import('./authStore');
       useAuthStore.getState().setUser(entry.user);
 
-      // Fetch fresh user data from backend
-      try {
-        const freshUser = await authService.getMe();
-        useAuthStore.getState().setUser(freshUser);
-        await authStorage.setUser(freshUser);
-        entry.user = freshUser;
-        await get().addAccount(entry);
-      } catch {
-        // Non-fatal: cached user is already set above
-      }
+      // End animation NOW — user sees the new account immediately
+      useAccountSwitchAnimationStore.getState().endFlip();
 
-      const { useSubscriptionStore } = await import('./subscriptionStore');
-      useSubscriptionStore.getState().fetchSubscription();
+      // ── Phase B: Fire-and-forget background sync ──
+      const capturedEntry = entry;
+      Promise.allSettled([
+        // Refresh user data
+        authService.getMe().then(async (freshUser) => {
+          useAuthStore.getState().setUser(freshUser);
+          await authStorage.setUser(freshUser);
+          capturedEntry.user = freshUser;
+          await get().addAccount(capturedEntry);
+        }),
+        // Refresh subscription
+        import('./subscriptionStore').then(({ useSubscriptionStore }) =>
+          useSubscriptionStore.getState().fetchSubscription()
+        ),
+        // Reconnect WebSocket (non-blocking)
+        import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
+          phoenixSocket.disconnect();
+          phoenixSocket.connect(String(userId));
+        }),
+      ]).catch(() => {
+        // All errors are non-fatal — cached data is already displayed
+      });
+
+      return; // Skip finally's endFlip — already called above
     } catch (error) {
-      // Rollback: restore previous account's tokens so user stays logged in
+      // ── Phase C: Rollback ──
       console.warn('[AccountSwitch] Failed, rolling back:', error);
       if (prevToken) await authStorage.setToken(prevToken);
       if (prevRefreshToken) await authStorage.setRefreshToken(prevRefreshToken);
@@ -150,7 +168,6 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         await setActiveAccountId(prevActiveId);
         set({ activeAccountId: prevActiveId });
       }
-    } finally {
       useAccountSwitchAnimationStore.getState().endFlip();
     }
   },
@@ -176,14 +193,28 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
   loadAccounts: async () => {
     const ids = await getAccountIds();
     const seen = new Set<number>();
-    const entries: AccountEntry[] = [];
-
+    const uniqueIds: number[] = [];
     for (const id of ids) {
       const numId = Number(id);
-      if (seen.has(numId)) continue;
-      seen.add(numId);
-      const tokens = await getAccountTokens(id);
-      const user = await getAccountUser(id);
+      if (!seen.has(numId)) {
+        seen.add(numId);
+        uniqueIds.push(numId);
+      }
+    }
+
+    // Parallel SecureStore reads — all accounts at once
+    const raw = await Promise.all(
+      uniqueIds.map(async (id) => {
+        const [tokens, user] = await Promise.all([
+          getAccountTokens(id),
+          getAccountUser(id),
+        ]);
+        return { id, tokens, user };
+      })
+    );
+
+    const entries: AccountEntry[] = [];
+    for (const { id, tokens, user } of raw) {
       if (tokens && user && user.id) {
         entries.push({ user, tokens });
       } else {

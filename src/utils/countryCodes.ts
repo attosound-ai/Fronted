@@ -26,3 +26,7 @@ export const COUNTRY_CODES: CountryCode[] = [
 export function getCountryByDial(dial: string): CountryCode | undefined {
   return COUNTRY_CODES.find((c) => c.dial === dial);
 }
+
+export function getCountryByISO(iso: string): CountryCode | undefined {
+  return COUNTRY_CODES.find((c) => c.code === iso.toUpperCase());
+}

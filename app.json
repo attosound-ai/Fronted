@@ -109,7 +109,8 @@
         }
       ],
       "expo-video",
-      "react-native-bottom-tabs"
+      "react-native-bottom-tabs",
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "router": {},

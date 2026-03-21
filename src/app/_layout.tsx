@@ -1,8 +1,9 @@
 import '@/lib/i18n';
 import { useEffect, type ReactNode } from 'react';
+import { useMountEffect } from '@/hooks';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PostHogProvider, usePostHog } from 'posthog-react-native';
 import * as Sentry from '@sentry/react-native';
@@ -65,7 +66,11 @@ Sentry.init({
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 
-let StripeProvider: (props: { publishableKey: string; children: ReactNode }) => ReactNode;
+let StripeProvider: (props: {
+  publishableKey: string;
+  merchantIdentifier?: string;
+  children: ReactNode;
+}) => ReactNode;
 try {
   StripeProvider = require('@stripe/stripe-react-native').StripeProvider;
 } catch {
@@ -75,23 +80,19 @@ try {
 // Tells expo-router the default route, preventing stale modal
 // screens (call, recording) from being restored on reload
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      retry: 2,
-    },
-  },
-});
+// QueryClient is extracted to a shared module so stores can import it
+// for cache invalidation (e.g., on account switch).
+import { queryClient, queryPersister } from '@/lib/queryClient';
 
 /** Bridges the PostHog instance into the analytics singleton + global error handler. */
 function AnalyticsInitializer() {
   const posthog = usePostHog();
+  // Legitimate: posthog transitions undefined → instance once after provider mounts.
   useEffect(() => {
     if (!posthog) return;
     analytics.setInstance(posthog);
@@ -118,9 +119,9 @@ function RootLayout() {
     Archivo_600SemiBold,
     Archivo_700Bold,
   });
-  useEffect(() => {
+  useMountEffect(() => {
     initialize();
-  }, [initialize]);
+  });
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -129,7 +130,7 @@ function RootLayout() {
   }, [fontsLoaded]);
 
   // Invalidate project cache when a call ends (covers all end scenarios)
-  useEffect(() => {
+  useMountEffect(() => {
     let trackedProjectId: string | null = null;
 
     const unsubscribe = useCallStore.subscribe((state, prevState) => {
@@ -144,7 +145,7 @@ function RootLayout() {
     });
 
     return unsubscribe;
-  }, []);
+  });
 
   if (!fontsLoaded) {
     return null;
@@ -163,8 +164,14 @@ function RootLayout() {
       autocapture={POSTHOG_CONFIG.autocapture}
     >
       <AnalyticsInitializer />
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-        <QueryClientProvider client={queryClient}>
+      <StripeProvider
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
+        merchantIdentifier="merchant.com.atto.sound"
+      >
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{ persister: queryPersister, maxAge: 1000 * 60 * 60 * 24 }}
+        >
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <SafeAreaProvider>
@@ -182,7 +189,7 @@ function RootLayout() {
                     headerBackTitleVisible: false,
                     contentStyle: { backgroundColor: '#000000' },
                     animation: 'slide_from_right',
-                    fullScreenGestureEnabled: true,
+                    fullScreenGestureEnabled: false,
                     animationDuration: 300,
                   }}
                 >
@@ -315,7 +322,7 @@ function RootLayout() {
               </SafeAreaProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </StripeProvider>
     </PostHogProvider>
   );

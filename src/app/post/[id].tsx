@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import { View, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
 import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
 import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet';
 import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
-import { useEngagement } from '@/features/feed/hooks/useEngagement';
+import { useInteractions } from '@/features/feed/hooks/useInteractions';
 import { useFollowFeed } from '@/features/feed/hooks/useFollowFeed';
 import { feedService } from '@/features/feed/services/feedService';
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -33,7 +33,7 @@ function toFeedPost(post: Post): FeedPost {
       username: post.author.username,
       displayName: post.author.displayName,
       avatar: post.author.avatar,
-      isFollowing: false,
+      isFollowing: post.isFollowingAuthor ?? false,
     },
     images: type === 'image' ? files : undefined,
     audioUrl: type === 'audio' ? files[0] : undefined,
@@ -49,6 +49,7 @@ function toFeedPost(post: Post): FeedPost {
     isBookmarked: post.isBookmarked,
     isReposted: post.isReposted,
     createdAt: post.createdAt,
+    isFollowingAuthor: post.isFollowingAuthor,
   };
 }
 
@@ -58,9 +59,8 @@ export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
-  const { toggleBookmark, toggleRepost } = useEngagement();
+  const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
-  const queryClient = useQueryClient();
 
   const {
     data: post,
@@ -70,33 +70,6 @@ export default function PostDetailScreen() {
     queryKey: QUERY_KEYS.FEED.POST(id),
     queryFn: () => feedService.getPost(id),
     enabled: !!id,
-  });
-
-  const likeMutation = useMutation({
-    mutationFn: async (isLiked: boolean) => {
-      if (isLiked) {
-        await feedService.unlikePost(id);
-      } else {
-        await feedService.likePost(id);
-      }
-    },
-    onMutate: async (isLiked) => {
-      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.FEED.POST(id) });
-      const prev = queryClient.getQueryData<Post>(QUERY_KEYS.FEED.POST(id));
-      queryClient.setQueryData<Post>(QUERY_KEYS.FEED.POST(id), (old) =>
-        old
-          ? {
-              ...old,
-              isLiked: !isLiked,
-              likesCount: isLiked ? old.likesCount - 1 : old.likesCount + 1,
-            }
-          : old
-      );
-      return { prev };
-    },
-    onError: (_, __, context) => {
-      if (context?.prev) queryClient.setQueryData(QUERY_KEYS.FEED.POST(id), context.prev);
-    },
   });
 
   const baseFeedPost = post ? toFeedPost(post) : null;
@@ -152,7 +125,7 @@ export default function PostDetailScreen() {
           <FeedPostCard
             post={feedPost}
             isVisible
-            onLike={() => likeMutation.mutate(feedPost.isLiked ?? false)}
+            onLike={() => toggleLike(feedPost.id)}
             onComment={() => setCommentsOpen(true)}
             onRepost={() => toggleRepost(feedPost.id)}
             onShare={() => setSharePost(feedPost)}
@@ -174,7 +147,12 @@ export default function PostDetailScreen() {
 
       {/* Share sheet */}
       {sharePost && (
-        <ShareSheet visible onClose={() => setSharePost(null)} post={sharePost} />
+        <ShareSheet
+          visible
+          onClose={() => setSharePost(null)}
+          post={sharePost}
+          onShareTracked={() => trackShare(sharePost.id)}
+        />
       )}
     </View>
   );

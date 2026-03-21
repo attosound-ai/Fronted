@@ -86,9 +86,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         set({ user: storedUser, tokens, isAuthenticated: true, isLoading: false });
       }
 
-      // Validate session with fresh data
+      // Validate session + fetch subscription + load accounts in PARALLEL
       try {
-        const freshUser = await authService.getMe();
+        const [freshUser] = await Promise.all([
+          authService.getMe(),
+          useSubscriptionStore.getState().fetchSubscription(),
+          useAccountStore.getState().loadAccounts(),
+        ]);
         await authStorage.setUser(freshUser);
         set({ user: freshUser, isAuthenticated: true, isLoading: false });
         analytics.identify(freshUser);
@@ -99,8 +103,6 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           username: freshUser.username,
         });
         analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
-        useSubscriptionStore.getState().fetchSubscription();
-        useAccountStore.getState().loadAccounts();
       } catch {
         // Token expired — try refresh
         const newTokens = await get().refreshTokens();

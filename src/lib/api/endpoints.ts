@@ -57,6 +57,7 @@ export const API_ENDPOINTS = {
     COMMENTS: (postId: string) => `/posts/${postId}/comments`,
     BOOKMARK: (postId: string) => `/posts/${postId}/bookmark`,
     REPOST: (postId: string) => `/posts/${postId}/repost`,
+    SHARE: (postId: string) => `/posts/${postId}/share`,
     BOOKMARKS_LIST: '/posts/bookmarks',
     USER_POSTS: (userId: number) => `/posts/user/${userId}`,
     DELETE: (postId: string) => `/content/${postId}`,
@@ -66,6 +67,7 @@ export const API_ENDPOINTS = {
     CONVERSATIONS: '/messages/conversations',
     CREATE_CONVERSATION: '/messages/conversations',
     CHAT: (chatId: string) => `/messages/${chatId}`,
+    MARK_READ: (chatId: string) => `/messages/${chatId}/read`,
     SEND: '/messages',
   },
 

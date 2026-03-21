@@ -1,62 +1,73 @@
 /**
- * Local Storage - Abstracción para almacenamiento local
+ * Local Storage — MMKV-backed with in-memory fallback.
  *
- * Nota: MMKV requiere configuración nativa adicional (prebuild).
- * Esta implementación usa un Map en memoria para desarrollo con Expo Go.
- *
- * Para producción con MMKV real:
- * 1. Ejecuta `npx expo prebuild`
- * 2. Descomenta el import de MMKV abajo
+ * react-native-mmkv is a native module already linked via EAS Build.
+ * Falls back to an in-memory Map if the native module fails to load
+ * (e.g., running in Expo Go without prebuild).
  */
 
-// TODO: Descomentar cuando hagas prebuild:
-// import { MMKV } from 'react-native-mmkv';
-// export const storage = new MMKV({ id: 'atto-app-storage' });
+import { MMKV } from 'react-native-mmkv';
 
-// Storage en memoria para desarrollo con Expo Go
+let storage: MMKV | null = null;
+try {
+  storage = new MMKV({ id: 'atto-app-storage' });
+} catch {
+  // Native module not available — fallback below
+}
+
+// In-memory fallback (Expo Go or broken native module)
 const memoryStorage = new Map<string, string>();
 
-/**
- * Helper functions para almacenamiento local
- *
- * Principio SOLID:
- * - Single Responsibility: Solo maneja almacenamiento local rápido
- * - Interface Segregation: API simple y específica
- */
+const useNative = storage !== null;
+
 export const mmkvStorage = {
-  // String
   getString(key: string): string | undefined {
+    if (useNative) return storage!.getString(key);
     return memoryStorage.get(key);
   },
 
   setString(key: string, value: string): void {
+    if (useNative) {
+      storage!.set(key, value);
+      return;
+    }
     memoryStorage.set(key, value);
   },
 
-  // Number
   getNumber(key: string): number | undefined {
+    if (useNative) {
+      const v = storage!.getNumber(key);
+      return v === undefined ? undefined : v;
+    }
     const value = memoryStorage.get(key);
     return value ? parseFloat(value) : undefined;
   },
 
   setNumber(key: string, value: number): void {
+    if (useNative) {
+      storage!.set(key, value);
+      return;
+    }
     memoryStorage.set(key, value.toString());
   },
 
-  // Boolean
   getBoolean(key: string): boolean | undefined {
+    if (useNative) return storage!.getBoolean(key);
     const value = memoryStorage.get(key);
     if (value === undefined) return undefined;
     return value === 'true';
   },
 
   setBoolean(key: string, value: boolean): void {
+    if (useNative) {
+      storage!.set(key, value);
+      return;
+    }
     memoryStorage.set(key, value.toString());
   },
 
-  // JSON (objetos)
   getObject<T>(key: string): T | null {
-    const data = memoryStorage.get(key);
+    const data = useNative ? storage!.getString(key) : memoryStorage.get(key);
     if (!data) return null;
     try {
       return JSON.parse(data) as T;
@@ -66,23 +77,40 @@ export const mmkvStorage = {
   },
 
   setObject<T>(key: string, value: T): void {
-    memoryStorage.set(key, JSON.stringify(value));
+    const json = JSON.stringify(value);
+    if (useNative) {
+      storage!.set(key, json);
+      return;
+    }
+    memoryStorage.set(key, json);
   },
 
-  // Utilidades
   delete(key: string): void {
+    if (useNative) {
+      storage!.delete(key);
+      return;
+    }
     memoryStorage.delete(key);
   },
 
   contains(key: string): boolean {
+    if (useNative) return storage!.contains(key);
     return memoryStorage.has(key);
   },
 
   clearAll(): void {
+    if (useNative) {
+      storage!.clearAll();
+      return;
+    }
     memoryStorage.clear();
   },
 
   getAllKeys(): string[] {
+    if (useNative) return storage!.getAllKeys();
     return Array.from(memoryStorage.keys());
   },
 };
+
+// Export raw MMKV instance for React Query persister
+export { storage as mmkvInstance };

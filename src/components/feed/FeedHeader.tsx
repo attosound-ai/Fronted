@@ -24,14 +24,14 @@ export function FeedHeader() {
   const isArtistWithPlan = user?.role === 'artist' && hasRecordUpload;
 
   const [comingSoonFeature, setComingSoonFeature] = useState<
-    'store' | 'info' | 'notifications' | null
+    'store' | 'info' | 'notifications' | 'dating' | null
   >(null);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [dropdownVisible, setDropdownVisible] = useState(false);
 
   return (
     <View style={styles.container}>
-      <View style={styles.leftIcons}>
+      <View style={styles.sideSlot}>
         <TouchableOpacity
           onPress={() =>
             isArtistWithPlan ? setActionSheetVisible(true) : router.push('/create-post')
@@ -39,12 +39,6 @@ export function FeedHeader() {
           style={styles.iconButton}
         >
           <Ionicons name="add" size={28} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setComingSoonFeature('store')}
-          style={styles.iconButton}
-        >
-          <Ionicons name="bag-outline" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
 
@@ -57,20 +51,7 @@ export function FeedHeader() {
         <Text style={styles.logoSubtext}>sound</Text>
       </TouchableOpacity>
 
-      <View style={styles.rightIcons}>
-        <TouchableOpacity
-          onPress={() => setComingSoonFeature('info')}
-          style={styles.iconButton}
-        >
-          <Ionicons name="information-circle-outline" size={26} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setComingSoonFeature('notifications')}
-          style={styles.iconButton}
-        >
-          <Ionicons name="notifications-outline" size={26} color="#FFF" />
-        </TouchableOpacity>
-      </View>
+      <View style={styles.sideSlot} />
 
       <ComingSoonModal
         visible={comingSoonFeature !== null}
@@ -80,21 +61,27 @@ export function FeedHeader() {
             ? 'bag-handle-outline'
             : comingSoonFeature === 'info'
               ? 'information-circle-outline'
-              : 'notifications-outline'
+              : comingSoonFeature === 'dating'
+                ? 'heart-outline'
+                : 'notifications-outline'
         }
         title={
           comingSoonFeature === 'store'
             ? 'Atto Store'
             : comingSoonFeature === 'info'
               ? 'About Atto'
-              : 'Notifications'
+              : comingSoonFeature === 'dating'
+                ? 'Atto Dating'
+                : 'Notifications'
         }
         description={
           comingSoonFeature === 'store'
             ? 'Shop exclusive merch from your favorite artists. Drops, collabs, and limited editions — all in one place.'
             : comingSoonFeature === 'info'
               ? 'Learn more about Atto Sound, our mission, and how we connect artists with the world.'
-              : 'Stay in the loop — likes, comments, follows, and messages. All your activity in one place.'
+              : comingSoonFeature === 'dating'
+                ? 'Meet people who share your taste in music. Connections powered by sound.'
+                : 'Stay in the loop — likes, comments, follows, and messages. All your activity in one place.'
         }
       />
       <CreateActionSheet
@@ -122,6 +109,54 @@ export function FeedHeader() {
                   <Ionicons name="people-outline" size={20} color="#FFF" />
                   <Text style={styles.dropdownText}>Following</Text>
                 </TouchableOpacity>
+                <View style={styles.dropdownSeparator} />
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setDropdownVisible(false);
+                    setComingSoonFeature('notifications');
+                  }}
+                >
+                  <Ionicons name="notifications-outline" size={20} color="#FFF" />
+                  <Text style={styles.dropdownText}>Notifications</Text>
+                </TouchableOpacity>
+                <View style={styles.dropdownSeparator} />
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setDropdownVisible(false);
+                    setComingSoonFeature('store');
+                  }}
+                >
+                  <Ionicons name="bag-outline" size={20} color="#FFF" />
+                  <Text style={styles.dropdownText}>Atto Store</Text>
+                </TouchableOpacity>
+                <View style={styles.dropdownSeparator} />
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setDropdownVisible(false);
+                    setComingSoonFeature('info');
+                  }}
+                >
+                  <Ionicons name="information-circle-outline" size={20} color="#FFF" />
+                  <Text style={styles.dropdownText}>About Atto</Text>
+                </TouchableOpacity>
+                <View style={styles.dropdownSeparator} />
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setDropdownVisible(false);
+                    setComingSoonFeature('dating');
+                  }}
+                >
+                  <Ionicons name="heart-outline" size={20} color="#FFF" />
+                  <Text style={styles.dropdownText}>Dating</Text>
+                </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -140,11 +175,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#000',
   },
-  leftIcons: {
+  sideSlot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    width: 90,
+    width: 40,
   },
   logoContainer: {
     alignItems: 'center',
@@ -185,12 +219,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_500Medium',
     fontSize: 15,
   },
-  rightIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 12,
-    width: 90,
+  dropdownSeparator: {
+    height: 1,
+    backgroundColor: '#222',
+    marginHorizontal: 16,
   },
   iconButton: {
     padding: 6,

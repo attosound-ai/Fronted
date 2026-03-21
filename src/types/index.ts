@@ -27,6 +27,7 @@ export interface User {
   consentToRecording?: boolean;
   artistTypes?: string[];
   artistGenres?: string[];
+  dateOfBirth?: string | null;
   profileVerified: boolean;
   twoFactorEnabled: boolean;
   twoFactorMethod: 'sms' | 'email' | '';
@@ -59,7 +60,7 @@ export interface ResetPasswordDTO {
 
 export interface RegisterDTO {
   username: string;
-  email: string;
+  email?: string;
   password: string;
   displayName: string;
   role?: Role;
@@ -76,12 +77,13 @@ export interface RegisterDTO {
 
 // Pre-register DTO (after OTP, before Step 3)
 export interface PreRegisterDTO {
-  email: string;
+  email?: string;
   password: string;
   displayName: string;
   username: string;
   phoneCountryCode?: string;
   phoneNumber?: string;
+  dateOfBirth?: string;
 }
 
 // Complete registration DTO (Step 4 for listener, Step 8-9 for representative)
@@ -206,6 +208,7 @@ export interface Post {
   repostsCount?: number;
   isBookmarked?: boolean;
   isReposted?: boolean;
+  isFollowingAuthor?: boolean;
 }
 
 // Comentario

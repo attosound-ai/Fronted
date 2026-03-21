@@ -60,8 +60,8 @@ class PhoenixSocketManager {
 
       this.socket.connect();
 
-      // Fallback: resolve after 10s so the app isn't blocked if the server is slow
-      setTimeout(resolve, 10_000);
+      // Fallback: resolve after 3s so the app isn't blocked if the server is slow
+      setTimeout(resolve, 3_000);
     });
   }
 
@@ -146,10 +146,20 @@ class PhoenixSocketManager {
     channel?.push('typing', { is_typing: isTyping });
   }
 
-  /** Mark all messages as read in a conversation. */
+  /** Mark all messages as read in a conversation.
+   *  Retries for up to 3s if the channel hasn't joined yet. */
   markRead(conversationId: string): void {
-    const channel = this.channels.get(conversationId);
-    channel?.push('mark_read', {});
+    const tryPush = (attempts: number) => {
+      const channel = this.channels.get(conversationId);
+      if (channel?.state === 'joined') {
+        channel.push('mark_read', {});
+        return;
+      }
+      if (attempts > 0) {
+        setTimeout(() => tryPush(attempts - 1), 500);
+      }
+    };
+    tryPush(6); // 6 attempts × 500ms = 3s max wait
   }
 
   /** Join the user-level channel for conversation list updates. */
@@ -185,6 +195,41 @@ class PhoenixSocketManager {
       this.userChannel.leave();
       this.userChannel = null;
     }
+  }
+
+  /** Join a post channel for real-time interaction updates. */
+  joinPostChannel(
+    postId: string,
+    handlers: { onInteractionUpdate?: MessageHandler } = {}
+  ): Channel | null {
+    if (!this.socket) return null;
+
+    const topic = `post:${postId}`;
+    const existing = this.channels.get(topic);
+    if (existing?.state === 'joined') return existing;
+
+    const channel = this.socket.channel(topic, {});
+
+    if (handlers.onInteractionUpdate) {
+      channel.on('interaction_update', handlers.onInteractionUpdate);
+    }
+
+    channel
+      .join()
+      .receive('ok', () => {
+        this.channels.set(topic, channel);
+      })
+      .receive('error', (resp: unknown) => {
+        console.warn('[PhoenixSocket] Failed to join post channel:', resp);
+      });
+
+    this.channels.set(topic, channel);
+    return channel;
+  }
+
+  /** Leave a post channel. */
+  leavePostChannel(postId: string): void {
+    this.leaveChannel(`post:${postId}`);
   }
 
   /** Check if the socket is connected. */

@@ -1,11 +1,22 @@
 {
   "basicInfo": {
-    "title": "Enter your details to continue",
+    "title": "Create your account",
     "nameLabel": "Name",
     "namePlaceholder": "Enter your full name",
     "emailLabel": "Email",
     "emailPlaceholder": "Enter your email address",
-    "phoneLabel": "Phone number"
+    "phoneLabel": "Phone number",
+    "usePhone": "Create account with phone number instead",
+    "useEmail": "Create account with email instead"
+  },
+  "name": {
+    "title": "What's your name?",
+    "subtitle": "This helps people find and recognize you",
+    "placeholder": "Enter your full name"
+  },
+  "dateOfBirth": {
+    "title": "When were you born?",
+    "subtitle": "You must be at least 18 years old to use Atto"
   },
   "credentials": {
     "title": "Create your password",
@@ -13,7 +24,7 @@
     "passwordPlaceholder": "Create a password (min 8 characters)",
     "confirmLabel": "Confirm Password",
     "confirmPlaceholder": "Repeat your password",
-    "legalAgeCheckbox": "I confirm that I am of legal age to use this platform.",
+    "dobLabel": "Date of Birth",
     "termsPrefix": "I have read and agree to the",
     "termsLink": "Terms and Conditions"
   },
@@ -38,7 +49,7 @@
     "chooseFromGallery": "Choose from Gallery",
     "takePhoto": "Take Photo",
     "profilePreview": "Profile Preview",
-    "repQuestion": "Will you represent an artist on ATTO?",
+    "repQuestion": "Will you represent an artist on ATTO SOUND?",
     "repDescription": "You are creating this account on behalf of an artist and have their permission to manage and publish their content.",
     "yesRepresent": "Yes, I represent an artist",
     "noForMe": "No, this account is for me"

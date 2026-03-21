@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
@@ -15,37 +15,28 @@ function dismiss() {
 
 export default function CallScreen() {
   const activeCall = useCallStore((s) => s.activeCall);
-  const dismissAttempts = useRef(0);
 
-  // Dismiss when call is no longer ringing (accepted, rejected, or
-  // already connected via CallKit push notification before mount).
+  // Dismiss when call is no longer ringing. Polls every 100ms to handle
+  // cold-start race where the nav stack isn't ready immediately.
   useEffect(() => {
-    if (!activeCall || activeCall.state === 'ringing') return;
+    if (activeCall?.state === 'ringing') return;
 
-    // Try dismiss immediately, then retry a few times in case
-    // the navigation stack isn't fully ready (cold start).
-    dismissAttempts.current = 0;
-    const tryDismiss = () => {
-      dismissAttempts.current++;
-      dismiss();
-    };
+    const id = setInterval(() => {
+      if (router.canDismiss()) {
+        clearInterval(id);
+        router.dismiss();
+      }
+    }, 100);
 
-    const t1 = setTimeout(tryDismiss, 50);
-    const t2 = setTimeout(tryDismiss, 500);
-    const t3 = setTimeout(tryDismiss, 1500);
+    const safety = setTimeout(() => {
+      clearInterval(id);
+      if (!router.canDismiss()) router.replace('/');
+    }, 2000);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+      clearInterval(id);
+      clearTimeout(safety);
     };
-  }, [activeCall]);
-
-  // Fallback: if the screen stays without an activeCall for 1s, force-dismiss
-  useEffect(() => {
-    if (activeCall) return;
-    const timeout = setTimeout(dismiss, 1000);
-    return () => clearTimeout(timeout);
   }, [activeCall]);
 
   if (activeCall?.state !== 'ringing') {

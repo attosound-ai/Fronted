@@ -107,7 +107,7 @@ async function uploadToCloudinary(
       console.error('[Upload] XHR error:', xhr.status, xhr.statusText, xhr.responseText);
       reject(new Error(`Network error during upload (${xhr.status})`));
     };
-    xhr.timeout = 30000;
+    xhr.timeout = 300000; // 5 minutes for large videos
     xhr.ontimeout = () => reject(new Error('Upload timed out'));
     xhr.send(formData);
   });

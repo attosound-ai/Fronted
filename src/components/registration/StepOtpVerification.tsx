@@ -1,21 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { Phone, Mail, AlertCircle, SquarePen } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
-import { Text, OtpInput } from '@/components/ui';
+import { Text, OtpInput, Input, Button, BottomSheet } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { authService } from '@/lib/api/authService';
+import { apiClient } from '@/lib/api/client';
 import { useCountdown } from '@/hooks/useCountdown';
 import { haptic } from '@/lib/haptics/hapticService';
+import { isValidEmail } from '@/utils/validators';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 const COOLDOWN_SECONDS = 60;
 
-/**
- * StepOtpVerification - Step 2 of registration wizard
- * Verifies phone + email via 6-digit OTP code
- */
 export function StepOtpVerification({
   state,
   dispatch,
@@ -28,19 +27,49 @@ export function StepOtpVerification({
   const [isResending, setIsResending] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
 
-  // Start countdown immediately — the OTP was just sent in Step 1
+  const screenMountTimeRef = useRef(Date.now());
+  const fillTimeRef = useRef<number | null>(null);
+
+  // Track screen view
+  useEffect(() => {
+    screenMountTimeRef.current = Date.now();
+    analytics.capture(ANALYTICS_EVENTS.OTP.SCREEN_VIEWED, {
+      identifier_mode: state.identifierMode,
+      has_email: !!state.email,
+      has_phone: !!state.phoneNumber,
+    });
+  }, []);
+
+  // Edit modal state
+  const [editVisible, setEditVisible] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
+
   useEffect(() => {
     countdown.start(COOLDOWN_SECONDS);
   }, []);
 
-  // Auto-advance when state.otpCode reaches 6 digits (works with both manual input and iOS AutoFill)
+  // Auto-advance on 6 digits
   const hasAdvancedRef = useRef(false);
   useEffect(() => {
     if (state.otpCode.length === 6 && !hasAdvancedRef.current && !isLoading) {
       setOtpError(null);
       hasAdvancedRef.current = true;
       haptic('light');
-      // Small delay so the user sees the last digit fill in
+
+      if (!fillTimeRef.current) {
+        fillTimeRef.current = Date.now();
+        const timeToFillMs = fillTimeRef.current - screenMountTimeRef.current;
+        analytics.capture(ANALYTICS_EVENTS.OTP.TIME_TO_FILL, {
+          time_ms: timeToFillMs,
+          time_seconds: Math.round(timeToFillMs / 1000),
+        });
+      }
+      analytics.capture(ANALYTICS_EVENTS.OTP.VERIFY_STARTED, {
+        time_since_mount_ms: Date.now() - screenMountTimeRef.current,
+      });
+
       const timer = setTimeout(() => onNext(), 200);
       return () => clearTimeout(timer);
     }
@@ -57,12 +86,25 @@ export function StepOtpVerification({
     [dispatch]
   );
 
+  const handleOtpTelemetry = useCallback(
+    (event: string, data: Record<string, unknown>) => {
+      analytics.capture(`otp_${event.replace('otp_', '')}`, {
+        ...data,
+        identifier_mode: state.identifierMode,
+        screen_time_ms: Date.now() - screenMountTimeRef.current,
+      });
+    },
+    [state.identifierMode]
+  );
+
   const handleResendCode = async () => {
     if (countdown.isActive || isResending) return;
-
     setIsResending(true);
     setOtpError(null);
-
+    analytics.capture(ANALYTICS_EVENTS.OTP.RESEND_PRESSED, {
+      identifier_mode: state.identifierMode,
+      time_since_mount_ms: Date.now() - screenMountTimeRef.current,
+    });
     try {
       if (state.identifierMode === 'phone') {
         const fullPhone = `${state.phoneCountryCode}${state.phoneNumber}`;
@@ -72,16 +114,83 @@ export function StepOtpVerification({
       }
       dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value: '' });
       countdown.start(COOLDOWN_SECONDS);
+      fillTimeRef.current = null; // Reset fill timer for new code
+      analytics.capture(ANALYTICS_EVENTS.OTP.RESEND_SUCCESS, {
+        identifier_mode: state.identifierMode,
+      });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : t('otp.resendFailed');
       setOtpError(message);
+      analytics.capture(ANALYTICS_EVENTS.OTP.RESEND_FAILED, {
+        identifier_mode: state.identifierMode,
+        error: message,
+      });
     } finally {
       setIsResending(false);
     }
   };
 
+  // ── Edit identifier modal logic ──
+
+  const openEditModal = () => {
+    setEditValue(state.identifierMode === 'email' ? state.email : state.phoneNumber);
+    setEditError('');
+    setEditVisible(true);
+    analytics.capture(ANALYTICS_EVENTS.OTP.EDIT_IDENTIFIER_OPENED, {
+      identifier_mode: state.identifierMode,
+    });
+  };
+
+  const handleEditSave = async () => {
+    setEditError('');
+    const trimmed = editValue.trim();
+
+    if (state.identifierMode === 'email') {
+      if (!isValidEmail(trimmed)) {
+        setEditError(t('validation:emailInvalid'));
+        return;
+      }
+      // Same email — no change needed
+      if (trimmed.toLowerCase() === state.email.toLowerCase()) {
+        setEditVisible(false);
+        return;
+      }
+
+      setIsChecking(true);
+      try {
+        // Check availability
+        const res = await apiClient
+          .get(`/auth/check-email?email=${encodeURIComponent(trimmed)}`)
+          .catch((e: { response?: { status: number } }) => e.response);
+
+        if (res?.status === 409) {
+          setEditError(t('errors.emailTaken'));
+          return;
+        }
+
+        // Update state + send new OTP
+        dispatch({ type: 'UPDATE_FIELD', field: 'email', value: trimmed });
+        dispatch({ type: 'UPDATE_FIELD', field: 'otpCode', value: '' });
+        await authService.sendOtp({ email: trimmed, locale: i18n.language });
+        countdown.start(COOLDOWN_SECONDS);
+        haptic('success');
+        setEditVisible(false);
+        fillTimeRef.current = null;
+        analytics.capture(ANALYTICS_EVENTS.OTP.EDIT_IDENTIFIER_SAVED, {
+          identifier_mode: state.identifierMode,
+        });
+      } catch {
+        setEditError(t('errors.networkError'));
+      } finally {
+        setIsChecking(false);
+      }
+    }
+    // Phone mode can be added here in the future
+  };
+
   const maskedEmail = maskEmail(state.email);
   const maskedPhone = maskPhone(state.phoneCountryCode, state.phoneNumber);
+  const isEmailMode = state.identifierMode === 'email';
 
   return (
     <View style={styles.container}>
@@ -92,41 +201,36 @@ export function StepOtpVerification({
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >
-        {/* Title */}
         <Text variant="h2" style={styles.title}>
           {t('otp.title')}
         </Text>
 
-        {/* Destination — show only the active identifier */}
-        <View style={styles.destinationsRow}>
-          {state.identifierMode === 'phone' ? (
-            <>
-              <Ionicons name="call-outline" size={14} color="#888888" />
-              <Text variant="small" style={styles.destinationText}>
-                {maskedPhone}
-              </Text>
-            </>
+        {/* Tappable masked identifier with edit hint */}
+        <TouchableOpacity
+          style={styles.destinationsRow}
+          onPress={openEditModal}
+          activeOpacity={0.7}
+        >
+          {isEmailMode ? (
+            <Mail size={14} color="#888888" strokeWidth={2.25} />
           ) : (
-            <>
-              <Ionicons name="mail-outline" size={14} color="#888888" />
-              <Text variant="small" style={styles.destinationText}>
-                {maskedEmail}
-              </Text>
-            </>
+            <Phone size={14} color="#888888" strokeWidth={2.25} />
           )}
-        </View>
+          <Text variant="body" style={styles.destinationText}>
+            {isEmailMode ? state.email : maskedPhone}
+          </Text>
+          <SquarePen size={16} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
 
-        {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+            <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
           </View>
         )}
 
-        {/* OTP Input */}
         <View style={styles.otpContainer}>
           <OtpInput
             length={6}
@@ -134,10 +238,10 @@ export function StepOtpVerification({
             onChange={handleOtpChange}
             error={otpError || undefined}
             autoFocus
+            onTelemetry={handleOtpTelemetry}
           />
         </View>
 
-        {/* Resend Code */}
         <TouchableOpacity
           onPress={handleResendCode}
           disabled={countdown.isActive || isResending}
@@ -159,11 +263,39 @@ export function StepOtpVerification({
           </Text>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
+
+      {/* Edit identifier modal */}
+      <BottomSheet
+        visible={editVisible}
+        onClose={() => setEditVisible(false)}
+        title={isEmailMode ? t('otp.editEmailTitle') : t('otp.editPhoneTitle')}
+      >
+        <View style={styles.editContent}>
+          <Input
+            value={editValue}
+            onChangeText={(v: string) => {
+              setEditValue(v);
+              setEditError('');
+            }}
+            placeholder={t('otp.editEmailPlaceholder')}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            autoFocus
+            error={editError}
+          />
+          <Button
+            title={t('otp.editSave')}
+            onPress={handleEditSave}
+            loading={isChecking}
+            disabled={isChecking || !editValue.trim()}
+          />
+        </View>
+      </BottomSheet>
     </View>
   );
 }
 
-/** Masks an email: dav***@gmail.com */
 function maskEmail(email: string): string {
   if (!email) return '';
   const [local, domain] = email.split('@');
@@ -172,7 +304,6 @@ function maskEmail(email: string): string {
   return `${visible}***@${domain}`;
 }
 
-/** Masks a phone: +57***0022 */
 function maskPhone(countryCode: string, number: string): string {
   if (!number) return countryCode;
   const last4 = number.slice(-4);
@@ -198,15 +329,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginBottom: 32,
+    gap: 8,
+    marginBottom: 48,
   },
   destinationText: {
-    color: '#888888',
-  },
-  separator: {
-    color: '#333333',
-    marginHorizontal: 2,
+    color: '#AAAAAA',
+    fontSize: 15,
+    fontFamily: 'Archivo_500Medium',
   },
   errorBanner: {
     flexDirection: 'row',
@@ -237,5 +366,8 @@ const styles = StyleSheet.create({
   },
   resendTextDisabled: {
     color: '#666666',
+  },
+  editContent: {
+    gap: 16,
   },
 });

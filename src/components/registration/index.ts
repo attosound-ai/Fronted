@@ -1,9 +1,16 @@
 export { StepBasicInfo } from './StepBasicInfo';
+export { StepName } from './StepName';
+export { StepDateOfBirth } from './StepDateOfBirth';
 export { StepCredentials } from './StepCredentials';
 export { StepOtpVerification } from './StepOtpVerification';
 export { StepProfileSetup } from './StepProfileSetup';
 export { StepHowItWorks } from './StepHowItWorks';
 export { StepConsentForm } from './StepConsentForm';
-export { StepWhatHappensNext } from './StepWhatHappensNext';
+export { StepCreatorBasicInfo } from './StepCreatorBasicInfo';
+export { StepCreatorPassword } from './StepCreatorPassword';
+export { StepCreatorProfile } from './StepCreatorProfile';
+export { StepCreatorTypes } from './StepCreatorTypes';
+export { StepCreatorGenres } from './StepCreatorGenres';
+export { StepCreatorInmate } from './StepCreatorInmate';
 export { StepSubscription } from './StepSubscription';
 export { StepBridgeNumber } from './StepBridgeNumber';

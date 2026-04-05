@@ -1,0 +1,279 @@
+{
+  "basicInfo": {
+    "title": "Crea tu cuenta",
+    "nameLabel": "Nombre",
+    "namePlaceholder": "Ingrese su nombre completo",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "Ingrese su correo electrónico",
+    "phoneLabel": "Número de teléfono",
+    "usePhone": "Crear cuenta con número de teléfono",
+    "useEmail": "Crear cuenta con correo electrónico",
+    "phoneUnavailableTitle": "Próximamente",
+    "phoneUnavailableMessage": "El registro con número de teléfono aún no está disponible. Por favor usa tu correo electrónico para crear una cuenta."
+  },
+  "errors": {
+    "emailTaken": "Este correo ya está asociado a una cuenta. Intenta iniciar sesión.",
+    "phoneTaken": "Este número ya está asociado a una cuenta. Intenta iniciar sesión.",
+    "networkError": "No se pudo conectar al servidor. Revisa tu conexión a internet e intenta de nuevo.",
+    "serverError": "Algo salió mal de nuestro lado. Intenta más tarde.",
+    "unknownError": "Ocurrió un error inesperado. Intenta de nuevo."
+  },
+  "name": {
+    "title": "¿Cómo te llamas?",
+    "subtitle": "Esto ayuda a que las personas te encuentren y reconozcan",
+    "placeholder": "Ingresa tu nombre completo"
+  },
+  "dateOfBirth": {
+    "title": "¿Cuándo naciste?",
+    "subtitle": "Debes tener al menos 18 años para usar ATTO SOUND"
+  },
+  "credentials": {
+    "title": "Cree su contraseña",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Cree una contraseña (mín. 8 caracteres)",
+    "confirmLabel": "Confirmar contraseña",
+    "confirmPlaceholder": "Repita su contraseña",
+    "dobLabel": "Fecha de Nacimiento",
+    "termsPrefix": "He leído y acepto los",
+    "termsLink": "Términos y Condiciones"
+  },
+  "otp": {
+    "title": "Ingresa el código de verificación",
+    "sending": "Enviando...",
+    "resendCode": "Reenviar código",
+    "resendCodeCountdown": "Reenviar código ({{seconds}}s)",
+    "resendFailed": "No se pudo reenviar el código",
+    "editEmailTitle": "Cambiar correo electrónico",
+    "editPhoneTitle": "Cambiar número de teléfono",
+    "editEmailPlaceholder": "Ingresa tu nuevo correo electrónico",
+    "editSave": "Enviar nuevo código"
+  },
+  "profileSetup": {
+    "addProfilePicture": "Agregar foto de perfil",
+    "displayNamePlaceholder": "Nickname",
+    "usernamePlaceholder": "nombre_de_usuario",
+    "usernameAvailable": "Disponible",
+    "usernameTaken": "Este nombre de usuario ya está en uso",
+    "usernameChecking": "Verificando...",
+    "usernameHint": "Letras, números, puntos y guiones bajos. 3-30 caracteres.",
+    "changeAnytime": "Puedes cambiarlo después",
+    "suggestions": "Sugerencias",
+    "uploadPhotoTitle": "Subir foto de perfil",
+    "chooseFromGallery": "Elegir de la galería",
+    "takePhoto": "Tomar foto",
+    "profilePreview": "Vista previa del perfil",
+    "repQuestion": "¿Representará a un creador en ATTO SOUND?",
+    "repDescription": "Está creando esta cuenta en nombre de un creador y cuenta con su permiso para gestionar y publicar su contenido.",
+    "yesRepresent": "Sí, represento a un creador",
+    "iAmCreator": "Yo soy un creador",
+    "noForMe": "No, esta cuenta es para mí"
+  },
+  "creatorInmate": {
+    "title": "Verifica tu identidad",
+    "subtitle": "Ingresa tu número de recluso para que podamos verificar tu identidad y configurar tu perfil de creador."
+  },
+  "creatorAccountSetup": {
+    "title": "Configura la cuenta del creador",
+    "subtitle": "Crea las credenciales de acceso para el creador",
+    "displayNamePlaceholder": "Nombre del creador",
+    "emailPlaceholder": "Correo del creador",
+    "emailAvailable": "Disponible",
+    "emailTaken": "Este correo ya está registrado",
+    "emailChecking": "Verificando...",
+    "emailInvalid": "Ingresa un correo válido",
+    "phoneTaken": "Este número ya está registrado",
+    "passwordPlaceholder": "Crear contraseña",
+    "confirmPlaceholder": "Confirmar contraseña",
+    "nameLabel": "Nombre del creador",
+    "emailLabel": "Correo (opcional)",
+    "phoneLabel": "Teléfono (opcional)",
+    "passwordTitle": "Crea una contraseña",
+    "passwordSubtitle": "Esta contraseña se usará para iniciar sesión en la cuenta del creador",
+    "profileTitle": "Perfil del creador",
+    "profileSubtitle": "Configura cómo aparecerá el creador en ATTO SOUND",
+    "addProfilePicture": "Agregar foto del creador",
+    "uploadPhotoTitle": "Subir foto del creador",
+    "chooseFromGallery": "Elegir de la galería",
+    "takePhoto": "Tomar foto"
+  },
+  "howItWorks": {
+    "title": "Cómo funciona la representación del creador",
+    "paragraph": "Como representante, administrará esta cuenta en nombre del creador.\nSerá responsable de publicar contenido, gestionar interacciones y manejar las comunicaciones relacionadas con el perfil del creador.",
+    "bullets": [
+      "Actúa en nombre del creador",
+      "Debe contar con su consentimiento explícito",
+      "Todas las acciones se registran para mayor transparencia",
+      "El creador puede revocar la representación en cualquier momento"
+    ]
+  },
+  "consentForm": {
+    "title": "Se requiere el consentimiento del creador",
+    "relationshipLabel": "¿Cuál es su relación?",
+    "relationshipFamily": "Familiar",
+    "relationshipFriend": "Amigo/a",
+    "relationshipManager": "Mánager / Representante",
+    "creatorNameLabel": "Nombre del creador",
+    "creatorNamePlaceholder": "Ingrese el nombre completo del creador",
+    "inmateNumberLabel": "Número de recluso",
+    "inmateNumberPlaceholder": "Ingrese el número",
+    "stateLabel": "Estado",
+    "statePlaceholder": "Seleccionar estado",
+    "stateDisclaimer": "Próximamente más estados. Actualmente solo Connecticut está disponible.",
+    "consentCheckbox": "Entiendo y acepto que todas las llamadas de <bold>verificación de consentimiento</bold> serán grabadas con fines legales y de seguridad.",
+    "lookupFailed": "Recluso no encontrado. Por favor verifique el número e intente nuevamente.",
+    "confirmTitle": "Confirmar identidad del recluso",
+    "inmateName": "Nombre",
+    "inmateNumber": "Recluso #",
+    "dateOfBirth": "Fecha de nacimiento",
+    "location": "Ubicación",
+    "status": "Estado",
+    "offense": "Delito",
+    "sentenceDate": "Fecha de sentencia",
+    "maxSentence": "Sentencia máxima",
+    "maxRelease": "Liberación máxima",
+    "estRelease": "Liberación estimada",
+    "confirmPerson": "Confirmar — Esta es la persona",
+    "notThisPerson": "No es esta persona"
+  },
+  "whatHappensNext": {
+    "title": "¿Qué sucede después?",
+    "verifyConsentTitle": "Verificar consentimiento del creador",
+    "verifyConsentParagraph": "Nos pondremos en contacto directamente con el creador para verificar su consentimiento para que usted actúe como su representante. Este es un paso fundamental para garantizar que se respeten los derechos y deseos del creador.",
+    "howCallsWorkTitle": "Cómo funcionan las llamadas",
+    "howCallsWorkParagraph": "Todas las llamadas de verificación de consentimiento se graban automáticamente para el cumplimiento legal y su protección. Estas grabaciones sirven como documentación oficial de la aprobación del creador.",
+    "callFeatures": [
+      "Almacenadas de forma segura en una carpeta dedicada dentro de su perfil",
+      "Disponibles para escuchar, descargar o publicar en cualquier momento"
+    ],
+    "recordingsPrivate": "Estas grabaciones son privadas y accesibles <bold>solo desde su cuenta</bold>."
+  },
+  "subscription": {
+    "title": "Elija su plan",
+    "subtitle": "Desbloquee funciones que se adapten a sus objetivos.",
+    "mostPopular": "MÁS POPULAR",
+    "perYear": "/año",
+    "seeFeatures": "Ver características",
+    "hideFeatures": "Ocultar características",
+    "disclaimer": "Cancele cuando quiera. La suscripción se renueva automáticamente a menos que se cancele antes de la renovación.",
+    "continueWithout": "Continuar sin suscripción",
+    "sharePdf": "Compartir PDF",
+    "plans": {
+      "record": {
+        "name": "Record",
+        "features": [
+          "Grabación Ilimitada"
+        ]
+      },
+      "recordPro": {
+        "name": "Record Pro",
+        "features": [
+          "Grabación Ilimitada+",
+          "Suite de Producción Avanzada",
+          "Analíticas Mejoradas",
+          "Descubrimiento Prioritario"
+        ]
+      },
+      "connectPro": {
+        "name": "Connect Pro",
+        "features": [
+          "Panel de analíticas de talentos",
+          "Creadores emergentes destacados",
+          "Información de participación y demografía",
+          "Reportes de datos exportables",
+          "Acceso anticipado a talentos emergentes"
+        ]
+      }
+    }
+  },
+  "bridgeNumber": {
+    "title": "Su número puente",
+    "subtitle": "Este es su número único para conectarse con el creador. Compártalo de forma segura.",
+    "assigning": "Asignando su número único...",
+    "purchaseFailed": "No pudimos adquirir su número. Por favor intente nuevamente más tarde.",
+    "notAvailable": "No disponible",
+    "save": "Guardar",
+    "shareMessage": "Su número puente ATTO: {{number}}\n\nUse este número para conectarse con su creador.",
+    "shareTitle": "Número puente ATTO",
+    "contactPermission": "Permiso requerido",
+    "contactPermissionMessage": "Permita el acceso a Contactos para guardar el número puente.",
+    "saveContactTitle": "Guardar contacto puente",
+    "assigningButton": "Asignando número...",
+    "noteSecure": "Mantenga este número seguro. El creador lo necesitará para verificar y establecer la conexión.",
+    "noteOtp": "Se enviará un OTP al recluso para verificar su representación antes de que se pueda establecer la llamada puente."
+  },
+  "creatorTypes": {
+    "title": "¿Qué tipo de creador?",
+    "subtitle": "Selecciona todos los que apliquen",
+    "types": {
+      "singer": "Cantante",
+      "songwriter": "Compositor",
+      "rapper": "Rapero",
+      "producer": "Productor",
+      "painter": "Pintor",
+      "sculptor": "Escultor",
+      "photographer": "Fotógrafo",
+      "poet": "Poeta",
+      "writer": "Escritor",
+      "actor": "Actor",
+      "dancer": "Bailarín",
+      "multifaceted": "Multifacético",
+      "other": "Otro"
+    }
+  },
+  "creatorGenres": {
+    "title": "¿Qué géneros?",
+    "subtitle": "Selecciona los géneros que definen al creador",
+    "categories": {
+      "music": "Música",
+      "visual_art": "Artes Visuales",
+      "literary": "Literario",
+      "performing": "Artes Escénicas"
+    },
+    "genres": {
+      "hip_hop": "Hip-Hop",
+      "rnb": "R&B",
+      "rap": "Rap",
+      "rock": "Rock",
+      "pop": "Pop",
+      "jazz": "Jazz",
+      "blues": "Blues",
+      "country": "Country",
+      "electronic": "Electrónica",
+      "latin": "Latina",
+      "classical": "Clásica",
+      "gospel": "Gospel",
+      "reggae": "Reggae",
+      "metal": "Metal",
+      "folk": "Folk",
+      "punk": "Punk",
+      "soul": "Soul",
+      "funk": "Funk",
+      "alternative": "Alternativo",
+      "indie": "Indie",
+      "reggaeton": "Reggaetón",
+      "trap": "Trap",
+      "contemporary": "Contemporáneo",
+      "modern": "Moderno",
+      "abstract": "Abstracto",
+      "impressionist": "Impresionista",
+      "expressionist": "Expresionista",
+      "minimalist": "Minimalista",
+      "pop_art": "Pop Art",
+      "street_art": "Arte Urbano",
+      "realism": "Realismo",
+      "surrealism": "Surrealismo",
+      "poetry": "Poesía",
+      "fiction": "Ficción",
+      "non_fiction": "No Ficción",
+      "spoken_word": "Spoken Word",
+      "lyrics": "Letras",
+      "essays": "Ensayos",
+      "theater": "Teatro",
+      "film": "Cine",
+      "contemporary_dance": "Danza Contemporánea",
+      "ballet": "Ballet",
+      "hip_hop_dance": "Danza Hip-Hop",
+      "improv": "Improvisación"
+    }
+  }
+}

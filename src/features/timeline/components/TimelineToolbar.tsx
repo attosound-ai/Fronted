@@ -1,5 +1,17 @@
-import { View, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import {
+  Scissors,
+  Trash2,
+  Volume2,
+  Undo2,
+  Redo2,
+  FolderOpen,
+  Download,
+  Upload,
+  StopCircle,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface TimelineToolbarProps {
@@ -18,10 +30,12 @@ interface TimelineToolbarProps {
   onImport?: () => void;
   isImporting?: boolean;
   onVolumePress?: () => void;
+  onPublish?: () => void;
+  isPublishing?: boolean;
 }
 
 interface ToolButtonProps {
-  icon: keyof typeof Ionicons.glyphMap;
+  Icon: LucideIcon;
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -30,7 +44,7 @@ interface ToolButtonProps {
 }
 
 function ToolButton({
-  icon,
+  Icon,
   label,
   onPress,
   disabled,
@@ -44,7 +58,7 @@ function ToolButton({
         disabled={disabled}
         style={[styles.outlinedButton, disabled && styles.buttonDisabled]}
       >
-        <Ionicons name={icon} size={16} color={disabled ? '#999' : '#000'} />
+        <Icon size={16} color={disabled ? '#999' : '#000'} strokeWidth={2.25} />
         <Text
           variant="caption"
           style={[styles.outlinedLabel, disabled && { color: '#999' }]}
@@ -61,7 +75,7 @@ function ToolButton({
       disabled={disabled}
       style={[styles.button, disabled && styles.buttonDisabled]}
     >
-      <Ionicons name={icon} size={20} color={disabled ? '#444' : color} />
+      <Icon size={20} color={disabled ? '#444' : color} strokeWidth={2.25} />
       <Text variant="caption" style={[styles.label, disabled && styles.labelDisabled]}>
         {label}
       </Text>
@@ -91,7 +105,10 @@ export function TimelineToolbar({
   onImport,
   isImporting = false,
   onVolumePress,
+  onPublish,
+  isPublishing = false,
 }: TimelineToolbarProps) {
+  const { t } = useTranslation('projects');
   return (
     <View style={styles.container}>
       {/* Recording button row */}
@@ -99,16 +116,18 @@ export function TimelineToolbar({
         <View style={styles.recordRow}>
           {isRecording ? (
             <Pressable style={styles.stopRecordButton} onPress={onStopRecord}>
-              <Ionicons name="stop-circle" size={18} color="#FFF" />
+              <StopCircle size={18} color="#FFF" strokeWidth={2.25} />
               <Text variant="caption" style={styles.stopRecordText}>
-                Stop {formatElapsed(recordingElapsed)}
+                {t('timeline.toolStopRecording', {
+                  elapsed: formatElapsed(recordingElapsed),
+                })}
               </Text>
             </Pressable>
           ) : (
             <Pressable style={styles.recordButton} onPress={onRecord}>
               <View style={styles.recordDot} />
               <Text variant="caption" style={styles.recordText}>
-                Record
+                {t('timeline.toolRecord')}
               </Text>
             </Pressable>
           )}
@@ -116,41 +135,69 @@ export function TimelineToolbar({
       )}
 
       <View style={styles.row}>
-        <ToolButton icon="cut" label="Split" onPress={onSplit} />
+        <ToolButton Icon={Scissors} label={t('timeline.toolSplit')} onPress={onSplit} />
         <ToolButton
-          icon="trash-outline"
-          label="Delete"
+          Icon={Trash2}
+          label={t('timeline.toolDelete')}
           onPress={onDelete}
           disabled={!hasSelection}
           color="#EF4444"
         />
         {onVolumePress && (
           <ToolButton
-            icon="volume-medium"
-            label="Volume"
+            Icon={Volume2}
+            label={t('timeline.toolVolume')}
             onPress={onVolumePress}
             disabled={!hasSelection}
           />
         )}
-        <ToolButton icon="arrow-undo" label="Undo" onPress={onUndo} disabled={!canUndo} />
-        <ToolButton icon="arrow-redo" label="Redo" onPress={onRedo} disabled={!canRedo} />
+        <ToolButton
+          Icon={Undo2}
+          label={t('timeline.toolUndo')}
+          onPress={onUndo}
+          disabled={!canUndo}
+        />
+        <ToolButton
+          Icon={Redo2}
+          label={t('timeline.toolRedo')}
+          onPress={onRedo}
+          disabled={!canRedo}
+        />
       </View>
       <View style={styles.row}>
         {onImport && (
           <ToolButton
-            icon="folder-open-outline"
-            label={isImporting ? 'Importing...' : 'Import'}
+            Icon={FolderOpen}
+            label={isImporting ? t('timeline.toolImporting') : t('timeline.toolImport')}
             onPress={onImport}
             disabled={isImporting}
             variant="outlined"
           />
         )}
         <ToolButton
-          icon="download-outline"
-          label="Export"
+          Icon={Download}
+          label={t('timeline.toolExport')}
           onPress={onExport}
           variant="outlined"
         />
+        {onPublish && (
+          <Pressable
+            onPress={onPublish}
+            disabled={isPublishing}
+            style={[styles.publishButton, isPublishing && styles.buttonDisabled]}
+          >
+            {isPublishing ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Upload size={16} color="#000" strokeWidth={2.25} />
+            )}
+            <Text style={styles.publishLabel}>
+              {isPublishing
+                ? t('timeline.toolPublishing', 'Publicando...')
+                : t('timeline.toolPublish', 'Publicar')}
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -190,7 +237,7 @@ const styles = StyleSheet.create({
   recordText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   stopRecordButton: {
     flexDirection: 'row',
@@ -205,7 +252,7 @@ const styles = StyleSheet.create({
   stopRecordText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   row: {
     flexDirection: 'row',
@@ -232,10 +279,25 @@ const styles = StyleSheet.create({
   outlinedLabel: {
     color: '#000',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   buttonDisabled: {
     opacity: 0.4,
+  },
+  publishButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  publishLabel: {
+    color: '#000',
+    fontSize: 12,
+    fontFamily: 'Archivo_600SemiBold',
   },
   label: {
     color: '#999',

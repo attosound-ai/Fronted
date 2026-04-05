@@ -1,39 +1,41 @@
 import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Wrench } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 
 interface ComingSoonModalProps {
   visible: boolean;
   onClose: () => void;
+  icon?: LucideIcon;
+  title?: string;
+  description?: string;
 }
 
-export function ComingSoonModal({ visible, onClose }: ComingSoonModalProps) {
+export function ComingSoonModal({
+  visible,
+  onClose,
+  icon: Icon = Wrench,
+  title,
+  description,
+}: ComingSoonModalProps) {
+  const { t } = useTranslation('common');
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color="#888" />
+            <X size={24} color="#888" strokeWidth={2.25} />
           </TouchableOpacity>
 
-          <Ionicons
-            name="construct-outline"
-            size={56}
-            color="#3B82F6"
-            style={styles.icon}
-          />
+          <Icon size={56} color="#FFF" strokeWidth={2.25} style={styles.icon} />
 
           <Text variant="h2" style={styles.title}>
-            Coming Soon
+            {title ?? t('comingSoon.title')}
           </Text>
 
           <Text variant="body" style={styles.description}>
-            This section is under construction and will be available soon.
+            {description ?? t('comingSoon.description')}
           </Text>
         </View>
       </View>

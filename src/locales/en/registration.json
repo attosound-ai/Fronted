@@ -1,0 +1,279 @@
+{
+  "basicInfo": {
+    "title": "Create your account",
+    "nameLabel": "Name",
+    "namePlaceholder": "Enter your full name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "Enter your email address",
+    "phoneLabel": "Phone number",
+    "usePhone": "Create account with phone number",
+    "useEmail": "Create account with email",
+    "phoneUnavailableTitle": "Coming soon",
+    "phoneUnavailableMessage": "Phone number registration is not available yet. Please use your email to create an account."
+  },
+  "errors": {
+    "emailTaken": "This email is already associated with an account. Try signing in.",
+    "phoneTaken": "This phone number is already associated with an account. Try signing in.",
+    "networkError": "Could not connect to the server. Check your internet connection and try again.",
+    "serverError": "Something went wrong on our end. Please try again later.",
+    "unknownError": "An unexpected error occurred. Please try again."
+  },
+  "name": {
+    "title": "What's your name?",
+    "subtitle": "This helps people find and recognize you",
+    "placeholder": "Enter your full name"
+  },
+  "dateOfBirth": {
+    "title": "When were you born?",
+    "subtitle": "You must be at least 18 years old to use ATTO SOUND"
+  },
+  "credentials": {
+    "title": "Create your password",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Create a password (min 8 characters)",
+    "confirmLabel": "Confirm Password",
+    "confirmPlaceholder": "Repeat your password",
+    "dobLabel": "Date of Birth",
+    "termsPrefix": "I have read and agree to the",
+    "termsLink": "Terms and Conditions"
+  },
+  "otp": {
+    "title": "Enter the verification code",
+    "sending": "Sending...",
+    "resendCode": "Resend code",
+    "resendCodeCountdown": "Resend code ({{seconds}}s)",
+    "resendFailed": "Failed to resend code",
+    "editEmailTitle": "Change email",
+    "editPhoneTitle": "Change phone number",
+    "editEmailPlaceholder": "Enter new email address",
+    "editSave": "Send new code"
+  },
+  "profileSetup": {
+    "addProfilePicture": "Add Profile picture",
+    "displayNamePlaceholder": "Nickname",
+    "usernamePlaceholder": "username",
+    "usernameAvailable": "Available",
+    "usernameTaken": "This username is taken",
+    "usernameChecking": "Checking...",
+    "usernameHint": "Letters, numbers, dots, and underscores. 3-30 chars.",
+    "changeAnytime": "You can change this later",
+    "suggestions": "Suggestions",
+    "uploadPhotoTitle": "Upload Profile Photo",
+    "chooseFromGallery": "Choose from Gallery",
+    "takePhoto": "Take Photo",
+    "profilePreview": "Profile Preview",
+    "repQuestion": "Will you represent a creator on ATTO SOUND?",
+    "repDescription": "You are creating this account on behalf of a creator and have their permission to manage and publish their content.",
+    "yesRepresent": "Yes, I represent a creator",
+    "iAmCreator": "I am a creator",
+    "noForMe": "No, this account is for me"
+  },
+  "creatorInmate": {
+    "title": "Verify your identity",
+    "subtitle": "Enter your inmate number so we can verify your identity and set up your creator profile."
+  },
+  "creatorAccountSetup": {
+    "title": "Set up the creator account",
+    "subtitle": "Create login credentials for the creator",
+    "displayNamePlaceholder": "Creator nickname",
+    "emailPlaceholder": "Creator email address",
+    "emailAvailable": "Available",
+    "emailTaken": "This email is already registered",
+    "emailChecking": "Checking...",
+    "emailInvalid": "Enter a valid email",
+    "phoneTaken": "This phone number is already registered",
+    "passwordPlaceholder": "Create a password",
+    "confirmPlaceholder": "Confirm password",
+    "nameLabel": "Creator name",
+    "emailLabel": "Email (optional)",
+    "phoneLabel": "Phone (optional)",
+    "passwordTitle": "Create a password",
+    "passwordSubtitle": "This password will be used to log in to the creator account",
+    "profileTitle": "Creator profile",
+    "profileSubtitle": "Set up how the creator appears on ATTO SOUND",
+    "addProfilePicture": "Add creator photo",
+    "uploadPhotoTitle": "Upload Creator Photo",
+    "chooseFromGallery": "Choose from Gallery",
+    "takePhoto": "Take Photo"
+  },
+  "howItWorks": {
+    "title": "How creator representation works",
+    "paragraph": "As a representative, you will manage this account on behalf of the creator.\nYou will be responsible for publishing content, managing interactions, and handling communications related to the creator's profile.",
+    "bullets": [
+      "You act on behalf of the creator",
+      "You must have their explicit consent",
+      "All actions are logged for transparency",
+      "The creator can revoke representation at any time"
+    ]
+  },
+  "consentForm": {
+    "title": "Creator consent is required",
+    "relationshipLabel": "What is your relationship?",
+    "relationshipFamily": "Family",
+    "relationshipFriend": "Friend",
+    "relationshipManager": "Manager / Representative",
+    "creatorNameLabel": "Creator Name",
+    "creatorNamePlaceholder": "Enter creator's full name",
+    "inmateNumberLabel": "Inmate number",
+    "inmateNumberPlaceholder": "Enter number",
+    "stateLabel": "State",
+    "statePlaceholder": "Select state",
+    "stateDisclaimer": "More states coming soon.",
+    "consentCheckbox": "I understand and agree that all <bold>consent verification</bold> calls will be recorded for legal and security purposes.",
+    "lookupFailed": "Inmate not found. Please check the number and try again.",
+    "confirmTitle": "Confirm Inmate Identity",
+    "inmateName": "Name",
+    "inmateNumber": "Inmate #",
+    "dateOfBirth": "Date of Birth",
+    "location": "Location",
+    "status": "Status",
+    "offense": "Offense",
+    "sentenceDate": "Sentence Date",
+    "maxSentence": "Max Sentence",
+    "maxRelease": "Max Release",
+    "estRelease": "Est. Release",
+    "confirmPerson": "Confirm — This is the person",
+    "notThisPerson": "Not this person"
+  },
+  "whatHappensNext": {
+    "title": "What happens next?",
+    "verifyConsentTitle": "Verify Creator Consent",
+    "verifyConsentParagraph": "We will contact the creator directly to verify their consent for you to act as their representative. This is a crucial step to ensure the creator's rights and wishes are respected.",
+    "howCallsWorkTitle": "How calls work",
+    "howCallsWorkParagraph": "All consent verification calls are automatically recorded for legal compliance and your protection. These recordings serve as official documentation of the creator's approval.",
+    "callFeatures": [
+      "Securely stored in a dedicated folder within your profile",
+      "Available for you to listen, download or post them to at any time"
+    ],
+    "recordingsPrivate": "These recordings are private and accessible <bold>only from your account</bold>."
+  },
+  "subscription": {
+    "title": "Choose Your Plan",
+    "subtitle": "Unlock features that match your goals.",
+    "mostPopular": "MOST POPULAR",
+    "perYear": "/year",
+    "seeFeatures": "See features",
+    "hideFeatures": "Hide features",
+    "disclaimer": "Cancel anytime. Subscription renews automatically unless canceled before renewal.",
+    "continueWithout": "Continue without Subscription",
+    "sharePdf": "Share PDF",
+    "plans": {
+      "record": {
+        "name": "Record",
+        "features": [
+          "Unlimited Recording"
+        ]
+      },
+      "recordPro": {
+        "name": "Record Pro",
+        "features": [
+          "Unlimited Recording+",
+          "Advanced Production Suite",
+          "Enhanced Analytics",
+          "Priority Discovery"
+        ]
+      },
+      "connectPro": {
+        "name": "Connect Pro",
+        "features": [
+          "Talent analytics dashboard",
+          "Top emerging creators",
+          "Engagement & demographic insights",
+          "Exportable data reports",
+          "Early access to emerging talent"
+        ]
+      }
+    }
+  },
+  "bridgeNumber": {
+    "title": "Your Bridge Number",
+    "subtitle": "This is your unique number for connecting with the creator. Share it securely.",
+    "assigning": "Assigning your unique number...",
+    "purchaseFailed": "We could not purchase your number. Please try again later.",
+    "notAvailable": "Not available",
+    "save": "Save",
+    "shareMessage": "Your ATTO Bridge Number: {{number}}\n\nUse this number to connect with your creator.",
+    "shareTitle": "ATTO Bridge Number",
+    "contactPermission": "Permission required",
+    "contactPermissionMessage": "Allow access to Contacts to save the bridge number.",
+    "saveContactTitle": "Save Bridge Contact",
+    "assigningButton": "Assigning number...",
+    "noteSecure": "Keep this number secure. The creator will need it to verify and establish the connection.",
+    "noteOtp": "An OTP will be sent to the inmate to verify your representation before the bridge call can be established."
+  },
+  "creatorTypes": {
+    "title": "What kind of creator?",
+    "subtitle": "Select all that apply",
+    "types": {
+      "singer": "Singer",
+      "songwriter": "Songwriter",
+      "rapper": "Rapper",
+      "producer": "Producer",
+      "painter": "Painter",
+      "sculptor": "Sculptor",
+      "photographer": "Photographer",
+      "poet": "Poet",
+      "writer": "Writer",
+      "actor": "Actor",
+      "dancer": "Dancer",
+      "multifaceted": "Multifaceted",
+      "other": "Other"
+    }
+  },
+  "creatorGenres": {
+    "title": "What genres?",
+    "subtitle": "Select the genres that define the creator",
+    "categories": {
+      "music": "Music",
+      "visual_art": "Visual Art",
+      "literary": "Literary",
+      "performing": "Performing Arts"
+    },
+    "genres": {
+      "hip_hop": "Hip-Hop",
+      "rnb": "R&B",
+      "rap": "Rap",
+      "rock": "Rock",
+      "pop": "Pop",
+      "jazz": "Jazz",
+      "blues": "Blues",
+      "country": "Country",
+      "electronic": "Electronic",
+      "latin": "Latin",
+      "classical": "Classical",
+      "gospel": "Gospel",
+      "reggae": "Reggae",
+      "metal": "Metal",
+      "folk": "Folk",
+      "punk": "Punk",
+      "soul": "Soul",
+      "funk": "Funk",
+      "alternative": "Alternative",
+      "indie": "Indie",
+      "reggaeton": "Reggaeton",
+      "trap": "Trap",
+      "contemporary": "Contemporary",
+      "modern": "Modern",
+      "abstract": "Abstract",
+      "impressionist": "Impressionist",
+      "expressionist": "Expressionist",
+      "minimalist": "Minimalist",
+      "pop_art": "Pop Art",
+      "street_art": "Street Art",
+      "realism": "Realism",
+      "surrealism": "Surrealism",
+      "poetry": "Poetry",
+      "fiction": "Fiction",
+      "non_fiction": "Non-Fiction",
+      "spoken_word": "Spoken Word",
+      "lyrics": "Lyrics",
+      "essays": "Essays",
+      "theater": "Theater",
+      "film": "Film",
+      "contemporary_dance": "Contemporary Dance",
+      "ballet": "Ballet",
+      "hip_hop_dance": "Hip-Hop Dance",
+      "improv": "Improv"
+    }
+  }
+}

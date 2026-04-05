@@ -18,12 +18,16 @@ const PRESETS: Record<string, string> = {
 
   // Content images — responsive widths
   thumb: 'c_limit,w_300,f_auto,q_auto',
-  feed: 'c_limit,w_750,f_auto,q_auto',
-  full: 'c_limit,w_1500,f_auto,q_auto',
+  feed: 'c_limit,w_1500,f_auto,q_auto',
+  full: 'c_limit,w_2000,f_auto,q_auto',
 
   // Chat images
   chat_sm: 'c_limit,w_400,f_auto,q_auto',
   chat_lg: 'c_limit,w_800,f_auto,q_auto',
+
+  // Video thumbnails (so_0 = first frame)
+  video_thumb: 'c_limit,w_750,h_750,f_jpg,q_auto,so_0',
+  reel_thumb: 'c_limit,w_480,h_854,f_jpg,q_auto,so_0',
 
   // Original (no transforms, only format + quality)
   original: 'f_auto,q_auto',

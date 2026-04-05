@@ -16,6 +16,7 @@ let pushKitReady = false;
 let activeCallObj: Call | null = null;
 let pendingInvite: CallInvite | null = null;
 let lastToken: string | null = null;
+let isRegistering = false;
 
 function getVoice(): Voice {
   voiceInstance ??= new Voice();
@@ -163,10 +164,17 @@ export function useTwilioVoice() {
   const endCall = useCallStore((s) => s.endCall);
 
   const registerDevice = useCallback(async () => {
+    if (isRegistering) return;
     if (Platform.OS === 'ios' && !pushKitReady) {
       return;
     }
+    // Re-check auth at call time — the session may have been invalidated while
+    // waiting for PushKit init (3-second iOS delay) or between interval ticks.
+    if (!useAuthStore.getState().isAuthenticated) {
+      return;
+    }
 
+    isRegistering = true;
     try {
       const { token } = await telephonyService.getVoiceToken();
 
@@ -178,8 +186,12 @@ export function useTwilioVoice() {
       const message =
         error instanceof Error ? error.message : 'Voice registration failed';
       console.error('[TwilioVoice] Registration FAILED:', message);
-      Sentry.captureException(error, { tags: { feature: 'twilio-voice', step: 'register' } });
+      Sentry.captureException(error, {
+        tags: { feature: 'twilio-voice', step: 'register' },
+      });
       setRegistered(false, message);
+    } finally {
+      isRegistering = false;
     }
   }, [setRegistered]);
 
@@ -236,7 +248,9 @@ export function useTwilioVoice() {
         await registerDevice();
       } catch (err) {
         console.error('[TwilioVoice] Setup FAILED:', err);
-        Sentry.captureException(err, { tags: { feature: 'twilio-voice', step: 'setup' } });
+        Sentry.captureException(err, {
+          tags: { feature: 'twilio-voice', step: 'setup' },
+        });
       }
     };
     setup();

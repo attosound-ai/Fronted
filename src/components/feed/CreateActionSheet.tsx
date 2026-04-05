@@ -1,9 +1,7 @@
-import { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { PenLine, Music } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
-import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { Text } from '@/components/ui/Text';
 
 interface CreateActionSheetProps {
@@ -12,104 +10,68 @@ interface CreateActionSheetProps {
 }
 
 export function CreateActionSheet({ visible, onClose }: CreateActionSheetProps) {
-  const [comingSoonVisible, setComingSoonVisible] = useState(false);
-
-  const handleProjects = () => {
-    onClose();
-    router.push('/(tabs)/projects');
-  };
-
-  const handleUploadPost = () => {
-    setComingSoonVisible(true);
-  };
-
   return (
-    <>
-      <BottomSheet visible={visible} onClose={onClose} title="Create">
-        {/* Projects option */}
-        <Pressable style={styles.option} onPress={handleProjects}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="folder-outline" size={22} color="#FFF" />
+    <BottomSheet visible={visible} onClose={onClose}>
+      <View style={styles.options}>
+        <TouchableOpacity
+          style={styles.option}
+          activeOpacity={0.7}
+          onPress={() => {
+            onClose();
+            router.push('/create-post');
+          }}
+        >
+          <PenLine size={22} color="#FFFFFF" strokeWidth={2.25} />
+          <View style={styles.optionText}>
+            <Text style={styles.optionTitle}>New Post</Text>
+            <Text style={styles.optionSubtitle}>Share with your audience</Text>
           </View>
-          <View style={styles.textContainer}>
-            <Text variant="body" style={styles.optionTitle}>
-              Projects
-            </Text>
-            <Text variant="caption" style={styles.optionSubtitle}>
-              Open your audio projects
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#555" />
-        </Pressable>
+        </TouchableOpacity>
 
-        {/* Upload Post option */}
-        <Pressable style={styles.option} onPress={handleUploadPost}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="cloud-upload-outline" size={22} color="#FFF" />
+        <TouchableOpacity
+          style={styles.option}
+          activeOpacity={0.7}
+          onPress={() => {
+            onClose();
+            router.push('/projects');
+          }}
+        >
+          <Music size={22} color="#FFFFFF" strokeWidth={2.25} />
+          <View style={styles.optionText}>
+            <Text style={styles.optionTitle}>Projects</Text>
+            <Text style={styles.optionSubtitle}>Record and produce music</Text>
           </View>
-          <View style={styles.textContainer}>
-            <Text variant="body" style={styles.optionTitle}>
-              Upload Post
-            </Text>
-            <Text variant="caption" style={styles.optionSubtitle}>
-              Share with your audience
-            </Text>
-          </View>
-          <View style={styles.badge}>
-            <Text variant="caption" style={styles.badgeText}>
-              Coming Soon
-            </Text>
-          </View>
-        </Pressable>
-      </BottomSheet>
-
-      <ComingSoonModal
-        visible={comingSoonVisible}
-        onClose={() => setComingSoonVisible(false)}
-      />
-    </>
+        </TouchableOpacity>
+      </View>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  options: {
+    gap: 8,
+    paddingVertical: 8,
+  },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 14,
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#222',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textContainer: {
+  optionText: {
     flex: 1,
-    marginLeft: 14,
   },
   optionTitle: {
-    color: '#FFF',
+    color: '#FFFFFF',
     fontSize: 15,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_600SemiBold',
   },
   optionSubtitle: {
-    color: '#888',
-    fontSize: 12,
+    color: '#888888',
+    fontSize: 13,
+    fontFamily: 'Archivo_400Regular',
     marginTop: 2,
-  },
-  badge: {
-    backgroundColor: '#222',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    color: '#888',
-    fontSize: 10,
-    fontFamily: 'Poppins_500Medium',
   },
 });

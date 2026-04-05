@@ -1,11 +1,11 @@
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
-import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useVerification } from '../hooks/useVerification';
-import { ArtistInfoCard } from './ArtistInfoCard';
+import { CreatorInfoCard } from './CreatorInfoCard';
 
 /**
  * VerificationBanner — Full-width gray banner shown to unverified representatives.
@@ -14,37 +14,47 @@ import { ArtistInfoCard } from './ArtistInfoCard';
  * Always shows OTP input fields (auto-sends OTP on mount).
  */
 export function VerificationBanner() {
+  const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
-  const hasBridgeNumber = useSubscriptionStore((s) => s.hasEntitlement('bridge_number'));
+  const {
+    otpCode,
+    otpError,
+    isVerifying,
+    isFetchingBridge,
+    hasBridgePhone,
+    handleOtpChange,
+  } = useVerification();
 
-  const { otpCode, otpError, isVerifying, isFetchingBridge, handleOtpChange } =
-    useVerification();
-
-  // Only show for unverified representatives with a paid plan that includes bridge_number
-  if (!user || user.role !== 'representative' || user.profileVerified || !hasBridgeNumber) {
+  // Only show for unverified representatives
+  if (!user || user.role !== 'representative' || user.profileVerified) {
     return null;
   }
 
-  const artistName = user.artistName || 'Unknown Artist';
-  const artistEmail = user.artistEmail || user.email;
+  const creatorName = user.creatorName || 'Unknown Creator';
+  const creatorEmail = user.creatorEmail || user.email;
 
   const handleEdit = () => {
-    router.push('/edit-artist-contact');
+    router.push('/edit-creator-contact');
   };
 
   return (
     <View style={styles.container}>
       <Text variant="body" style={styles.title}>
-        Authorization pending
+        {t('verification.bannerTitle')}
       </Text>
       <Text variant="caption" style={styles.subtitle}>
-        Enter Artist code to get consent
+        {t('verification.bannerSubtitle')}
       </Text>
 
-      {/* OTP fields — always visible */}
+      {/* OTP fields */}
       <View style={styles.otpSection}>
         {isFetchingBridge ? (
           <ActivityIndicator color="#666" size="small" />
+        ) : !hasBridgePhone ? (
+          <Text variant="caption" style={styles.noBridgeText}>
+            Bridge number not set up. Please complete your subscription or contact
+            support.
+          </Text>
         ) : (
           <>
             <OtpInput
@@ -60,8 +70,8 @@ export function VerificationBanner() {
         )}
       </View>
 
-      {/* Artist info row */}
-      <ArtistInfoCard artistName={artistName} email={artistEmail} onEdit={handleEdit} />
+      {/* Creator info row */}
+      <CreatorInfoCard creatorName={creatorName} email={creatorEmail} onEdit={handleEdit} />
     </View>
   );
 }
@@ -76,7 +86,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     lineHeight: 20,
   },
@@ -90,5 +100,10 @@ const styles = StyleSheet.create({
   },
   spinner: {
     marginTop: 8,
+  },
+  noBridgeText: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

@@ -1,0 +1,34 @@
+{
+  "header": {
+    "title": "Mensajes",
+    "newMessageAccessibility": "Nuevo mensaje"
+  },
+  "empty": {
+    "title": "Aún no hay mensajes",
+    "subtitle": "Inicie una conversación"
+  },
+  "error": {
+    "loadingMessages": "Error al cargar los mensajes"
+  },
+  "conversation": {
+    "fallbackUserName": "Usuario",
+    "unreadAccessibility": "{{name}}, {{count}} sin leer",
+    "noPreview": ""
+  },
+  "chat": {
+    "inputPlaceholder": "Escriba un mensaje...",
+    "inputAccessibilityLabel": "Campo de mensaje",
+    "sendAccessibilityLabel": "Enviar mensaje",
+    "emptyMessages": "Aún no hay mensajes. ¡Di hola!",
+    "errorFailedToSend": "No se pudo enviar el mensaje"
+  },
+  "newMessage": {
+    "headerTitle": "Nuevo mensaje",
+    "searchPlaceholder": "Buscar usuarios...",
+    "searchAccessibilityLabel": "Buscar usuarios",
+    "backAccessibilityLabel": "Volver",
+    "creatingConversation": "Creando conversación...",
+    "errorFailedToStart": "No se pudo iniciar la conversación",
+    "messageUserAccessibility": "Mensaje a {{name}}"
+  }
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
 
 import { Text } from './Text';
 import { BottomSheet } from './BottomSheet';
@@ -61,11 +61,11 @@ export function Select({
         >
           {selectedOption?.label ?? placeholder}
         </Text>
-        <Ionicons
-          name={isOpen ? 'chevron-up' : 'chevron-down'}
-          size={18}
-          color="#666666"
-        />
+        {isOpen ? (
+          <ChevronUp size={18} color="#666666" strokeWidth={2.25} />
+        ) : (
+          <ChevronDown size={18} color="#666666" strokeWidth={2.25} />
+        )}
       </TouchableOpacity>
 
       {error && (
@@ -91,7 +91,7 @@ export function Select({
                 {item.label}
               </Text>
               {item.value === value && (
-                <Ionicons name="checkmark" size={20} color="#3B82F6" />
+                <Check size={20} color="#3B82F6" strokeWidth={2.25} />
               )}
             </TouchableOpacity>
           )}
@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
   },
   trigger: {
     backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     borderWidth: 1,
     borderColor: '#222222',
     flexDirection: 'row',

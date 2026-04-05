@@ -60,7 +60,7 @@ export function useChat(conversationId: string) {
       );
       // Invalidate conversation list to update last message preview
       queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
+        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
       });
     },
     onError: () => {
@@ -83,6 +83,7 @@ export function useChat(conversationId: string) {
     refresh: refetch,
     loadMore: fetchNextPage,
     sendMessage: (content: string) => sendMutation.mutate(content),
+    sendMessageAsync: (content: string) => sendMutation.mutateAsync(content),
     isSending: sendMutation.isPending,
     sendError: sendMutation.error as Error | null,
     isSendError: sendMutation.isError,

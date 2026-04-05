@@ -1,11 +1,5 @@
 import { useState } from 'react';
-import {
-  TextInput,
-  View,
-  StyleSheet,
-  TextInputProps,
-  ViewStyle,
-} from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, ViewStyle, StyleProp, TextStyle } from 'react-native';
 
 import { Text } from './Text';
 
@@ -13,6 +7,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
   containerStyle?: ViewStyle;
+  style?: StyleProp<TextStyle>;
 }
 
 /**
@@ -22,12 +17,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
  * - Single Responsibility: Solo maneja entrada de texto
  * - Interface Segregation: Props específicas para inputs
  */
-export function Input({
-  label,
-  error,
-  containerStyle,
-  ...props
-}: InputProps) {
+export function Input({ label, error, containerStyle, style, ...props }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -42,6 +32,7 @@ export function Input({
           styles.input,
           isFocused && styles.inputFocused,
           error && styles.inputError,
+          style,
         ]}
         placeholderTextColor="#666666"
         onFocus={() => setIsFocused(true)}
@@ -67,12 +58,12 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: '#111111',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     fontSize: 15,
     color: '#FFFFFF',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     borderWidth: 1,
     borderColor: '#222222',
   },

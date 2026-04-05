@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { AxiosError } from 'axios';
 import * as Sentry from '@sentry/react-native';
+import i18n from '@/lib/i18n';
 import { authService } from '@/lib/api/authService';
 import { authStorage } from '@/lib/auth/storage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -15,6 +17,7 @@ import type {
   TokenPair,
   TwoFactorMethod,
 } from '@/types';
+import { useAccountStore } from './accountStore';
 
 interface Pending2FA {
   tempToken: string;
@@ -37,7 +40,7 @@ interface AuthActions {
   login: (credentials: LoginDTO) => Promise<void>;
   register: (data: RegisterDTO) => Promise<void>;
   preRegister: (data: PreRegisterDTO) => Promise<void>;
-  completeRegistration: (data: CompleteRegistrationDTO) => Promise<void>;
+  completeRegistration: (data: CompleteRegistrationDTO) => Promise<number | null>;
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<TokenPair | null>;
@@ -84,9 +87,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         set({ user: storedUser, tokens, isAuthenticated: true, isLoading: false });
       }
 
-      // Validate session with fresh data
+      // Validate session + fetch subscription + load accounts in PARALLEL
       try {
-        const freshUser = await authService.getMe();
+        const [freshUser] = await Promise.all([
+          authService.getMe(),
+          useSubscriptionStore.getState().fetchSubscription(),
+          useAccountStore.getState().loadAccounts(),
+        ]);
         await authStorage.setUser(freshUser);
         set({ user: freshUser, isAuthenticated: true, isLoading: false });
         analytics.identify(freshUser);
@@ -97,7 +104,6 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           username: freshUser.username,
         });
         analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
-        useSubscriptionStore.getState().fetchSubscription();
       } catch {
         // Token expired — try refresh
         const newTokens = await get().refreshTokens();
@@ -163,7 +169,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);
       useSubscriptionStore.getState().fetchSubscription();
     } catch (error: unknown) {
-      const message = getErrorMessage(error, 'Invalid credentials');
+      const message = getErrorMessage(error, i18n.t('common:toasts.invalidCredentials'));
       set({ isAuthenticating: false, error: message });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_FAILED, { error: message });
       throw error;
@@ -237,7 +243,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     try {
       set({ isAuthenticating: true, error: null });
 
-      const { user, tokens } = await authService.completeRegistration(data);
+      const result = await authService.completeRegistration(data);
+      const { user, tokens, linkedAccount } = result;
 
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
@@ -250,6 +257,13 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isAuthenticating: false,
       });
 
+      // Persist both accounts when a managed creator was created
+      if (linkedAccount) {
+        const { addAccount } = useAccountStore.getState();
+        await addAccount({ user, tokens });
+        await addAccount({ user: linkedAccount.user, tokens: linkedAccount.tokens });
+      }
+
       analytics.identify(user);
       Sentry.setUser({
         id: String(user.id),
@@ -258,6 +272,8 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.COMPLETED, { role: user.role });
+
+      return linkedAccount?.user?.id ?? null;
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to complete registration';
@@ -296,6 +312,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       analytics.reset();
       Sentry.setUser(null);
       useSubscriptionStore.getState().clear();
+      await useAccountStore.getState().clearAll();
       await authStorage.clearAll();
       set({ ...initialState, isLoading: false });
     }
@@ -313,9 +330,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       set({ tokens: newTokens });
       return newTokens;
-    } catch {
-      await authStorage.clearAll();
-      set({ ...initialState, isLoading: false });
+    } catch (error: unknown) {
+      // Only clear session on auth errors (401/403) — the refresh token is
+      // genuinely invalid.  Transient failures (429 rate-limit, 500, network
+      // timeout) should NOT nuke the session; the next automatic retry or
+      // user action will try again with the same (still valid) token.
+      const status =
+        error instanceof AxiosError ? error.response?.status : undefined;
+      if (status === 401 || status === 403) {
+        await authStorage.clearAll();
+        set({ ...initialState, isLoading: false });
+      }
       return null;
     }
   },

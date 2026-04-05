@@ -1,9 +1,10 @@
 export { ProfileHero } from './components/ProfileHero';
+export { ProfileContentTabs } from './components/ProfileContentTabs';
 export { ProfileSection } from './components/ProfileSection';
 export { ProfileInfoRow } from './components/ProfileInfoRow';
 export { ProfileAccountSection } from './components/ProfileAccountSection';
 export { ProfileSecuritySection } from './components/ProfileSecuritySection';
-export { ProfileArtistSection } from './components/ProfileArtistSection';
+export { ProfileCreatorSection } from './components/ProfileCreatorSection';
 export { ProfileRepresentativeSection } from './components/ProfileRepresentativeSection';
 export { ProfileActionsSection } from './components/ProfileActionsSection';
 export { LogoutBottomSheet } from './components/LogoutBottomSheet';

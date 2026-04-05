@@ -23,6 +23,21 @@ export interface BackendMessage {
   content: string;
   content_type: string;
   is_read: boolean;
+  is_edited: boolean;
+  edited_at: string | null;
+  is_deleted: boolean;
+  reply_to_id: string | null;
+  reply_to_content: string | null;
+  reply_to_sender: string | null;
+  created_at: string | null;
+  reactions?: BackendReaction[];
+}
+
+export interface BackendReaction {
+  message_id: string;
+  conversation_id: string;
+  user_id: string;
+  emoji: string;
   created_at: string | null;
 }
 
@@ -43,6 +58,8 @@ export interface ChatConversation {
   updatedAt: string | null;
 }
 
+export type MessageStatus = 'sending' | 'sent' | 'failed';
+
 export interface ChatMessage {
   conversationId: string;
   messageId: string;
@@ -50,7 +67,21 @@ export interface ChatMessage {
   content: string;
   contentType: string;
   isRead: boolean;
+  isEdited?: boolean;
+  editedAt?: string | null;
+  isDeleted?: boolean;
+  replyToId?: string | null;
+  replyToContent?: string | null;
+  replyToSender?: string | null;
   createdAt: string | null;
+  status?: MessageStatus;
+  reactions?: Reaction[];
+}
+
+export interface Reaction {
+  messageId: string;
+  userId: string;
+  emoji: string;
 }
 
 // DTOs

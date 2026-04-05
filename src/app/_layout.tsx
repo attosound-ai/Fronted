@@ -1,19 +1,22 @@
-import { useEffect, type ReactNode } from 'react';
-import { Stack } from 'expo-router';
+import '@/lib/i18n';
+import '@/lib/pushNotifications'; // registers foreground notification handler
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useMountEffect } from '@/hooks';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { PostHogProvider, usePostHog } from 'posthog-react-native';
+import { PostHogProvider, PostHogErrorBoundary, usePostHog } from 'posthog-react-native';
 import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   useFonts,
-  Poppins_400Regular,
-  Poppins_500Medium,
-  Poppins_600SemiBold,
-  Poppins_700Bold,
-} from '@expo-google-fonts/poppins';
+  Archivo_400Regular,
+  Archivo_500Medium,
+  Archivo_600SemiBold,
+  Archivo_700Bold,
+} from '@expo-google-fonts/archivo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
@@ -22,6 +25,7 @@ import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { BugReportFAB } from '@/components/BugReportFAB';
+import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
 Sentry.init({
@@ -63,7 +67,11 @@ Sentry.init({
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 
-let StripeProvider: (props: { publishableKey: string; children: ReactNode }) => ReactNode;
+let StripeProvider: (props: {
+  publishableKey: string;
+  merchantIdentifier?: string;
+  children: ReactNode;
+}) => ReactNode;
 try {
   StripeProvider = require('@stripe/stripe-react-native').StripeProvider;
 } catch {
@@ -73,33 +81,30 @@ try {
 // Tells expo-router the default route, preventing stale modal
 // screens (call, recording) from being restored on reload
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
 SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      retry: 2,
-    },
-  },
-});
+// QueryClient is extracted to a shared module so stores can import it
+// for cache invalidation (e.g., on account switch).
+import { queryClient, queryPersister } from '@/lib/queryClient';
 
 /** Bridges the PostHog instance into the analytics singleton + global error handler. */
 function AnalyticsInitializer() {
   const posthog = usePostHog();
+  // Legitimate: posthog transitions undefined → instance once after provider mounts.
   useEffect(() => {
     if (!posthog) return;
     analytics.setInstance(posthog);
 
-    // Global unhandled-error capture
+    // Global unhandled-error capture (non-React JS errors — React render
+    // errors are caught by PostHogErrorBoundary instead).
     const RNErrorUtils = (global as any).ErrorUtils;
     if (RNErrorUtils) {
       const defaultHandler = RNErrorUtils.getGlobalHandler();
       RNErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
-        analytics.captureError(error, { is_fatal: isFatal });
+        analytics.captureError(error, { is_fatal: isFatal, source: 'global_handler' });
         defaultHandler(error, isFatal);
       });
     }
@@ -107,18 +112,43 @@ function AnalyticsInitializer() {
   return null;
 }
 
+/**
+ * Manual screen tracking for Expo Router v3+ (React Navigation v7).
+ * RN v7 restricts navigation hooks, so automatic screen capture is unreliable.
+ * This component fires posthog.screen() on every pathname change.
+ */
+function ScreenTracker() {
+  const pathname = usePathname();
+  const posthog = usePostHog();
+  const prevPathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!posthog || !pathname) return;
+    if (pathname === prevPathRef.current) return;
+    prevPathRef.current = pathname;
+    posthog.screen(pathname, { route: pathname });
+  }, [pathname, posthog]);
+
+  return null;
+}
+
+/** Minimal fallback shown when PostHogErrorBoundary catches a render crash. */
+function ErrorFallback() {
+  return null; // Sentry already captures — this just prevents a white screen
+}
+
 function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   useTwilioVoice();
   const [fontsLoaded] = useFonts({
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
+    Archivo_400Regular,
+    Archivo_500Medium,
+    Archivo_600SemiBold,
+    Archivo_700Bold,
   });
-  useEffect(() => {
+  useMountEffect(() => {
     initialize();
-  }, [initialize]);
+  });
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -127,7 +157,7 @@ function RootLayout() {
   }, [fontsLoaded]);
 
   // Invalidate project cache when a call ends (covers all end scenarios)
-  useEffect(() => {
+  useMountEffect(() => {
     let trackedProjectId: string | null = null;
 
     const unsubscribe = useCallStore.subscribe((state, prevState) => {
@@ -142,7 +172,7 @@ function RootLayout() {
     });
 
     return unsubscribe;
-  }, []);
+  });
 
   if (!fontsLoaded) {
     return null;
@@ -153,110 +183,211 @@ function RootLayout() {
       apiKey={POSTHOG_CONFIG.apiKey}
       options={{
         host: POSTHOG_CONFIG.host,
+        disabled: POSTHOG_CONFIG.disabled,
         enableSessionReplay: POSTHOG_CONFIG.enableSessionReplay,
         sessionReplayConfig: POSTHOG_CONFIG.sessionReplayConfig,
+        captureAppLifecycleEvents: POSTHOG_CONFIG.captureAppLifecycleEvents,
+        personProfiles: POSTHOG_CONFIG.personProfiles,
+        featureFlagsRequestTimeoutMs: POSTHOG_CONFIG.featureFlagsRequestTimeoutMs,
         flushAt: POSTHOG_CONFIG.flushAt,
         flushInterval: POSTHOG_CONFIG.flushInterval,
       }}
       autocapture={POSTHOG_CONFIG.autocapture}
     >
       <AnalyticsInitializer />
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <SafeAreaProvider>
-                <StatusBar style="light" />
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: '#000000' },
-                    animation: 'slide_from_right',
-                  }}
-                >
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen
-                    name="edit-artist-contact"
-                    options={{
-                      headerShown: false,
-                      presentation: 'modal',
-                      animation: 'slide_from_bottom',
-                    }}
-                  />
-                  <Stack.Screen
-                    name="edit-profile"
-                    options={{
-                      headerShown: false,
-                      presentation: 'modal',
-                      animation: 'slide_from_bottom',
-                    }}
-                  />
-                  <Stack.Screen
-                    name="call"
-                    options={{
-                      headerShown: false,
-                      presentation: 'fullScreenModal',
-                      animation: 'slide_from_bottom',
-                      gestureEnabled: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="recording"
-                    options={{
-                      headerShown: false,
-                      presentation: 'fullScreenModal',
-                      animation: 'slide_from_bottom',
-                      gestureEnabled: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="chat"
-                    options={{
-                      headerShown: false,
+      <ScreenTracker />
+      <PostHogErrorBoundary
+        fallback={ErrorFallback}
+        additionalProperties={{ source: 'error_boundary' }}
+      >
+        <StripeProvider
+          publishableKey={STRIPE_PUBLISHABLE_KEY}
+          merchantIdentifier="merchant.com.atto.sound"
+        >
+          <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{ persister: queryPersister, maxAge: 1000 * 60 * 60 * 24 }}
+          >
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <KeyboardProvider>
+                <SafeAreaProvider>
+                  <StatusBar style="light" />
+                  <Stack
+                    screenOptions={{
+                      headerShown: true,
+                      headerBackTitle: '',
+                      headerStyle: { backgroundColor: '#000000' },
+                      headerTintColor: '#FFFFFF',
+                      headerTitleStyle: {
+                        fontFamily: 'Archivo_600SemiBold',
+                        fontSize: 17,
+                      },
+                      headerShadowVisible: false,
+                      headerBackTitleVisible: false,
+                      contentStyle: { backgroundColor: '#000000' },
                       animation: 'slide_from_right',
+                      fullScreenGestureEnabled: false,
+                      animationDuration: 300,
                     }}
-                  />
-                  <Stack.Screen
-                    name="new-message"
-                    options={{
-                      headerShown: false,
-                      presentation: 'modal',
-                      animation: 'slide_from_bottom',
-                    }}
-                  />
-                  <Stack.Screen
-                    name="project/[id]"
-                    options={{
-                      headerShown: false,
-                      animation: 'slide_from_right',
-                    }}
-                  />
-                  <Stack.Screen
-                    name="user/[id]"
-                    options={{
-                      headerShown: false,
-                      animation: 'slide_from_right',
-                    }}
-                  />
-                  <Stack.Screen
-                    name="subscription"
-                    options={{
-                      headerShown: false,
-                      presentation: 'modal',
-                      animation: 'slide_from_bottom',
-                    }}
-                  />
-                  <Stack.Screen name="+not-found" />
-                </Stack>
-                <InCallTopBar />
-                <CallBanner />
-                <BugReportFAB />
-              </SafeAreaProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </StripeProvider>
+                  >
+                    <Stack.Screen
+                      name="index"
+                      options={{ headerShown: false, title: '', gestureEnabled: false }}
+                    />
+                    <Stack.Screen
+                      name="(auth)"
+                      options={{
+                        headerShown: false,
+                        title: '',
+                        animation: 'fade',
+                        gestureEnabled: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="(tabs)"
+                      options={{
+                        headerShown: false,
+                        title: '',
+                        headerBackTitle: '',
+                        animation: 'fade',
+                        gestureEnabled: false,
+                        fullScreenGestureEnabled: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="edit-creator-contact"
+                      options={{
+                        headerShown: false,
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="edit-profile"
+                      options={{
+                        headerShown: false,
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="call"
+                      options={{
+                        headerShown: false,
+                        presentation: 'fullScreenModal',
+                        animation: 'slide_from_bottom',
+                        gestureEnabled: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="recording"
+                      options={{
+                        headerShown: false,
+                        presentation: 'fullScreenModal',
+                        animation: 'slide_from_bottom',
+                        gestureEnabled: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="chat"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="new-message"
+                      options={{
+                        title: 'New Message',
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="project/[id]"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="user/[id]"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="subscription"
+                      options={{
+                        title: 'Subscription',
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="edit-post"
+                      options={{
+                        headerShown: false,
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="create-post"
+                      options={{
+                        headerShown: false,
+                        presentation: 'modal',
+                        animation: 'slide_from_bottom',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="post/[id]"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="bookmarks"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="following"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="notifications"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen
+                      name="projects"
+                      options={{
+                        headerShown: false,
+                        animation: 'slide_from_right',
+                      }}
+                    />
+                    <Stack.Screen name="+not-found" />
+                  </Stack>
+                  <InCallTopBar />
+                  <CallBanner />
+                  <BugReportFAB />
+                  <AccountSwitchOverlay />
+                </SafeAreaProvider>
+              </KeyboardProvider>
+            </GestureHandlerRootView>
+          </PersistQueryClientProvider>
+        </StripeProvider>
+      </PostHogErrorBoundary>
     </PostHogProvider>
   );
 }

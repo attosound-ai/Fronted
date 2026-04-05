@@ -6,7 +6,7 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
 import type { FeedPost } from '@/types/post';
@@ -25,6 +25,7 @@ export function AudioMedia({ post }: AudioMediaProps) {
     progress,
     currentTime,
     duration,
+    barAmplitudes,
     togglePlayPause,
     seekToFraction,
   } = useAudioPlayback(post.audioUrl);
@@ -39,9 +40,11 @@ export function AudioMedia({ post }: AudioMediaProps) {
         style={styles.playBtn}
       >
         {showLoading && isPlaying ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : isPlaying ? (
+          <Pause size={22} color="#FFFFFF" strokeWidth={2.25} />
         ) : (
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color="#fff" />
+          <Play size={22} color="#FFFFFF" strokeWidth={2.25} />
         )}
       </TouchableOpacity>
 
@@ -64,10 +67,11 @@ export function AudioMedia({ post }: AudioMediaProps) {
           barGap={2}
           maxHeight={80}
           minHeight={4}
-          color="#666"
-          playedColor="#3B82F6"
+          color="#444444"
+          playedColor="#888888"
           playing={isPlaying}
           progress={progress}
+          amplitudes={barAmplitudes}
         />
       </TouchableOpacity>
 
@@ -86,13 +90,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#1A1A1A',
-    borderRadius: 12,
+    borderRadius: 0,
   },
   playBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#222',
+    backgroundColor: '#2A2A2A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -104,9 +108,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   time: {
-    color: '#999',
+    color: '#666666',
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     minWidth: 70,
     textAlign: 'right',
   },

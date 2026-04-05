@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { LinkedText } from './LinkedText';
 import { formatCount, formatRelativeTime } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
 
@@ -10,12 +12,13 @@ interface PostEngagementProps {
 }
 
 export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
+  const { t } = useTranslation('feed');
   const [expanded, setExpanded] = useState(false);
 
   return (
     <View style={styles.container}>
-      {/* Caption */}
-      {post.description && (
+      {/* Caption — omitted for text posts since PoemMedia already renders the content */}
+      {post.type !== 'text' && post.description && (
         <Text
           variant="body"
           style={styles.caption}
@@ -26,7 +29,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
             {post.author.username}
           </Text>
           {'  '}
-          {post.description}
+          <LinkedText style={styles.caption}>{post.description}</LinkedText>
         </Text>
       )}
 
@@ -34,7 +37,9 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       {post.commentsCount > 0 && (
         <TouchableOpacity onPress={onViewComments} activeOpacity={0.7}>
           <Text variant="body" style={styles.viewComments}>
-            View all {formatCount(post.commentsCount)} comments
+            {t('post.viewAllComments', {
+              count: formatCount(post.commentsCount),
+            } as Record<string, unknown>)}
           </Text>
         </TouchableOpacity>
       )}
@@ -42,6 +47,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       {/* Timestamp */}
       <Text variant="caption" style={styles.timestamp}>
         {formatRelativeTime(post.createdAt)}
+        {post.isEdited && ' · edited'}
       </Text>
     </View>
   );
@@ -59,7 +65,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   captionUsername: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   viewComments: {
     color: '#999',

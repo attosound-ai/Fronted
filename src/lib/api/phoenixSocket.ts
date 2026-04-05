@@ -13,6 +13,7 @@ class PhoenixSocketManager {
   private socket: Socket | null = null;
   private readonly channels = new Map<string, Channel>();
   private userChannel: Channel | null = null;
+  onConnectionChange?: (connected: boolean) => void;
 
   /** Build the WebSocket URL from the REST API base URL. */
   private getSocketUrl(): string {
@@ -21,17 +22,21 @@ class PhoenixSocketManager {
     return `${wsBase}/socket`;
   }
 
-  /** Connect to the Phoenix WebSocket server. Resolves once the socket is open. */
-  async connect(): Promise<void> {
+  /** Connect to the Phoenix WebSocket server. Resolves once the socket is open.
+   *  @param forUserId — explicit user ID to authenticate with (used during account switch)
+   */
+  async connect(forUserId?: string): Promise<void> {
     if (this.socket?.isConnected()) return;
 
     const token = await authStorage.getToken();
     if (!token) return;
 
-    // Lazy-import to avoid circular deps at module-load time
-    const { useAuthStore } = await import('@/stores/authStore');
-    const user = useAuthStore.getState().user;
-    const userId = user ? String(user.id) : undefined;
+    let userId = forUserId;
+    if (!userId) {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const user = useAuthStore.getState().user;
+      userId = user ? String(user.id) : undefined;
+    }
 
     return new Promise<void>((resolve) => {
       this.socket = new Socket(this.getSocketUrl(), {
@@ -40,11 +45,23 @@ class PhoenixSocketManager {
         heartbeatIntervalMs: 30_000,
       });
 
-      this.socket.onOpen(() => resolve());
+      this.socket.onOpen(() => {
+        resolve();
+        this.onConnectionChange?.(true);
+        // Re-join user channel after auto-reconnect
+        if (this.userChannel) {
+          this.userChannel.rejoinUntilConnected();
+        }
+      });
+
+      this.socket.onClose(() => {
+        this.onConnectionChange?.(false);
+      });
+
       this.socket.connect();
 
-      // Fallback: resolve after 10s so the app isn't blocked if the server is slow
-      setTimeout(resolve, 10_000);
+      // Fallback: resolve after 3s so the app isn't blocked if the server is slow
+      setTimeout(resolve, 3_000);
     });
   }
 
@@ -65,6 +82,10 @@ class PhoenixSocketManager {
       onTyping?: MessageHandler;
       onMessagesRead?: MessageHandler;
       onMessageHistory?: MessageHandler;
+      onReactionAdded?: MessageHandler;
+      onReactionRemoved?: MessageHandler;
+      onMessageEdited?: MessageHandler;
+      onMessageDeleted?: MessageHandler;
     } = {}
   ): Channel | null {
     if (!this.socket) return null;
@@ -79,6 +100,12 @@ class PhoenixSocketManager {
     if (handlers.onMessagesRead) channel.on('messages_read', handlers.onMessagesRead);
     if (handlers.onMessageHistory)
       channel.on('message_history', handlers.onMessageHistory);
+    if (handlers.onReactionAdded) channel.on('reaction_added', handlers.onReactionAdded);
+    if (handlers.onReactionRemoved)
+      channel.on('reaction_removed', handlers.onReactionRemoved);
+    if (handlers.onMessageEdited) channel.on('message_edited', handlers.onMessageEdited);
+    if (handlers.onMessageDeleted)
+      channel.on('message_deleted', handlers.onMessageDeleted);
 
     channel
       .join()
@@ -106,7 +133,8 @@ class PhoenixSocketManager {
   pushMessage(
     conversationId: string,
     content: string,
-    contentType = 'text'
+    contentType = 'text',
+    replyTo?: { id: string; content: string; sender: string }
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const channel = this.channels.get(conversationId);
@@ -115,8 +143,15 @@ class PhoenixSocketManager {
         return;
       }
 
+      const payload: Record<string, string> = { content, content_type: contentType };
+      if (replyTo) {
+        payload.reply_to_id = replyTo.id;
+        payload.reply_to_content = replyTo.content;
+        payload.reply_to_sender = replyTo.sender;
+      }
+
       channel
-        .push('new_message', { content, content_type: contentType })
+        .push('new_message', payload)
         .receive('ok', resolve)
         .receive('error', reject)
         .receive('timeout', () => reject(new Error('Timeout')));
@@ -129,16 +164,84 @@ class PhoenixSocketManager {
     channel?.push('typing', { is_typing: isTyping });
   }
 
-  /** Mark all messages as read in a conversation. */
+  /** Add an emoji reaction to a message. */
+  addReaction(conversationId: string, messageId: string, emoji: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'add_reaction', {
+      message_id: messageId,
+      emoji,
+    });
+  }
+
+  /** Remove an emoji reaction from a message. */
+  removeReaction(
+    conversationId: string,
+    messageId: string,
+    emoji: string
+  ): Promise<void> {
+    return this.pushToChannel(conversationId, 'remove_reaction', {
+      message_id: messageId,
+      emoji,
+    });
+  }
+
+  /** Edit a message's content. */
+  editMessage(conversationId: string, messageId: string, content: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'edit_message', {
+      message_id: messageId,
+      content,
+    });
+  }
+
+  /** Soft-delete a message. */
+  deleteMessage(conversationId: string, messageId: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'delete_message', {
+      message_id: messageId,
+    });
+  }
+
+  /** Generic push helper that returns a promise. */
+  private pushToChannel(
+    conversationId: string,
+    event: string,
+    payload: Record<string, unknown>
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const channel = this.channels.get(conversationId);
+      if (!channel) {
+        reject(new Error('Channel not joined'));
+        return;
+      }
+      channel
+        .push(event, payload)
+        .receive('ok', () => resolve())
+        .receive('error', reject)
+        .receive('timeout', () => reject(new Error('Timeout')));
+    });
+  }
+
+  /** Mark all messages as read in a conversation.
+   *  Retries for up to 3s if the channel hasn't joined yet. */
   markRead(conversationId: string): void {
-    const channel = this.channels.get(conversationId);
-    channel?.push('mark_read', {});
+    const tryPush = (attempts: number) => {
+      const channel = this.channels.get(conversationId);
+      if (channel?.state === 'joined') {
+        channel.push('mark_read', {});
+        return;
+      }
+      if (attempts > 0) {
+        setTimeout(() => tryPush(attempts - 1), 500);
+      }
+    };
+    tryPush(6); // 6 attempts × 500ms = 3s max wait
   }
 
   /** Join the user-level channel for conversation list updates. */
   joinUserChannel(
     userId: string,
-    handlers: { onConversationUpdated?: MessageHandler } = {}
+    handlers: {
+      onConversationUpdated?: MessageHandler;
+      onNewNotification?: MessageHandler;
+    } = {}
   ): Channel | null {
     if (!this.socket) return null;
     if (this.userChannel?.state === 'joined') return this.userChannel;
@@ -147,6 +250,9 @@ class PhoenixSocketManager {
 
     if (handlers.onConversationUpdated) {
       channel.on('conversation_updated', handlers.onConversationUpdated);
+    }
+    if (handlers.onNewNotification) {
+      channel.on('new_notification', handlers.onNewNotification);
     }
 
     channel
@@ -168,6 +274,41 @@ class PhoenixSocketManager {
       this.userChannel.leave();
       this.userChannel = null;
     }
+  }
+
+  /** Join a post channel for real-time interaction updates. */
+  joinPostChannel(
+    postId: string,
+    handlers: { onInteractionUpdate?: MessageHandler } = {}
+  ): Channel | null {
+    if (!this.socket) return null;
+
+    const topic = `post:${postId}`;
+    const existing = this.channels.get(topic);
+    if (existing?.state === 'joined') return existing;
+
+    const channel = this.socket.channel(topic, {});
+
+    if (handlers.onInteractionUpdate) {
+      channel.on('interaction_update', handlers.onInteractionUpdate);
+    }
+
+    channel
+      .join()
+      .receive('ok', () => {
+        this.channels.set(topic, channel);
+      })
+      .receive('error', (resp: unknown) => {
+        console.warn('[PhoenixSocket] Failed to join post channel:', resp);
+      });
+
+    this.channels.set(topic, channel);
+    return channel;
+  }
+
+  /** Leave a post channel. */
+  leavePostChannel(postId: string): void {
+    this.leaveChannel(`post:${postId}`);
   }
 
   /** Check if the socket is connected. */

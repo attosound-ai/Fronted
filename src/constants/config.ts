@@ -10,7 +10,7 @@ export const API_CONFIG = {
 } as const;
 
 export const APP_CONFIG = {
-  NAME: 'Atto',
+  NAME: 'ATTO SOUND',
   VERSION: '1.0.0',
 
   // Paginación

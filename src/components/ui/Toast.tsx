@@ -16,7 +16,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { CheckCircle } from 'lucide-react-native';
 import { Text } from './Text';
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ export function Toast(): React.ReactElement | null {
       accessibilityLiveRegion="polite"
       accessibilityLabel={message}
     >
-      <Ionicons name="checkmark-circle" size={20} color="#3B82F6" style={styles.icon} />
+      <CheckCircle size={20} color="#3B82F6" strokeWidth={2.25} style={styles.icon} />
       <Text style={styles.message} numberOfLines={2}>
         {message}
       </Text>
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   },
   message: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 14,
     lineHeight: 20,
     flexShrink: 1,

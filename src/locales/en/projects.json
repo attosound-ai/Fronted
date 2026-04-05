@@ -1,0 +1,77 @@
+{
+  "list": {
+    "title": "Projects",
+    "errorCreateFailed": "Failed to create project"
+  },
+  "empty": {
+    "title": "No projects yet",
+    "subtitle": "Create your first project to start organizing your recordings"
+  },
+  "card": {
+    "trackSingular": "track",
+    "trackPlural": "tracks"
+  },
+  "detail": {
+    "statTracks": "Tracks",
+    "statClips": "Clips",
+    "statStatus": "Status",
+    "sectionAudioSegments": "Audio Segments",
+    "segmentDefaultLabel": "Recording {{index}}",
+    "emptySegments": "No segments yet. Record during a call to add audio.",
+    "projectNotFound": "Project not found",
+    "openEditorButton": "Open Editor",
+    "deleteButton": "Delete",
+    "deleteAlertTitle": "Delete Project",
+    "deleteAlertMessage": "Are you sure? This cannot be undone.",
+    "deleteAlertConfirm": "Delete",
+    "deleteAlertCancel": "Cancel",
+    "errorDeleteFailed": "Failed to delete project"
+  },
+  "create": {
+    "sheetTitle": "New Project",
+    "namePlaceholder": "Project name",
+    "descriptionPlaceholder": "Description (optional)",
+    "createButton": "Create"
+  },
+  "timeline": {
+    "editorTitle": "Timeline Editor",
+    "saveStatusSaving": "Saving...",
+    "saveStatusUnsaved": "Unsaved",
+    "saveStatusSaved": "Saved",
+    "toolSplit": "Split",
+    "toolDelete": "Delete",
+    "toolVolume": "Volume",
+    "toolUndo": "Undo",
+    "toolRedo": "Redo",
+    "toolImport": "Import",
+    "toolImporting": "Importing...",
+    "toolExport": "Export",
+    "toolRecord": "Record",
+    "toolStopRecording": "Stop {{elapsed}}",
+    "emptyClips": "No clips yet. Segments will appear as clips when added.",
+    "clipCountSingular": "{{n}} clip",
+    "clipCountPlural": "{{n}} clips",
+    "laneNamePromptTitle": "Lane Name",
+    "laneNamePromptMessage": "Enter a name for lane {{index}}",
+    "laneNamePromptNext": "Next",
+    "laneNamePromptCancel": "Cancel",
+    "laneColorTitle": "Lane Color",
+    "laneColorCancel": "Cancel",
+    "laneColorBlue": "Blue",
+    "laneColorRed": "Red",
+    "laneColorGreen": "Green",
+    "laneColorPurple": "Purple",
+    "laneColorOrange": "Orange",
+    "laneColorPink": "Pink",
+    "exportCompleteTitle": "Export Complete",
+    "exportCompleteMessage": "Audio exported ({{size}}KB)",
+    "exportCompleteOk": "OK",
+    "errorNoClipsToExport": "No clips to export",
+    "errorExportFailed": "Export failed",
+    "errorAutosaveFailed": "Autosave failed",
+    "errorRemoveClipsFirst": "Remove clips from this lane first",
+    "volumeModalTitle": "Clip Volume",
+    "volumeDoneButton": "Done",
+    "loadingTitle": "Optimizing your experience..."
+  }
+}

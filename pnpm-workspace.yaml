@@ -1,0 +1,51 @@
+# ══════════════════════════════════════════════════
+# ATTO SOUND — pnpm security configuration
+# ══════════════════════════════════════════════════
+
+# Block lifecycle scripts by default (pnpm v10 default).
+# Only explicitly approved packages can run preinstall/install/postinstall.
+allowBuilds:
+  # Native modules that require compilation or binary downloads
+  fsevents: true
+  esbuild: true
+  '@sentry/cli': true
+  unrs-resolver: true
+
+# Fail CI if any dependency has unreviewed build scripts
+strictDepBuilds: true
+
+# Block git repos, tarballs, and other non-registry sources in transitive deps
+blockExoticSubdeps: true
+
+# 24-hour cooldown — reject packages published less than 24h ago.
+# Would have blocked the Axios 1.14.1 attack (live ~2-3h before removal).
+minimumReleaseAge: 10080
+
+# Trusted publishers — exempt from the 24h cooldown.
+# Expo publishes SDK-wide patches frequently; we trust their pipeline.
+minimumReleaseAgeExclude:
+  - 'expo'
+  - 'expo-*'
+  - '@expo/*'
+  - '@expo-google-fonts/*'
+  - 'babel-preset-expo'
+  - 'react-native'
+  - 'react-native-*'
+  - '@react-native/*'
+  - '@react-native-community/*'
+  - 'posthog-*'
+  - '@posthog/*'
+  - '@sentry/*'
+  - '@stripe/*'
+  - '@tanstack/*'
+
+# Prevent provenance downgrades (a package that had OIDC provenance
+# cannot suddenly publish without it — likely a compromised account).
+trustPolicy: no-downgrade
+trustPolicyExclude:
+  # Packages whose older versions had provenance but current versions don't.
+  # Reviewed — these are well-known, widely-used packages, not takeovers.
+  - 'eslint-import-resolver-typescript@3.10.1'
+  - 'ua-parser-js'
+  - 'semver@6.3.1'
+  - 'react-native-worklets'

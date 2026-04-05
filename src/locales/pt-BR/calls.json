@@ -1,0 +1,47 @@
+{
+  "incoming": {
+    "label": "Chamada Recebida",
+    "decline": "Recusar",
+    "accept": "Aceitar"
+  },
+  "active": {
+    "mute": "Silenciar",
+    "unmute": "Ativar som",
+    "speaker": "Alto-falante",
+    "end": "Encerrar",
+    "hold": "Colocar em espera",
+    "resume": "Retomar",
+    "stop": "Parar",
+    "capture": "Capturar",
+    "recording": "Gravando {{time}}",
+    "processingRecording": "Processando gravação...",
+    "clipCount_one": "{{count}} clipe",
+    "clipCount_other": "{{count}} clipes",
+    "tapToRecord": "Toque em Gravar para capturar áudio",
+    "recordingFailed": "Falha na gravação",
+    "recordingNotFound": "Gravação Não Encontrada",
+    "recordingNotFoundMessage": "A gravação foi salva no servidor, mas não pôde ser carregada. Tente atualizar o projeto.",
+    "couldNotLoadRecording": "Não foi possível carregar a gravação: {{message}}",
+    "couldNotLink": "Não foi possível vincular ao projeto: {{message}}",
+    "exportComplete": "Exportação Concluída",
+    "exportCompleteMessage": "Áudio exportado ({{size}}KB)",
+    "clipVolume": "Volume do Clipe",
+    "capturingAudio": "Capturando Áudio",
+    "laneName": "Nome da Faixa",
+    "laneNamePrompt": "Digite um nome para a faixa {{number}}"
+  },
+  "banner": {
+    "tapToRecord": "Toque para Gravar",
+    "callInProgress": "Chamada em andamento"
+  },
+  "projectPicker": {
+    "selectProject": "Selecionar Projeto",
+    "newProject": "Novo Projeto",
+    "subtitle": "Escolha um projeto para esta gravação",
+    "projectName": "Nome do projeto",
+    "descriptionPlaceholder": "Descrição (opcional)",
+    "noProjects": "Nenhum projeto ainda. Crie o seu primeiro acima.",
+    "segmentCount_one": "{{count}} segmento",
+    "segmentCount_other": "{{count}} segmentos"
+  }
+}

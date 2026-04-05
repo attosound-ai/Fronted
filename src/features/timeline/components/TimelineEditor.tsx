@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Pressable, Alert, Modal } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Upload, Circle, CloudOff, Play, Pause, Plus, Volume1, Volume2 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { TimelineRuler } from './TimelineRuler';
@@ -18,7 +19,7 @@ import { getTimelineDuration } from '../utils/clipOperations';
 import { msToPixels, formatTimelineMs } from '../utils/timelineCalculations';
 import { projectService } from '@/lib/api/projectService';
 import type { LaneMeta } from '../types';
-import type { TimelineClip, LaneMetadata } from '@/types/project';
+import type { TimelineClip, LaneMetadata, ExportResult } from '@/types/project';
 import type { AudioSegment } from '@/types/call';
 
 interface TimelineEditorProps {
@@ -27,6 +28,7 @@ interface TimelineEditorProps {
   segments: (AudioSegment & { downloadUrl: string })[];
   lanes?: Record<string, LaneMetadata>;
   onClose: () => void;
+  onPublish?: (result: ExportResult, durationMs: number) => Promise<void>;
 }
 
 const TRACK_HEIGHT = 56;
@@ -40,6 +42,7 @@ export function TimelineEditor({
   segments,
   lanes: serverLanes,
   onClose,
+  onPublish,
 }: TimelineEditorProps) {
   const initialClips = useMemo(() => serverClips.map(serverClipToLocal), [serverClips]);
 
@@ -53,7 +56,11 @@ export function TimelineEditor({
   // Re-link them to the project, then refetch to get their downloadUrls.
   const didResolveOrphans = useRef(false);
   useEffect(() => {
-    if (didResolveOrphans.current || localSegments.length === 0 || initialClips.length === 0)
+    if (
+      didResolveOrphans.current ||
+      localSegments.length === 0 ||
+      initialClips.length === 0
+    )
       return;
     const segIds = new Set(localSegments.map((s) => s.id));
     const orphanIds = [...new Set(initialClips.map((c) => c.segmentId))].filter(
@@ -120,7 +127,9 @@ export function TimelineEditor({
     setLaneMeta,
   } = useTimeline(initialClips, initialLaneMeta);
 
+  const { t } = useTranslation('projects');
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [volumeModalVisible, setVolumeModalVisible] = useState(false);
 
   const { importAudio: rawImportAudio, isImporting } = useImportAudio({
@@ -251,7 +260,7 @@ export function TimelineEditor({
           markClean();
         }
       } catch {
-        showToast('Autosave failed');
+        showToast(t('timeline.errorAutosaveFailed'));
       } finally {
         savingRef.current = false;
         setIsSaving(false);
@@ -287,22 +296,34 @@ export function TimelineEditor({
 
   const handleExport = useCallback(async () => {
     if (state.clips.length === 0) {
-      showToast('No clips to export');
+      showToast(t('timeline.errorNoClipsToExport'));
       return;
     }
 
     try {
       await flushSave();
       const result = await projectService.exportProject(projectId);
-      Alert.alert(
-        'Export Complete',
-        `Audio exported (${Math.round(result.fileSizeBytes / 1024)}KB)`,
-        [{ text: 'OK' }]
-      );
+
+      if (onPublish) {
+        setIsPublishing(true);
+        try {
+          await onPublish(result, getTimelineDuration(state.clips));
+        } finally {
+          setIsPublishing(false);
+        }
+      } else {
+        Alert.alert(
+          t('timeline.exportCompleteTitle'),
+          t('timeline.exportCompleteMessage', {
+            size: Math.round(result.fileSizeBytes / 1024),
+          }),
+          [{ text: t('timeline.exportCompleteOk') }]
+        );
+      }
     } catch {
-      showToast('Export failed');
+      showToast(t('timeline.errorExportFailed'));
     }
-  }, [projectId, state.clips, flushSave]);
+  }, [projectId, state.clips, flushSave, onPublish]);
 
   const handleClose = useCallback(async () => {
     if (state.isDirty) {
@@ -320,7 +341,7 @@ export function TimelineEditor({
     (laneIndex: number) => {
       const hasClips = state.clips.some((c) => c.laneIndex === laneIndex);
       if (hasClips) {
-        showToast('Remove clips from this lane first');
+        showToast(t('timeline.errorRemoveClipsFirst'));
         return;
       }
       removeLane(laneIndex);
@@ -329,35 +350,35 @@ export function TimelineEditor({
   );
 
   const LANE_COLORS = [
-    { label: 'Blue', value: '#3B82F6' },
-    { label: 'Red', value: '#EF4444' },
-    { label: 'Green', value: '#22C55E' },
-    { label: 'Purple', value: '#A855F7' },
-    { label: 'Orange', value: '#F97316' },
-    { label: 'Pink', value: '#EC4899' },
+    { label: t('timeline.laneColorBlue'), value: '#3B82F6' },
+    { label: t('timeline.laneColorRed'), value: '#EF4444' },
+    { label: t('timeline.laneColorGreen'), value: '#22C55E' },
+    { label: t('timeline.laneColorPurple'), value: '#A855F7' },
+    { label: t('timeline.laneColorOrange'), value: '#F97316' },
+    { label: t('timeline.laneColorPink'), value: '#EC4899' },
   ];
 
   const handleEditLane = useCallback(
     (laneIndex: number) => {
       const current = state.laneMeta[laneIndex];
       Alert.prompt(
-        'Lane Name',
-        `Enter a name for lane ${laneIndex + 1}`,
+        t('timeline.laneNamePromptTitle'),
+        t('timeline.laneNamePromptMessage', { index: laneIndex + 1 }),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('timeline.laneNamePromptCancel'), style: 'cancel' },
           {
-            text: 'Next',
+            text: t('timeline.laneNamePromptNext'),
             onPress: (text) => {
               const name = text ?? current?.name ?? '';
               Alert.alert(
-                'Lane Color',
+                t('timeline.laneColorTitle'),
                 `Choose a color for "${name || `Lane ${laneIndex + 1}`}"`,
                 [
                   ...LANE_COLORS.map((c) => ({
                     text: `${current?.color === c.value ? '● ' : ''}${c.label}`,
                     onPress: () => setLaneMeta(laneIndex, { name, color: c.value }),
                   })),
-                  { text: 'Cancel', style: 'cancel' },
+                  { text: t('timeline.laneColorCancel'), style: 'cancel' },
                 ]
               );
             },
@@ -374,33 +395,37 @@ export function TimelineEditor({
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={handleClose} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#FFF" />
-        </Pressable>
+        <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.5} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <X size={24} color="#FFF" strokeWidth={2.25} />
+        </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text variant="body" style={styles.headerTitle}>
-            Timeline Editor
+            {t('timeline.editorTitle')}
           </Text>
           <View style={styles.saveStatus}>
-            <Ionicons
-              name={
-                isSaving
-                  ? 'cloud-upload-outline'
-                  : state.isDirty
-                    ? 'ellipse'
-                    : 'cloud-done-outline'
-              }
-              size={10}
-              color={isSaving ? '#888' : state.isDirty ? '#999' : '#FFF'}
-            />
+            {isSaving ? (
+              <Upload size={10} color="#888" strokeWidth={2.25} />
+            ) : state.isDirty ? (
+              <Circle size={10} color="#999" strokeWidth={2.25} />
+            ) : (
+              <CloudOff size={10} color="#FFF" strokeWidth={2.25} />
+            )}
             <Text variant="caption" style={styles.saveStatusText}>
-              {isSaving ? 'Saving...' : state.isDirty ? 'Unsaved' : 'Saved'}
+              {isSaving
+                ? t('timeline.saveStatusSaving')
+                : state.isDirty
+                  ? t('timeline.saveStatusUnsaved')
+                  : t('timeline.saveStatusSaved')}
             </Text>
           </View>
         </View>
-        <Pressable onPress={handlePlayPause} style={styles.playButton}>
-          <Ionicons name={state.isPlaying ? 'pause' : 'play'} size={22} color="#FFF" />
-        </Pressable>
+        <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
+          {state.isPlaying ? (
+            <Pause size={22} color="#FFF" strokeWidth={2.25} />
+          ) : (
+            <Play size={22} color="#FFF" strokeWidth={2.25} />
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Position display */}
@@ -409,7 +434,9 @@ export function TimelineEditor({
           {formatTimelineMs(state.playbackPositionMs)} / {formatTimelineMs(totalDuration)}
         </Text>
         <Text variant="caption" style={styles.clipCount}>
-          {state.clips.length} clip{state.clips.length !== 1 ? 's' : ''}
+          {state.clips.length !== 1
+            ? t('timeline.clipCountPlural', { n: state.clips.length })
+            : t('timeline.clipCountSingular', { n: state.clips.length })}
         </Text>
       </View>
 
@@ -497,7 +524,7 @@ export function TimelineEditor({
             const meta = state.laneMeta[i];
             const color = meta?.color ?? '#555';
             return (
-              <Pressable
+              <TouchableOpacity
                 key={i}
                 onPress={() => {
                   setActiveLane(i);
@@ -521,24 +548,24 @@ export function TimelineEditor({
                 >
                   {meta?.name || String(i + 1)}
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             );
           })}
-          <Pressable
+          <TouchableOpacity
             onPress={addLane}
             style={[
               styles.stickyAddButton,
               { top: RULER_HEIGHT + state.laneCount * TRACK_HEIGHT + LANE_PADDING / 2 },
             ]}
           >
-            <Ionicons name="add" size={14} color="#666" />
-          </Pressable>
+            <Plus size={14} color="#666" strokeWidth={2.25} />
+          </TouchableOpacity>
         </View>
 
         {state.clips.length === 0 && (
           <View style={styles.emptyOverlay}>
             <Text variant="body" style={styles.emptyText}>
-              No clips yet. Segments will appear as clips when added.
+              {t('timeline.emptyClips')}
             </Text>
           </View>
         )}
@@ -559,6 +586,8 @@ export function TimelineEditor({
         onVolumePress={
           state.selectedClipId ? () => setVolumeModalVisible(true) : undefined
         }
+        onPublish={onPublish ? handleExport : undefined}
+        isPublishing={isPublishing}
       />
 
       {/* Volume Modal */}
@@ -568,17 +597,17 @@ export function TimelineEditor({
         animationType="fade"
         onRequestClose={() => setVolumeModalVisible(false)}
       >
-        <Pressable
+        <TouchableOpacity
           style={styles.modalOverlay}
           onPress={() => setVolumeModalVisible(false)}
         >
-          <Pressable style={styles.volumeModal} onPress={() => {}}>
+          <TouchableOpacity style={styles.volumeModal} onPress={() => {}}>
             <Text variant="body" style={styles.volumeModalTitle}>
-              Clip Volume
+              {t('timeline.volumeModalTitle')}
             </Text>
             <View style={styles.volumeSliderRow}>
-              <Ionicons name="volume-low" size={18} color="#888" />
-              <Pressable
+              <Volume1 size={18} color="#888" strokeWidth={2.25} />
+              <TouchableOpacity
                 style={styles.volumeTrack}
                 onPress={(e) => {
                   if (!state.selectedClipId) return;
@@ -596,8 +625,8 @@ export function TimelineEditor({
                     },
                   ]}
                 />
-              </Pressable>
-              <Ionicons name="volume-high" size={18} color="#888" />
+              </TouchableOpacity>
+              <Volume2 size={18} color="#888" strokeWidth={2.25} />
             </View>
             <Text variant="caption" style={styles.volumePercent}>
               {Math.round(
@@ -607,16 +636,16 @@ export function TimelineEditor({
               )}
               %
             </Text>
-            <Pressable
+            <TouchableOpacity
               style={styles.volumeDoneButton}
               onPress={() => setVolumeModalVisible(false)}
             >
               <Text variant="caption" style={styles.volumeDoneText}>
-                Done
+                {t('timeline.volumeDoneButton')}
               </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <Toast />
@@ -648,7 +677,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 16,
   },
   saveStatus: {
@@ -678,7 +707,7 @@ const styles = StyleSheet.create({
   positionText: {
     color: '#888',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   clipCount: {
     color: '#555',
@@ -738,7 +767,7 @@ const styles = StyleSheet.create({
   laneLabelText: {
     color: '#555',
     fontSize: 8,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   laneLabelTextActive: {
     color: '#3B82F6',
@@ -782,7 +811,7 @@ const styles = StyleSheet.create({
   },
   volumeModalTitle: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 15,
   },
   volumeSliderRow: {
@@ -808,7 +837,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 20,
     lineHeight: 28,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   volumeDoneButton: {
     backgroundColor: '#FFF',
@@ -819,6 +848,6 @@ const styles = StyleSheet.create({
   volumeDoneText: {
     color: '#000',
     fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
 });

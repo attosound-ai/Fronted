@@ -1,4 +1,5 @@
 import { View, Modal, StyleSheet, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface EditorLoadingModalProps {
@@ -7,16 +8,19 @@ interface EditorLoadingModalProps {
 }
 
 export function EditorLoadingModal({ visible, progress }: EditorLoadingModalProps) {
+  const { t } = useTranslation('projects');
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
           <ActivityIndicator size="large" color="#FFFFFF" />
           <Text variant="body" style={styles.title}>
-            Optimizing your experience...
+            {t('timeline.loadingTitle')}
           </Text>
           <View style={styles.trackBackground}>
-            <View style={[styles.trackFill, { width: `${Math.round(progress * 100)}%` }]} />
+            <View
+              style={[styles.trackFill, { width: `${Math.round(progress * 100)}%` }]}
+            />
           </View>
           <Text variant="caption" style={styles.percent}>
             {Math.round(progress * 100)}%
@@ -45,7 +49,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 15,
     textAlign: 'center',
   },
@@ -63,7 +67,7 @@ const styles = StyleSheet.create({
   },
   percent: {
     color: '#666666',
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
   },
 });

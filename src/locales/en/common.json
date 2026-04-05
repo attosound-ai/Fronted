@@ -1,0 +1,114 @@
+{
+  "buttons": {
+    "continue": "Continue",
+    "done": "Done",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "back": "Back",
+    "create": "Create",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "viewPlans": "View Plans",
+    "upgrade": "Upgrade",
+    "subscribe": "Subscribe",
+    "copy": "Copy",
+    "share": "Share"
+  },
+  "toasts": {
+    "copiedToClipboard": "Copied to clipboard",
+    "autosaveFailed": "Autosave failed",
+    "exportFailed": "Export failed",
+    "failedToCreateProject": "Failed to create project",
+    "recordingAdded": "Recording added to timeline",
+    "removeClipsFirst": "Remove clips from this lane first",
+    "noClipsToExport": "No clips to export",
+    "profileUpdated": "Profile updated",
+    "creatorContactUpdated": "Creator contact updated",
+    "audioImported": "Audio imported",
+    "importFailed": "Import failed: {{message}}",
+    "failedToUpdate": "Failed to update",
+    "failedToUploadAvatar": "Failed to upload avatar",
+    "invalidCredentials": "Invalid credentials"
+  },
+  "time": {
+    "now": "now",
+    "minuteShort": "m",
+    "hourShort": "h",
+    "dayShort": "d",
+    "weekShort": "w"
+  },
+  "comingSoon": {
+    "title": "Coming Soon",
+    "description": "This section is under construction and will be available soon.",
+    "showSupport": "Show your support to creators by sending donations directly. This feature is coming soon!"
+  },
+  "paywall": {
+    "upgradeRequired": "Upgrade Required",
+    "notAvailable": "{{feature}} is not available on your current plan.",
+    "currentPlan": "Current plan",
+    "maybeLater": "Maybe Later"
+  },
+  "entitlements": {
+    "browseSearch": "Search & Discovery",
+    "listen": "Listen to Recordings",
+    "comment": "Comment & Engage",
+    "recordUpload": "Record & Upload",
+    "advancedProduction": "Advanced Production Suite",
+    "aiAvatars": "AI Avatar Videos",
+    "enhancedAnalytics": "Enhanced Analytics",
+    "priorityDiscovery": "Priority Discovery",
+    "talentDashboard": "Talent Dashboard",
+    "exportableReports": "Exportable Reports",
+    "earlyAccess": "Early Access",
+    "bridgeNumber": "Bridge Phone Number"
+  },
+  "planNames": {
+    "connectFree": "Connect (Free)",
+    "record": "Record",
+    "recordPro": "Record Pro",
+    "connectPro": "Connect Pro"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "registrationFailed": "Registration failed",
+    "verificationFailed": "Verification failed",
+    "sendOtpFailed": "Failed to send verification code",
+    "profileUpdateFailed": "Failed to update profile",
+    "uploadFailed": "Could not upload your photo: {{message}}",
+    "avatarUploadSkipped": "Photo upload failed. You can add it later from your profile.",
+    "paymentFailed": "Payment failed. Please try again.",
+    "upgradeFailed": "Failed to process upgrade. Please try again.",
+    "cancelFailed": "Failed to cancel. Please try again."
+  },
+  "phoneInput": {
+    "placeholder": "Phone number",
+    "selectCountry": "Select Country"
+  },
+  "language": {
+    "title": "Choose Language"
+  },
+  "months": {
+    "placeholder": "Month",
+    "01": "January",
+    "02": "February",
+    "03": "March",
+    "04": "April",
+    "05": "May",
+    "06": "June",
+    "07": "July",
+    "08": "August",
+    "09": "September",
+    "10": "October",
+    "11": "November",
+    "12": "December"
+  },
+  "day": "Day",
+  "year": "Year",
+  "notFound": {
+    "title": "Oops!",
+    "code": "404",
+    "message": "This page doesn't exist",
+    "goHome": "Go back home"
+  }
+}

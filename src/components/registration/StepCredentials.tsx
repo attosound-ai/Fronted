@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, Checkbox } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
+import { haptic } from '@/lib/haptics/hapticService';
 
 /**
  * StepCredentials - Step 2 of registration wizard
@@ -19,35 +21,45 @@ export function StepCredentials({
   isLoading,
   apiError,
 }: StepProps) {
+  const { t } = useTranslation(['registration', 'common']);
+  const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const bothFilled = state.password.length > 0 && confirmPassword.length > 0;
+  const passwordsMatch = state.password === confirmPassword;
+
+  const strengthChecks = {
+    length: state.password.length >= 8,
+    upper: /[A-Z]/.test(state.password),
+    lower: /[a-z]/.test(state.password),
+    number: /\d/.test(state.password),
+  };
+
   const validateAndContinue = () => {
     const newErrors: Record<string, string> = {};
 
     if (!isStrongPassword(state.password)) {
-      newErrors.password =
-        'Password must be at least 8 characters with uppercase, lowercase, and a number';
+      newErrors.password = tv('passwordWeak');
     }
 
     if (confirmPassword !== state.password) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    if (!state.confirmLegalAge) {
-      newErrors.confirmLegalAge = 'You must confirm you are of legal age';
+      newErrors.confirmPassword = tv('passwordMismatch');
     }
 
     if (!state.acceptTerms) {
-      newErrors.acceptTerms = 'You must accept the Terms and Conditions';
+      newErrors.acceptTerms = tv('termsRequired');
     }
 
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
+      haptic('light');
       onNext();
+    } else {
+      haptic('error');
     }
   };
 
@@ -69,11 +81,11 @@ export function StepCredentials({
                 style={styles.backButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
-              Create your password
+              {t('credentials.title')}
             </Text>
           </View>
         </View>
@@ -81,7 +93,7 @@ export function StepCredentials({
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#EF4444" />
+            <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -92,13 +104,13 @@ export function StepCredentials({
         <View style={styles.form}>
           <View>
             <Input
-              label="Password"
+              label={t('credentials.passwordLabel')}
               value={state.password}
               onChangeText={(value: string) => {
                 dispatch({ type: 'UPDATE_FIELD', field: 'password', value });
                 setErrors((prev) => ({ ...prev, password: '' }));
               }}
-              placeholder="Create a password (min 8 characters)"
+              placeholder={t('credentials.passwordPlaceholder')}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="new-password"
@@ -109,54 +121,77 @@ export function StepCredentials({
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={20}
-                color="#888888"
-              />
+              {showPassword ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
 
+          {state.password.length > 0 && (
+            <View style={styles.strengthContainer}>
+              {(
+                [
+                  [strengthChecks.length, tv('strengthLength')],
+                  [strengthChecks.upper, tv('strengthUpper')],
+                  [strengthChecks.lower, tv('strengthLower')],
+                  [strengthChecks.number, tv('strengthNumber')],
+                ] as [boolean, string][]
+              ).map(([met, label]) => (
+                <View key={label} style={styles.strengthRow}>
+                  {met ? (
+                    <CheckCircle size={14} color="#22C55E" strokeWidth={2.25} />
+                  ) : (
+                    <View style={styles.strengthDot} />
+                  )}
+                  <Text
+                    variant="small"
+                    style={[styles.strengthText, met && styles.strengthMet]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View>
             <Input
-              label="Confirm Password"
+              label={t('credentials.confirmLabel')}
               value={confirmPassword}
               onChangeText={(value: string) => {
                 setConfirmPassword(value);
                 setErrors((prev) => ({ ...prev, confirmPassword: '' }));
               }}
-              placeholder="Repeat your password"
+              placeholder={t('credentials.confirmPlaceholder')}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoComplete="new-password"
-              error={errors.confirmPassword}
+              error={
+                bothFilled && !passwordsMatch
+                  ? tv('passwordMismatch')
+                  : errors.confirmPassword
+              }
             />
             <TouchableOpacity
               style={styles.eyeToggle}
               onPress={() => setShowConfirm((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons
-                name={showConfirm ? 'eye-off' : 'eye'}
-                size={20}
-                color="#888888"
-              />
+              {showConfirm ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
 
-          {/* Spacer */}
-          <View style={styles.spacer} />
-
-          {/* Checkboxes */}
-          <Checkbox
-            checked={state.confirmLegalAge}
-            onToggle={(value) => {
-              dispatch({ type: 'UPDATE_FIELD', field: 'confirmLegalAge', value });
-              setErrors((prev) => ({ ...prev, confirmLegalAge: '' }));
-            }}
-            label="I confirm that I am of legal age to use this platform."
-            error={errors.confirmLegalAge}
-          />
+          {bothFilled && passwordsMatch && (
+            <Text variant="small" style={styles.matchSuccess}>
+              {tv('passwordMatch')}
+            </Text>
+          )}
 
           <Checkbox
             checked={state.acceptTerms}
@@ -166,13 +201,13 @@ export function StepCredentials({
             }}
             label={
               <Text variant="small" style={styles.checkboxLabel}>
-                I have read and agree to the{' '}
+                {t('credentials.termsPrefix')}{' '}
                 <Text
                   variant="small"
                   style={styles.linkText}
                   onPress={() => Linking.openURL('https://attosound.com/terms')}
                 >
-                  Terms and Conditions
+                  {t('credentials.termsLink')}
                 </Text>
                 .
               </Text>
@@ -184,7 +219,7 @@ export function StepCredentials({
         {/* Continue Button */}
         <View style={styles.footer}>
           <Button
-            title="Continue"
+            title={t('common:buttons.continue')}
             onPress={validateAndContinue}
             disabled={isLoading}
             loading={isLoading}
@@ -229,30 +264,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#2A1515',
+    backgroundColor: '#111111',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 24,
   },
   errorBannerText: {
-    color: '#EF4444',
+    color: '#FFFFFF',
     flex: 1,
   },
   form: {
     gap: 4,
-  },
-  spacer: {
-    height: 8,
   },
   checkboxLabel: {
     color: '#CCCCCC',
     lineHeight: 20,
   },
   linkText: {
-    color: '#3B82F6',
+    color: '#FFFFFF',
     textDecorationLine: 'underline',
   },
   eyeToggle: {
@@ -261,6 +293,37 @@ const styles = StyleSheet.create({
     top: 22,
     bottom: 16,
     justifyContent: 'center',
+  },
+  strengthContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 6,
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  strengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    width: '50%',
+  },
+  strengthDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: '#555555',
+  },
+  strengthText: {
+    color: '#555555',
+  },
+  strengthMet: {
+    color: '#22C55E',
+  },
+  matchSuccess: {
+    color: '#22C55E',
+    marginTop: -12,
+    marginBottom: 8,
   },
   footer: {
     marginTop: 20,

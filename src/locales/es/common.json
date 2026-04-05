@@ -1,0 +1,114 @@
+{
+  "buttons": {
+    "continue": "Continuar",
+    "done": "Listo",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "back": "Atrás",
+    "create": "Crear",
+    "confirm": "Confirmar",
+    "ok": "OK",
+    "viewPlans": "Ver planes",
+    "upgrade": "Mejorar plan",
+    "subscribe": "Suscribirse",
+    "copy": "Copiar",
+    "share": "Compartir"
+  },
+  "toasts": {
+    "copiedToClipboard": "Copiado al portapapeles",
+    "autosaveFailed": "Error al guardar automáticamente",
+    "exportFailed": "Error al exportar",
+    "failedToCreateProject": "No se pudo crear el proyecto",
+    "recordingAdded": "Grabación agregada a la línea de tiempo",
+    "removeClipsFirst": "Primero elimine los clips de esta pista",
+    "noClipsToExport": "No hay clips para exportar",
+    "profileUpdated": "Perfil actualizado",
+    "creatorContactUpdated": "Contacto del creador actualizado",
+    "audioImported": "Audio importado",
+    "importFailed": "Error al importar: {{message}}",
+    "failedToUpdate": "Error al actualizar",
+    "failedToUploadAvatar": "Error al subir el avatar",
+    "invalidCredentials": "Credenciales inválidas"
+  },
+  "time": {
+    "now": "ahora",
+    "minuteShort": "m",
+    "hourShort": "h",
+    "dayShort": "d",
+    "weekShort": "s"
+  },
+  "comingSoon": {
+    "title": "Próximamente",
+    "description": "Esta sección está en construcción y estará disponible pronto.",
+    "showSupport": "Muestra tu apoyo a los creadores enviando donaciones directamente. ¡Esta función estará disponible pronto!"
+  },
+  "paywall": {
+    "upgradeRequired": "Se requiere mejorar el plan",
+    "notAvailable": "{{feature}} no está disponible en su plan actual.",
+    "currentPlan": "Plan actual",
+    "maybeLater": "Quizás después"
+  },
+  "entitlements": {
+    "browseSearch": "Búsqueda y descubrimiento",
+    "listen": "Escuchar grabaciones",
+    "comment": "Comentar e interactuar",
+    "recordUpload": "Grabar y subir",
+    "advancedProduction": "Suite de producción avanzada",
+    "aiAvatars": "Videos con avatar de IA",
+    "enhancedAnalytics": "Analíticas mejoradas",
+    "priorityDiscovery": "Descubrimiento prioritario",
+    "talentDashboard": "Panel de talentos",
+    "exportableReports": "Reportes exportables",
+    "earlyAccess": "Acceso anticipado",
+    "bridgeNumber": "Número de teléfono puente"
+  },
+  "planNames": {
+    "connectFree": "Connect (Gratis)",
+    "record": "Record",
+    "recordPro": "Record Pro",
+    "connectPro": "Connect Pro"
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "registrationFailed": "El registro falló",
+    "verificationFailed": "La verificación falló",
+    "sendOtpFailed": "No se pudo enviar el código de verificación",
+    "profileUpdateFailed": "No se pudo actualizar el perfil",
+    "uploadFailed": "No se pudo subir su foto: {{message}}",
+    "avatarUploadSkipped": "No se pudo subir la foto. Puedes agregarla después desde tu perfil.",
+    "paymentFailed": "El pago falló. Por favor intente nuevamente.",
+    "upgradeFailed": "No se pudo procesar la mejora. Por favor intente nuevamente.",
+    "cancelFailed": "No se pudo cancelar. Por favor intente nuevamente."
+  },
+  "phoneInput": {
+    "placeholder": "Número de teléfono",
+    "selectCountry": "Seleccionar país"
+  },
+  "language": {
+    "title": "Elegir idioma"
+  },
+  "months": {
+    "placeholder": "Mes",
+    "01": "Enero",
+    "02": "Febrero",
+    "03": "Marzo",
+    "04": "Abril",
+    "05": "Mayo",
+    "06": "Junio",
+    "07": "Julio",
+    "08": "Agosto",
+    "09": "Septiembre",
+    "10": "Octubre",
+    "11": "Noviembre",
+    "12": "Diciembre"
+  },
+  "day": "Día",
+  "year": "Año",
+  "notFound": {
+    "title": "¡Ups!",
+    "code": "404",
+    "message": "Esta página no existe",
+    "goHome": "Volver al inicio"
+  }
+}

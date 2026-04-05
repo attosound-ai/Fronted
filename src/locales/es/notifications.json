@@ -1,0 +1,38 @@
+{
+  "header": {
+    "title": "Notificaciones",
+    "markAllRead": "Marcar todas como leídas"
+  },
+  "sections": {
+    "today": "Hoy",
+    "thisWeek": "Esta semana",
+    "earlier": "Anteriores"
+  },
+  "types": {
+    "follow_one": "{{actor}} te siguió",
+    "follow_two": "{{actor1}} y {{actor2}} te siguieron",
+    "follow_many": "{{actor1}}, {{actor2}} y {{count}} más te siguieron",
+    "like_one": "A {{actor}} le gustó tu publicación",
+    "like_two": "A {{actor1}} y {{actor2}} les gustó tu publicación",
+    "like_many": "A {{actor1}}, {{actor2}} y {{count}} más les gustó tu publicación",
+    "comment_one": "{{actor}} comentó en tu publicación",
+    "comment_two": "{{actor1}} y {{actor2}} comentaron en tu publicación",
+    "comment_many": "{{actor1}}, {{actor2}} y {{count}} más comentaron en tu publicación",
+    "repost_one": "{{actor}} reposteó tu publicación",
+    "repost_two": "{{actor1}} y {{actor2}} repostearon tu publicación",
+    "repost_many": "{{actor1}}, {{actor2}} y {{count}} más repostearon tu publicación",
+    "share_one": "{{actor}} compartió tu publicación",
+    "share_two": "{{actor1}} y {{actor2}} compartieron tu publicación",
+    "share_many": "{{actor1}}, {{actor2}} y {{count}} más compartieron tu publicación",
+    "message_one": "{{actor}} te envió un mensaje",
+    "message_many": "{{actor}} te envió {{count}} mensajes",
+    "welcome": "¡Bienvenido a ATTO SOUND!"
+  },
+  "empty": {
+    "title": "Sin notificaciones",
+    "subtitle": "Cuando alguien interactúe con tu contenido, lo verás aquí."
+  },
+  "error": {
+    "loadFailed": "No se pudieron cargar las notificaciones"
+  }
+}

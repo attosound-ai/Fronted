@@ -8,7 +8,7 @@ const EDGE_MARGIN = 16;
 
 export function BugReportFAB() {
   const pan = useRef(
-    new Animated.ValueXY({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 })
+    new Animated.ValueXY({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 }),
   ).current;
   const lastOffset = useRef({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 });
 
@@ -35,7 +35,7 @@ export function BugReportFAB() {
         // Clamp Y within screen bounds
         const clampedY = Math.max(
           EDGE_MARGIN + 50,
-          Math.min(rawY, SCREEN_H - FAB_SIZE - 100)
+          Math.min(rawY, SCREEN_H - FAB_SIZE - 100),
         );
 
         lastOffset.current = { x: snapX, y: clampedY };
@@ -46,7 +46,7 @@ export function BugReportFAB() {
           friction: 7,
         }).start();
       },
-    })
+    }),
   ).current;
 
   const handlePress = () => {
@@ -55,7 +55,7 @@ export function BugReportFAB() {
 
   return (
     <Animated.View
-      style={[styles.fab, { transform: pan.getTranslateTransform() }]}
+      style={[styles.fab, { left: pan.x, top: pan.y }]}
       {...panResponder.panHandlers}
     >
       <Animated.Text style={styles.icon} onPress={handlePress}>
@@ -68,8 +68,6 @@ export function BugReportFAB() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    top: 0,
-    left: 0,
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,

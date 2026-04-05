@@ -23,6 +23,7 @@ export function useParticipantProfile(participantId: string) {
   return {
     avatarUri: (data?.avatar as string | null) ?? null,
     displayName: (data?.displayName as string | null) ?? null,
+    role: (data?.role as string | null) ?? null,
   };
 }
 

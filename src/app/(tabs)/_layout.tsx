@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
+import { DeviceEventEmitter, StyleSheet } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { House, CirclePlay, MessageCircle, Search } from 'lucide-react-native';
+import { haptic } from '@/lib/haptics/hapticService';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { MessageNotificationBanner } from '@/components/ui/MessageNotificationBanner';
+import { PostPublishedBanner } from '@/components/ui/PostPublishedBanner';
+import { ProfileTabIcon } from '@/components/ui/ProfileTabIcon';
+import { ProfileTabButton } from '@/components/ui/ProfileTabButton';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/features/messages/stores/chatStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
+import { useUnreadCount } from '@/features/notifications/hooks/useUnreadCount';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { messageService } from '@/features/messages/services/messageService';
 
-/**
- * TabsLayout — Bottom navigation matching Figma design.
- * Order: Home, Listen, Messages, Search, Profile — no labels.
- * Redirects to login when not authenticated.
- */
 export default function TabsLayout() {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -20,6 +23,22 @@ export default function TabsLayout() {
 
   const connectSocket = useChatStore((s) => s.connectSocket);
   const disconnectSocket = useChatStore((s) => s.disconnectSocket);
+
+  // Sync notification badge + register push token
+  useUnreadCount();
+  usePushNotifications();
+
+  // Fetch unread message count on app start (before user opens messages tab)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    messageService
+      .getConversations()
+      .then((conversations) => {
+        const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+        useChatStore.getState().setTotalUnread(unread);
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -48,24 +67,27 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarShowLabel: false,
+          lazy: true,
+          tabBarStyle: styles.tabBar,
           tabBarActiveTintColor: '#FFFFFF',
           tabBarInactiveTintColor: '#888888',
-          tabBarStyle: {
-            backgroundColor: '#000000',
-            borderTopColor: '#222222',
-          },
+          tabBarShowLabel: false,
         }}
       >
         <Tabs.Screen
           name="index"
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              if (navigation.isFocused()) {
+                e.preventDefault();
+                haptic('light');
+                DeviceEventEmitter.emit('feedScrollToTop');
+              }
+            },
+          })}
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'home' : 'home-outline'}
-                color={color}
-                size={24}
-              />
+              <House size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
           }}
         />
@@ -73,60 +95,36 @@ export default function TabsLayout() {
           name="listen"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'play-circle' : 'play-circle-outline'}
-                color={color}
-                size={24}
-              />
+              <CirclePlay size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
-          }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setComingSoonVisible(true);
-            },
           }}
         />
         <Tabs.Screen
           name="messages"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'chatbubble' : 'chatbubble-outline'}
-                color={color}
-                size={24}
-              />
+              <MessageCircle size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
             tabBarBadge:
               totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
-            tabBarBadgeStyle: { backgroundColor: '#EF4444', fontSize: 10 },
+            tabBarBadgeStyle: styles.badge,
           }}
         />
         <Tabs.Screen
           name="search"
           options={{
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="search-outline" color={color} size={24} />
+            tabBarIcon: ({ color, focused }) => (
+              <Search size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
           }}
-          listeners={{
-            tabPress: (e) => {
-              e.preventDefault();
-              setComingSoonVisible(true);
-            },
-          }}
         />
-        <Tabs.Screen name="projects" options={{ href: null }} />
         <Tabs.Screen
           name="profile"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'person' : 'person-outline'}
-                color={color}
-                size={24}
-              />
+              <ProfileTabIcon color={color} focused={focused} />
             ),
+            tabBarButton: (props) => <ProfileTabButton {...props} />,
           }}
         />
       </Tabs>
@@ -137,6 +135,19 @@ export default function TabsLayout() {
       />
 
       <MessageNotificationBanner />
+      <PostPublishedBanner />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: '#000000',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#222222',
+  },
+  badge: {
+    backgroundColor: '#EF4444',
+    fontSize: 10,
+  },
+});

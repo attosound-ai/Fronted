@@ -1,4 +1,5 @@
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { Text } from '@/components/ui/Text';
@@ -16,16 +17,17 @@ export function LogoutBottomSheet({
   onConfirm,
   isLoading,
 }: LogoutBottomSheetProps) {
+  const { t } = useTranslation('profile');
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Log Out">
+    <BottomSheet visible={visible} onClose={onClose} title={t('logout.sheetTitle')}>
       <View style={styles.content}>
         <Text variant="body" style={styles.message}>
-          Are you sure you want to log out? You'll need to sign in again to access your
-          account.
+          {t('logout.message')}
         </Text>
 
         <Button
-          title="Log Out"
+          title={t('logout.confirmButton')}
           onPress={onConfirm}
           loading={isLoading}
           style={styles.logoutButton}
@@ -36,7 +38,7 @@ export function LogoutBottomSheet({
           activeOpacity={0.7}
           style={styles.cancelButton}
         >
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={styles.cancelText}>{t('logout.cancelButton')}</Text>
         </TouchableOpacity>
       </View>
     </BottomSheet>
@@ -61,7 +63,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: '#FFFFFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
 });

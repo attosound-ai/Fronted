@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Mic, MicOff, Play, Pause, CircleDot, CircleStop, Phone } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 interface CallControlsProps {
   isMuted: boolean;
@@ -21,24 +23,25 @@ export function CallControls({
   onToggleCapture,
   onHangUp,
 }: CallControlsProps) {
+  const { t } = useTranslation('calls');
   return (
     <View style={styles.container}>
       <View style={styles.row}>
         <ControlButton
-          icon={isMuted ? 'mic-off' : 'mic'}
-          label={isMuted ? 'Unmute' : 'Mute'}
+          icon={isMuted ? MicOff : Mic}
+          label={isMuted ? t('active.unmute') : t('active.mute')}
           active={isMuted}
           onPress={onToggleMute}
         />
         <ControlButton
-          icon={isOnHold ? 'play' : 'pause'}
-          label={isOnHold ? 'Resume' : 'Hold'}
+          icon={isOnHold ? Play : Pause}
+          label={isOnHold ? t('active.resume') : t('active.hold')}
           active={isOnHold}
           onPress={onToggleHold}
         />
         <ControlButton
-          icon={isCapturing ? 'stop-circle' : 'radio-button-on'}
-          label={isCapturing ? 'Stop' : 'Capture'}
+          icon={isCapturing ? CircleStop : CircleDot}
+          label={isCapturing ? t('active.stop') : t('active.capture')}
           active={isCapturing}
           activeColor="#EF4444"
           onPress={onToggleCapture}
@@ -46,20 +49,20 @@ export function CallControls({
       </View>
 
       <TouchableOpacity style={styles.hangUpButton} onPress={onHangUp}>
-        <Ionicons name="call" size={28} color="#FFF" style={styles.hangUpIcon} />
+        <Phone size={28} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
       </TouchableOpacity>
     </View>
   );
 }
 
 function ControlButton({
-  icon,
+  icon: Icon,
   label,
   active,
   activeColor = '#3B82F6',
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
   label: string;
   active: boolean;
   activeColor?: string;
@@ -70,7 +73,7 @@ function ControlButton({
       style={[styles.controlButton, active && { backgroundColor: activeColor + '22' }]}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={24} color={active ? activeColor : '#FFFFFF'} />
+      <Icon size={24} color={active ? activeColor : '#FFFFFF'} strokeWidth={2.25} />
       <Text style={[styles.controlLabel, active && { color: activeColor }]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -97,7 +100,7 @@ const styles = StyleSheet.create({
   controlLabel: {
     color: '#FFFFFF',
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
   },
   hangUpButton: {
     width: 64,

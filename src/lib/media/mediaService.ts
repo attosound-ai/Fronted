@@ -31,7 +31,7 @@ export interface CloudinaryUploadResult {
   bytes: number;
 }
 
-export type MediaContext = 'avatar' | 'content' | 'audio' | 'chat';
+export type MediaContext = 'avatar' | 'content' | 'audio' | 'chat' | 'video' | 'reel';
 
 /**
  * Get signed upload parameters from our backend.
@@ -103,7 +103,12 @@ async function uploadToCloudinary(
       }
     };
 
-    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onerror = () => {
+      console.error('[Upload] XHR error:', xhr.status, xhr.statusText, xhr.responseText);
+      reject(new Error(`Network error during upload (${xhr.status})`));
+    };
+    xhr.timeout = 300000; // 5 minutes for large videos
+    xhr.ontimeout = () => reject(new Error('Upload timed out'));
     xhr.send(formData);
   });
 }
@@ -120,7 +125,9 @@ async function upload(
   context: MediaContext,
   onProgress?: (progress: number) => void
 ): Promise<string> {
-  const resourceType = context === 'audio' ? 'raw' : 'image';
+  let resourceType = 'image';
+  if (context === 'audio') resourceType = 'raw';
+  else if (context === 'video' || context === 'reel') resourceType = 'video';
   const params = await getSignedParams(context, resourceType);
   const result = await uploadToCloudinary(
     fileUri,

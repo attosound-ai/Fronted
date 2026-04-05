@@ -7,7 +7,10 @@
 
 import type PostHog from 'posthog-react-native';
 import * as Application from 'expo-application';
+import { mmkvStorage } from '@/lib/storage/mmkv';
 import type { User } from '@/types';
+
+const ANALYTICS_OPT_OUT_KEY = 'analytics_opted_out';
 
 class AnalyticsService {
   private posthog: PostHog | null = null;
@@ -40,7 +43,7 @@ class AnalyticsService {
         followers_count: user.followersCount,
         following_count: user.followingCount,
         posts_count: user.postsCount,
-        artist_name: user.artistName ?? null,
+        creator_name: user.creatorName ?? null,
         inmate_state: user.inmateState ?? null,
         relationship: user.relationship ?? null,
         consent_to_recording: user.consentToRecording ?? null,
@@ -114,6 +117,25 @@ class AnalyticsService {
         ...context,
       });
     }
+  }
+
+  // ── Privacy / consent ──────────────────────────
+
+  /** Opt the user out of all analytics tracking. */
+  optOut() {
+    mmkvStorage.setString(ANALYTICS_OPT_OUT_KEY, 'true');
+    this.posthog?.optOut();
+  }
+
+  /** Re-enable tracking after opt-out. */
+  optIn() {
+    mmkvStorage.setString(ANALYTICS_OPT_OUT_KEY, 'false');
+    this.posthog?.optIn();
+  }
+
+  /** Check if user has opted out (synchronous, reads from local storage). */
+  hasOptedOut(): boolean {
+    return mmkvStorage.getString(ANALYTICS_OPT_OUT_KEY) === 'true';
   }
 }
 

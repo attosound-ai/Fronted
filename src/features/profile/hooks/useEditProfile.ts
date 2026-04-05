@@ -1,7 +1,12 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
+import { useAccountStore } from '@/stores/accountStore';
+import { setAccountUser } from '@/lib/auth/storage';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
 import { showToast } from '@/components/ui/Toast';
+import { QUERY_KEYS } from '@/constants/queryKeys';
 
 interface ProfileForm {
   displayName: string;
@@ -9,20 +14,33 @@ interface ProfileForm {
   bio: string;
   avatarUri: string | null;
   avatarChanged: boolean;
-  // Artist fields
-  artistName: string;
+  // Creator fields
+  creatorName: string;
   inmateNumber: string;
   // Representative fields
   relationship: string;
   inmateState: string;
-  artistEmail: string;
-  artistPhoneCountryCode: string;
-  artistPhone: string;
+  creatorEmail: string;
+  creatorPhoneCountryCode: string;
+  creatorPhone: string;
+  // Social media links + extended bio
+  socialInstagram: string;
+  socialTiktok: string;
+  socialYoutube: string;
+  socialSoundcloud: string;
+  socialSpotify: string;
+  socialTwitter: string;
+  website: string;
+  location: string;
+  recordLabel: string;
+  bookingEmail: string;
 }
 
 export function useEditProfile() {
+  const { t } = useTranslation(['profile', 'validation', 'common']);
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
+  const queryClient = useQueryClient();
   const { upload, isUploading } = useMediaUpload();
 
   const [form, setForm] = useState<ProfileForm>({
@@ -31,13 +49,23 @@ export function useEditProfile() {
     bio: user?.bio ?? '',
     avatarUri: user?.avatar ?? null,
     avatarChanged: false,
-    artistName: user?.artistName ?? '',
+    creatorName: user?.creatorName ?? '',
     inmateNumber: user?.inmateNumber ?? '',
     relationship: user?.relationship ?? '',
     inmateState: user?.inmateState ?? '',
-    artistEmail: user?.artistEmail ?? '',
-    artistPhoneCountryCode: '+1',
-    artistPhone: user?.artistPhone?.replace(/^\+1/, '') ?? '',
+    creatorEmail: user?.creatorEmail ?? '',
+    creatorPhoneCountryCode: '+1',
+    creatorPhone: user?.creatorPhone?.replace(/^\+1/, '') ?? '',
+    socialInstagram: user?.socialInstagram ?? '',
+    socialTiktok: user?.socialTiktok ?? '',
+    socialYoutube: user?.socialYoutube ?? '',
+    socialSoundcloud: user?.socialSoundcloud ?? '',
+    socialSpotify: user?.socialSpotify ?? '',
+    socialTwitter: user?.socialTwitter ?? '',
+    website: user?.website ?? '',
+    location: user?.location ?? '',
+    recordLabel: user?.recordLabel ?? '',
+    bookingEmail: user?.bookingEmail ?? '',
   });
 
   const [errors, setErrors] = useState<
@@ -66,25 +94,31 @@ export function useEditProfile() {
   const validate = useCallback((): boolean => {
     const newErrors: typeof errors = {};
 
-    if (!form.displayName.trim()) newErrors.displayName = 'Display name is required';
-    if (!form.username.trim()) newErrors.username = 'Username is required';
+    if (!form.displayName.trim())
+      newErrors.displayName = t('validation:displayNameRequired');
+    if (!form.username.trim()) newErrors.username = t('validation:usernameRequired');
 
     if (user?.role === 'representative') {
-      if (!form.artistName.trim()) newErrors.artistName = 'Artist name is required';
-      if (!form.inmateNumber.trim()) newErrors.inmateNumber = 'Inmate number is required';
-      if (!form.relationship) newErrors.relationship = 'Relationship is required';
+      if (!form.creatorName.trim())
+        newErrors.creatorName = t('validation:creatorNameRequired');
+      if (!form.inmateNumber.trim())
+        newErrors.inmateNumber = t('validation:inmateNumberRequired');
+      if (!form.relationship)
+        newErrors.relationship = t('validation:relationshipRequired');
     }
 
-    if (user?.role === 'artist') {
-      if (!form.artistName.trim()) newErrors.artistName = 'Artist name is required';
-      if (!form.inmateNumber.trim()) newErrors.inmateNumber = 'Inmate number is required';
-    }
+    // creatorName and inmateNumber are optional for creators during edit
+    // (they were set during registration; if empty, username is used as fallback)
 
-    if (form.artistEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.artistEmail)) {
-      newErrors.artistEmail = 'Invalid email address';
+    if (form.creatorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.creatorEmail)) {
+      newErrors.creatorEmail = t('validation:emailInvalid');
     }
 
     setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      const firstError = Object.values(newErrors)[0];
+      if (firstError) showToast(firstError);
+    }
     return Object.keys(newErrors).length === 0;
   }, [form, user?.role]);
 
@@ -104,7 +138,7 @@ export function useEditProfile() {
           'avatar'
         );
         if (!publicId) {
-          setErrors({ submit: 'Failed to upload avatar' });
+          setErrors({ submit: t('common:toasts.failedToUploadAvatar') });
           return false;
         }
         avatarPublicId = publicId;
@@ -120,25 +154,48 @@ export function useEditProfile() {
         data.avatar = avatarPublicId;
       }
 
-      if (user?.role === 'artist' || user?.role === 'representative') {
-        data.artistName = form.artistName;
+      if (user?.role === 'creator' || user?.role === 'representative') {
+        data.creatorName = form.creatorName;
         data.inmateNumber = form.inmateNumber;
       }
+
+      // Social media links + extended bio (all roles, but UI only shows for creators)
+      data.socialInstagram = form.socialInstagram || undefined;
+      data.socialTiktok = form.socialTiktok || undefined;
+      data.socialYoutube = form.socialYoutube || undefined;
+      data.socialSoundcloud = form.socialSoundcloud || undefined;
+      data.socialSpotify = form.socialSpotify || undefined;
+      data.socialTwitter = form.socialTwitter || undefined;
+      data.website = form.website || undefined;
+      data.location = form.location || undefined;
+      data.recordLabel = form.recordLabel || undefined;
+      data.bookingEmail = form.bookingEmail || undefined;
 
       if (user?.role === 'representative') {
         data.relationship = form.relationship;
         data.inmateState = form.inmateState || undefined;
-        data.artistEmail = form.artistEmail || undefined;
-        data.artistPhone = form.artistPhone
-          ? form.artistPhoneCountryCode + form.artistPhone
+        data.creatorEmail = form.creatorEmail || undefined;
+        data.creatorPhone = form.creatorPhone
+          ? form.creatorPhoneCountryCode + form.creatorPhone
           : undefined;
       }
 
       await updateProfile(data);
-      showToast('Profile updated');
+      // Invalidate cached profile so the screen re-fetches with the new avatar/data
+      const freshUser = useAuthStore.getState().user;
+      if (freshUser?.id) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.USERS.PROFILE(freshUser.id),
+        });
+        // Update per-account SecureStore entry + reload accountStore for tab icon
+        await setAccountUser(freshUser.id, freshUser);
+        await useAccountStore.getState().loadAccounts();
+      }
+      showToast(t('common:toasts.profileUpdated'));
       return true;
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Failed to update profile';
+      const msg =
+        error instanceof Error ? error.message : t('common:errors.profileUpdateFailed');
       setErrors({ submit: msg });
       return false;
     } finally {

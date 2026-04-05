@@ -14,9 +14,10 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Animated, PanResponder, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Avatar } from './Avatar';
 import { Text } from './Text';
 
@@ -41,6 +42,7 @@ type ShowFn = (data: MessageNotificationData) => void;
 let _show: ShowFn | null = null;
 
 export function showMessageNotification(data: MessageNotificationData): void {
+  import('@/lib/haptics/hapticService').then(({ haptic }) => haptic('success'));
   _show?.(data);
 }
 
@@ -52,6 +54,7 @@ const ANIMATION_DURATION = 300;
 const VISIBLE_DURATION = 4000;
 
 export function MessageNotificationBanner(): React.ReactElement | null {
+  const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<MessageNotificationData | null>(null);
   const [visible, setVisible] = useState(false);
@@ -81,6 +84,33 @@ export function MessageNotificationBanner(): React.ReactElement | null {
       isAnimatingOut.current = false;
     });
   }, [translateY, opacity]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy < -8,
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy < 0) {
+          translateY.setValue(gesture.dy);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -30 || gesture.vy < -0.5) {
+          if (dismissTimer.current) {
+            clearTimeout(dismissTimer.current);
+            dismissTimer.current = null;
+          }
+          dismiss();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            damping: 18,
+            stiffness: 200,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   const show = useCallback(
     (notification: MessageNotificationData) => {
@@ -144,6 +174,7 @@ export function MessageNotificationBanner(): React.ReactElement | null {
 
   return (
     <Animated.View
+      {...panResponder.panHandlers}
       style={[
         styles.container,
         { top: insets.top + 8, transform: [{ translateY }], opacity },
@@ -154,7 +185,7 @@ export function MessageNotificationBanner(): React.ReactElement | null {
         onPress={handlePress}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`New message from ${data.senderName}: ${data.message}`}
+        accessibilityLabel={`${t('header.title')} ${data.senderName}: ${data.message}`}
       >
         <Avatar uri={data.senderAvatar} size="sm" />
         <View style={styles.textContainer}>
@@ -187,7 +218,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
     borderWidth: 1,
-    borderColor: '#333333',
+    borderColor: '#555555',
     borderRadius: 16,
     padding: 12,
     gap: 12,

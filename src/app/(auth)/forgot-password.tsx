@@ -3,7 +3,8 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -15,6 +16,7 @@ import { isValidEmail, isStrongPassword } from '@/utils/validators';
 type Step = 'email' | 'reset';
 
 export default function ForgotPasswordScreen() {
+  const { t, i18n } = useTranslation('auth');
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
@@ -33,20 +35,23 @@ export default function ForgotPasswordScreen() {
     setApiError('');
 
     if (!isValidEmail(email.trim())) {
-      setEmailError('Enter a valid email address');
+      setEmailError(t('forgotPassword.emailError'));
       return;
     }
 
     try {
       setIsLoading(true);
-      await authService.forgotPassword({ email: email.trim().toLowerCase() });
+      await authService.forgotPassword({
+        email: email.trim().toLowerCase(),
+        locale: i18n.language,
+      });
     } catch {
       // Always advance to prevent email enumeration
     } finally {
       setIsLoading(false);
       setStep('reset');
     }
-  }, [email]);
+  }, [email, i18n.language]);
 
   const handleReset = useCallback(async () => {
     setOtpError('');
@@ -56,17 +61,15 @@ export default function ForgotPasswordScreen() {
 
     let hasError = false;
     if (otp.length !== 6) {
-      setOtpError('Enter the 6-digit code');
+      setOtpError(t('forgotPassword.otpError'));
       hasError = true;
     }
     if (!isStrongPassword(password)) {
-      setPasswordError(
-        'Password must be 8+ chars with uppercase, lowercase, and a number'
-      );
+      setPasswordError(t('forgotPassword.passwordError'));
       hasError = true;
     }
     if (password !== confirmPassword) {
-      setConfirmError('Passwords do not match');
+      setConfirmError(t('forgotPassword.confirmError'));
       hasError = true;
     }
     if (hasError) return;
@@ -81,7 +84,7 @@ export default function ForgotPasswordScreen() {
       router.replace('/(auth)/login');
     } catch (error: unknown) {
       const msg =
-        error instanceof Error ? error.message : 'Reset failed. Please try again.';
+        error instanceof Error ? error.message : t('forgotPassword.resetFailed');
       setApiError(msg);
     } finally {
       setIsLoading(false);
@@ -98,16 +101,16 @@ export default function ForgotPasswordScreen() {
           bottomOffset={16}
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          <Text variant="h2" style={styles.title}>
-            Reset your password
-          </Text>
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+            <Text variant="h2" style={styles.headerTitle}>
+              {t('forgotPassword.title')}
+            </Text>
+          </View>
           <Text variant="body" style={styles.subtitle}>
-            Enter your account email. We will send a verification code to your registered
-            phone.
+            {t('forgotPassword.subtitle')}
           </Text>
 
           {apiError ? (
@@ -117,7 +120,7 @@ export default function ForgotPasswordScreen() {
           ) : null}
 
           <Input
-            label="Email"
+            label={t('forgotPassword.emailLabel')}
             value={email}
             onChangeText={(v: string) => {
               setEmail(v);
@@ -130,7 +133,7 @@ export default function ForgotPasswordScreen() {
           />
 
           <Button
-            title="Send Code"
+            title={t('forgotPassword.sendCode')}
             onPress={handleSendOtp}
             loading={isLoading}
             disabled={isLoading}
@@ -149,20 +152,21 @@ export default function ForgotPasswordScreen() {
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity onPress={() => setStep('email')} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text variant="h2" style={styles.title}>
-          Enter the code
-        </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => setStep('email')} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+          <Text variant="h2" style={styles.headerTitle}>
+            {t('forgotPassword.enterCode')}
+          </Text>
+        </View>
         <Text variant="body" style={styles.subtitle}>
-          Check your phone for the 6-digit code, then create a new password.
+          {t('forgotPassword.codeSubtitle')}
         </Text>
 
         {apiError ? (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#EF4444" />
+            <AlertCircle size={20} color="#EF4444" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -181,7 +185,7 @@ export default function ForgotPasswordScreen() {
 
         <View>
           <Input
-            label="New Password"
+            label={t('forgotPassword.newPasswordLabel')}
             value={password}
             onChangeText={(v: string) => {
               setPassword(v);
@@ -196,12 +200,16 @@ export default function ForgotPasswordScreen() {
             onPress={() => setShowPassword((v) => !v)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#888888" />
+            {showPassword ? (
+              <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+            ) : (
+              <Eye size={20} color="#888888" strokeWidth={2.25} />
+            )}
           </TouchableOpacity>
         </View>
 
         <Input
-          label="Confirm New Password"
+          label={t('forgotPassword.confirmPasswordLabel')}
           value={confirmPassword}
           onChangeText={(v: string) => {
             setConfirmPassword(v);
@@ -213,7 +221,7 @@ export default function ForgotPasswordScreen() {
         />
 
         <Button
-          title="Reset Password"
+          title={t('forgotPassword.resetButton')}
           onPress={handleReset}
           loading={isLoading}
           disabled={isLoading}
@@ -234,14 +242,19 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     gap: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   backButton: {
-    marginBottom: 16,
     width: 40,
     height: 40,
     justifyContent: 'center',
   },
-  title: {
+  headerTitle: {
     color: '#FFFFFF',
+    marginLeft: 12,
+    flex: 1,
   },
   subtitle: {
     color: '#888888',

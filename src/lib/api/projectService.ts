@@ -110,12 +110,23 @@ export const projectService = {
     } as unknown as Blob);
     formData.append('laneIndex', String(laneIndex));
 
-    const { data } = await apiClient.post<ApiResponse<TimelineClip>>(
-      API_ENDPOINTS.PROJECTS.UPLOAD_AUDIO(projectId),
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    );
-    return data.data;
+    const token = await (await import('@/lib/auth/storage')).authStorage.getToken();
+    const baseUrl = apiClient.defaults.baseURL ?? '';
+    const url = `${baseUrl}${API_ENDPOINTS.PROJECTS.UPLOAD_AUDIO(projectId)}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Request failed with status code ${res.status}`);
+    }
+
+    const json: ApiResponse<TimelineClip> = await res.json();
+    return json.data;
   },
 
   async getWaveform(segmentId: string, samples = 100): Promise<number[]> {

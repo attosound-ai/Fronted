@@ -3,8 +3,12 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { feedService } from '../services/feedService';
 import { useAuthStore } from '@/stores/authStore';
-import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
-import type { Post } from '@/types';
+import {
+  cancelPostQueries,
+  snapshotPostCaches,
+  rollbackPostCaches,
+  removePostFromCaches,
+} from '../utils/postCacheSync';
 
 /**
  * useFeed - Hook para manejar el feed infinito
@@ -16,8 +20,8 @@ import type { Post } from '@/types';
 export function useFeed() {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
-  // Query infinita para el feed
   const {
     data,
     fetchNextPage,
@@ -28,64 +32,40 @@ export function useFeed() {
     refetch,
     error,
   } = useInfiniteQuery({
-    queryKey: QUERY_KEYS.FEED.INFINITE,
+    queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId),
     queryFn: ({ pageParam }) => feedService.getFeed(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
     enabled: isAuthenticated,
+    staleTime: 30_000, // 30s — social feed needs freshness
+    refetchOnMount: 'always', // Always refetch when tab is focused (prevents stale persisted data)
   });
 
-  // Mutation para like
-  const likeMutation = useMutation({
-    mutationFn: (postId: string) => feedService.likePost(postId),
+  const deleteMutation = useMutation({
+    mutationFn: (postId: string) => feedService.deletePost(postId),
     onMutate: async (postId) => {
-      // Track like/unlike
-      const pages = queryClient.getQueryData(QUERY_KEYS.FEED.INFINITE) as any;
-      const post = pages?.pages
-        ?.flatMap((p: any) => p.data)
-        ?.find((p: Post) => p.id === postId);
-      analytics.capture(
-        post?.isLiked
-          ? ANALYTICS_EVENTS.FEED.POST_UNLIKED
-          : ANALYTICS_EVENTS.FEED.POST_LIKED,
-        { post_id: postId }
-      );
-
-      // Optimistic update
-      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.FEED.INFINITE });
-
-      const previousData = queryClient.getQueryData(QUERY_KEYS.FEED.INFINITE);
-
-      queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page: any) => ({
-            ...page,
-            data: page.data.map((post: Post) =>
-              post.id === postId
-                ? {
-                    ...post,
-                    isLiked: !post.isLiked,
-                    likesCount: post.isLiked ? post.likesCount - 1 : post.likesCount + 1,
-                  }
-                : post
-            ),
-          })),
-        };
-      });
-
-      return { previousData };
+      await cancelPostQueries(queryClient, postId);
+      const snapshot = snapshotPostCaches(queryClient, postId);
+      removePostFromCaches(queryClient, postId);
+      return { snapshot };
     },
-    onError: (_, __, context) => {
-      // Rollback on error
-      if (context?.previousData) {
-        queryClient.setQueryData(QUERY_KEYS.FEED.INFINITE, context.previousData);
+    onError: (_, postId, context) => {
+      if (context?.snapshot) {
+        rollbackPostCaches(queryClient, postId, context.snapshot);
+      }
+    },
+    onSuccess: (_, postId) => {
+      if (currentUserId) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
+        });
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.USERS.PROFILE(Number(currentUserId)),
+        });
       }
     },
   });
 
-  // Aplanar los posts de todas las páginas
   const posts = data?.pages.flatMap((page) => page.data) ?? [];
 
   return {
@@ -96,9 +76,19 @@ export function useFeed() {
     hasMore: hasNextPage ?? false,
     error: error as Error | null,
 
-    // Actions
-    refresh: refetch,
+    refresh: () => {
+      // Invalidate cache first so refetch always hits the server,
+      // even if data is still within staleTime window.
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId) });
+      // Keep profile posts grid in sync with the feed
+      if (currentUserId) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
+        });
+      }
+      return refetch();
+    },
     loadMore: fetchNextPage,
-    toggleLike: (postId: string) => likeMutation.mutate(postId),
+    deletePost: (postId: string) => deleteMutation.mutate(postId),
   };
 }

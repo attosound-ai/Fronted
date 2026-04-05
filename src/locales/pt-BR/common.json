@@ -1,0 +1,114 @@
+{
+  "buttons": {
+    "continue": "Continuar",
+    "done": "Concluir",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "back": "Voltar",
+    "create": "Criar",
+    "confirm": "Confirmar",
+    "ok": "OK",
+    "viewPlans": "Ver Planos",
+    "upgrade": "Fazer Upgrade",
+    "subscribe": "Assinar",
+    "copy": "Copiar",
+    "share": "Compartilhar"
+  },
+  "toasts": {
+    "copiedToClipboard": "Copiado para a área de transferência",
+    "autosaveFailed": "Falha no salvamento automático",
+    "exportFailed": "Falha na exportação",
+    "failedToCreateProject": "Falha ao criar projeto",
+    "recordingAdded": "Gravação adicionada à linha do tempo",
+    "removeClipsFirst": "Remova os clipes desta faixa primeiro",
+    "noClipsToExport": "Nenhum clipe para exportar",
+    "profileUpdated": "Perfil atualizado",
+    "creatorContactUpdated": "Contato do criador atualizado",
+    "audioImported": "Áudio importado",
+    "importFailed": "Falha na importação: {{message}}",
+    "failedToUpdate": "Falha ao atualizar",
+    "failedToUploadAvatar": "Falha ao enviar o avatar",
+    "invalidCredentials": "Credenciais inválidas"
+  },
+  "time": {
+    "now": "agora",
+    "minuteShort": "m",
+    "hourShort": "h",
+    "dayShort": "d",
+    "weekShort": "sem"
+  },
+  "comingSoon": {
+    "title": "Em Breve",
+    "description": "Esta seção está em construção e estará disponível em breve.",
+    "showSupport": "Mostre seu apoio aos criadores enviando doações diretamente. Esse recurso estará disponível em breve!"
+  },
+  "paywall": {
+    "upgradeRequired": "Upgrade Necessário",
+    "notAvailable": "{{feature}} não está disponível no seu plano atual.",
+    "currentPlan": "Plano atual",
+    "maybeLater": "Talvez Depois"
+  },
+  "entitlements": {
+    "browseSearch": "Busca e Descoberta",
+    "listen": "Ouvir Gravações",
+    "comment": "Comentar e Interagir",
+    "recordUpload": "Gravar e Enviar",
+    "advancedProduction": "Suite de Produção Avançada",
+    "aiAvatars": "Vídeos com Avatar de IA",
+    "enhancedAnalytics": "Analytics Avançado",
+    "priorityDiscovery": "Descoberta Prioritária",
+    "talentDashboard": "Painel de Talentos",
+    "exportableReports": "Relatórios Exportáveis",
+    "earlyAccess": "Acesso Antecipado",
+    "bridgeNumber": "Número Telefônico Bridge"
+  },
+  "planNames": {
+    "connectFree": "Connect (Gratuito)",
+    "record": "Record",
+    "recordPro": "Record Pro",
+    "connectPro": "Connect Pro"
+  },
+  "errors": {
+    "generic": "Algo deu errado",
+    "registrationFailed": "Falha no cadastro",
+    "verificationFailed": "Falha na verificação",
+    "sendOtpFailed": "Falha ao enviar o código de verificação",
+    "profileUpdateFailed": "Falha ao atualizar o perfil",
+    "uploadFailed": "Não foi possível enviar sua foto: {{message}}",
+    "avatarUploadSkipped": "Não foi possível enviar a foto. Você pode adicioná-la depois no seu perfil.",
+    "paymentFailed": "Falha no pagamento. Tente novamente.",
+    "upgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
+    "cancelFailed": "Falha ao cancelar. Tente novamente."
+  },
+  "phoneInput": {
+    "placeholder": "Número de telefone",
+    "selectCountry": "Selecionar País"
+  },
+  "language": {
+    "title": "Escolher idioma"
+  },
+  "months": {
+    "placeholder": "Mês",
+    "01": "Janeiro",
+    "02": "Fevereiro",
+    "03": "Março",
+    "04": "Abril",
+    "05": "Maio",
+    "06": "Junho",
+    "07": "Julho",
+    "08": "Agosto",
+    "09": "Setembro",
+    "10": "Outubro",
+    "11": "Novembro",
+    "12": "Dezembro"
+  },
+  "day": "Dia",
+  "year": "Ano",
+  "notFound": {
+    "title": "Ops!",
+    "code": "404",
+    "message": "Esta página não existe",
+    "goHome": "Voltar ao início"
+  }
+}

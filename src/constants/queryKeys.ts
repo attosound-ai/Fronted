@@ -12,11 +12,18 @@ export const QUERY_KEYS = {
     SESSION: ['auth', 'session'] as const,
   },
 
-  // Feed
+  // Feed — INFINITE and REELS are scoped by userId so account switches
+  // get a cache miss for the new user while preserving the old user's cache.
   FEED: {
     ALL: ['feed'] as const,
-    INFINITE: ['feed', 'infinite'] as const,
+    INFINITE: (userId?: number) => ['feed', 'infinite', userId ?? 0] as const,
+    REELS: (userId?: number) => ['feed', 'reels', userId ?? 0] as const,
+    EXPLORE: ['feed', 'explore'] as const,
     POST: (id: string) => ['feed', 'post', id] as const,
+    COMMENTS: (postId: string) => ['feed', 'comments', postId] as const,
+    BOOKMARKS: ['feed', 'bookmarks'] as const,
+    USER_POSTS: (userId: number) => ['feed', 'user-posts', userId] as const,
+    SEARCH: (query: string) => ['feed', 'search', query] as const,
   },
 
   // Users
@@ -41,7 +48,7 @@ export const QUERY_KEYS = {
 
   // Messages
   MESSAGES: {
-    CONVERSATIONS: ['messages', 'conversations'] as const,
+    CONVERSATIONS: () => ['messages', 'conversations'] as const,
     CHAT: (chatId: string) => ['messages', 'chat', chatId] as const,
   },
 

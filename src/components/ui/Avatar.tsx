@@ -1,4 +1,5 @@
-import { Image, View, StyleSheet, ImageStyle, ViewStyle } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Image, View, StyleSheet, ImageStyle, ViewStyle, Text } from 'react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { Logo } from './Logo';
 
@@ -8,6 +9,7 @@ interface AvatarProps {
   uri?: string | null;
   size?: AvatarSize;
   style?: ImageStyle | ViewStyle;
+  fallbackText?: string;
 }
 
 const SIZES: Record<AvatarSize, number> = {
@@ -24,6 +26,15 @@ const PRESET_MAP: Record<AvatarSize, 'avatar_sm' | 'avatar_md' | 'avatar_lg'> = 
   xl: 'avatar_lg',
 };
 
+function getInitials(text: string): string {
+  return text
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
 /**
  * Avatar - Componente de avatar de usuario
  *
@@ -31,8 +42,14 @@ const PRESET_MAP: Record<AvatarSize, 'avatar_sm' | 'avatar_md' | 'avatar_lg'> = 
  * - Single Responsibility: Solo renderiza imagen de perfil
  * - Open/Closed: Extensible con más tamaños sin modificar código
  */
-export function Avatar({ uri, size = 'md', style }: AvatarProps) {
+export function Avatar({ uri, size = 'md', style, fallbackText }: AvatarProps) {
+  const [hasError, setHasError] = useState(false);
   const dimension = SIZES[size];
+
+  // Reset error state when uri changes (e.g. after profile edit)
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
 
   const avatarStyle = {
     width: dimension,
@@ -42,7 +59,19 @@ export function Avatar({ uri, size = 'md', style }: AvatarProps) {
 
   const resolvedUri = cloudinaryUrl(uri, PRESET_MAP[size]);
 
-  if (!resolvedUri) {
+  if (!resolvedUri || hasError) {
+    if (fallbackText) {
+      return (
+        <View style={[styles.placeholder, avatarStyle, style]}>
+          <Text
+            style={[styles.initials, { fontSize: dimension * 0.35 }]}
+            allowFontScaling={false}
+          >
+            {getInitials(fallbackText)}
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={[styles.placeholder, avatarStyle, style]}>
         <Logo size={dimension * 0.7} />
@@ -52,8 +81,10 @@ export function Avatar({ uri, size = 'md', style }: AvatarProps) {
 
   return (
     <Image
+      key={resolvedUri}
       source={{ uri: resolvedUri }}
       style={[styles.image, avatarStyle, style as ImageStyle]}
+      onError={() => setHasError(true)}
     />
   );
 }
@@ -66,5 +97,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#333333',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  initials: {
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_600SemiBold',
   },
 });

@@ -1,5 +1,5 @@
 /**
- * Type-safe catalogue of every custom analytics event in Atto Sound.
+ * Type-safe catalogue of every custom analytics event in ATTO SOUND.
  * Namespaced by feature so funnels / insights in PostHog stay organised.
  */
 
@@ -29,6 +29,40 @@ export const ANALYTICS_EVENTS = {
     ABANDONED: 'registration_abandoned',
   },
 
+  // ── OTP (deep telemetry for debugging autofill) ─
+  OTP: {
+    // Screen lifecycle
+    SCREEN_VIEWED: 'otp_screen_viewed',
+    // Send/Resend
+    SEND_REQUESTED: 'otp_send_requested',
+    SEND_SUCCESS: 'otp_send_success',
+    SEND_FAILED: 'otp_send_failed',
+    RESEND_PRESSED: 'otp_resend_pressed',
+    RESEND_SUCCESS: 'otp_resend_success',
+    RESEND_FAILED: 'otp_resend_failed',
+    // Input interactions
+    INPUT_FOCUSED: 'otp_input_focused',
+    INPUT_BLURRED: 'otp_input_blurred',
+    INPUT_CHANGE: 'otp_input_change',
+    KEY_PRESS: 'otp_key_press',
+    // Autofill detection
+    AUTOFILL_DETECTED: 'otp_autofill_detected',
+    AUTOFILL_PARTIAL: 'otp_autofill_partial',
+    PASTE_DETECTED: 'otp_paste_detected',
+    // Completion
+    COMPLETED: 'otp_completed',
+    VERIFY_STARTED: 'otp_verify_started',
+    VERIFY_SUCCESS: 'otp_verify_success',
+    VERIFY_FAILED: 'otp_verify_failed',
+    // Edit identifier
+    EDIT_IDENTIFIER_OPENED: 'otp_edit_identifier_opened',
+    EDIT_IDENTIFIER_SAVED: 'otp_edit_identifier_saved',
+    // Timing
+    TIME_TO_FILL: 'otp_time_to_fill',
+    TIME_TO_VERIFY: 'otp_time_to_verify',
+    DIGIT_TIMELINE: 'otp_digit_timeline',
+  },
+
   // ── Feed ───────────────────────────────────────
   FEED: {
     VIEWED: 'feed_viewed',
@@ -38,6 +72,9 @@ export const ANALYTICS_EVENTS = {
     POST_COMMENTED: 'feed_post_commented',
     POST_SHARED: 'feed_post_shared',
     POST_SUPPORT: 'feed_post_support_pressed',
+    POST_CREATED: 'feed_post_created',
+    POST_BOOKMARKED: 'feed_post_bookmarked',
+    POST_REPOSTED: 'feed_post_reposted',
     LOAD_MORE: 'feed_load_more',
     AUTHOR_PROFILE_PRESSED: 'feed_author_profile_pressed',
     FOLLOW_PRESSED: 'feed_follow_pressed',
@@ -61,11 +98,49 @@ export const ANALYTICS_EVENTS = {
 
   // ── Messages ───────────────────────────────────
   MESSAGES: {
+    // Conversation lifecycle
     CONVERSATIONS_VIEWED: 'messages_conversations_viewed',
     CONVERSATION_OPENED: 'messages_conversation_opened',
-    MESSAGE_SENT: 'messages_message_sent',
     NEW_CONVERSATION_STARTED: 'messages_new_conversation_started',
     USER_SEARCHED: 'messages_user_searched',
+    // Sending
+    MESSAGE_SENT: 'messages_message_sent',
+    MESSAGE_SEND_FAILED: 'messages_message_send_failed',
+    MESSAGE_SEND_FALLBACK_REST: 'messages_message_send_fallback_rest',
+    // Reply
+    REPLY_SENT: 'messages_reply_sent',
+    REPLY_STARTED: 'messages_reply_started',
+    REPLY_CANCELLED: 'messages_reply_cancelled',
+    // Edit
+    EDIT_STARTED: 'messages_edit_started',
+    EDIT_COMPLETED: 'messages_edit_completed',
+    EDIT_CANCELLED: 'messages_edit_cancelled',
+    EDIT_FAILED: 'messages_edit_failed',
+    // Delete
+    DELETE_CONFIRMED: 'messages_delete_confirmed',
+    DELETE_FAILED: 'messages_delete_failed',
+    // Reactions
+    REACTION_ADDED: 'messages_reaction_added',
+    REACTION_REMOVED: 'messages_reaction_removed',
+    REACTION_FAILED: 'messages_reaction_failed',
+    // Read receipts
+    MESSAGES_MARKED_READ: 'messages_marked_read',
+    // Real-time
+    WEBSOCKET_CONNECTED: 'messages_websocket_connected',
+    WEBSOCKET_DISCONNECTED: 'messages_websocket_disconnected',
+    CHANNEL_JOINED: 'messages_channel_joined',
+    CHANNEL_JOIN_FAILED: 'messages_channel_join_failed',
+    MESSAGE_RECEIVED_REALTIME: 'messages_received_realtime',
+    // Typing
+    TYPING_STARTED: 'messages_typing_started',
+    TYPING_STOPPED: 'messages_typing_stopped',
+    // Pagination
+    LOAD_EARLIER_PRESSED: 'messages_load_earlier',
+    // Context menu
+    CONTEXT_MENU_OPENED: 'messages_context_menu_opened',
+    CONTEXT_MENU_ACTION: 'messages_context_menu_action',
+    // Copy
+    MESSAGE_COPIED: 'messages_message_copied',
   },
 
   // ── Projects ───────────────────────────────────
@@ -91,7 +166,7 @@ export const ANALYTICS_EVENTS = {
     AVATAR_UPLOADED: 'profile_avatar_uploaded',
     VERIFICATION_OTP_SENT: 'profile_verification_otp_sent',
     VERIFICATION_COMPLETED: 'profile_verification_completed',
-    ARTIST_CONTACT_EDITED: 'profile_artist_contact_edited',
+    CREATOR_CONTACT_EDITED: 'profile_artist_contact_edited',
   },
 
   // ── Payments ───────────────────────────────────
@@ -101,6 +176,11 @@ export const ANALYTICS_EVENTS = {
     PAYMENT_FAILED: 'payment_failed',
     SUBSCRIPTION_CANCELLED: 'payment_subscription_cancelled',
     BRIDGE_NUMBER_ASSIGNED: 'payment_bridge_number_assigned',
+  },
+
+  // ── Network ────────────────────────────────────
+  NETWORK: {
+    API_REQUEST: 'api_request',
   },
 
   // ── Errors ─────────────────────────────────────

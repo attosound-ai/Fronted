@@ -1,7 +1,9 @@
 import { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
@@ -17,8 +19,12 @@ interface ConversationItemProps {
 }
 
 function ConversationItemInner({ conversation, onPress }: ConversationItemProps) {
-  const { avatarUri, displayName } = useParticipantProfile(conversation.participantId);
-  const name = conversation.participantName || displayName || 'User';
+  const { t } = useTranslation('messages');
+  const { avatarUri, displayName, role } = useParticipantProfile(
+    conversation.participantId
+  );
+  const name =
+    conversation.participantName || displayName || t('conversation.fallbackUserName');
 
   return (
     <TouchableOpacity
@@ -28,14 +34,24 @@ function ConversationItemInner({ conversation, onPress }: ConversationItemProps)
       }
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Conversation with ${name}${conversation.unreadCount > 0 ? `, ${conversation.unreadCount} unread` : ''}`}
+      accessibilityLabel={
+        conversation.unreadCount > 0
+          ? t('conversation.unreadAccessibility', {
+              name,
+              count: conversation.unreadCount,
+            })
+          : name
+      }
     >
-      <Avatar uri={avatarUri} size="md" />
+      <Avatar uri={avatarUri} size="md" fallbackText={name} />
       <View style={styles.content}>
         <View style={styles.topRow}>
-          <Text variant="h3" numberOfLines={1} style={styles.name}>
-            {name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text variant="h3" numberOfLines={1} style={styles.name}>
+              {name}
+            </Text>
+            {role === 'creator' && <CreatorBadge size="sm" />}
+          </View>
           {conversation.lastMessageAt && (
             <Text variant="small" style={styles.time}>
               {formatRelativeTime(conversation.lastMessageAt)}
@@ -80,10 +96,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  name: {
+  nameRow: {
     flex: 1,
-    color: COLORS.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginRight: SPACING.sm,
+  },
+  name: {
+    flexShrink: 1,
+    color: COLORS.white,
   },
   time: {
     color: COLORS.gray[500],
@@ -99,7 +121,7 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   badge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.white,
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -108,9 +130,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
-    color: COLORS.white,
+    color: '#000000',
     fontSize: 11,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     lineHeight: 14,
   },
 });

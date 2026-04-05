@@ -9,79 +9,21 @@ import {
   UIManager,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useAccountStore } from '@/stores/accountStore';
 import { paymentService } from '@/lib/api/paymentService';
 import type { PlanId } from '@/types/registration';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-
-const PLANS: {
-  id: PlanId;
-  name: string;
-  price: string;
-  priceAmount: number;
-  features: string[];
-}[] = [
-  {
-    id: 'connect_free',
-    name: 'Connect',
-    price: 'Free',
-    priceAmount: 0,
-    features: [
-      'Search and discover creators',
-      'Listen to recordings',
-      'Comment and engage with content',
-      'Community browsing',
-    ],
-  },
-  {
-    id: 'record',
-    name: 'Record',
-    price: '$99/year',
-    priceAmount: 99,
-    features: [
-      'Record and upload content',
-      'Create a profile',
-      'Community engagement',
-      'Bridge phone number',
-    ],
-  },
-  {
-    id: 'record_pro',
-    name: 'Record Pro',
-    price: '$139/year',
-    priceAmount: 139,
-    features: [
-      'Advanced production suite',
-      'AI avatar videos (4-10 sec)',
-      'Unlimited recordings',
-      'Enhanced analytics',
-      'Priority discovery algorithm',
-    ],
-  },
-  {
-    id: 'connect_pro',
-    name: 'Connect Pro',
-    price: '$1,999/year',
-    priceAmount: 1999,
-    features: [
-      'Talent analytics dashboard',
-      'Top emerging creators',
-      'Engagement & demographic insights',
-      'Exportable data reports',
-      'Early access to emerging talent',
-    ],
-  },
-];
 
 const PLAN_ORDER: Record<PlanId, number> = {
   connect_free: 0,
@@ -91,10 +33,49 @@ const PLAN_ORDER: Record<PlanId, number> = {
 };
 
 export default function SubscriptionScreen() {
+  const { t } = useTranslation('subscription');
+
+  const PLANS: {
+    id: PlanId;
+    name: string;
+    price: string;
+    priceAmount: number;
+    features: string[];
+  }[] = [
+    {
+      id: 'connect_free',
+      name: t('plans.connect_free.name'),
+      price: t('plans.connect_free.price'),
+      priceAmount: 0,
+      features: t('plans.connect_free.features', { returnObjects: true }) as string[],
+    },
+    {
+      id: 'record',
+      name: t('plans.record.name'),
+      price: t('plans.record.price'),
+      priceAmount: 99,
+      features: t('plans.record.features', { returnObjects: true }) as string[],
+    },
+    {
+      id: 'record_pro',
+      name: t('plans.record_pro.name'),
+      price: t('plans.record_pro.price'),
+      priceAmount: 139,
+      features: t('plans.record_pro.features', { returnObjects: true }) as string[],
+    },
+  ];
+
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const user = useAuthStore((s) => s.user);
+  const accounts = useAccountStore((s) => s.accounts);
+
+  // If user is a representative, find the managed creator to pay on their behalf
+  const managedCreator =
+    user?.role === 'representative'
+      ? accounts.find((a) => a.user.id !== user.id && a.user.isManagedAccount)
+      : undefined;
   const [isProcessing, setIsProcessing] = useState(false);
   const [activePlan, setActivePlan] = useState<PlanId | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<PlanId | null>(null);
@@ -113,17 +94,18 @@ export default function SubscriptionScreen() {
       const { clientSecret, paymentIntentId } = await paymentService.upgradeSubscription(
         planId,
         user.email,
+        managedCreator ? String(managedCreator.user.id) : undefined
       );
 
       const { error: initError } = await initPaymentSheet({
         paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'ATTO Sound',
+        merchantDisplayName: t('merchantName'),
         style: 'alwaysDark',
         returnURL: 'atto://stripe-redirect',
       });
 
       if (initError) {
-        Alert.alert('Error', initError.message);
+        Alert.alert(t('errorTitle'), initError.message);
         return;
       }
 
@@ -131,16 +113,16 @@ export default function SubscriptionScreen() {
 
       if (presentError) {
         if (presentError.code !== 'Canceled') {
-          Alert.alert('Error', presentError.message);
+          Alert.alert(t('errorTitle'), presentError.message);
         }
         return;
       }
 
       await paymentService.confirmPayment(paymentIntentId).catch(() => {});
       await fetchSubscription();
-      Alert.alert('Success', 'Your subscription has been upgraded!');
+      Alert.alert(t('successTitle'), t('successUpgrade'));
     } catch {
-      Alert.alert('Error', 'Failed to process upgrade. Please try again.');
+      Alert.alert(t('errorTitle'), t('errorUpgradeFailed'));
     } finally {
       setIsProcessing(false);
       setActivePlan(null);
@@ -148,41 +130,30 @@ export default function SubscriptionScreen() {
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      'Cancel Subscription',
-      'Are you sure? You will lose access to premium features at the end of your billing period.',
-      [
-        { text: 'Keep Plan', style: 'cancel' },
-        {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await paymentService.cancelSubscription();
-              await fetchSubscription();
-              Alert.alert('Cancelled', 'Your subscription has been cancelled.');
-            } catch {
-              Alert.alert('Error', 'Failed to cancel. Please try again.');
-            }
-          },
+    Alert.alert(t('cancelDialog.title'), t('cancelDialog.message'), [
+      { text: t('cancelDialog.keepPlan'), style: 'cancel' },
+      {
+        text: t('cancelDialog.confirm'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await paymentService.cancelSubscription();
+            await fetchSubscription();
+            Alert.alert(t('errorTitle'), t('successCancelled'));
+          } catch {
+            Alert.alert(t('errorTitle'), t('errorCancelFailed'));
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-        <Text variant="h3" style={styles.headerTitle}>
-          Subscription
-        </Text>
-        <View style={styles.backButton} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {PLANS.map((plan) => {
           const isCurrent = plan.id === currentPlan;
           const isUpgrade = PLAN_ORDER[plan.id] > PLAN_ORDER[currentPlan];
@@ -201,13 +172,13 @@ export default function SubscriptionScreen() {
 
                 {isCurrent && (
                   <View style={styles.currentBadge}>
-                    <Text style={styles.currentBadgeText}>Current plan</Text>
+                    <Text style={styles.currentBadgeText}>{t('currentPlanBadge')}</Text>
                   </View>
                 )}
 
                 {isUpgrade && (
                   <Button
-                    title="Upgrade"
+                    title={t('upgradeButton')}
                     onPress={() => handleUpgrade(plan.id)}
                     loading={isProcessing && activePlan === plan.id}
                     disabled={isProcessing && activePlan !== plan.id}
@@ -217,7 +188,7 @@ export default function SubscriptionScreen() {
 
                 {isCurrent && plan.id !== 'connect_free' && (
                   <TouchableOpacity onPress={handleCancel}>
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Text style={styles.cancelText}>{t('cancelButton')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -228,13 +199,13 @@ export default function SubscriptionScreen() {
                 style={styles.featuresToggle}
               >
                 <Text style={styles.featuresToggleText}>
-                  {isExpanded ? 'Hide features' : 'See features'}
+                  {isExpanded ? t('featuresHide') : t('featuresShow')}
                 </Text>
-                <Ionicons
-                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color="#666"
-                />
+                {isExpanded ? (
+                  <ChevronUp size={14} color="#666" strokeWidth={2.25} />
+                ) : (
+                  <ChevronDown size={14} color="#666" strokeWidth={2.25} />
+                )}
               </TouchableOpacity>
 
               {isExpanded && (
@@ -242,7 +213,7 @@ export default function SubscriptionScreen() {
                   <View style={styles.features}>
                     {plan.features.map((f, i) => (
                       <View key={i} style={styles.featureRow}>
-                        <Ionicons name="checkmark" size={14} color="#888" />
+                        <Check size={14} color="#888" strokeWidth={2.25} />
                         <Text style={styles.featureText}>{f}</Text>
                       </View>
                     ))}
@@ -255,7 +226,7 @@ export default function SubscriptionScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -263,25 +234,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 17,
   },
   content: {
     paddingHorizontal: 16,
@@ -310,12 +262,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   planName: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Archivo_700Bold',
     fontSize: 16,
     color: '#FFF',
   },
   planPrice: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#999',
     marginTop: 2,
@@ -328,7 +280,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   currentBadgeText: {
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
     fontSize: 13,
     color: '#FFFFFF',
   },
@@ -340,7 +292,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   featuresToggleText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 12,
     color: '#666',
   },
@@ -357,13 +309,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   featureText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#CCC',
     flex: 1,
   },
   cancelText: {
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 13,
     color: '#EF4444',
     textDecorationLine: 'underline',

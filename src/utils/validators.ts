@@ -78,3 +78,27 @@ export function isValidOtpCode(code: string): boolean {
 export function isValidInmateNumber(inmateNumber: string): boolean {
   return /^[A-Za-z0-9-]{4,20}$/.test(inmateNumber.trim());
 }
+
+/**
+ * Validates "YYYY-MM-DD" format and that the date is real
+ */
+export function isValidDate(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+/**
+ * Returns true if age calculated from "YYYY-MM-DD" is >= minAge
+ */
+export function isMinimumAge(dateStr: string, minAge: number = 18): boolean {
+  if (!isValidDate(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) {
+    age--;
+  }
+  return age >= minAge;
+}

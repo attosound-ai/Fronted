@@ -1,5 +1,14 @@
-import { useEffect } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { useEffect, useState, useRef } from 'react';
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioSampleListener,
+  setAudioModeAsync,
+} from 'expo-audio';
+import { useMountEffect } from '@/hooks';
+
+const BAR_COUNT = 40;
+const UPDATE_MS = 80; // ~12 fps
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -11,10 +20,34 @@ function formatTime(seconds: number): string {
 export function useAudioPlayback(url: string | undefined) {
   const player = useAudioPlayer(url ?? null, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);
+  const [barAmplitudes, setBarAmplitudes] = useState<number[]>([]);
+  const lastUpdateRef = useRef(0);
 
-  useEffect(() => {
+  useMountEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true });
-  }, []);
+  });
+
+  // Real-time PCM amplitude → bar heights
+  useAudioSampleListener(player, (sample) => {
+    const now = Date.now();
+    if (now - lastUpdateRef.current < UPDATE_MS) return;
+    lastUpdateRef.current = now;
+
+    const frames = sample.channels[0]?.frames;
+    if (!frames || frames.length === 0) return;
+
+    const chunk = Math.floor(frames.length / BAR_COUNT);
+    if (chunk === 0) return;
+
+    const amps = Array.from({ length: BAR_COUNT }, (_, i) => {
+      let sum = 0;
+      for (let j = i * chunk; j < (i + 1) * chunk; j++) sum += frames[j] * frames[j];
+      return Math.min(Math.sqrt(sum / chunk) * 8, 1);
+    });
+    setBarAmplitudes(amps);
+  });
+
+  const displayAmplitudes = status.playing ? barAmplitudes : [];
 
   // Auto-reset when track finishes
   useEffect(() => {
@@ -44,6 +77,7 @@ export function useAudioPlayback(url: string | undefined) {
     progress: status.duration > 0 ? status.currentTime / status.duration : 0,
     currentTime: formatTime(status.currentTime),
     duration: formatTime(status.duration),
+    barAmplitudes: displayAmplitudes,
     togglePlayPause,
     seekToFraction,
   };

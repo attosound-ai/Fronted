@@ -1,5 +1,6 @@
 import { View, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, ChevronRight } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { Project } from '@/types/project';
 
@@ -24,13 +25,14 @@ function formatDate(dateStr: string): string {
 }
 
 export function ProjectCard({ project, onPress }: ProjectCardProps) {
+  const { t } = useTranslation('projects');
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
     >
       <View style={styles.iconContainer}>
-        <Ionicons name="musical-notes" size={24} color="#3B82F6" />
+        <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
       </View>
       <View style={styles.info}>
         <Text variant="body" style={styles.name} numberOfLines={1}>
@@ -38,7 +40,8 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
         </Text>
         <View style={styles.meta}>
           <Text variant="caption" style={styles.metaText}>
-            {project.segmentCount} track{project.segmentCount !== 1 ? 's' : ''}
+            {project.segmentCount}{' '}
+            {project.segmentCount !== 1 ? t('card.trackPlural') : t('card.trackSingular')}
           </Text>
           <View style={styles.dot} />
           <Text variant="caption" style={styles.metaText}>
@@ -50,7 +53,7 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
           </Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#444" />
+      <ChevronRight size={20} color="#444" strokeWidth={2.25} />
     </Pressable>
   );
 }
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: '#FFF',
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   meta: {
     flexDirection: 'row',

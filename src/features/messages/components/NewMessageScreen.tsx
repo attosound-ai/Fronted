@@ -3,13 +3,13 @@ import {
   View,
   FlatList,
   TextInput,
-  TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Search } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -18,15 +18,11 @@ import { messageService } from '../services/messageService';
 import type { User } from '@/types';
 
 export function NewMessageScreen() {
-  const insets = useSafeAreaInsets();
+  const { t } = useTranslation('messages');
   const [query, setQuery] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { results, isLoading } = useUserSearch(query);
-
-  const handleBack = useCallback(() => {
-    router.back();
-  }, []);
 
   const handleSelectUser = useCallback(
     async (user: User) => {
@@ -48,7 +44,7 @@ export function NewMessageScreen() {
         });
       } catch (err: unknown) {
         const message =
-          err instanceof Error ? err.message : 'Failed to start conversation';
+          err instanceof Error ? err.message : t('newMessage.errorFailedToStart');
         setError(message);
         setIsCreating(false);
       }
@@ -63,7 +59,9 @@ export function NewMessageScreen() {
         onPress={() => handleSelectUser(item)}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Message ${item.displayName || item.username}`}
+        accessibilityLabel={t('newMessage.messageUserAccessibility', {
+          name: item.displayName || item.username,
+        })}
       >
         <Avatar uri={item.avatar} size="md" />
         <View style={styles.userInfo}>
@@ -80,34 +78,18 @@ export function NewMessageScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="chevron-back" size={28} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text variant="h2">New Message</Text>
-      </View>
+    <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Ionicons
-          name="search-outline"
-          size={18}
-          color={COLORS.gray[500]}
-          style={styles.searchIcon}
-        />
+        <Search size={18} color={COLORS.gray[500]} strokeWidth={2.25} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search users..."
+          placeholder={t('newMessage.searchPlaceholder')}
           placeholderTextColor={COLORS.gray[500]}
           value={query}
           onChangeText={setQuery}
           autoFocus
           returnKeyType="search"
-          accessibilityLabel="Search users"
+          accessibilityLabel={t('newMessage.searchAccessibilityLabel')}
         />
       </View>
       {isLoading && (
@@ -119,7 +101,7 @@ export function NewMessageScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.primary} />
           <Text variant="caption" style={styles.creatingText}>
-            Creating conversation...
+            {t('newMessage.creatingConversation')}
           </Text>
         </View>
       )}
@@ -145,16 +127,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.black,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.md,
-    gap: SPACING.sm,
-  },
-  backButton: {
-    padding: SPACING.xs,
-  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -171,7 +143,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.sm + 2,
     color: COLORS.white,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
     fontSize: 14,
   },
   loadingContainer: {

@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   selected: {
-    borderColor: '#3B82F6',
+    borderColor: '#FFFFFF',
     borderWidth: 2,
   },
   handle: {
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 14,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     borderRadius: 3,
     justifyContent: 'center',
     alignItems: 'center',

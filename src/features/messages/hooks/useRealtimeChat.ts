@@ -2,8 +2,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { phoenixSocket } from '@/lib/api/phoenixSocket';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useChatStore } from '../stores/chatStore';
-import type { BackendMessage } from '../types';
+import type { BackendMessage, BackendReaction, Reaction } from '../types';
 import type { ChatMessage, ChatMessagesPage } from '../types';
 
 function mapBackendMessage(m: BackendMessage): ChatMessage {
@@ -14,6 +15,12 @@ function mapBackendMessage(m: BackendMessage): ChatMessage {
     content: m.content,
     contentType: m.content_type,
     isRead: m.is_read,
+    isEdited: m.is_edited || false,
+    editedAt: m.edited_at || null,
+    isDeleted: m.is_deleted || false,
+    replyToId: m.reply_to_id || null,
+    replyToContent: m.reply_to_content || null,
+    replyToSender: m.reply_to_sender || null,
     createdAt: m.created_at || null,
   };
 }
@@ -34,10 +41,31 @@ export function useRealtimeChat(conversationId: string) {
         QUERY_KEYS.MESSAGES.CHAT(conversationId),
         (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
           if (!old) return old;
-          // Deduplicate — don't add if already in the first page
           const firstPage = old.pages[0];
-          if (firstPage.messages.some((m) => m.messageId === msg.messageId)) {
-            return old;
+          // Deduplicate: skip if messageId already exists OR if there's a
+          // temp optimistic message with the same content (own message echo)
+          if (
+            firstPage.messages.some(
+              (m) =>
+                m.messageId === msg.messageId ||
+                (m.messageId.startsWith('temp-') && m.content === msg.content)
+            )
+          ) {
+            // Replace the temp message with the real server message
+            return {
+              ...old,
+              pages: [
+                {
+                  ...firstPage,
+                  messages: firstPage.messages.map((m) =>
+                    m.messageId.startsWith('temp-') && m.content === msg.content
+                      ? { ...msg, status: 'sent' as const }
+                      : m
+                  ),
+                },
+                ...old.pages.slice(1),
+              ],
+            };
           }
           return {
             ...old,
@@ -49,7 +77,28 @@ export function useRealtimeChat(conversationId: string) {
         }
       );
       // Refresh conversation list sidebar
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
+    },
+    [conversationId, queryClient]
+  );
+
+  const updateMessageInCache = useCallback(
+    (messageId: string, updater: (msg: ChatMessage) => ChatMessage) => {
+      queryClient.setQueryData(
+        QUERY_KEYS.MESSAGES.CHAT(conversationId),
+        (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.map((m) =>
+                m.messageId === messageId ? updater(m) : m
+              ),
+            })),
+          };
+        }
+      );
     },
     [conversationId, queryClient]
   );
@@ -61,13 +110,18 @@ export function useRealtimeChat(conversationId: string) {
       onMessage: (payload) => {
         const msg = mapBackendMessage(payload as unknown as BackendMessage);
         prependMessage(msg);
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_RECEIVED_REALTIME, {
+          conversation_id: conversationId,
+          message_id: msg.messageId,
+          sender_id: msg.senderId,
+          has_reply: !!msg.replyToId,
+        });
       },
       onTyping: (payload) => {
         const { user_id, is_typing } = payload as { user_id: string; is_typing: boolean };
         setTyping(conversationId, user_id, is_typing);
       },
       onMessagesRead: () => {
-        // Mark all own messages as read in cache
         queryClient.setQueryData(
           QUERY_KEYS.MESSAGES.CHAT(conversationId),
           (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
@@ -82,21 +136,97 @@ export function useRealtimeChat(conversationId: string) {
           }
         );
       },
+      onReactionAdded: (payload) => {
+        const r = payload as unknown as BackendReaction;
+        const reaction: Reaction = {
+          messageId: r.message_id,
+          userId: r.user_id,
+          emoji: r.emoji,
+        };
+        updateMessageInCache(r.message_id, (m) => ({
+          ...m,
+          reactions: [
+            ...(m.reactions ?? []).filter(
+              (x) => !(x.userId === reaction.userId && x.emoji === reaction.emoji)
+            ),
+            reaction,
+          ],
+        }));
+      },
+      onReactionRemoved: (payload) => {
+        const { message_id, user_id, emoji } = payload as {
+          message_id: string;
+          user_id: string;
+          emoji: string;
+        };
+        updateMessageInCache(message_id, (m) => ({
+          ...m,
+          reactions: (m.reactions ?? []).filter(
+            (x) => !(x.userId === user_id && x.emoji === emoji)
+          ),
+        }));
+      },
+      onMessageEdited: (payload) => {
+        const { message_id, content, edited_at } = payload as {
+          message_id: string;
+          content: string;
+          edited_at: string;
+        };
+        updateMessageInCache(message_id, (m) => ({
+          ...m,
+          content,
+          isEdited: true,
+          editedAt: edited_at,
+        }));
+      },
+      onMessageDeleted: (payload) => {
+        const { message_id } = payload as { message_id: string };
+        updateMessageInCache(message_id, (m) => ({
+          ...m,
+          isDeleted: true,
+          content: '',
+        }));
+      },
     });
 
-    if (channel) joinedRef.current = true;
+    if (channel) {
+      joinedRef.current = true;
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CHANNEL_JOINED, {
+        conversation_id: conversationId,
+      });
+    } else {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CHANNEL_JOIN_FAILED, {
+        conversation_id: conversationId,
+      });
+    }
 
     return () => {
       phoenixSocket.leaveChannel(conversationId);
       clearTyping(conversationId);
       joinedRef.current = false;
     };
-  }, [conversationId, prependMessage, setTyping, clearTyping, queryClient]);
+  }, [
+    conversationId,
+    prependMessage,
+    updateMessageInCache,
+    setTyping,
+    clearTyping,
+    queryClient,
+  ]);
 
   /** Send a message via WebSocket (falls back to REST in useChat if this fails). */
   const sendViaSocket = useCallback(
-    async (content: string, contentType = 'text') => {
-      const resp = await phoenixSocket.pushMessage(conversationId, content, contentType);
+    async (
+      content: string,
+      contentType = 'text',
+      replyTo?: { id: string; content: string; sender: string }
+    ) => {
+      const resp = await phoenixSocket.pushMessage(
+        conversationId,
+        content,
+        contentType,
+        replyTo
+      );
       return mapBackendMessage(resp as unknown as BackendMessage);
     },
     [conversationId]

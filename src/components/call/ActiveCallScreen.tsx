@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   TouchableOpacity,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, Play, Pause, Mic, MicOff, Volume1, Volume2, Phone, Plus, Music } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
@@ -49,6 +50,7 @@ const RULER_HEIGHT = 28;
 const LANE_LABEL_WIDTH = 34;
 
 export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
+  const { t } = useTranslation(['calls', 'common']);
   const queryClient = useQueryClient();
   const activeCall = useCallStore((s) => s.activeCall);
   const activeProjectId = useCallStore((s) => s.activeProjectId);
@@ -306,7 +308,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
       setIsRecording(true);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
-      Alert.alert('Recording failed', msg);
+      Alert.alert(t('active.recordingFailed'), msg);
     }
   }, [activeCall, startCapture]);
 
@@ -362,7 +364,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
                   await new Promise((r) => setTimeout(r, 1000));
                 } else {
                   const m = e instanceof Error ? e.message : String(e);
-                  showToast(`Could not link to project: ${m}`);
+                  showToast(t('active.couldNotLink', { message: m }));
                 }
               }
             }
@@ -395,25 +397,26 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
           addClip(newClip);
 
           setIsProcessing(false);
-          showToast('Recording added to timeline');
+          showToast(t('common:toasts.recordingAdded'));
           return;
         }
       } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         if (i === maxRetries - 1) {
           setIsProcessing(false);
-          Alert.alert('Error', `Could not load recording: ${msg}`);
+          Alert.alert(
+            t('active.recordingFailed'),
+            t('active.couldNotLoadRecording', { message: msg })
+          );
           return;
         }
       }
     }
     // All retries exhausted — segment not found
     setIsProcessing(false);
-    Alert.alert(
-      'Recording Not Found',
-      'The recording was saved on the server but could not be loaded. Try refreshing the project.',
-      [{ text: 'OK' }]
-    );
+    Alert.alert(t('active.recordingNotFound'), t('active.recordingNotFoundMessage'), [
+      { text: t('common:buttons.ok') },
+    ]);
   }, [
     activeCall,
     activeProjectId,
@@ -459,7 +462,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
           queryClient.invalidateQueries({ queryKey: ['project', activeProjectId] });
         }
       } catch {
-        showToast('Autosave failed');
+        showToast(t('common:toasts.autosaveFailed'));
       } finally {
         savingRef.current = false;
         setIsSaving(false);
@@ -497,19 +500,21 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
   const handleExport = useCallback(async () => {
     if (!activeProjectId) return;
     if (state.clips.length === 0) {
-      showToast('No clips to export');
+      showToast(t('common:toasts.noClipsToExport'));
       return;
     }
     try {
       await flushSave();
       const result = await projectService.exportProject(activeProjectId);
       Alert.alert(
-        'Export Complete',
-        `Audio exported (${Math.round(result.fileSizeBytes / 1024)}KB)`,
-        [{ text: 'OK' }]
+        t('active.exportComplete'),
+        t('active.exportCompleteMessage', {
+          size: Math.round(result.fileSizeBytes / 1024),
+        }),
+        [{ text: t('common:buttons.ok') }]
       );
     } catch {
-      showToast('Export failed');
+      showToast(t('common:toasts.exportFailed'));
     }
   }, [activeProjectId, state.clips, flushSave]);
 
@@ -540,7 +545,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
     (laneIndex: number) => {
       const hasClips = state.clips.some((c) => c.laneIndex === laneIndex);
       if (hasClips) {
-        showToast('Remove clips from this lane first');
+        showToast(t('common:toasts.removeClipsFirst'));
         return;
       }
       removeLane(laneIndex);
@@ -552,8 +557,8 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
     (laneIndex: number) => {
       const current = state.laneMeta[laneIndex];
       Alert.prompt(
-        'Lane Name',
-        `Enter a name for lane ${laneIndex + 1}`,
+        t('active.laneName'),
+        t('active.laneNamePrompt', { number: laneIndex + 1 }),
         (text) => {
           if (text !== undefined) {
             setLaneMeta(laneIndex, {
@@ -584,7 +589,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
       {/* Header: call info + controls */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
-          <Ionicons name="arrow-back" size={22} color="#FFF" />
+          <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -600,38 +605,42 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         </View>
 
         <TouchableOpacity onPress={handlePlayPause} style={styles.headerPlayButton}>
-          <Ionicons name={state.isPlaying ? 'pause' : 'play'} size={20} color="#FFF" />
+          {state.isPlaying ? (
+            <Pause size={20} color="#FFF" strokeWidth={2.25} />
+          ) : (
+            <Play size={20} color="#FFF" strokeWidth={2.25} />
+          )}
         </TouchableOpacity>
       </View>
 
       {/* Call controls row */}
       <View style={styles.callControlsRow}>
         <TouchableOpacity style={styles.callControl} onPress={toggleMuteCall}>
-          <Ionicons
-            name={activeCall.isMuted ? 'mic-off' : 'mic'}
-            size={20}
-            color={activeCall.isMuted ? '#EF4444' : '#FFF'}
-          />
+          {activeCall.isMuted ? (
+            <MicOff size={20} color="#EF4444" strokeWidth={2.25} />
+          ) : (
+            <Mic size={20} color="#FFF" strokeWidth={2.25} />
+          )}
           <Text variant="caption" style={styles.callControlLabel}>
-            {activeCall.isMuted ? 'Unmute' : 'Mute'}
+            {activeCall.isMuted ? t('active.unmute') : t('active.mute')}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.callControl} onPress={toggleSpeaker}>
-          <Ionicons
-            name={activeCall.isSpeaker ? 'volume-high' : 'volume-low'}
-            size={20}
-            color={activeCall.isSpeaker ? '#3B82F6' : '#FFF'}
-          />
+          {activeCall.isSpeaker ? (
+            <Volume2 size={20} color="#3B82F6" strokeWidth={2.25} />
+          ) : (
+            <Volume1 size={20} color="#FFF" strokeWidth={2.25} />
+          )}
           <Text variant="caption" style={styles.callControlLabel}>
-            Speaker
+            {t('active.speaker')}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.hangUpButton} onPress={handleHangUp}>
-          <Ionicons name="call" size={18} color="#FFF" style={styles.hangUpIcon} />
+          <Phone size={18} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
           <Text variant="caption" style={styles.hangUpLabel}>
-            End
+            {t('active.end')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -641,7 +650,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         <Animated.View style={[styles.recordingBanner, { opacity: pulseAnim }]}>
           <View style={styles.recordingDot} />
           <Text variant="caption" style={styles.recordingText}>
-            Recording {formatTime(recordingElapsed)}
+            {t('active.recording', { time: formatTime(recordingElapsed) })}
           </Text>
         </Animated.View>
       )}
@@ -650,7 +659,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         <View style={styles.processingBanner}>
           <ActivityIndicator size="small" color="#3B82F6" />
           <Text variant="caption" style={styles.processingText}>
-            Processing recording...
+            {t('active.processingRecording')}
           </Text>
         </View>
       )}
@@ -661,7 +670,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
           {formatTimelineMs(playPosition)} / {formatTimelineMs(totalDuration)}
         </Text>
         <Text variant="caption" style={styles.clipCount}>
-          {state.clips.length} clip{state.clips.length !== 1 ? 's' : ''}
+          {t('active.clipCount', { count: state.clips.length })}
         </Text>
       </View>
 
@@ -785,15 +794,15 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
               { top: RULER_HEIGHT + state.laneCount * TRACK_HEIGHT + LANE_PADDING / 2 },
             ]}
           >
-            <Ionicons name="add" size={14} color="#666" />
+            <Plus size={14} color="#666" strokeWidth={2.25} />
           </Pressable>
         </View>
 
         {state.clips.length === 0 && !isProjectLoading && (
           <View style={styles.emptyOverlay}>
-            <Ionicons name="musical-notes-outline" size={32} color="#333" />
+            <Music size={32} color="#333" strokeWidth={2.25} />
             <Text variant="body" style={styles.emptyText}>
-              Tap Record to capture audio
+              {t('active.tapToRecord')}
             </Text>
           </View>
         )}
@@ -835,10 +844,10 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         >
           <Pressable style={styles.volumeModal} onPress={() => {}}>
             <Text variant="body" style={styles.volumeModalTitle}>
-              Clip Volume
+              {t('active.clipVolume')}
             </Text>
             <View style={styles.volumeSliderRow}>
-              <Ionicons name="volume-low" size={18} color="#888" />
+              <Volume1 size={18} color="#888" strokeWidth={2.25} />
               <Pressable
                 style={styles.volumeTrack}
                 onPress={(e) => {
@@ -858,7 +867,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
                   ]}
                 />
               </Pressable>
-              <Ionicons name="volume-high" size={18} color="#888" />
+              <Volume2 size={18} color="#888" strokeWidth={2.25} />
             </View>
             <Text variant="caption" style={styles.volumePercent}>
               {Math.round(
@@ -873,7 +882,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
               onPress={() => setVolumeModalVisible(false)}
             >
               <Text variant="caption" style={styles.volumeDoneText}>
-                Done
+                {t('common:buttons.done')}
               </Text>
             </Pressable>
           </Pressable>
@@ -910,17 +919,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#FFF',
     fontSize: 16,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   headerO: {
     color: '#FFF',
     fontSize: 16,
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Archivo_700Bold',
   },
   callTimerText: {
     color: '#666',
     fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
   },
   headerPlayButton: {
     width: 36,
@@ -947,7 +956,7 @@ const styles = StyleSheet.create({
   callControlLabel: {
     color: '#888',
     fontSize: 10,
-    fontFamily: 'Poppins_400Regular',
+    fontFamily: 'Archivo_400Regular',
   },
   hangUpButton: {
     alignItems: 'center',
@@ -960,7 +969,7 @@ const styles = StyleSheet.create({
   hangUpLabel: {
     color: '#EF4444',
     fontSize: 10,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   recordingBanner: {
     flexDirection: 'row',
@@ -979,7 +988,7 @@ const styles = StyleSheet.create({
   recordingText: {
     color: '#EF4444',
     fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   processingBanner: {
     flexDirection: 'row',
@@ -992,7 +1001,7 @@ const styles = StyleSheet.create({
   processingText: {
     color: '#3B82F6',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   positionBar: {
     flexDirection: 'row',
@@ -1003,7 +1012,7 @@ const styles = StyleSheet.create({
   positionText: {
     color: '#888',
     fontSize: 12,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   clipCount: {
     color: '#555',
@@ -1063,7 +1072,7 @@ const styles = StyleSheet.create({
   laneLabelText: {
     color: '#555',
     fontSize: 8,
-    fontFamily: 'Poppins_500Medium',
+    fontFamily: 'Archivo_500Medium',
   },
   laneLabelTextActive: {
     color: '#3B82F6',
@@ -1113,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   volumeModalTitle: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 15,
   },
   volumeSliderRow: {
@@ -1139,7 +1148,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 20,
     lineHeight: 28,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
   volumeDoneButton: {
     backgroundColor: '#FFF',
@@ -1150,6 +1159,6 @@ const styles = StyleSheet.create({
   volumeDoneText: {
     color: '#000',
     fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
   },
 });

@@ -1,30 +1,40 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Keyboard, Animated } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
+import { useAccountStore } from '@/stores/accountStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
+import { haptic } from '@/lib/haptics/hapticService';
 
 type Step = 'identifier' | 'password' | '2fa';
 
 export default function LoginScreen() {
+  const { t } = useTranslation('auth');
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isAddMode = mode === 'add';
+  const addAccount = useAccountStore((s) => s.addAccount);
+  const switchToAccount = useAccountStore((s) => s.switchToAccount);
+
   const [step, setStep] = useState<Step>('identifier');
-  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [identifierError, setIdentifierError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-
-  const opacity = useRef(new Animated.Value(1)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
 
   const login = useAuthStore((s) => s.login);
   const isAuthenticating = useAuthStore((s) => s.isAuthenticating);
@@ -40,105 +50,120 @@ export default function LoginScreen() {
     }, [clearError])
   );
 
-  const animateTransition = useCallback(
-    (dir: 'forward' | 'back') => {
-      const startY = dir === 'forward' ? 30 : -20;
-      opacity.setValue(0);
-      translateY.setValue(startY);
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    },
-    [opacity, translateY]
-  );
-
-  const goTo = useCallback((nextStep: Step, dir: 'forward' | 'back') => {
-    setDirection(dir);
-    setStep(nextStep);
+  const goToStep = useCallback((next: Step) => {
+    setStep(next);
   }, []);
-
-  useEffect(() => {
-    animateTransition(direction);
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Transition to 2FA step when pending2FA is set
-  useEffect(() => {
-    if (pending2FA && step === 'password') {
-      goTo('2fa', 'forward');
-    }
-  }, [pending2FA, step, goTo]);
 
   const handleContinue = useCallback(() => {
     setIdentifierError('');
     clearError();
-    if (!identifier.trim()) {
-      setIdentifierError('Enter your phone, email, or username');
+    if (identifier.trim().length < 3) {
+      setIdentifierError(t('login.identifierError'));
+      haptic('error');
       return;
     }
-    Keyboard.dismiss();
-    goTo('password', 'forward');
-  }, [identifier, clearError, goTo]);
+    goToStep('password');
+  }, [identifier, clearError, t, goToStep]);
 
   const handleLogin = useCallback(async () => {
     setPasswordError('');
     clearError();
     if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters');
+      setPasswordError(t('login.passwordError'));
+      haptic('error');
       return;
     }
+
     try {
+      if (isAddMode) {
+        const prev = useAuthStore.getState();
+        if (prev.user && prev.tokens) {
+          await addAccount({ user: prev.user, tokens: prev.tokens });
+        }
+      }
+
       await login({ identifier: identifier.trim(), password });
+
       if (!useAuthStore.getState().pending2FA) {
+        await haptic('light');
+        if (isAddMode) {
+          const { user: newUser, tokens: newTokens } = useAuthStore.getState();
+          if (newUser && newTokens) {
+            await addAccount({ user: newUser, tokens: newTokens });
+            await switchToAccount(newUser.id);
+          }
+        }
         router.replace('/(tabs)');
+      } else {
+        goToStep('2fa');
       }
     } catch {
-      // error displayed via authStore.error
+      haptic('error');
     }
-  }, [identifier, password, login, clearError]);
+  }, [
+    password,
+    identifier,
+    login,
+    clearError,
+    t,
+    goToStep,
+    isAddMode,
+    addAccount,
+    switchToAccount,
+  ]);
 
   const handleVerify2FA = useCallback(async () => {
     if (otpCode.length !== 6) return;
     clearError();
     try {
+      if (isAddMode) {
+        const prev = useAuthStore.getState();
+        if (prev.user && prev.tokens) {
+          await addAccount({ user: prev.user, tokens: prev.tokens });
+        }
+      }
+
       await verify2FALogin(otpCode);
+      await haptic('light');
+
+      if (isAddMode) {
+        const { user: newUser, tokens: newTokens } = useAuthStore.getState();
+        if (newUser && newTokens) {
+          await addAccount({ user: newUser, tokens: newTokens });
+          await switchToAccount(newUser.id);
+        }
+      }
       router.replace('/(tabs)');
     } catch {
-      // error displayed via authStore.error
+      haptic('error');
     }
-  }, [otpCode, verify2FALogin, clearError]);
+  }, [otpCode, verify2FALogin, clearError, isAddMode, addAccount, switchToAccount]);
 
   const handleBack = useCallback(() => {
     clearError();
     if (step === 'identifier') {
-      router.back();
+      router.replace('/(auth)/welcome');
     } else if (step === 'password') {
       setPasswordError('');
-      goTo('identifier', 'back');
+      goToStep('identifier');
     } else if (step === '2fa') {
       setOtpCode('');
       clearPending2FA();
-      goTo('password', 'back');
+      goToStep('password');
     }
-  }, [step, clearError, clearPending2FA, goTo]);
+  }, [step, clearError, clearPending2FA, goToStep]);
+
+  const stepTitle = {
+    identifier: t('login.identifierTitle'),
+    password: t('login.passwordTitle'),
+    '2fa': t('twoFactor.title'),
+  }[step];
 
   const renderStep = () => {
     switch (step) {
       case 'identifier':
         return (
-          <View style={styles.form}>
-            <Text variant="h1" style={styles.title}>
-              {"What's your email, phone, or username?"}
-            </Text>
-
+          <View style={styles.stepContent}>
             {authError && (
               <Text variant="small" style={styles.apiError}>
                 {authError}
@@ -146,7 +171,7 @@ export default function LoginScreen() {
             )}
 
             <Input
-              placeholder="Phone number, email, username"
+              placeholder={t('login.identifierPlaceholder')}
               value={identifier}
               onChangeText={(v: string) => {
                 setIdentifier(v);
@@ -163,23 +188,16 @@ export default function LoginScreen() {
             />
 
             <Button
-              title="Continue"
+              title={t('login.continue')}
               onPress={handleContinue}
-              disabled={!identifier.trim()}
+              disabled={identifier.trim().length < 3}
             />
           </View>
         );
 
       case 'password':
         return (
-          <View style={styles.form}>
-            <Text variant="h1" style={styles.title}>
-              Enter your password
-            </Text>
-            <Text variant="caption" style={styles.subtitle}>
-              {identifier}
-            </Text>
-
+          <View style={styles.stepContent}>
             {authError && (
               <Text variant="small" style={styles.apiError}>
                 {authError}
@@ -188,7 +206,7 @@ export default function LoginScreen() {
 
             <View>
               <Input
-                placeholder="Password"
+                placeholder={t('login.passwordPlaceholder')}
                 value={password}
                 onChangeText={(v: string) => {
                   setPassword(v);
@@ -208,45 +226,35 @@ export default function LoginScreen() {
                 onPress={() => setShowPassword((v) => !v)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons
-                  name={showPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#888888"
-                />
+                {showPassword ? (
+                  <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+                ) : (
+                  <Eye size={20} color="#888888" strokeWidth={2.25} />
+                )}
               </TouchableOpacity>
             </View>
 
             <Button
-              title="Sign In"
+              title={t('login.signIn')}
               onPress={handleLogin}
               loading={isAuthenticating}
-              disabled={isAuthenticating}
+              disabled={isAuthenticating || password.length < 3}
             />
 
             <TouchableOpacity
-              onPress={() => router.push('/(auth)/forgot-password')}
               style={styles.forgotRow}
+              onPress={() => router.push('/(auth)/forgot-password')}
             >
-              <Text variant="caption" style={styles.forgotLink}>
-                Forgot password?
-              </Text>
+              <Text style={styles.forgotLink}>{t('login.forgotPassword')}</Text>
             </TouchableOpacity>
           </View>
         );
 
       case '2fa':
         return (
-          <View style={styles.form}>
-            <View style={styles.shieldIcon}>
-              <Ionicons name="shield-checkmark" size={64} color="#3B82F6" />
-            </View>
-
-            <Text variant="h2" style={styles.twoFaTitle}>
-              Two-Factor Authentication
-            </Text>
-            <Text variant="body" style={styles.twoFaSubtitle}>
-              Enter the 6-digit code sent to{'\n'}
-              {pending2FA?.maskedTarget}
+          <View style={styles.stepContent}>
+            <Text variant="body" style={styles.subtitle}>
+              {t('twoFactor.subtitle', { maskedTarget: pending2FA?.maskedTarget })}
             </Text>
 
             {authError && (
@@ -265,7 +273,7 @@ export default function LoginScreen() {
             />
 
             <Button
-              title="Verify"
+              title={t('twoFactor.verify')}
               onPress={handleVerify2FA}
               loading={isAuthenticating}
               disabled={otpCode.length !== 6}
@@ -277,27 +285,24 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={handleBack}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
-
-      <KeyboardAwareScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        bottomOffset={16}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View
-          style={[styles.stepContainer, { opacity, transform: [{ translateY }] }]}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          {renderStep()}
-        </Animated.View>
-      </KeyboardAwareScrollView>
+          <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text variant="h2" style={styles.headerTitle}>
+          {stepTitle}
+        </Text>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.content}>{renderStep()}</View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -307,36 +312,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 80,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  stepContainer: {
+  keyboardAvoid: {
     flex: 1,
   },
-  backButton: {
-    position: 'absolute',
-    top: 56,
-    left: 16,
-    zIndex: 10,
-    padding: 4,
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
   },
-  form: {
+  stepContent: {
     gap: 16,
   },
-  title: {
+  headerTitle: {
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginLeft: 12,
+    flex: 1,
   },
   subtitle: {
     color: '#888888',
-    marginTop: -8,
+    textAlign: 'center',
     marginBottom: 8,
   },
   apiError: {
     color: '#EF4444',
-    textAlign: 'center',
   },
   eyeToggle: {
     position: 'absolute',
@@ -346,24 +351,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   forgotRow: {
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
     marginTop: 4,
   },
   forgotLink: {
-    color: '#FFFFFF',
-    fontFamily: 'Poppins_500Medium',
-  },
-  shieldIcon: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  twoFaTitle: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  twoFaSubtitle: {
     color: '#888888',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 14,
   },
 });

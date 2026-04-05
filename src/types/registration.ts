@@ -1,19 +1,22 @@
 import type { Role } from './index';
 
-// Relationship between representative and artist
+// Relationship between representative and creator
 export type RepresentativeRelationship = 'family' | 'friend' | 'manager';
 
 // All wizard form data accumulated across steps
 export interface RegistrationWizardState {
-  // Step 1: Basic Info
-  name: string;
+  // Step 1: Identifier (email or phone)
+  identifierMode: 'email' | 'phone';
   email: string;
   phoneCountryCode: string;
   phoneNumber: string;
 
-  // Step 2: Credentials & Consent
+  // Step 2: Name
+  name: string;
+
+  // Step 3: Credentials & Consent
   password: string;
-  confirmLegalAge: boolean;
+  dateOfBirth: string;
   acceptTerms: boolean;
 
   // Step 3: OTP
@@ -30,12 +33,26 @@ export interface RegistrationWizardState {
 
   // Step 7: Consent Form (only if isRepresentative === true)
   relationship: RepresentativeRelationship | null;
-  artistName: string;
+  creatorName: string;
   inmateNumber: string;
   inmateState: string;
   consentToRecording: boolean;
 
-  // Step 9: Subscription
+  // Steps 8-10: Creator Account Setup (only if isRepresentative === true)
+  creatorEmail: string;
+  creatorPassword: string;
+  creatorConfirmPassword: string;
+  creatorUsername: string;
+  creatorDisplayName: string;
+  creatorPhoneCountryCode: string;
+  creatorPhoneNumber: string;
+  creatorAvatarUri: string | null;
+
+  // Steps 11-12: Creator Type & Genres
+  creatorTypes: string[];
+  creatorGenres: string[];
+
+  // Step 13: Subscription
   selectedPlan: 'record' | 'record_pro' | 'connect_pro' | 'none' | null;
 
   // Step 10: Bridge Number (assigned by backend after payment)
@@ -60,11 +77,14 @@ export interface StepProps {
 
 // OTP DTOs
 export interface SendOtpDTO {
-  phone: string;
+  phone?: string;
+  email?: string;
+  locale?: string;
 }
 
 export interface VerifyOtpDTO {
-  phone: string;
+  phone?: string;
+  email?: string;
   code: string;
 }
 

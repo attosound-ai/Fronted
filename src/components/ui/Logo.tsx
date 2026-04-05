@@ -1,24 +1,32 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing } from 'react-native';
+import { useEffect } from 'react';
 import Svg, { ClipPath, Circle, G, Line } from 'react-native-svg';
+import ReAnimated, {
+  useSharedValue,
+  useAnimatedProps,
+  withTiming,
+  withSequence,
+  withDelay,
+  withRepeat,
+  Easing,
+} from 'react-native-reanimated';
 
-const AnimatedG = Animated.createAnimatedComponent(G);
+const AnimatedG = ReAnimated.createAnimatedComponent(G);
 
 const FADERS = [
   { x: -102.6, top: -80, bot: 20 },
   { x: -77.4, top: -28, bot: 5 },
-  { x: -52.8, top: -62.9, bot: 30 },
-  { x: -28.2, top: -63.8, bot: 63.8 },
-  { x: 0, top: -54.5, bot: 83.1 },
-  { x: 28.2, top: -66.3, bot: 54.5 },
-  { x: 52.8, top: -66.3, bot: 30 },
+  { x: -52.8, top: -52.9, bot: 20 },
+  { x: -28.2, top: -53.8, bot: 53.8 },
+  { x: 0, top: -34.5, bot: 83.1 },
+  { x: 28.2, top: -56.3, bot: 44.5 },
+  { x: 52.8, top: -56.3, bot: 20 },
   { x: 77.4, top: -28, bot: 5 },
   { x: 102.6, top: -80, bot: 20 },
 ];
 
 const CIRCLE_R = 116;
-const CAPSULE_W = 12.8;
-const STEM_W = 1.2;
+const CAPSULE_W = 14;
+const STEM_W = 3;
 
 interface LogoProps {
   size?: number;
@@ -26,49 +34,26 @@ interface LogoProps {
 }
 
 export function Logo({ size = 56, animated = false }: LogoProps) {
-  const pulse = useRef(new Animated.Value(1)).current;
+  const scaleY = useSharedValue(1);
 
   useEffect(() => {
     if (!animated) return;
 
-    const animation = Animated.loop(
-      Animated.sequence([
-        // 0% → 12.5% — scale up to 1.07
-        Animated.timing(pulse, {
-          toValue: 1.07,
-          duration: 150,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        // 12.5% → 20% — back to 1
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 90,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        // 20% → 29% — scale up to 1.042
-        Animated.timing(pulse, {
-          toValue: 1.042,
-          duration: 108,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        // 29% → 38% — back to 1
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 108,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        // 38% → 100% — hold at 1
-        Animated.delay(744),
-      ])
+    scaleY.value = withRepeat(
+      withSequence(
+        withTiming(1.07, { duration: 150, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 90, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1.042, { duration: 108, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 108, easing: Easing.inOut(Easing.ease) }),
+        withDelay(744, withTiming(1, { duration: 0 })),
+      ),
+      -1,
     );
+  }, [animated, scaleY]);
 
-    animation.start();
-    return () => animation.stop();
-  }, [animated, pulse]);
+  const animatedProps = useAnimatedProps(() => ({
+    transform: [{ scaleY: scaleY.value }],
+  }));
 
   return (
     <Svg width={size} height={size} viewBox="-115 -115 230 230">
@@ -85,7 +70,7 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
             y2={CIRCLE_R}
             stroke="white"
             strokeWidth={STEM_W}
-            opacity={0.55}
+            opacity={1}
           />
         ))}
         {/* Extreme faders — static (no pulse) */}
@@ -102,7 +87,7 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
           />
         ))}
         {/* Inner faders — animated with pulse */}
-        <AnimatedG style={{ transform: [{ scale: animated ? pulse : 1 }] }}>
+        <AnimatedG animatedProps={animated ? animatedProps : undefined}>
           {FADERS.slice(1, -1).map((f, i) => (
             <Line
               key={`c${i}`}

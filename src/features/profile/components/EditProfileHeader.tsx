@@ -1,6 +1,7 @@
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
 interface EditProfileHeaderProps {
@@ -9,13 +10,15 @@ interface EditProfileHeaderProps {
 }
 
 export function EditProfileHeader({ onSave, isSubmitting }: EditProfileHeaderProps) {
+  const { t } = useTranslation('profile');
+
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={() => router.back()} hitSlop={8} activeOpacity={0.6}>
-        <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
       </TouchableOpacity>
       <Text variant="h2" style={styles.headerTitle}>
-        Edit Profile
+        {t('edit.headerTitle')}
       </Text>
       <TouchableOpacity
         onPress={onSave}
@@ -23,9 +26,11 @@ export function EditProfileHeader({ onSave, isSubmitting }: EditProfileHeaderPro
         hitSlop={8}
         activeOpacity={0.6}
       >
-        <Text style={[styles.saveText, isSubmitting && styles.saveTextDisabled]}>
-          Save
-        </Text>
+        {isSubmitting ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <Text style={styles.saveText}>{t('edit.saveButton')}</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -46,8 +51,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   saveText: {
-    color: '#3B82F6',
-    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
   saveTextDisabled: {

@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import type { ApiResponse, User } from '@/types';
-import type { SendVerificationOtpDTO, VerifyArtistOtpDTO } from '@/types/verification';
+import type { SendVerificationOtpDTO, VerifyCreatorOtpDTO } from '@/types/verification';
 
 /**
  * VerificationService — Pure API calls for representative verification.
@@ -13,7 +13,7 @@ export const verificationService = {
     await apiClient.post(API_ENDPOINTS.USERS.VERIFICATION_SEND_OTP, data);
   },
 
-  async verifyArtistOtp(data: VerifyArtistOtpDTO): Promise<User> {
+  async verifyCreatorOtp(data: VerifyCreatorOtpDTO): Promise<User> {
     const response = await apiClient.post<ApiResponse<User>>(
       API_ENDPOINTS.USERS.VERIFICATION_VERIFY,
       data

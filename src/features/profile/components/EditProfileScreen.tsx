@@ -1,29 +1,48 @@
+import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Camera,
+  AlertTriangle,
+  Instagram,
+  Music2,
+  Youtube,
+  Cloud,
+  Disc3,
+  Twitter,
+  Globe,
+  MapPin,
+  Building2,
+  Mail,
+} from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Avatar } from '@/components/ui/Avatar';
 import { Toast } from '@/components/ui/Toast';
+import { ImageCropModal } from '@/components/ui/ImageCropModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useEditProfile } from '../hooks/useEditProfile';
 import { EditProfileHeader } from './EditProfileHeader';
 
-const RELATIONSHIP_OPTIONS = [
-  { label: 'Family', value: 'family' },
-  { label: 'Friend', value: 'friend' },
-  { label: 'Manager', value: 'manager' },
-];
-
 export function EditProfileScreen() {
+  const { t } = useTranslation('profile');
   const user = useAuthStore((s) => s.user);
+
+  const RELATIONSHIP_OPTIONS = [
+    { label: t('edit.relationshipFamily'), value: 'family' },
+    { label: t('edit.relationshipFriend'), value: 'friend' },
+    { label: t('edit.relationshipManager'), value: 'manager' },
+  ];
   const { form, errors, isSubmitting, updateField, setAvatar, save } = useEditProfile();
   const { pickFromGallery } = useImagePicker();
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [pendingUri, setPendingUri] = useState<string | null>(null);
 
   const handleSave = async () => {
     const success = await save();
@@ -32,7 +51,21 @@ export function EditProfileScreen() {
 
   const handlePickAvatar = async () => {
     const uri = await pickFromGallery();
-    if (uri) setAvatar(uri);
+    if (uri) {
+      setPendingUri(uri);
+      setShowCropModal(true);
+    }
+  };
+
+  const handleCropDone = (croppedUri: string) => {
+    setAvatar(croppedUri);
+    setShowCropModal(false);
+    setPendingUri(null);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropModal(false);
+    setPendingUri(null);
   };
 
   if (!user) return null;
@@ -61,53 +94,132 @@ export function EditProfileScreen() {
             <Avatar uri={form.avatarUri} size="xl" />
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={14} color="#FFFFFF" />
+            <Camera size={14} color="#000000" strokeWidth={2.25} />
           </View>
         </TouchableOpacity>
 
         {/* Common Fields */}
         <Input
-          label="Display Name"
+          label={t('edit.displayNameLabel')}
           value={form.displayName}
           onChangeText={(text) => updateField('displayName', text)}
-          placeholder="Enter display name"
+          placeholder={t('edit.displayNamePlaceholder')}
           error={errors.displayName}
         />
 
         <Input
-          label="Username"
+          label={t('edit.usernameLabel')}
           value={form.username}
           onChangeText={(text) => updateField('username', text)}
-          placeholder="Enter username"
+          placeholder={t('edit.usernamePlaceholder')}
           autoCapitalize="none"
           error={errors.username}
         />
 
         <Input
-          label="Bio"
+          label={t('edit.bioLabel')}
           value={form.bio}
           onChangeText={(text) => updateField('bio', text)}
-          placeholder="Tell us about yourself"
+          placeholder={t('edit.bioPlaceholder')}
           multiline
           numberOfLines={3}
           style={styles.bioInput}
         />
 
-        {/* Artist Fields */}
-        {user.role === 'artist' && (
+        {/* Social Links + Extended Bio (creators) */}
+        {user.role === 'creator' && (
           <>
+            <Text style={styles.sectionTitle}>Social Links</Text>
             <Input
-              label="Artist Name"
-              value={form.artistName}
-              onChangeText={(text) => updateField('artistName', text)}
-              placeholder="Enter artist name"
-              error={errors.artistName}
+              label="Instagram"
+              value={form.socialInstagram}
+              onChangeText={(text) => updateField('socialInstagram', text)}
+              placeholder="@username"
+              autoCapitalize="none"
             />
             <Input
-              label="Inmate Number"
+              label="TikTok"
+              value={form.socialTiktok}
+              onChangeText={(text) => updateField('socialTiktok', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="YouTube"
+              value={form.socialYoutube}
+              onChangeText={(text) => updateField('socialYoutube', text)}
+              placeholder="@channel"
+              autoCapitalize="none"
+            />
+            <Input
+              label="SoundCloud"
+              value={form.socialSoundcloud}
+              onChangeText={(text) => updateField('socialSoundcloud', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="Spotify"
+              value={form.socialSpotify}
+              onChangeText={(text) => updateField('socialSpotify', text)}
+              placeholder="Artist name or URI"
+              autoCapitalize="none"
+            />
+            <Input
+              label="X (Twitter)"
+              value={form.socialTwitter}
+              onChangeText={(text) => updateField('socialTwitter', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="Website"
+              value={form.website}
+              onChangeText={(text) => updateField('website', text)}
+              placeholder="https://..."
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+
+            <Text style={styles.sectionTitle}>Extended Info</Text>
+            <Input
+              label="Location"
+              value={form.location}
+              onChangeText={(text) => updateField('location', text)}
+              placeholder="City, State"
+            />
+            <Input
+              label="Record Label"
+              value={form.recordLabel}
+              onChangeText={(text) => updateField('recordLabel', text)}
+              placeholder="Independent"
+            />
+            <Input
+              label="Booking Email"
+              value={form.bookingEmail}
+              onChangeText={(text) => updateField('bookingEmail', text)}
+              placeholder="booking@example.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </>
+        )}
+
+        {/* Creator Fields */}
+        {user.role === 'creator' && (
+          <>
+            <Input
+              label={t('edit.creatorNameLabel')}
+              value={form.creatorName}
+              onChangeText={(text) => updateField('creatorName', text)}
+              placeholder={t('edit.creatorNamePlaceholder')}
+              error={errors.creatorName}
+            />
+            <Input
+              label={t('edit.inmateNumberLabel')}
               value={form.inmateNumber}
               onChangeText={(text) => updateField('inmateNumber', text)}
-              placeholder="Enter inmate number"
+              placeholder={t('edit.inmateNumberPlaceholder')}
               error={errors.inmateNumber}
             />
           </>
@@ -117,15 +229,15 @@ export function EditProfileScreen() {
         {user.role === 'representative' && (
           <>
             <View style={styles.warningContainer}>
-              <Ionicons name="warning-outline" size={16} color="#F59E0B" />
+              <AlertTriangle size={16} color="#F59E0B" strokeWidth={2.25} />
               <Text variant="small" style={styles.warningText}>
-                Changing artist info will require re-verification.
+                {t('edit.warningReVerification')}
               </Text>
             </View>
 
             <Select
-              label="Relationship"
-              placeholder="Select relationship"
+              label={t('edit.relationshipLabel')}
+              placeholder={t('edit.relationshipPlaceholder')}
               options={RELATIONSHIP_OPTIONS}
               value={form.relationship || null}
               onChange={(value) => updateField('relationship', value)}
@@ -133,44 +245,44 @@ export function EditProfileScreen() {
             />
 
             <Input
-              label="Artist Name"
-              value={form.artistName}
-              onChangeText={(text) => updateField('artistName', text)}
-              placeholder="Enter artist name"
-              error={errors.artistName}
+              label={t('edit.creatorNameLabel')}
+              value={form.creatorName}
+              onChangeText={(text) => updateField('creatorName', text)}
+              placeholder={t('edit.creatorNamePlaceholder')}
+              error={errors.creatorName}
             />
 
             <Input
-              label="Inmate Number"
+              label={t('edit.inmateNumberLabel')}
               value={form.inmateNumber}
               onChangeText={(text) => updateField('inmateNumber', text)}
-              placeholder="Enter inmate number"
+              placeholder={t('edit.inmateNumberPlaceholder')}
               error={errors.inmateNumber}
             />
 
             <Input
-              label="Inmate State"
+              label={t('edit.inmateStateLabel')}
               value={form.inmateState}
               onChangeText={(text) => updateField('inmateState', text)}
-              placeholder="Enter inmate state"
+              placeholder={t('edit.inmateStatePlaceholder')}
             />
 
             <Input
-              label="Artist Email"
-              value={form.artistEmail}
-              onChangeText={(text) => updateField('artistEmail', text)}
-              placeholder="Enter artist email (optional)"
+              label={t('edit.creatorEmailLabel')}
+              value={form.creatorEmail}
+              onChangeText={(text) => updateField('creatorEmail', text)}
+              placeholder={t('edit.creatorEmailPlaceholder')}
               keyboardType="email-address"
               autoCapitalize="none"
-              error={errors.artistEmail}
+              error={errors.creatorEmail}
             />
 
             <PhoneInput
-              label="Artist Phone"
-              countryCode={form.artistPhoneCountryCode}
-              onCountryCodeChange={(code) => updateField('artistPhoneCountryCode', code)}
-              phoneNumber={form.artistPhone}
-              onPhoneNumberChange={(number) => updateField('artistPhone', number)}
+              label={t('edit.creatorPhoneLabel')}
+              countryCode={form.creatorPhoneCountryCode}
+              onCountryCodeChange={(code) => updateField('creatorPhoneCountryCode', code)}
+              phoneNumber={form.creatorPhone}
+              onPhoneNumberChange={(number) => updateField('creatorPhone', number)}
             />
           </>
         )}
@@ -183,6 +295,13 @@ export function EditProfileScreen() {
       </KeyboardAwareScrollView>
 
       <Toast />
+
+      <ImageCropModal
+        visible={showCropModal}
+        imageUri={pendingUri}
+        onCrop={handleCropDone}
+        onCancel={handleCropCancel}
+      />
     </SafeAreaView>
   );
 }
@@ -214,7 +333,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -226,6 +345,15 @@ const styles = StyleSheet.create({
   bioInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  sectionTitle: {
+    color: '#888',
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 13,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 20,
+    marginBottom: 4,
   },
   warningContainer: {
     flexDirection: 'row',

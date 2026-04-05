@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Mic, MicOff, Volume1, Volume2, Phone } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
@@ -18,6 +19,7 @@ function formatElapsed(seconds: number): string {
 }
 
 export function InCallTopBar() {
+  const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -63,26 +65,26 @@ export function InCallTopBar() {
             style={[styles.btn, activeCall?.isMuted && styles.btnActive]}
             onPress={toggleMuteCall}
           >
-            <Ionicons
-              name={activeCall?.isMuted ? 'mic-off' : 'mic'}
-              size={18}
-              color="#FFF"
-            />
+            {activeCall?.isMuted ? (
+              <MicOff size={18} color="#FFF" strokeWidth={2.25} />
+            ) : (
+              <Mic size={18} color="#FFF" strokeWidth={2.25} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.btn, activeCall?.isSpeaker && styles.btnActive]}
             onPress={toggleSpeaker}
           >
-            <Ionicons
-              name={activeCall?.isSpeaker ? 'volume-high' : 'volume-low'}
-              size={18}
-              color="#FFF"
-            />
+            {activeCall?.isSpeaker ? (
+              <Volume2 size={18} color="#FFF" strokeWidth={2.25} />
+            ) : (
+              <Volume1 size={18} color="#FFF" strokeWidth={2.25} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.hangUpBtn} onPress={hangUpCall}>
-            <Ionicons name="call" size={16} color="#FFF" style={styles.hangUpIcon} />
+            <Phone size={16} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
           </TouchableOpacity>
         </View>
       </View>
@@ -119,7 +121,7 @@ const styles = StyleSheet.create({
   },
   timer: {
     color: '#FFF',
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
   controls: {

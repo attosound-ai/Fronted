@@ -5,7 +5,7 @@
  */
 
 // Roles de usuario
-export type Role = 'artist' | 'representative' | 'listener';
+export type Role = 'creator' | 'representative' | 'listener';
 
 // Usuario (matches backend UserProfile exactly)
 export interface User {
@@ -19,17 +19,33 @@ export interface User {
   bio: string | null;
   role: Role;
   inmateNumber?: string;
-  artistName?: string;
+  creatorName?: string;
   inmateState?: string;
   relationship?: string;
-  artistEmail?: string;
-  artistPhone?: string;
+  creatorEmail?: string;
+  creatorPhone?: string;
   consentToRecording?: boolean;
+  creatorTypes?: string[];
+  creatorGenres?: string[];
+  dateOfBirth?: string | null;
+  // Social media links
+  socialInstagram?: string | null;
+  socialTiktok?: string | null;
+  socialYoutube?: string | null;
+  socialSoundcloud?: string | null;
+  socialSpotify?: string | null;
+  socialTwitter?: string | null;
+  website?: string | null;
+  // Extended bio
+  location?: string | null;
+  recordLabel?: string | null;
+  bookingEmail?: string | null;
   profileVerified: boolean;
   twoFactorEnabled: boolean;
   twoFactorMethod: 'sms' | 'email' | '';
   registrationStatus: 'pending' | 'completed';
   representativeId?: number;
+  isManagedAccount?: boolean;
   followersCount: number;
   followingCount: number;
   postsCount: number;
@@ -45,6 +61,7 @@ export interface LoginDTO {
 
 export interface ForgotPasswordDTO {
   email: string;
+  locale?: string;
 }
 
 export interface ResetPasswordDTO {
@@ -55,7 +72,7 @@ export interface ResetPasswordDTO {
 
 export interface RegisterDTO {
   username: string;
-  email: string;
+  email?: string;
   password: string;
   displayName: string;
   role?: Role;
@@ -63,7 +80,7 @@ export interface RegisterDTO {
   phoneNumber?: string;
   inmateNumber?: string;
   representativeFields?: {
-    artistName: string;
+    creatorName: string;
     inmateState: string;
     relationship: string;
     consentToRecording: boolean;
@@ -72,12 +89,13 @@ export interface RegisterDTO {
 
 // Pre-register DTO (after OTP, before Step 3)
 export interface PreRegisterDTO {
-  email: string;
+  email?: string;
   password: string;
   displayName: string;
   username: string;
   phoneCountryCode?: string;
   phoneNumber?: string;
+  dateOfBirth?: string;
 }
 
 // Complete registration DTO (Step 4 for listener, Step 8-9 for representative)
@@ -85,10 +103,21 @@ export interface CompleteRegistrationDTO {
   role: Role;
   inmateNumber?: string;
   representativeFields?: {
-    artistName: string;
+    creatorName: string;
     inmateState: string;
     relationship: string;
     consentToRecording: boolean;
+  };
+  managedCreatorFields?: {
+    email: string;
+    password: string;
+    username: string;
+    displayName: string;
+    phoneCountryCode?: string;
+    phoneNumber?: string;
+    avatar?: string;
+    creatorTypes?: string[];
+    creatorGenres?: string[];
   };
 }
 
@@ -99,12 +128,23 @@ export interface UpdateProfileDTO {
   bio?: string;
   username?: string;
   // Representative fields
-  artistName?: string;
+  creatorName?: string;
   inmateNumber?: string;
   inmateState?: string;
   relationship?: string;
-  artistEmail?: string;
-  artistPhone?: string;
+  creatorEmail?: string;
+  creatorPhone?: string;
+  // Social media links + extended bio
+  socialInstagram?: string;
+  socialTiktok?: string;
+  socialYoutube?: string;
+  socialSoundcloud?: string;
+  socialSpotify?: string;
+  socialTwitter?: string;
+  website?: string;
+  location?: string;
+  recordLabel?: string;
+  bookingEmail?: string;
 }
 
 // Inmate lookup response from DOC scraper
@@ -135,6 +175,13 @@ export interface AuthResponse {
   tokens: TokenPair;
 }
 
+// Extended response from complete-registration when role = representative
+export interface CompleteRegistrationResponse {
+  user: User;
+  tokens: TokenPair;
+  linkedAccount?: { user: User; tokens: TokenPair };
+}
+
 // 2FA Types
 export type TwoFactorMethod = 'sms' | 'email';
 
@@ -163,24 +210,35 @@ export interface Login2FAResponse {
   maskedTarget: string;
 }
 
-// Post
+// Post (supports both legacy placeholder shape and backend FeedPostDto)
 export interface Post {
   id: string;
   content: string;
   images: string[];
-  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar'>;
+  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar' | 'role'>;
   likesCount: number;
   commentsCount: number;
   isLiked: boolean;
   createdAt: string;
   updatedAt: string;
+  // Fields from backend FeedPostDto
+  contentType?: string;
+  textContent?: string;
+  filePaths?: string[];
+  metadata?: Record<string, string>;
+  tags?: string[];
+  sharesCount?: number;
+  repostsCount?: number;
+  isBookmarked?: boolean;
+  isReposted?: boolean;
+  isFollowingAuthor?: boolean;
 }
 
 // Comentario
 export interface Comment {
   id: string;
   content: string;
-  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar'>;
+  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar' | 'role'>;
   createdAt: string;
 }
 

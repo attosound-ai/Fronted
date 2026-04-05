@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, type ReactNode } from 'react';
 import { View, TouchableOpacity, Animated, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 
 interface ProfileSectionProps {
@@ -32,16 +32,12 @@ export function ProfileSection({
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        onPress={toggle}
-        activeOpacity={0.7}
-        style={styles.header}
-      >
+      <TouchableOpacity onPress={toggle} activeOpacity={0.7} style={styles.header}>
         <Text variant="h3" style={styles.title}>
           {title}
         </Text>
         <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-          <Ionicons name="chevron-down" size={20} color="#888" />
+          <ChevronDown size={20} color="#888" strokeWidth={2.25} />
         </Animated.View>
       </TouchableOpacity>
 

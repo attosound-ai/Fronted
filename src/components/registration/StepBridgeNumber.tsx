@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle, Copy, Share2, UserPlus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
@@ -26,12 +26,13 @@ const MAX_POLL_ATTEMPTS = 40; // ~2 minutes
  * Shows the unique bridge number and allows copying/sharing/saving as contact.
  * Polls the backend if the number hasn't been provisioned yet.
  */
-export const StepBridgeNumber: React.FC<StepProps> = ({
+export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
   state,
   dispatch,
   onNext,
   isLoading,
   apiError,
+  forUserId,
 }) => {
   const { t } = useTranslation(['registration', 'common']);
   const [provisioning, setProvisioning] = useState(!state.bridgeNumber);
@@ -47,7 +48,8 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
 
     const poll = async () => {
       try {
-        const result = await paymentService.getBridgeNumber();
+        const result = await paymentService.getBridgeNumber(forUserId);
+        console.log('[BridgeNumber] poll result:', result);
         if (result.status === 'failed') {
           setProvisioningFailed(true);
           setProvisioning(false);
@@ -62,8 +64,9 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
           setProvisioning(false);
           return;
         }
-      } catch {
-        // Network error — keep polling
+      } catch (err) {
+        console.warn('[BridgeNumber] poll error:', err);
+        // Network/auth error — keep polling
       }
 
       pollCount.current += 1;
@@ -74,7 +77,8 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
       }
     };
 
-    poll();
+    // Delay first poll to let auth tokens settle after registration
+    timerRef.current = setTimeout(poll, 2000);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -82,7 +86,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
   }, [state.bridgeNumber, dispatch]);
 
   const bridgeNumber = state.bridgeNumber ?? null;
-  const artistName = state.artistName || 'ATTO Bridge';
+  const creatorName = state.creatorName || 'ATTO Bridge';
 
   const handleCopy = async () => {
     try {
@@ -117,12 +121,12 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         return;
       }
       await Contacts.presentFormAsync(null, {
-        name: `ATTO Bridge - ${artistName}`,
+        name: `ATTO Bridge - ${creatorName}`,
         phoneNumbers: [{ number: bridgeNumber, label: 'mobile' }],
       });
     } catch {
       await Share.share({
-        message: `ATTO Bridge - ${artistName}\n${bridgeNumber}`,
+        message: `ATTO Bridge - ${creatorName}\n${bridgeNumber}`,
         title: t('bridgeNumber.saveContactTitle'),
       });
     }
@@ -153,7 +157,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
             </View>
           ) : provisioningFailed ? (
             <View style={styles.provisioningContainer}>
-              <Ionicons name="alert-circle-outline" size={40} color="#FFFFFF" />
+              <AlertCircle size={40} color="#FFFFFF" strokeWidth={2.25} />
               <Text style={styles.failedText}>{t('bridgeNumber.purchaseFailed')}</Text>
             </View>
           ) : (
@@ -176,10 +180,10 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
             activeOpacity={0.7}
             disabled={provisioning || provisioningFailed}
           >
-            <Ionicons
-              name="copy-outline"
+            <Copy
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
+              strokeWidth={2.25}
             />
             <Text
               style={[
@@ -199,10 +203,10 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
             activeOpacity={0.7}
             disabled={provisioning || provisioningFailed}
           >
-            <Ionicons
-              name="share-outline"
+            <Share2
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
+              strokeWidth={2.25}
             />
             <Text
               style={[
@@ -222,10 +226,10 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
             activeOpacity={0.7}
             disabled={provisioning || provisioningFailed}
           >
-            <Ionicons
-              name="person-add-outline"
+            <UserPlus
               size={22}
               color={provisioning || provisioningFailed ? '#555' : '#FFFFFF'}
+              strokeWidth={2.25}
             />
             <Text
               style={[
@@ -256,7 +260,7 @@ export const StepBridgeNumber: React.FC<StepProps> = ({
         {/* Error */}
         {apiError && (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
+            <AlertCircle size={16} color="#FFFFFF" strokeWidth={2.25} />
             <Text style={styles.errorText}>{apiError}</Text>
           </View>
         )}

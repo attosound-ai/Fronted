@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -71,8 +71,8 @@ export default function SubscriptionScreen() {
   const user = useAuthStore((s) => s.user);
   const accounts = useAccountStore((s) => s.accounts);
 
-  // If user is a representative, find the managed artist to pay on their behalf
-  const managedArtist =
+  // If user is a representative, find the managed creator to pay on their behalf
+  const managedCreator =
     user?.role === 'representative'
       ? accounts.find((a) => a.user.id !== user.id && a.user.isManagedAccount)
       : undefined;
@@ -94,7 +94,7 @@ export default function SubscriptionScreen() {
       const { clientSecret, paymentIntentId } = await paymentService.upgradeSubscription(
         planId,
         user.email,
-        managedArtist ? String(managedArtist.user.id) : undefined
+        managedCreator ? String(managedCreator.user.id) : undefined
       );
 
       const { error: initError } = await initPaymentSheet({
@@ -201,11 +201,11 @@ export default function SubscriptionScreen() {
                 <Text style={styles.featuresToggleText}>
                   {isExpanded ? t('featuresHide') : t('featuresShow')}
                 </Text>
-                <Ionicons
-                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color="#666"
-                />
+                {isExpanded ? (
+                  <ChevronUp size={14} color="#666" strokeWidth={2.25} />
+                ) : (
+                  <ChevronDown size={14} color="#666" strokeWidth={2.25} />
+                )}
               </TouchableOpacity>
 
               {isExpanded && (
@@ -213,7 +213,7 @@ export default function SubscriptionScreen() {
                   <View style={styles.features}>
                     {plan.features.map((f, i) => (
                       <View key={i} style={styles.featureRow}>
-                        <Ionicons name="checkmark" size={14} color="#888" />
+                        <Check size={14} color="#888" strokeWidth={2.25} />
                         <Text style={styles.featureText}>{f}</Text>
                       </View>
                     ))}

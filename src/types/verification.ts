@@ -4,7 +4,7 @@ export interface SendVerificationOtpDTO {
 }
 
 /** DTO for verifying OTP against bridge number */
-export interface VerifyArtistOtpDTO {
+export interface VerifyCreatorOtpDTO {
   bridgePhone: string;
   code: string;
 }

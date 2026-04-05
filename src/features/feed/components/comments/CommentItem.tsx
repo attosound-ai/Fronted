@@ -1,6 +1,8 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from '@/components/ui/Text';
+import { LinkedText } from '../LinkedText';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { formatRelativeTime } from '@/utils/formatters';
 import type { Comment } from '../../hooks/useComments';
 
@@ -15,12 +17,14 @@ export function CommentItem({ comment, onReply, isReply }: CommentItemProps) {
     <View style={[styles.container, isReply && styles.replyContainer]}>
       <Avatar uri={comment.author?.avatar ?? null} size="sm" />
       <View style={styles.content}>
-        <Text variant="body" style={styles.text}>
+        <View style={styles.usernameRow}>
           <Text variant="body" style={styles.username}>
             {comment.author?.username ?? 'unknown'}
           </Text>
-          {'  '}
-          {comment.comment}
+          {comment.author?.role === 'creator' && <CreatorBadge size="sm" />}
+        </View>
+        <Text variant="body" style={styles.text}>
+          <LinkedText style={styles.text}>{comment.comment}</LinkedText>
         </Text>
         <View style={styles.meta}>
           <Text variant="caption" style={styles.time}>
@@ -62,6 +66,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  usernameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   text: {
     color: '#FFF',

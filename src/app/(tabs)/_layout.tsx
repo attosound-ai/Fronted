@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { DeviceEventEmitter, StyleSheet } from 'react-native';
 import { Tabs, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { House, CirclePlay, MessageCircle, Search } from 'lucide-react-native';
 import { haptic } from '@/lib/haptics/hapticService';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { MessageNotificationBanner } from '@/components/ui/MessageNotificationBanner';
+import { PostPublishedBanner } from '@/components/ui/PostPublishedBanner';
 import { ProfileTabIcon } from '@/components/ui/ProfileTabIcon';
 import { ProfileTabButton } from '@/components/ui/ProfileTabButton';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/features/messages/stores/chatStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
+import { useUnreadCount } from '@/features/notifications/hooks/useUnreadCount';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { messageService } from '@/features/messages/services/messageService';
 
 export default function TabsLayout() {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
@@ -20,9 +24,25 @@ export default function TabsLayout() {
   const connectSocket = useChatStore((s) => s.connectSocket);
   const disconnectSocket = useChatStore((s) => s.disconnectSocket);
 
+  // Sync notification badge + register push token
+  useUnreadCount();
+  usePushNotifications();
+
+  // Fetch unread message count on app start (before user opens messages tab)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    messageService
+      .getConversations()
+      .then((conversations) => {
+        const unread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+        useChatStore.getState().setTotalUnread(unread);
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/(auth)/login');
+      router.replace('/(auth)/welcome');
     }
   }, [isLoading, isAuthenticated]);
 
@@ -67,11 +87,7 @@ export default function TabsLayout() {
           })}
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'home' : 'home-outline'}
-                color={color}
-                size={24}
-              />
+              <House size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
           }}
         />
@@ -79,11 +95,7 @@ export default function TabsLayout() {
           name="listen"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'play-circle' : 'play-circle-outline'}
-                color={color}
-                size={24}
-              />
+              <CirclePlay size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
           }}
         />
@@ -91,11 +103,7 @@ export default function TabsLayout() {
           name="messages"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'chatbubble' : 'chatbubble-outline'}
-                color={color}
-                size={24}
-              />
+              <MessageCircle size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
             tabBarBadge:
               totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
@@ -106,11 +114,7 @@ export default function TabsLayout() {
           name="search"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? 'search' : 'search-outline'}
-                color={color}
-                size={24}
-              />
+              <Search size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
           }}
         />
@@ -131,6 +135,7 @@ export default function TabsLayout() {
       />
 
       <MessageNotificationBanner />
+      <PostPublishedBanner />
     </>
   );
 }

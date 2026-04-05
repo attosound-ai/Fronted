@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Animated, PanResponder, TouchableOpacity, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -85,6 +85,33 @@ export function MessageNotificationBanner(): React.ReactElement | null {
     });
   }, [translateY, opacity]);
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy < -8,
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dy < 0) {
+          translateY.setValue(gesture.dy);
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy < -30 || gesture.vy < -0.5) {
+          if (dismissTimer.current) {
+            clearTimeout(dismissTimer.current);
+            dismissTimer.current = null;
+          }
+          dismiss();
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            damping: 18,
+            stiffness: 200,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
   const show = useCallback(
     (notification: MessageNotificationData) => {
       if (dismissTimer.current) {
@@ -147,6 +174,7 @@ export function MessageNotificationBanner(): React.ReactElement | null {
 
   return (
     <Animated.View
+      {...panResponder.panHandlers}
       style={[
         styles.container,
         { top: insets.top + 8, transform: [{ translateY }], opacity },

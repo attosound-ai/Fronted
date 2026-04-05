@@ -6,9 +6,10 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle, Camera, Images, CheckCircle, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, BottomSheet } from '@/components/ui';
@@ -18,10 +19,13 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { isNotEmpty, isValidUsername } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 import { authService } from '@/lib/api/authService';
+import { useAuthStore } from '@/stores/authStore';
+
+type RoleChoice = 'representative' | 'creator' | 'listener';
 
 interface StepProfileSetupProps extends StepProps {
   showRepQuestion?: boolean;
-  onRepChoice?: (isRep: boolean) => void;
+  onRepChoice?: (choice: RoleChoice) => void;
 }
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -64,9 +68,12 @@ export function StepProfileSetup({
     const baseUnderscore = normalized.replaceAll(/\s+/g, '_');
     const baseNoSep = normalized.replaceAll(/\s+/g, '');
     const rand = Math.floor(Math.random() * 100);
-    return [...new Set([base, baseUnderscore, `${baseNoSep}${rand}`])].filter((s) =>
-      isValidUsername(s)
-    );
+    const rand2 = Math.floor(Math.random() * 1000);
+    return [
+      ...new Set([base, baseUnderscore, `${baseNoSep}${rand}`, `${base}${rand2}`]),
+    ]
+      .filter((s) => isValidUsername(s))
+      .slice(0, 4);
   }, [state.name]);
 
   // Debounced username availability check
@@ -86,6 +93,14 @@ export function StepProfileSetup({
     }
 
     if (cleaned === lastCheckedRef.current) return;
+
+    // If this is the current user's own username (resume scenario), skip API check
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser?.username === cleaned) {
+      setUsernameStatus('available');
+      lastCheckedRef.current = cleaned;
+      return;
+    }
 
     setUsernameStatus('checking');
     debounceRef.current = setTimeout(async () => {
@@ -171,7 +186,7 @@ export function StepProfileSetup({
       case 'available':
         return (
           <View style={styles.statusRow}>
-            <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+            <CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.statusAvailable}>
               {t('profileSetup.usernameAvailable')}
             </Text>
@@ -180,7 +195,7 @@ export function StepProfileSetup({
       case 'taken':
         return (
           <View style={styles.statusRow}>
-            <Ionicons name="close-circle" size={16} color="#888888" />
+            <XCircle size={16} color="#888888" strokeWidth={2.25} />
             <Text variant="small" style={styles.statusTaken}>
               {t('profileSetup.usernameTaken')}
             </Text>
@@ -189,7 +204,7 @@ export function StepProfileSetup({
       case 'invalid':
         return (
           <View style={styles.statusRow}>
-            <Ionicons name="close-circle" size={16} color="#888888" />
+            <XCircle size={16} color="#888888" strokeWidth={2.25} />
             <Text variant="small" style={styles.statusTaken}>
               {t('profileSetup.usernameHint')}
             </Text>
@@ -221,7 +236,7 @@ export function StepProfileSetup({
       {/* API Error Banner */}
       {apiError && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
           <Text variant="small" style={styles.errorBannerText}>
             {apiError}
           </Text>
@@ -239,18 +254,13 @@ export function StepProfileSetup({
             <Image source={{ uri: state.avatarUri }} style={styles.avatarCircle} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Ionicons name="camera" size={56} color="#666666" />
+              <Camera size={56} color="#666666" strokeWidth={2.25} />
             </View>
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={18} color="#000000" />
+            <Camera size={18} color="#000000" strokeWidth={2.25} />
           </View>
         </TouchableOpacity>
-        {!state.avatarUri && (
-          <Text variant="small" style={styles.avatarHint}>
-            {t('profileSetup.addProfilePicture')}
-          </Text>
-        )}
       </View>
 
       {/* Form */}
@@ -270,10 +280,10 @@ export function StepProfileSetup({
               autoComplete="off"
             />
             {usernameStatus === 'available' && (
-              <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+              <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             )}
             {(usernameStatus === 'taken' || usernameStatus === 'invalid') && (
-              <Ionicons name="close-circle" size={20} color="#888888" />
+              <XCircle size={20} color="#888888" strokeWidth={2.25} />
             )}
             {usernameStatus === 'checking' && (
               <ActivityIndicator size="small" color="#888888" />
@@ -291,7 +301,11 @@ export function StepProfileSetup({
                 <Text variant="small" style={styles.suggestionsLabel}>
                   {t('profileSetup.suggestions')}
                 </Text>
-                <View style={styles.suggestionsRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.suggestionsRow}
+                >
                   {suggestions.map((s, i) => (
                     <TouchableOpacity
                       key={`${s}-${i}`}
@@ -304,13 +318,10 @@ export function StepProfileSetup({
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
 
-          <Text variant="small" style={styles.changeAnytime}>
-            {t('profileSetup.changeAnytime')}
-          </Text>
         </View>
 
         {/* Done button */}
@@ -334,7 +345,7 @@ export function StepProfileSetup({
             onPress={handleImageFromGallery}
             activeOpacity={0.7}
           >
-            <Ionicons name="images-outline" size={20} color="#000000" />
+            <Images size={20} color="#000000" strokeWidth={2.25} />
             <Text variant="body" style={styles.pickerOptionPrimaryText}>
               {t('profileSetup.chooseFromGallery')}
             </Text>
@@ -345,7 +356,7 @@ export function StepProfileSetup({
             onPress={handleTakePhoto}
             activeOpacity={0.7}
           >
-            <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+            <Camera size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="body" style={styles.pickerOptionText}>
               {t('profileSetup.takePhoto')}
             </Text>
@@ -354,7 +365,7 @@ export function StepProfileSetup({
       </BottomSheet>
 
       {/* Representative Question Bottom Sheet */}
-      <BottomSheet visible={!!showRepQuestion} onClose={() => { onRepChoice?.(false); }}>
+      <BottomSheet visible={!!showRepQuestion} onClose={() => { onRepChoice?.('listener'); }}>
         <View style={styles.repContent}>
           <Text variant="h2" style={styles.repTitle}>
             {t('profileSetup.repQuestion')}
@@ -367,7 +378,7 @@ export function StepProfileSetup({
               title={t('profileSetup.yesRepresent')}
               onPress={() => {
                 haptic('light');
-                onRepChoice?.(true);
+                onRepChoice?.('representative');
               }}
               variant="primary"
               loading={isLoading}
@@ -376,11 +387,23 @@ export function StepProfileSetup({
               title={t('profileSetup.noForMe')}
               onPress={() => {
                 haptic('light');
-                onRepChoice?.(false);
+                onRepChoice?.('listener');
               }}
               variant="outline"
               disabled={isLoading}
             />
+            <TouchableOpacity
+              onPress={() => {
+                haptic('light');
+                onRepChoice?.('creator');
+              }}
+              disabled={isLoading}
+              style={styles.creatorLink}
+            >
+              <Text style={styles.creatorLinkText}>
+                {t('profileSetup.iAmCreator')}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </BottomSheet>
@@ -423,23 +446,22 @@ const styles = StyleSheet.create({
   },
   avatarSection: {
     alignItems: 'center',
-    paddingTop: 32,
+    paddingTop: 60,
     paddingBottom: 8,
-    gap: 12,
   },
   avatarTouchable: {
     position: 'relative',
   },
   avatarCircle: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     backgroundColor: '#1A1A1A',
   },
   avatarPlaceholder: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: '#333333',
@@ -494,7 +516,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222222',
     paddingHorizontal: 18,
-    paddingVertical: 18,
+    paddingVertical: 14,
     gap: 4,
   },
   atPrefix: {
@@ -533,7 +555,6 @@ const styles = StyleSheet.create({
   },
   suggestionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
   suggestionChip: {
@@ -563,7 +584,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 9999,
     paddingVertical: 14,
     paddingHorizontal: 24,
   },
@@ -598,5 +619,16 @@ const styles = StyleSheet.create({
   repButtons: {
     gap: 12,
     marginTop: 8,
+  },
+  creatorLink: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  creatorLinkText: {
+    color: '#CCCCCC',
+    fontFamily: 'Archivo_500Medium',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

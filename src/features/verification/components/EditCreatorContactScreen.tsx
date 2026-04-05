@@ -2,7 +2,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertTriangle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -10,24 +10,24 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Toast } from '@/components/ui/Toast';
-import { useEditArtistContact } from '../hooks/useEditArtistContact';
+import { useEditCreatorContact } from '../hooks/useEditCreatorContact';
 
 // RELATIONSHIP_OPTIONS is defined inside the component so labels can be translated
 
 /**
- * EditArtistContactScreen — Form for editing representative's artist contact info.
+ * EditCreatorContactScreen — Form for editing representative's creator contact info.
  *
- * Single Responsibility: Renders the edit form and delegates logic to useEditArtistContact.
+ * Single Responsibility: Renders the edit form and delegates logic to useEditCreatorContact.
  * Open/Closed: Uses existing UI components, extensible via new fields.
  */
-export function EditArtistContactScreen() {
+export function EditCreatorContactScreen() {
   const { t } = useTranslation('feed');
   const RELATIONSHIP_OPTIONS = [
     { label: t('verification.relationshipFamily'), value: 'family' },
     { label: t('verification.relationshipFriend'), value: 'friend' },
     { label: t('verification.relationshipManager'), value: 'manager' },
   ];
-  const { form, errors, isSubmitting, updateField, save } = useEditArtistContact();
+  const { form, errors, isSubmitting, updateField, save } = useEditCreatorContact();
 
   const handleSave = async () => {
     const success = await save();
@@ -39,7 +39,7 @@ export function EditArtistContactScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8} activeOpacity={0.6}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <Text variant="h2" style={styles.headerTitle}>
           {t('verification.editTitle')}
@@ -65,11 +65,11 @@ export function EditArtistContactScreen() {
         />
 
         <Input
-          label={t('verification.labelArtistName')}
-          value={form.artistName}
-          onChangeText={(text) => updateField('artistName', text)}
-          placeholder={t('verification.placeholderArtistName')}
-          error={errors.artistName}
+          label={t('verification.labelCreatorName')}
+          value={form.creatorName}
+          onChangeText={(text) => updateField('creatorName', text)}
+          placeholder={t('verification.placeholderCreatorName')}
+          error={errors.creatorName}
         />
 
         <Input
@@ -81,26 +81,26 @@ export function EditArtistContactScreen() {
         />
 
         <Input
-          label={t('verification.labelArtistEmail')}
-          value={form.artistEmail}
-          onChangeText={(text) => updateField('artistEmail', text)}
-          placeholder={t('verification.placeholderArtistEmail')}
+          label={t('verification.labelCreatorEmail')}
+          value={form.creatorEmail}
+          onChangeText={(text) => updateField('creatorEmail', text)}
+          placeholder={t('verification.placeholderCreatorEmail')}
           keyboardType="email-address"
           autoCapitalize="none"
-          error={errors.artistEmail}
+          error={errors.creatorEmail}
         />
 
         <PhoneInput
-          label={t('verification.labelArtistPhone')}
-          countryCode={form.artistPhoneCountryCode}
-          onCountryCodeChange={(code) => updateField('artistPhoneCountryCode', code)}
-          phoneNumber={form.artistPhone}
-          onPhoneNumberChange={(number) => updateField('artistPhone', number)}
+          label={t('verification.labelCreatorPhone')}
+          countryCode={form.creatorPhoneCountryCode}
+          onCountryCodeChange={(code) => updateField('creatorPhoneCountryCode', code)}
+          phoneNumber={form.creatorPhone}
+          onPhoneNumberChange={(number) => updateField('creatorPhone', number)}
         />
 
         {/* Warning */}
         <View style={styles.warningContainer}>
-          <Ionicons name="warning-outline" size={16} color="#F59E0B" />
+          <AlertTriangle size={16} color="#F59E0B" strokeWidth={2.25} />
           <Text variant="small" style={styles.warningText}>
             {t('verification.warningReauthorize')}
           </Text>

@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MessageCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -8,7 +8,7 @@ export function EmptyConversations() {
   const { t } = useTranslation('messages');
   return (
     <View style={styles.container}>
-      <Ionicons name="chatbubbles-outline" size={48} color={COLORS.gray[500]} />
+      <MessageCircle size={48} color={COLORS.gray[500]} strokeWidth={2.25} />
       <Text variant="h2" style={styles.title}>
         {t('empty.title')}
       </Text>

@@ -1,7 +1,7 @@
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CheckCircle, PlusCircle } from 'lucide-react-native';
 import { BottomSheet } from './BottomSheet';
 import { Avatar } from './Avatar';
 import { Text } from './Text';
@@ -16,7 +16,7 @@ interface AccountSwitcherBottomSheetProps {
 
 const ROLE_LABEL: Record<string, string> = {
   representative: 'Representative',
-  artist: 'Artist account',
+  creator: 'Creator account',
   listener: 'Listener',
 };
 
@@ -82,9 +82,9 @@ export function AccountSwitcherBottomSheet({
               {isSwitching ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : isActive ? (
-                <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+                <CheckCircle size={22} color="#FFFFFF" strokeWidth={2.25} />
               ) : (
-                <Ionicons name="ellipse-outline" size={22} color="#333333" />
+                <View style={styles.ellipseOutline} />
               )}
             </TouchableOpacity>
           );
@@ -100,7 +100,7 @@ export function AccountSwitcherBottomSheet({
             router.push('/(auth)/login?mode=add');
           }}
         >
-          <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" />
+          <PlusCircle size={24} color="#FFFFFF" strokeWidth={2.25} />
           <Text style={styles.addText}>Add account</Text>
         </TouchableOpacity>
       </View>
@@ -166,5 +166,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Archivo_500Medium',
+  },
+  ellipseOutline: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#333333',
   },
 });

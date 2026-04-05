@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button } from '@/components/ui';
@@ -10,9 +10,9 @@ import { isStrongPassword } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 
 /**
- * StepArtistPassword - Step 9: Password + confirm for the artist account
+ * StepCreatorPassword - Step 9: Password + confirm for the creator account
  */
-export function StepArtistPassword({
+export function StepCreatorPassword({
   state,
   dispatch,
   onNext,
@@ -25,15 +25,15 @@ export function StepArtistPassword({
   const [showConfirm, setShowConfirm] = useState(false);
 
   const strengthChecks = {
-    length: state.artistPassword.length >= 8,
-    upper: /[A-Z]/.test(state.artistPassword),
-    lower: /[a-z]/.test(state.artistPassword),
-    number: /\d/.test(state.artistPassword),
+    length: state.creatorPassword.length >= 8,
+    upper: /[A-Z]/.test(state.creatorPassword),
+    lower: /[a-z]/.test(state.creatorPassword),
+    number: /\d/.test(state.creatorPassword),
   };
 
-  const bothFilled = state.artistPassword.length > 0 && state.artistConfirmPassword.length > 0;
-  const passwordsMatch = state.artistPassword === state.artistConfirmPassword;
-  const canContinue = isStrongPassword(state.artistPassword) && bothFilled && passwordsMatch;
+  const bothFilled = state.creatorPassword.length > 0 && state.creatorConfirmPassword.length > 0;
+  const passwordsMatch = state.creatorPassword === state.creatorConfirmPassword;
+  const canContinue = isStrongPassword(state.creatorPassword) && bothFilled && passwordsMatch;
 
   const handleContinue = () => {
     if (!canContinue) { haptic('error'); return; }
@@ -50,12 +50,12 @@ export function StepArtistPassword({
       bottomOffset={16}
       showsVerticalScrollIndicator={false}
     >
-      <Text variant="h2" style={styles.title}>{t('artistAccountSetup.passwordTitle')}</Text>
-      <Text variant="body" style={styles.subtitle}>{t('artistAccountSetup.passwordSubtitle')}</Text>
+      <Text variant="h2" style={styles.title}>{t('creatorAccountSetup.passwordTitle')}</Text>
+      <Text variant="body" style={styles.subtitle}>{t('creatorAccountSetup.passwordSubtitle')}</Text>
 
       {apiError && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
           <Text variant="small" style={styles.errorBannerText}>{apiError}</Text>
         </View>
       )}
@@ -65,9 +65,9 @@ export function StepArtistPassword({
         <View>
           <View style={styles.passwordWrapper}>
             <TextInput
-              value={state.artistPassword}
-              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistPassword', value: v })}
-              placeholder={t('artistAccountSetup.passwordPlaceholder')}
+              value={state.creatorPassword}
+              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorPassword', value: v })}
+              placeholder={t('creatorAccountSetup.passwordPlaceholder')}
               placeholderTextColor="#666666"
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showPassword}
@@ -75,11 +75,15 @@ export function StepArtistPassword({
               autoComplete="off"
             />
             <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#888888" />
+              {showPassword ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
 
-          {state.artistPassword.length > 0 && (
+          {state.creatorPassword.length > 0 && (
             <View style={styles.strengthContainer}>
               {([
                 [strengthChecks.length, tv('strengthLength')],
@@ -88,7 +92,11 @@ export function StepArtistPassword({
                 [strengthChecks.number, tv('strengthNumber')],
               ] as [boolean, string][]).map(([met, label]) => (
                 <View key={label} style={styles.strengthRow}>
-                  <Ionicons name={met ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={met ? '#22C55E' : '#555555'} />
+                  {met ? (
+                    <CheckCircle size={14} color="#22C55E" strokeWidth={2.25} />
+                  ) : (
+                    <View style={styles.strengthDot} />
+                  )}
                   <Text variant="small" style={[styles.strengthText, met && styles.strengthMet]}>{label}</Text>
                 </View>
               ))}
@@ -100,9 +108,9 @@ export function StepArtistPassword({
         <View>
           <View style={styles.passwordWrapper}>
             <TextInput
-              value={state.artistConfirmPassword}
-              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistConfirmPassword', value: v })}
-              placeholder={t('artistAccountSetup.confirmPlaceholder')}
+              value={state.creatorConfirmPassword}
+              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorConfirmPassword', value: v })}
+              placeholder={t('creatorAccountSetup.confirmPlaceholder')}
               placeholderTextColor="#666666"
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showConfirm}
@@ -110,7 +118,11 @@ export function StepArtistPassword({
               autoComplete="off"
             />
             <TouchableOpacity onPress={() => setShowConfirm((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name={showConfirm ? 'eye-off' : 'eye'} size={20} color="#888888" />
+              {showConfirm ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
           {bothFilled && passwordsMatch && (
@@ -144,6 +156,7 @@ const styles = StyleSheet.create({
   passwordWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 16, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 18, paddingVertical: 18, gap: 8 },
   strengthContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 4, width: '45%' },
+  strengthDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, borderColor: '#555555' },
   strengthText: { color: '#555555' },
   strengthMet: { color: '#22C55E' },
   matchSuccess: { color: '#22C55E', marginTop: 6 },

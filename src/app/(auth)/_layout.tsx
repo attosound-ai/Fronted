@@ -24,7 +24,7 @@ export default function AuthLayout() {
 
     // Don't redirect when adding a second account — user is authenticated
     // but intentionally on the login screen to sign into another account
-    if (params.mode === 'add') return;
+    if (params.mode === 'add' || params.mode === 'creator') return;
 
     if (!isLoading && isAuthenticated && user?.registrationStatus !== 'pending') {
       router.replace('/(tabs)');
@@ -40,8 +40,12 @@ export default function AuthLayout() {
         animationDuration: 300,
       }}
     >
+      <Stack.Screen
+        name="welcome"
+        options={{ animation: 'none', gestureEnabled: false }}
+      />
       <Stack.Screen name="login" />
-      <Stack.Screen name="register" />
+      <Stack.Screen name="register" options={{ gestureEnabled: false }} />
       <Stack.Screen name="forgot-password" />
     </Stack>
   );

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Mic } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
@@ -70,7 +70,7 @@ export function CallBanner() {
             {t('banner.callInProgress')}
           </Text>
         </View>
-        <Ionicons name="mic" size={18} color="#FFF" />
+        <Mic size={18} color="#FFF" strokeWidth={2.25} />
       </TouchableOpacity>
       <ProjectPickerSheet
         visible={pickerVisible}

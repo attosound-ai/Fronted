@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Image, View, StyleSheet, ImageStyle, ViewStyle, Text } from 'react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { Logo } from './Logo';
@@ -46,6 +46,11 @@ export function Avatar({ uri, size = 'md', style, fallbackText }: AvatarProps) {
   const [hasError, setHasError] = useState(false);
   const dimension = SIZES[size];
 
+  // Reset error state when uri changes (e.g. after profile edit)
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
+
   const avatarStyle = {
     width: dimension,
     height: dimension,
@@ -76,6 +81,7 @@ export function Avatar({ uri, size = 'md', style, fallbackText }: AvatarProps) {
 
   return (
     <Image
+      key={resolvedUri}
       source={{ uri: resolvedUri }}
       style={[styles.image, avatarStyle, style as ImageStyle]}
       onError={() => setHasError(true)}

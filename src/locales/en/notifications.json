@@ -1,0 +1,38 @@
+{
+  "header": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read"
+  },
+  "sections": {
+    "today": "Today",
+    "thisWeek": "This Week",
+    "earlier": "Earlier"
+  },
+  "types": {
+    "follow_one": "{{actor}} followed you",
+    "follow_two": "{{actor1}} and {{actor2}} followed you",
+    "follow_many": "{{actor1}}, {{actor2}} and {{count}} others followed you",
+    "like_one": "{{actor}} liked your post",
+    "like_two": "{{actor1}} and {{actor2}} liked your post",
+    "like_many": "{{actor1}}, {{actor2}} and {{count}} others liked your post",
+    "comment_one": "{{actor}} commented on your post",
+    "comment_two": "{{actor1}} and {{actor2}} commented on your post",
+    "comment_many": "{{actor1}}, {{actor2}} and {{count}} others commented on your post",
+    "repost_one": "{{actor}} reposted your post",
+    "repost_two": "{{actor1}} and {{actor2}} reposted your post",
+    "repost_many": "{{actor1}}, {{actor2}} and {{count}} others reposted your post",
+    "share_one": "{{actor}} shared your post",
+    "share_two": "{{actor1}} and {{actor2}} shared your post",
+    "share_many": "{{actor1}}, {{actor2}} and {{count}} others shared your post",
+    "message_one": "{{actor}} sent you a message",
+    "message_many": "{{actor}} sent you {{count}} messages",
+    "welcome": "Welcome to ATTO SOUND!"
+  },
+  "empty": {
+    "title": "No notifications yet",
+    "subtitle": "When someone interacts with your content, you'll see it here."
+  },
+  "error": {
+    "loadFailed": "Could not load notifications"
+  }
+}

@@ -1,9 +1,9 @@
+import type { ReactElement } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/ui/Text';
 
 interface ProfileInfoRowProps {
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: ReactElement;
   label: string;
   value: string;
   valueColor?: string;
@@ -20,7 +20,7 @@ export function ProfileInfoRow({
   return (
     <View style={[styles.container, showDivider && styles.divider]}>
       <View style={styles.left}>
-        {icon && <Ionicons name={icon} size={18} color="#888888" />}
+        {icon ?? null}
         <Text variant="body" style={styles.label}>
           {label}
         </Text>

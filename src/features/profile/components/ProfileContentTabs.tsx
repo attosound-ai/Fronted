@@ -9,26 +9,60 @@
  *   <ProfileContentTabs userId={user.id} />
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
-  FlatList,
   TouchableOpacity,
   Image,
+  Modal,
+  ScrollView,
   Dimensions,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Grid2x2, Bookmark, User, Music, Play, ArrowLeft } from 'lucide-react-native';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
+import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
+import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { feedService } from '@/features/feed/services/feedService';
 import { useBookmarks } from '@/features/feed/hooks/useBookmarks';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post } from '@/types';
+import type { FeedPost, PostType } from '@/types/post';
 import type { FeedResponse } from '@/features/feed/types';
+
+function toFeedPost(post: Post): FeedPost {
+  const type: PostType = (post.contentType as PostType) || 'text';
+  const files = post.filePaths ?? post.images ?? [];
+  return {
+    id: post.id,
+    type,
+    author: {
+      id: post.author.id,
+      username: post.author.username,
+      displayName: post.author.displayName,
+      avatar: post.author.avatar,
+      isFollowing: false,
+      role: post.author.role,
+    },
+    audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined) : undefined,
+    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
+    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
+    title: post.textContent ?? undefined,
+    description: post.textContent ?? undefined,
+    likesCount: post.likesCount ?? 0,
+    commentsCount: post.commentsCount ?? 0,
+    sharesCount: post.sharesCount ?? 0,
+    repostsCount: post.repostsCount ?? 0,
+    isLiked: post.isLiked ?? false,
+    isBookmarked: post.isBookmarked ?? false,
+    isReposted: post.isReposted ?? false,
+    createdAt: post.createdAt,
+  };
+}
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -49,7 +83,7 @@ interface ProfileContentTabsProps {
 // ─── sub-components ───────────────────────────────────────────────────────────
 
 /** Single grid cell rendered for every post type. */
-function PostThumbnail({ post }: { post: Post }) {
+function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) {
   const isVideo = post.contentType === 'video';
   const isReel = post.contentType === 'reel';
   const isAudio = post.contentType === 'audio';
@@ -70,6 +104,7 @@ function PostThumbnail({ post }: { post: Post }) {
     <TouchableOpacity
       style={styles.cell}
       activeOpacity={0.8}
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Post by ${post.author.displayName}`}
     >
@@ -83,13 +118,13 @@ function PostThumbnail({ post }: { post: Post }) {
           />
           {isVideo && (
             <View style={styles.cellOverlay} pointerEvents="none">
-              <Ionicons name="play-circle" size={28} color="#FFFFFF" />
+              <Play size={28} color="#FFFFFF" strokeWidth={2.25} />
             </View>
           )}
         </>
       ) : isAudio ? (
         <View style={[styles.cellImage, styles.cellDark]}>
-          <Ionicons name="musical-notes" size={28} color="#3B82F6" />
+          <Music size={28} color="#3B82F6" strokeWidth={2.25} />
         </View>
       ) : (
         <View style={[styles.cellImage, styles.cellDark, styles.cellTextPad]}>
@@ -115,23 +150,24 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-/** Renders the active tab's content — extracted to reduce cognitive complexity. */
+/** Renders the active tab's content — plain View grid instead of FlatList
+ *  so it doesn't intercept the parent ScrollView's pull-to-refresh gesture. */
 function TabContent({
   activeTab,
   settingsContent,
   activeLoading,
   activeData,
   activeFetchingMore,
-  activeEndReached,
   emptyMessage,
+  onPostPress,
 }: {
   activeTab: ActiveTab;
   settingsContent?: React.ReactNode;
   activeLoading: boolean;
   activeData: Post[];
   activeFetchingMore: boolean;
-  activeEndReached: () => void;
   emptyMessage: string;
+  onPostPress?: (post: Post) => void;
 }) {
   if (activeTab === 'settings') {
     return <View style={styles.settingsWrap}>{settingsContent}</View>;
@@ -145,35 +181,43 @@ function TabContent({
     );
   }
 
+  if (activeData.length === 0) {
+    return <EmptyState message={emptyMessage} />;
+  }
+
   return (
-    <FlatList
-      key={activeTab}
-      data={activeData}
-      keyExtractor={(item) => item.id}
-      numColumns={COLUMNS}
-      renderItem={({ item }) => <PostThumbnail post={item} />}
-      ListEmptyComponent={<EmptyState message={emptyMessage} />}
-      ListFooterComponent={
-        activeFetchingMore ? (
-          <View style={styles.footerLoader}>
-            <ActivityIndicator color="#3B82F6" />
-          </View>
-        ) : null
-      }
-      onEndReached={activeEndReached}
-      onEndReachedThreshold={0.4}
-      columnWrapperStyle={styles.row}
-      scrollEnabled={false}
-      showsVerticalScrollIndicator={false}
+    <View
       accessibilityLabel={activeTab === 'posts' ? 'User posts grid' : 'Saved posts grid'}
-    />
+    >
+      <View style={styles.grid}>
+        {activeData.map((item) => (
+          <PostThumbnail
+            key={item.id}
+            post={item}
+            onPress={() => onPostPress?.(item)}
+          />
+        ))}
+      </View>
+      {activeFetchingMore && (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator color="#3B82F6" />
+        </View>
+      )}
+    </View>
   );
 }
 
 // ─── main component ───────────────────────────────────────────────────────────
 
-export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTabsProps) {
+export interface ProfileContentTabsHandle {
+  handleScrollNearEnd: () => void;
+}
+
+export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileContentTabsProps>(
+  function ProfileContentTabs({ userId, settingsContent }, ref) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('posts');
+  const [previewPost, setPreviewPost] = useState<Post | null>(null);
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
 
   // ── posts query ──────────────────────────────────────────────────────────
   const {
@@ -214,13 +258,19 @@ export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTa
     }
   }, [savedHasMore, savedFetchingMore, fetchMoreSaved]);
 
+  // Expose infinite-scroll trigger to parent ScrollView
+  useImperativeHandle(ref, () => ({
+    handleScrollNearEnd: () => {
+      if (activeTab === 'posts') handleEndReachedPosts();
+      else if (activeTab === 'saved') handleEndReachedSaved();
+    },
+  }), [activeTab, handleEndReachedPosts, handleEndReachedSaved]);
+
   // ── derived state ─────────────────────────────────────────────────────────
   const activeData = activeTab === 'posts' ? posts : bookmarks;
   const activeLoading = activeTab === 'posts' ? postsLoading : savedLoading;
   const activeFetchingMore =
     activeTab === 'posts' ? postsFetchingMore : savedFetchingMore;
-  const activeEndReached =
-    activeTab === 'posts' ? handleEndReachedPosts : handleEndReachedSaved;
   const emptyMessage = activeTab === 'posts' ? 'No posts yet' : 'No saved posts';
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -235,10 +285,10 @@ export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTa
           accessibilityState={{ selected: activeTab === 'posts' }}
           accessibilityLabel="Posts"
         >
-          <Ionicons
-            name="grid-outline"
+          <Grid2x2
             size={22}
             color={activeTab === 'posts' ? '#FFFFFF' : '#666666'}
+            strokeWidth={2.25}
           />
         </TouchableOpacity>
 
@@ -249,10 +299,10 @@ export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTa
           accessibilityState={{ selected: activeTab === 'saved' }}
           accessibilityLabel="Saved"
         >
-          <Ionicons
-            name="bookmark-outline"
+          <Bookmark
             size={22}
             color={activeTab === 'saved' ? '#FFFFFF' : '#666666'}
+            strokeWidth={2.25}
           />
         </TouchableOpacity>
 
@@ -263,10 +313,10 @@ export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTa
           accessibilityState={{ selected: activeTab === 'settings' }}
           accessibilityLabel="Settings"
         >
-          <Ionicons
-            name="person-outline"
+          <User
             size={22}
             color={activeTab === 'settings' ? '#FFFFFF' : '#666666'}
+            strokeWidth={2.25}
           />
         </TouchableOpacity>
       </View>
@@ -278,12 +328,52 @@ export function ProfileContentTabs({ userId, settingsContent }: ProfileContentTa
         activeLoading={activeLoading}
         activeData={activeData}
         activeFetchingMore={activeFetchingMore}
-        activeEndReached={activeEndReached}
         emptyMessage={emptyMessage}
+        onPostPress={setPreviewPost}
       />
+
+      {/* Post preview modal */}
+      <Modal
+        visible={previewPost !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewPost(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={styles.modalBack}
+            onPress={() => setPreviewPost(null)}
+            hitSlop={16}
+          >
+            <ArrowLeft size={32} color="#FFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+          <ScrollView
+            contentContainerStyle={styles.modalScroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {previewPost && (
+              <FeedPostCard
+                post={toFeedPost(previewPost)}
+                onComment={() => {
+                  console.log('[Profile] onComment tapped, postId:', previewPost.id);
+                  setCommentsPostId(previewPost.id);
+                }}
+              />
+            )}
+          </ScrollView>
+
+          {commentsPostId && (
+            <CommentsSheet
+              visible
+              onClose={() => setCommentsPostId(null)}
+              postId={commentsPostId}
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
-}
+});
 
 // ─── styles ───────────────────────────────────────────────────────────────────
 
@@ -310,8 +400,10 @@ const styles = StyleSheet.create({
   },
 
   // Grid
-  row: {
-    gap: GAP,
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: GAP,
   },
   cell: {
     width: CELL_SIZE,
@@ -365,5 +457,22 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 48,
     gap: 24,
+  },
+
+  // Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  modalBack: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  modalScroll: {
+    paddingTop: 100,
+    paddingBottom: 40,
   },
 });

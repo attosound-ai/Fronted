@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import type { InmateLookupResponse } from '@/types';
@@ -29,8 +29,8 @@ function InmateCell({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Step 6: Artist Consent Form
- * Collects artist information, verifies inmate identity, and consent
+ * Step 6: Creator Consent Form
+ * Collects creator information, verifies inmate identity, and consent
  */
 export const StepConsentForm: React.FC<StepProps> = ({
   state,
@@ -60,8 +60,8 @@ export const StepConsentForm: React.FC<StepProps> = ({
     if (!state.relationship) {
       newErrors.relationship = tv('relationshipRequired');
     }
-    if (!isNotEmpty(state.artistName || '')) {
-      newErrors.artistName = tv('artistNameRequired');
+    if (!isNotEmpty(state.creatorName || '')) {
+      newErrors.creatorName = tv('creatorNameRequired');
     }
     if (!isValidInmateNumber(state.inmateNumber || '')) {
       newErrors.inmateNumber = tv('inmateNumberInvalid');
@@ -106,7 +106,8 @@ export const StepConsentForm: React.FC<StepProps> = ({
         parts.length === 2
           ? `${parts[1].charAt(0).toUpperCase()}${parts[1].slice(1).toLowerCase()} ${parts[0].charAt(0).toUpperCase()}${parts[0].slice(1).toLowerCase()}`
           : inmateData.inmateName;
-      dispatch({ type: 'UPDATE_FIELD', field: 'artistName', value: formatted });
+      dispatch({ type: 'UPDATE_FIELD', field: 'creatorName', value: formatted });
+      dispatch({ type: 'UPDATE_FIELD', field: 'creatorDisplayName', value: formatted });
     }
     setShowInmateModal(false);
     haptic('success');
@@ -151,7 +152,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
               style={styles.backButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
             </TouchableOpacity>
           )}
           <Text variant="h1" style={styles.title}>
@@ -173,14 +174,15 @@ export const StepConsentForm: React.FC<StepProps> = ({
           />
 
           <Input
-            label={t('consentForm.artistNameLabel')}
-            value={state.artistName || ''}
+            label={t('consentForm.creatorNameLabel')}
+            value={state.creatorName || ''}
             onChangeText={(value) => {
-              dispatch({ type: 'UPDATE_FIELD', field: 'artistName', value });
-              setErrors((prev) => ({ ...prev, artistName: '' }));
+              dispatch({ type: 'UPDATE_FIELD', field: 'creatorName', value });
+              dispatch({ type: 'UPDATE_FIELD', field: 'creatorDisplayName', value });
+              setErrors((prev) => ({ ...prev, creatorName: '' }));
             }}
-            error={errors.artistName}
-            placeholder={t('consentForm.artistNamePlaceholder')}
+            error={errors.creatorName}
+            placeholder={t('consentForm.creatorNamePlaceholder')}
           />
 
           {/* Inmate number + State on same row */}
@@ -220,7 +222,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
 
           {lookupError && (
             <View style={styles.lookupErrorContainer}>
-              <Ionicons name="alert-circle" size={18} color="#FFFFFF" />
+              <AlertCircle size={18} color="#FFFFFF" strokeWidth={2.25} />
               <Text variant="small" style={styles.lookupErrorText}>
                 {lookupError}
               </Text>

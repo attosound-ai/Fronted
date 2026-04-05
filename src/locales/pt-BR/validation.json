@@ -10,7 +10,7 @@
   "displayNameRequired": "O nome de exibição é obrigatório",
   "otpIncomplete": "Digite o código completo de 6 dígitos",
   "relationshipRequired": "Selecione o seu relacionamento",
-  "artistNameRequired": "O nome do artista é obrigatório",
+  "creatorNameRequired": "O nome do criador é obrigatório",
   "inmateNumberInvalid": "Número do detento inválido",
   "stateRequired": "Selecione um estado",
   "consentRequired": "Você deve concordar com a gravação da chamada",

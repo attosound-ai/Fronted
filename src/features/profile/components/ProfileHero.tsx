@@ -1,9 +1,36 @@
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import {
+  View,
+  TouchableOpacity,
+  Modal,
+  Image,
+  Pressable,
+  Linking,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
+import {
+  Camera,
+  X,
+  Instagram,
+  Music2,
+  Youtube,
+  Cloud,
+  Disc3,
+  Twitter,
+  Globe,
+  MapPin,
+  Building2,
+  Mail,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
+import { Logo } from '@/components/ui/Logo';
 import { formatCount } from '@/utils/formatters';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { User } from '@/types';
 
 interface ProfileHeroProps {
@@ -11,27 +38,104 @@ interface ProfileHeroProps {
   onEditProfile?: () => void;
 }
 
+const SOCIAL_LINKS = [
+  { key: 'socialInstagram', icon: Instagram, urlPrefix: 'https://instagram.com/' },
+  { key: 'socialTiktok', icon: Music2, urlPrefix: 'https://tiktok.com/@' },
+  { key: 'socialYoutube', icon: Youtube, urlPrefix: 'https://youtube.com/@' },
+  { key: 'socialSoundcloud', icon: Cloud, urlPrefix: 'https://soundcloud.com/' },
+  { key: 'socialSpotify', icon: Disc3, urlPrefix: 'https://open.spotify.com/search/' },
+  { key: 'socialTwitter', icon: Twitter, urlPrefix: 'https://x.com/' },
+  { key: 'website', icon: Globe, urlPrefix: '' },
+  { key: 'bookingEmail', icon: Mail, urlPrefix: 'mailto:' },
+] as const;
+
+function SocialLinksRow({ user }: { user: User }) {
+  const links = SOCIAL_LINKS.filter(
+    (l) => user[l.key as keyof User] && String(user[l.key as keyof User]).trim()
+  );
+  if (links.length === 0) return null;
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.socialRow}
+      contentContainerStyle={styles.socialRowContent}
+    >
+      {links.map((link) => {
+        const handle = String(user[link.key as keyof User]).replace(/^@/, '');
+        const url = link.key === 'website' ? handle : link.urlPrefix + handle;
+        return (
+          <TouchableOpacity
+            key={link.key}
+            style={styles.socialIcon}
+            onPress={() => Linking.openURL(url)}
+            activeOpacity={0.6}
+          >
+            <link.icon size={18} color="#FFF" strokeWidth={2} />
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
   const { t } = useTranslation('profile');
+  const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+
+  const navigateToList = (mode: 'followers' | 'following') => {
+    router.push({
+      pathname: '/following',
+      params: { userId: String(user.id), mode },
+    });
+  };
 
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        onPress={onEditProfile}
+        onPress={() => setAvatarModalVisible(true)}
+        onLongPress={onEditProfile}
         activeOpacity={0.7}
         style={styles.avatarContainer}
       >
         <Avatar uri={user.avatar} size="xl" />
         <View style={styles.avatarBadge}>
-          <Ionicons name="camera" size={14} color="#000" />
+          <Camera size={14} color="#000" strokeWidth={2.25} />
         </View>
       </TouchableOpacity>
 
-      <Text variant="h2" style={styles.name}>
-        {(user.displayName || user.artistName || user.username).toUpperCase()}
-      </Text>
+      {/* Avatar fullscreen modal */}
+      <Modal
+        visible={avatarModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAvatarModalVisible(false)}
+      >
+        <Pressable
+          style={styles.avatarModal}
+          onPress={() => setAvatarModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.avatarModalClose}
+            onPress={() => setAvatarModalVisible(false)}
+            hitSlop={16}
+          >
+            <X size={28} color="#FFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+          {user.avatar ? (
+            <Image
+              source={{ uri: cloudinaryUrl(user.avatar, 'avatar_lg') ?? user.avatar }}
+              style={styles.avatarModalImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <Logo size={200} />
+          )}
+        </Pressable>
+      </Modal>
 
-      <Text variant="caption" style={styles.username}>
+      <Text variant="h2" style={styles.name}>
         @{user.username}
       </Text>
 
@@ -41,16 +145,39 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
         </Text>
       )}
 
+      {/* Location + Record Label badges */}
+      {(user.location || user.recordLabel) && (
+        <View style={styles.metaBadges}>
+          {user.location && (
+            <View style={styles.metaBadge}>
+              <MapPin size={12} color="#888" strokeWidth={2} />
+              <Text variant="caption" style={styles.metaBadgeText}>
+                {user.location}
+              </Text>
+            </View>
+          )}
+          {user.recordLabel && (
+            <View style={styles.metaBadge}>
+              <Building2 size={12} color="#888" strokeWidth={2} />
+              <Text variant="caption" style={styles.metaBadgeText}>
+                {user.recordLabel}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Social links row */}
+      {user.role === 'creator' && <SocialLinksRow user={user} />}
+
       {user.role !== 'listener' && (
         <View style={styles.badge}>
           <Text variant="caption" style={styles.badgeText}>
-            {user.role === 'artist'
-              ? t('hero.roleBadgeArtist')
+            {user.role === 'creator'
+              ? t('hero.roleBadgeCreator')
               : t('hero.roleBadgeRepresentative')}
           </Text>
-          {user.profileVerified && (
-            <Ionicons name="checkmark-circle" size={14} color="#3B82F6" />
-          )}
+          {user.role === 'creator' && <CreatorBadge />}
         </View>
       )}
 
@@ -61,18 +188,26 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
             {t('hero.statPosts')}
           </Text>
         </View>
-        <View style={styles.stat}>
+        <TouchableOpacity
+          style={styles.stat}
+          activeOpacity={0.7}
+          onPress={() => navigateToList('followers')}
+        >
           <Text variant="h2">{formatCount(user.followersCount)}</Text>
           <Text variant="caption" style={styles.statLabel}>
             {t('hero.statFollowers')}
           </Text>
-        </View>
-        <View style={styles.stat}>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.stat}
+          activeOpacity={0.7}
+          onPress={() => navigateToList('following')}
+        >
           <Text variant="h2">{formatCount(user.followingCount)}</Text>
           <Text variant="caption" style={styles.statLabel}>
             {t('hero.statFollowing')}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -119,6 +254,37 @@ const styles = StyleSheet.create({
     color: '#888888',
     textAlign: 'center',
   },
+  metaBadges: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  metaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaBadgeText: {
+    color: '#888',
+    fontSize: 12,
+  },
+  socialRow: {
+    marginTop: 4,
+    maxHeight: 40,
+  },
+  socialRowContent: {
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  socialIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -148,7 +314,7 @@ const styles = StyleSheet.create({
   editButton: {
     borderWidth: 1,
     borderColor: '#333',
-    borderRadius: 8,
+    borderRadius: 9999,
     paddingVertical: 8,
     alignItems: 'center',
     alignSelf: 'stretch',
@@ -158,5 +324,22 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
+  },
+  avatarModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarModalClose: {
+    position: 'absolute',
+    top: 56,
+    right: 20,
+    zIndex: 10,
+  },
+  avatarModalImage: {
+    width: 280,
+    height: 280,
+    borderRadius: 140,
   },
 });

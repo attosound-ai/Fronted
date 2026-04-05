@@ -4,9 +4,10 @@ import { Text } from '@/components/ui/Text';
 
 interface ProfileActionsSectionProps {
   onLogout: () => void;
+  onDeleteAccount: () => void;
 }
 
-export function ProfileActionsSection({ onLogout }: ProfileActionsSectionProps) {
+export function ProfileActionsSection({ onLogout, onDeleteAccount }: ProfileActionsSectionProps) {
   const { t } = useTranslation('profile');
 
   return (
@@ -17,6 +18,15 @@ export function ProfileActionsSection({ onLogout }: ProfileActionsSectionProps) 
         style={styles.logoutButton}
       >
         <Text style={styles.logoutText}>{t('actions.logout')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={onDeleteAccount}
+        activeOpacity={0.7}
+        style={styles.logoutButton}
+      >
+        <Text style={styles.deleteText}>
+          {t('actions.deleteAccount', { defaultValue: 'Delete Account' })}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -38,5 +48,10 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
+  },
+  deleteText: {
+    color: '#888',
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 13,
   },
 });

@@ -1,5 +1,5 @@
 import { TouchableOpacity, View, StyleSheet, Keyboard } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Check } from 'lucide-react-native';
 
 import { Text } from './Text';
 
@@ -38,7 +38,7 @@ export function Checkbox({
             disabled && styles.boxDisabled,
           ]}
         >
-          {checked && <Ionicons name="checkmark" size={14} color="#000000" />}
+          {checked && <Check size={14} color="#000000" strokeWidth={2.25} />}
         </View>
 
         {label && (

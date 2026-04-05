@@ -36,7 +36,8 @@ export function formatRelativeTime(dateString: string): string {
 /**
  * Formats a large number using locale-aware compact notation
  */
-export function formatCount(count: number): string {
+export function formatCount(count: number | undefined | null): string {
+  if (count == null) return '0';
   if (count >= 1000) {
     return new Intl.NumberFormat(getLocale(), { notation: 'compact' }).format(count);
   }

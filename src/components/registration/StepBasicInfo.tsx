@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, PhoneInput } from '@/components/ui';
@@ -72,19 +72,23 @@ export function StepBasicInfo({
       if (isEmailMode) {
         const emailRes = await apiClient
           .get(`/auth/check-email?email=${encodeURIComponent(state.email)}`)
-          .catch((e: { response: { status: number } }) => e.response);
+          .catch((e: { response?: { status: number } }) => e.response);
 
         if (emailRes?.status === 409) {
           newErrors.email = t('errors.emailTaken');
+        } else if (emailRes?.status && emailRes.status >= 500) {
+          newErrors.email = t('errors.serverError');
         }
       } else {
         const phone = `${state.phoneCountryCode}${state.phoneNumber}`;
         const phoneRes = await apiClient
           .get(`/auth/check-phone?phone=${encodeURIComponent(phone)}`)
-          .catch((e: { response: { status: number } }) => e.response);
+          .catch((e: { response?: { status: number } }) => e.response);
 
         if (phoneRes?.status === 409) {
           newErrors.phoneNumber = t('errors.phoneTaken');
+        } else if (phoneRes?.status && phoneRes.status >= 500) {
+          newErrors.phoneNumber = t('errors.serverError');
         }
       }
 
@@ -96,10 +100,19 @@ export function StepBasicInfo({
 
       haptic('light');
       onNext();
-    } catch {
-      // Network error — let the user continue, backend will validate on register
-      haptic('light');
-      onNext();
+    } catch (error: unknown) {
+      const isNetwork =
+        error instanceof Error &&
+        (error.message === 'Network Error' || error.message.includes('timeout'));
+      if (isNetwork) {
+        const field = isEmailMode ? 'email' : 'phoneNumber';
+        setErrors({ [field]: t('errors.networkError') });
+        haptic('error');
+      } else {
+        // Unknown error — let the user continue, backend will validate on register
+        haptic('light');
+        onNext();
+      }
     } finally {
       setChecking(false);
     }
@@ -123,7 +136,7 @@ export function StepBasicInfo({
                 style={styles.backButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
@@ -135,7 +148,7 @@ export function StepBasicInfo({
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+            <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -174,16 +187,23 @@ export function StepBasicInfo({
             />
           )}
 
-          {/* Mode toggle link */}
-          <TouchableOpacity
-            onPress={handleToggleMode}
-            style={styles.toggleContainer}
-            activeOpacity={0.7}
-          >
-            <Text variant="small" style={styles.toggleText}>
-              {isEmailMode ? t('basicInfo.usePhone') : t('basicInfo.useEmail')}
-            </Text>
-          </TouchableOpacity>
+          {/* Phone mode hint */}
+          {isEmailMode && (
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  t('basicInfo.phoneUnavailableTitle'),
+                  t('basicInfo.phoneUnavailableMessage')
+                )
+              }
+              style={styles.toggleContainer}
+              activeOpacity={0.7}
+            >
+              <Text variant="small" style={styles.toggleText}>
+                {t('basicInfo.usePhone')}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Continue Button */}

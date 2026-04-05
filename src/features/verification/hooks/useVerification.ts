@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { verificationService } from '../services/verificationService';
 import { paymentService } from '@/lib/api/paymentService';
 import { authService } from '@/lib/api/authService';
+import { apiClient } from '@/lib/api/client';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -28,26 +29,55 @@ export function useVerification() {
       return;
     }
     let cancelled = false;
-    paymentService
-      .getBridgeNumber()
-      .then(async (result) => {
-        if (cancelled || !result.bridgeNumber) return;
-        setBridgePhone(result.bridgeNumber);
-        // Auto-send OTP so the code is ready for the representative
-        try {
-          await verificationService.sendVerificationOtp({
-            bridgePhone: result.bridgeNumber,
-          });
-        } catch {
-          // Silently fail — user can still enter code manually
+
+    async function fetchBridgeNumber() {
+      try {
+        // Try current user first
+        const result = await paymentService.getBridgeNumber();
+        if (!cancelled && result.bridgeNumber) {
+          return result.bridgeNumber;
         }
-      })
-      .catch(() => {
-        // Subscription may not exist yet (e.g. skipped payment)
+      } catch {
+        // No subscription for current user
+      }
+
+      // If representative, find linked creator and check their bridge number
+      if (user?.role === 'representative') {
+        try {
+          const linkedRes = await apiClient.get('/users/me/linked-accounts');
+          const accounts = linkedRes.data?.data?.accounts ?? [];
+          for (const account of accounts) {
+            try {
+              const res = await apiClient.get('/payments/bridge-number', {
+                params: { for_user_id: String(account.id) },
+              });
+              const bridge = res.data?.data?.bridgeNumber;
+              if (bridge) return bridge;
+            } catch {
+              // No bridge number for this linked account
+            }
+          }
+        } catch {
+          // No linked accounts
+        }
+      }
+      return null;
+    }
+
+    fetchBridgeNumber()
+      .then(async (bridge) => {
+        if (cancelled || !bridge) return;
+        setBridgePhone(bridge);
+        try {
+          await verificationService.sendVerificationOtp({ bridgePhone: bridge });
+        } catch {
+          // Silently fail
+        }
       })
       .finally(() => {
         if (!cancelled) setIsFetchingBridge(false);
       });
+
     return () => {
       cancelled = true;
     };
@@ -60,13 +90,15 @@ export function useVerification() {
 
       // Auto-submit when all 6 digits are entered
       if (code.length === 6 && !bridgePhone) {
-        setOtpError('Bridge number not available. Please restart the app or contact support.');
+        setOtpError(
+          'Bridge number not available. Please restart the app or contact support.'
+        );
         return;
       }
       if (code.length === 6 && bridgePhone) {
         setIsVerifying(true);
         verificationService
-          .verifyArtistOtp({ bridgePhone, code })
+          .verifyCreatorOtp({ bridgePhone, code })
           .then(async () => {
             // Refresh user to get profileVerified=true
             const freshUser = await authService.getMe();

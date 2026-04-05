@@ -4,6 +4,21 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:8000/api/v1",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxzcutnlp",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51T3IztBYw6jRcyWb4rLSUKM9WC26V3O9QEOPt6B0qWqZB3VuqbJu3HXAb73tMVBnrgMI9chR0hhYhqZOwdvEZlGZ001RIGNGEx",
+        "EXPO_PUBLIC_POSTHOG_API_KEY": "phc_c7uYNqA3Y2DCrRHDhjUM0a4LWZDUViqdj1PCTUoNCrz",
+        "EXPO_PUBLIC_POSTHOG_HOST": "https://us.i.posthog.com",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://8c274f13e3bc7ee5128a14ef55366340@o4510961982373888.ingest.us.sentry.io/4510961983815680"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "ios": {

@@ -102,7 +102,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
           pointerEvents="box-none"
         >
           <View style={styles.header}>
-            <Avatar uri={post.author.avatar} size="sm" />
+            <Avatar uri={post.author.avatar} size="md" />
             <Text style={styles.authorName}>{post.author.displayName}</Text>
             <View style={styles.sponsoredBadge}>
               <Ionicons name="megaphone-outline" size={11} color="#CCC" />

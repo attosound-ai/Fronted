@@ -15,6 +15,7 @@ export interface PostAuthor {
   avatar: string | null;
   isFollowing: boolean;
   isVerified?: boolean;
+  role?: 'creator' | 'representative' | 'listener';
 }
 
 export type OnProfilePress = (author: PostAuthor) => void;
@@ -29,6 +30,8 @@ export interface FeedPost {
   images?: string[];
   thumbnailUrl?: string;
   duration?: number;
+  mediaWidth?: number;
+  mediaHeight?: number;
   // Content
   title?: string;
   description?: string;
@@ -44,6 +47,8 @@ export interface FeedPost {
   createdAt: string;
   /** true if viewer follows the author, false = "Suggested for you" */
   isFollowingAuthor?: boolean;
+  // Edit state
+  isEdited?: boolean;
   // Ads
   isAd?: boolean;
 }

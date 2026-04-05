@@ -4,9 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
-import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useVerification } from '../hooks/useVerification';
-import { ArtistInfoCard } from './ArtistInfoCard';
+import { CreatorInfoCard } from './CreatorInfoCard';
 
 /**
  * VerificationBanner — Full-width gray banner shown to unverified representatives.
@@ -17,26 +16,25 @@ import { ArtistInfoCard } from './ArtistInfoCard';
 export function VerificationBanner() {
   const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
-  const hasBridgeNumber = useSubscriptionStore((s) => s.hasEntitlement('bridge_number'));
+  const {
+    otpCode,
+    otpError,
+    isVerifying,
+    isFetchingBridge,
+    hasBridgePhone,
+    handleOtpChange,
+  } = useVerification();
 
-  const { otpCode, otpError, isVerifying, isFetchingBridge, hasBridgePhone, handleOtpChange } =
-    useVerification();
-
-  // Only show for unverified representatives with a paid plan that includes bridge_number
-  if (
-    !user ||
-    user.role !== 'representative' ||
-    user.profileVerified ||
-    !hasBridgeNumber
-  ) {
+  // Only show for unverified representatives
+  if (!user || user.role !== 'representative' || user.profileVerified) {
     return null;
   }
 
-  const artistName = user.artistName || 'Unknown Artist';
-  const artistEmail = user.artistEmail || user.email;
+  const creatorName = user.creatorName || 'Unknown Creator';
+  const creatorEmail = user.creatorEmail || user.email;
 
   const handleEdit = () => {
-    router.push('/edit-artist-contact');
+    router.push('/edit-creator-contact');
   };
 
   return (
@@ -54,7 +52,8 @@ export function VerificationBanner() {
           <ActivityIndicator color="#666" size="small" />
         ) : !hasBridgePhone ? (
           <Text variant="caption" style={styles.noBridgeText}>
-            Bridge number not set up. Please complete your subscription or contact support.
+            Bridge number not set up. Please complete your subscription or contact
+            support.
           </Text>
         ) : (
           <>
@@ -71,8 +70,8 @@ export function VerificationBanner() {
         )}
       </View>
 
-      {/* Artist info row */}
-      <ArtistInfoCard artistName={artistName} email={artistEmail} onEdit={handleEdit} />
+      {/* Creator info row */}
+      <CreatorInfoCard creatorName={creatorName} email={creatorEmail} onEdit={handleEdit} />
     </View>
   );
 }

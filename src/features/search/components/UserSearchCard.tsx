@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Plus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { useFollowStore } from '@/stores/followStore';
@@ -36,7 +37,7 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
   };
 
   const handlePress = () => {
-    router.push({
+    router.navigate({
       pathname: '/user/[id]',
       params: {
         id: String(user.id),
@@ -52,9 +53,12 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
       <Avatar uri={user.avatar} size="md" />
 
       <View style={styles.info}>
-        <Text variant="body" style={styles.displayName} numberOfLines={1}>
-          {user.displayName}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text variant="body" style={styles.displayName} numberOfLines={1}>
+            {user.displayName}
+          </Text>
+          {user.role === 'creator' && <CreatorBadge size="sm" />}
+        </View>
         <Text variant="caption" style={styles.username} numberOfLines={1}>
           @{user.username}
         </Text>
@@ -70,7 +74,7 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
           <ActivityIndicator size="small" color={isFollowing ? '#FFF' : '#000'} />
         ) : (
           <>
-            {!isFollowing && <Ionicons name="add" size={14} color="#000" />}
+            {!isFollowing && <Plus size={14} color="#000" strokeWidth={2.25} />}
             <Text style={[styles.followText, isFollowing && styles.followingText]}>
               {isFollowing ? 'Following' : 'Follow'}
             </Text>
@@ -92,6 +96,11 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     gap: 2,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   displayName: {
     color: '#FFF',

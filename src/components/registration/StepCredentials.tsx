@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, Checkbox } from '@/components/ui';
@@ -81,7 +81,7 @@ export function StepCredentials({
                 style={styles.backButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
@@ -93,7 +93,7 @@ export function StepCredentials({
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+            <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>
@@ -121,11 +121,11 @@ export function StepCredentials({
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={20}
-                color="#888888"
-              />
+              {showPassword ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -140,11 +140,11 @@ export function StepCredentials({
                 ] as [boolean, string][]
               ).map(([met, label]) => (
                 <View key={label} style={styles.strengthRow}>
-                  <Ionicons
-                    name={met ? 'checkmark-circle' : 'ellipse-outline'}
-                    size={14}
-                    color={met ? '#22C55E' : '#555555'}
-                  />
+                  {met ? (
+                    <CheckCircle size={14} color="#22C55E" strokeWidth={2.25} />
+                  ) : (
+                    <View style={styles.strengthDot} />
+                  )}
                   <Text
                     variant="small"
                     style={[styles.strengthText, met && styles.strengthMet]}
@@ -179,11 +179,11 @@ export function StepCredentials({
               onPress={() => setShowConfirm((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons
-                name={showConfirm ? 'eye-off' : 'eye'}
-                size={20}
-                color="#888888"
-              />
+              {showConfirm ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -306,6 +306,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     width: '50%',
+  },
+  strengthDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: '#555555',
   },
   strengthText: {
     color: '#555555',

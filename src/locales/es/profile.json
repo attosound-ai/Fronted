@@ -1,6 +1,6 @@
 {
   "hero": {
-    "roleBadgeArtist": "Artista",
+    "roleBadgeCreator": "Creador",
     "roleBadgeRepresentative": "Representante",
     "roleBadgeVerified": "Verificado",
     "statPosts": "Publicaciones",
@@ -16,7 +16,8 @@
     "memberSinceLabel": "Miembro desde",
     "statusLabel": "Estado",
     "statusActive": "Activo",
-    "statusPending": "Pendiente"
+    "statusPending": "Pendiente",
+    "createCreatorAccount": "Crear cuenta de creador"
   },
   "security": {
     "sectionTitle": "Seguridad",
@@ -40,10 +41,10 @@
     "errorInvalidCode": "Código inválido",
     "errorFailedToDisable": "No se pudo deshabilitar la 2FA"
   },
-  "artist": {
-    "sectionTitle": "Datos del artista",
-    "artistNameLabel": "Nombre del artista",
-    "artistNameNotSet": "No configurado",
+  "creator": {
+    "sectionTitle": "Datos del creador",
+    "creatorNameLabel": "Nombre del creador",
+    "creatorNameNotSet": "No configurado",
     "inmateNumberLabel": "Número de recluso",
     "inmateNumberNotSet": "No configurado",
     "verifiedLabel": "Verificado",
@@ -52,18 +53,18 @@
   },
   "representative": {
     "sectionTitle": "Datos del representante",
-    "artistNameLabel": "Nombre del artista",
-    "artistNameNotSet": "No configurado",
+    "creatorNameLabel": "Nombre del creador",
+    "creatorNameNotSet": "No configurado",
     "inmateNumberLabel": "Número de recluso",
     "inmateNumberNotSet": "No configurado",
     "inmateStateLabel": "Estado del recluso",
     "inmateStateNotSet": "No configurado",
     "relationshipLabel": "Relación",
     "relationshipNotSet": "No configurado",
-    "artistEmailLabel": "Correo del artista",
-    "artistEmailNotSet": "No configurado",
-    "artistPhoneLabel": "Teléfono del artista",
-    "artistPhoneNotSet": "No configurado",
+    "creatorEmailLabel": "Correo del creador",
+    "creatorEmailNotSet": "No configurado",
+    "creatorPhoneLabel": "Teléfono del creador",
+    "creatorPhoneNotSet": "No configurado",
     "consentToRecordLabel": "Consentimiento para grabar",
     "consentYes": "Sí",
     "consentNo": "No",
@@ -96,6 +97,10 @@
     "upgradePlan": "Mejorar plan",
     "manageSubscription": "Administrar suscripción"
   },
+  "settings": {
+    "sectionTitle": "Ajustes",
+    "languageLabel": "Idioma"
+  },
   "actions": {
     "logout": "Cerrar sesión"
   },
@@ -114,21 +119,21 @@
     "usernamePlaceholder": "Ingrese el nombre de usuario",
     "bioLabel": "Biografía",
     "bioPlaceholder": "Cuéntenos sobre usted",
-    "artistNameLabel": "Nombre del artista",
-    "artistNamePlaceholder": "Ingrese el nombre del artista",
+    "creatorNameLabel": "Nombre del creador",
+    "creatorNamePlaceholder": "Ingrese el nombre del creador",
     "inmateNumberLabel": "Número de recluso",
     "inmateNumberPlaceholder": "Ingrese el número de recluso",
     "inmateStateLabel": "Estado del recluso",
     "inmateStatePlaceholder": "Ingrese el estado del recluso",
-    "artistEmailLabel": "Correo del artista",
-    "artistEmailPlaceholder": "Ingrese el correo del artista (opcional)",
-    "artistPhoneLabel": "Teléfono del artista",
+    "creatorEmailLabel": "Correo del creador",
+    "creatorEmailPlaceholder": "Ingrese el correo del creador (opcional)",
+    "creatorPhoneLabel": "Teléfono del creador",
     "relationshipLabel": "Relación",
     "relationshipPlaceholder": "Seleccionar relación",
     "relationshipFamily": "Familiar",
     "relationshipFriend": "Amigo/a",
     "relationshipManager": "Mánager",
-    "warningReVerification": "Cambiar los datos del artista requerirá una nueva verificación."
+    "warningReVerification": "Cambiar los datos del creador requerirá una nueva verificación."
   },
   "publicProfile": {
     "headerTitle": "Perfil",
@@ -136,7 +141,7 @@
     "statPosts": "Publicaciones",
     "statFollowers": "Seguidores",
     "statFollowing": "Siguiendo",
-    "roleBadgeArtist": "Artista",
+    "roleBadgeCreator": "Creador",
     "roleBadgeRepresentative": "Representante",
     "roleBadgeVerified": "Verificado",
     "followButton": "Seguir",

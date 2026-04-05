@@ -1,5 +1,5 @@
 import { View, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { Project } from '@/types/project';
@@ -32,7 +32,7 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
       onPress={onPress}
     >
       <View style={styles.iconContainer}>
-        <Ionicons name="musical-notes" size={24} color="#FFFFFF" />
+        <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
       </View>
       <View style={styles.info}>
         <Text variant="body" style={styles.name} numberOfLines={1}>
@@ -53,7 +53,7 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
           </Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#444" />
+      <ChevronRight size={20} color="#444" strokeWidth={2.25} />
     </Pressable>
   );
 }

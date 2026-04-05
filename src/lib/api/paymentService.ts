@@ -31,9 +31,10 @@ export const paymentService = {
     return response.data.data;
   },
 
-  async getBridgeNumber(): Promise<BridgeNumberResult> {
+  async getBridgeNumber(forUserId?: number): Promise<BridgeNumberResult> {
     const response = await apiClient.get<ApiResponse<BridgeNumberResult>>(
-      API_ENDPOINTS.PAYMENTS.BRIDGE_NUMBER
+      API_ENDPOINTS.PAYMENTS.BRIDGE_NUMBER,
+      { params: forUserId ? { for_user_id: forUserId } : undefined }
     );
     return response.data.data;
   },

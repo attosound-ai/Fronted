@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Text } from '@/components/ui/Text';
+import { LinkedText } from '../LinkedText';
 import type { FeedPost } from '@/types/post';
 
 interface PoemMediaProps {
@@ -15,9 +16,9 @@ export function PoemMedia({ post }: PoemMediaProps) {
   return (
     <View style={styles.container}>
       {post.title ? <Text style={styles.title}>{post.title}</Text> : null}
-      <Text style={styles.body} numberOfLines={expanded ? undefined : 7}>
+      <LinkedText style={styles.body} numberOfLines={expanded ? undefined : 7}>
         {text}
-      </Text>
+      </LinkedText>
       {isLong && (
         <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
           <Text style={styles.expand}>{expanded ? 'Show less' : 'Show more'}</Text>

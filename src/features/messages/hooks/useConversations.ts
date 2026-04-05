@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { messageService } from '../services/messageService';
 import { useChatStore } from '../stores/chatStore';
+import { useAuthStore } from '@/stores/authStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useMountEffect } from '@/hooks';
 import type { ChatConversation } from '../types';
@@ -10,6 +11,7 @@ import type { ChatConversation } from '../types';
 export function useConversations() {
   const queryClient = useQueryClient();
   const setTotalUnread = useChatStore((s) => s.setTotalUnread);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   useMountEffect(() => {
@@ -17,7 +19,7 @@ export function useConversations() {
   });
 
   const { data, isLoading, refetch, error } = useQuery({
-    queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
+    queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
     queryFn: () => messageService.getConversations(),
     staleTime: 1000 * 60 * 2,
     gcTime: 1000 * 60 * 10,
@@ -51,7 +53,7 @@ export function useConversations() {
     refresh: manualRefresh,
     invalidate: () =>
       queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
+        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
       }),
   };
 }

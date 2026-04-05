@@ -1,5 +1,5 @@
 import { View, TouchableOpacity, StyleSheet, Share } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Share2, Link, ChevronRight } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -40,7 +40,7 @@ export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareShee
     <BottomSheet visible={visible} onClose={onClose} title={t('post.share')}>
       <TouchableOpacity style={styles.option} onPress={handleShareExternal}>
         <View style={styles.iconCircle}>
-          <Ionicons name="share-outline" size={22} color="#FFF" />
+          <Share2 size={22} color="#FFF" strokeWidth={2.25} />
         </View>
         <View style={styles.textContainer}>
           <Text variant="body" style={styles.optionTitle}>
@@ -50,12 +50,12 @@ export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareShee
             {t('post.shareToSubtitle')}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#555" />
+        <ChevronRight size={20} color="#555" strokeWidth={2.25} />
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.option} onPress={handleCopyLink}>
         <View style={styles.iconCircle}>
-          <Ionicons name="link-outline" size={22} color="#FFF" />
+          <Link size={22} color="#FFF" strokeWidth={2.25} />
         </View>
         <View style={styles.textContainer}>
           <Text variant="body" style={styles.optionTitle}>
@@ -65,7 +65,7 @@ export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareShee
             {t('post.copyLinkSubtitle')}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#555" />
+        <ChevronRight size={20} color="#555" strokeWidth={2.25} />
       </TouchableOpacity>
     </BottomSheet>
   );

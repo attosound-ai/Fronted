@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Mic, MicOff, Play, Pause, CircleDot, CircleStop, Phone } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 interface CallControlsProps {
@@ -27,19 +28,19 @@ export function CallControls({
     <View style={styles.container}>
       <View style={styles.row}>
         <ControlButton
-          icon={isMuted ? 'mic-off' : 'mic'}
+          icon={isMuted ? MicOff : Mic}
           label={isMuted ? t('active.unmute') : t('active.mute')}
           active={isMuted}
           onPress={onToggleMute}
         />
         <ControlButton
-          icon={isOnHold ? 'play' : 'pause'}
+          icon={isOnHold ? Play : Pause}
           label={isOnHold ? t('active.resume') : t('active.hold')}
           active={isOnHold}
           onPress={onToggleHold}
         />
         <ControlButton
-          icon={isCapturing ? 'stop-circle' : 'radio-button-on'}
+          icon={isCapturing ? CircleStop : CircleDot}
           label={isCapturing ? t('active.stop') : t('active.capture')}
           active={isCapturing}
           activeColor="#EF4444"
@@ -48,20 +49,20 @@ export function CallControls({
       </View>
 
       <TouchableOpacity style={styles.hangUpButton} onPress={onHangUp}>
-        <Ionicons name="call" size={28} color="#FFF" style={styles.hangUpIcon} />
+        <Phone size={28} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
       </TouchableOpacity>
     </View>
   );
 }
 
 function ControlButton({
-  icon,
+  icon: Icon,
   label,
   active,
   activeColor = '#3B82F6',
   onPress,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: LucideIcon;
   label: string;
   active: boolean;
   activeColor?: string;
@@ -72,7 +73,7 @@ function ControlButton({
       style={[styles.controlButton, active && { backgroundColor: activeColor + '22' }]}
       onPress={onPress}
     >
-      <Ionicons name={icon} size={24} color={active ? activeColor : '#FFFFFF'} />
+      <Icon size={24} color={active ? activeColor : '#FFFFFF'} strokeWidth={2.25} />
       <Text style={[styles.controlLabel, active && { color: activeColor }]}>{label}</Text>
     </TouchableOpacity>
   );

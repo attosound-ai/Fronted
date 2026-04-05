@@ -110,7 +110,10 @@
       ],
       "expo-video",
       "react-native-bottom-tabs",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-notifications",
+      "@sentry/react-native",
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

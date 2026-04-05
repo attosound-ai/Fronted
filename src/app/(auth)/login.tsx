@@ -1,19 +1,14 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  Animated,
-  Easing,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
-  useWindowDimensions,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
@@ -21,12 +16,10 @@ import { useAccountStore } from '@/stores/accountStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
-import { LanguageSelectorButton } from '@/components/ui/LanguageSelectorButton';
-import { Logo } from '@/components/ui/Logo';
 import { useAuthStore } from '@/stores/authStore';
 import { haptic } from '@/lib/haptics/hapticService';
 
-type Step = 'credentials' | '2fa';
+type Step = 'identifier' | 'password' | '2fa';
 
 export default function LoginScreen() {
   const { t } = useTranslation('auth');
@@ -34,56 +27,14 @@ export default function LoginScreen() {
   const isAddMode = mode === 'add';
   const addAccount = useAccountStore((s) => s.addAccount);
   const switchToAccount = useAccountStore((s) => s.switchToAccount);
-  const [step, setStep] = useState<Step>('credentials');
+
+  const [step, setStep] = useState<Step>('identifier');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [identifierError, setIdentifierError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const keyboardProgress = useRef(new Animated.Value(0)).current;
-  const { height: screenHeight } = useWindowDimensions();
-  // iPhone 17 Pro / 16 Pro = 874pt. Threshold 930 covers all non-Max iPhones.
-  // 150pt container: waveform SVG content sits within 24–94pt of the 160pt bounding box
-  // so nothing gets clipped visually. Moves the KAV 34pt higher → clears the keyboard.
-  const logoBaseHeight = screenHeight < 930 ? 180 : 210;
-
-  // Animate logo section: taller when keyboard hidden (pushes form down),
-  // original height when keyboard open (no visual change).
-  const logoContainerHeight = keyboardProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [logoBaseHeight + 180, logoBaseHeight - 30],
-  });
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const onShow = Keyboard.addListener(showEvent, (e) => {
-      const duration = e.duration > 0 ? e.duration : 250;
-      Animated.timing(keyboardProgress, {
-        toValue: 1,
-        duration,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    });
-    const onHide = Keyboard.addListener(hideEvent, (e) => {
-      const duration = e.duration > 0 ? e.duration : 250;
-      Animated.timing(keyboardProgress, {
-        toValue: 0,
-        duration,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    });
-    return () => {
-      onShow.remove();
-      onHide.remove();
-    };
-  }, [keyboardProgress]);
-
-  const opacity = useRef(new Animated.Value(1)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
 
   const login = useAuthStore((s) => s.login);
   const isAuthenticating = useAuthStore((s) => s.isAuthenticating);
@@ -99,36 +50,31 @@ export default function LoginScreen() {
     }, [clearError])
   );
 
-  const animateIn = useCallback(() => {
-    opacity.setValue(0);
-    translateY.setValue(30);
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }, [opacity, translateY]);
+  const goToStep = useCallback((next: Step) => {
+    setStep(next);
+  }, []);
+
+  const handleContinue = useCallback(() => {
+    setIdentifierError('');
+    clearError();
+    if (identifier.trim().length < 3) {
+      setIdentifierError(t('login.identifierError'));
+      haptic('error');
+      return;
+    }
+    goToStep('password');
+  }, [identifier, clearError, t, goToStep]);
 
   const handleLogin = useCallback(async () => {
-    setIdentifierError('');
     setPasswordError('');
     clearError();
-
-    let valid = true;
-    if (!identifier.trim()) {
-      setIdentifierError(t('login.identifierError'));
-      valid = false;
-    }
     if (password.length < 8) {
       setPasswordError(t('login.passwordError'));
-      valid = false;
-    }
-    if (!valid) {
       haptic('error');
       return;
     }
 
     try {
-      // In add mode, persist the CURRENT account before login overwrites it
       if (isAddMode) {
         const prev = useAuthStore.getState();
         if (prev.user && prev.tokens) {
@@ -141,7 +87,6 @@ export default function LoginScreen() {
       if (!useAuthStore.getState().pending2FA) {
         await haptic('light');
         if (isAddMode) {
-          // Now persist the NEW account and switch to it
           const { user: newUser, tokens: newTokens } = useAuthStore.getState();
           if (newUser && newTokens) {
             await addAccount({ user: newUser, tokens: newTokens });
@@ -150,19 +95,18 @@ export default function LoginScreen() {
         }
         router.replace('/(tabs)');
       } else {
-        setStep('2fa');
-        animateIn();
+        goToStep('2fa');
       }
     } catch {
       haptic('error');
     }
   }, [
-    identifier,
     password,
+    identifier,
     login,
     clearError,
     t,
-    animateIn,
+    goToStep,
     isAddMode,
     addAccount,
     switchToAccount,
@@ -172,7 +116,6 @@ export default function LoginScreen() {
     if (otpCode.length !== 6) return;
     clearError();
     try {
-      // In add mode, persist current account before 2FA overwrites it
       if (isAddMode) {
         const prev = useAuthStore.getState();
         if (prev.user && prev.tokens) {
@@ -198,21 +141,29 @@ export default function LoginScreen() {
 
   const handleBack = useCallback(() => {
     clearError();
-    if (step === 'credentials') {
-      router.back();
+    if (step === 'identifier') {
+      router.replace('/(auth)/welcome');
+    } else if (step === 'password') {
+      setPasswordError('');
+      goToStep('identifier');
     } else if (step === '2fa') {
       setOtpCode('');
       clearPending2FA();
-      setStep('credentials');
-      animateIn();
+      goToStep('password');
     }
-  }, [step, clearError, clearPending2FA, animateIn]);
+  }, [step, clearError, clearPending2FA, goToStep]);
+
+  const stepTitle = {
+    identifier: t('login.identifierTitle'),
+    password: t('login.passwordTitle'),
+    '2fa': t('twoFactor.title'),
+  }[step];
 
   const renderStep = () => {
     switch (step) {
-      case 'credentials':
+      case 'identifier':
         return (
-          <View style={styles.form}>
+          <View style={styles.stepContent}>
             {authError && (
               <Text variant="small" style={styles.apiError}>
                 {authError}
@@ -230,10 +181,28 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
+              autoFocus
               error={identifierError}
-              onSubmitEditing={() => {}}
+              onSubmitEditing={handleContinue}
               returnKeyType="next"
             />
+
+            <Button
+              title={t('login.continue')}
+              onPress={handleContinue}
+              disabled={identifier.trim().length < 3}
+            />
+          </View>
+        );
+
+      case 'password':
+        return (
+          <View style={styles.stepContent}>
+            {authError && (
+              <Text variant="small" style={styles.apiError}>
+                {authError}
+              </Text>
+            )}
 
             <View>
               <Input
@@ -247,6 +216,7 @@ export default function LoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoComplete="password"
+                autoFocus
                 error={passwordError}
                 onSubmitEditing={handleLogin}
                 returnKeyType="done"
@@ -256,11 +226,11 @@ export default function LoginScreen() {
                 onPress={() => setShowPassword((v) => !v)}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons
-                  name={showPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#888888"
-                />
+                {showPassword ? (
+                  <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+                ) : (
+                  <Eye size={20} color="#888888" strokeWidth={2.25} />
+                )}
               </TouchableOpacity>
             </View>
 
@@ -268,9 +238,7 @@ export default function LoginScreen() {
               title={t('login.signIn')}
               onPress={handleLogin}
               loading={isAuthenticating}
-              disabled={
-                isAuthenticating || identifier.trim().length < 3 || password.length < 3
-              }
+              disabled={isAuthenticating || password.length < 3}
             />
 
             <TouchableOpacity
@@ -279,31 +247,13 @@ export default function LoginScreen() {
             >
               <Text style={styles.forgotLink}>{t('login.forgotPassword')}</Text>
             </TouchableOpacity>
-
-            <View style={{ marginTop: 40 }}>
-              <Button
-                title={t('login.createAccount')}
-                variant="outline"
-                onPress={() => {
-                  haptic('light');
-                  router.push('/(auth)/register');
-                }}
-              />
-            </View>
           </View>
         );
 
       case '2fa':
         return (
-          <View style={styles.form}>
-            <View style={styles.shieldIcon}>
-              <Ionicons name="shield-checkmark" size={64} color="#3B82F6" />
-            </View>
-
-            <Text variant="h2" style={styles.twoFaTitle}>
-              {t('twoFactor.title')}
-            </Text>
-            <Text variant="body" style={styles.twoFaSubtitle}>
+          <View style={styles.stepContent}>
+            <Text variant="body" style={styles.subtitle}>
               {t('twoFactor.subtitle', { maskedTarget: pending2FA?.maskedTarget })}
             </Text>
 
@@ -335,58 +285,23 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View
-        style={[styles.header, step === '2fa' && { justifyContent: 'space-between' }]}
-      >
-        {step === '2fa' && (
-          <TouchableOpacity
-            onPress={handleBack}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        )}
-        <LanguageSelectorButton />
-        {step === '2fa' && <View style={{ width: 24 }} />}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text variant="h2" style={styles.headerTitle}>
+          {stepTitle}
+        </Text>
       </View>
 
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode="on-drag"
-          bounces={false}
-          showsVerticalScrollIndicator={false}
-        >
-          {step === 'credentials' && (
-            <Animated.View style={[styles.logoSection, { height: logoContainerHeight }]}>
-              <Animated.View
-                style={{
-                  transform: [
-                    {
-                      scale: keyboardProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [1, 0.4],
-                        extrapolate: 'clamp',
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <Logo size={220} animated />
-              </Animated.View>
-            </Animated.View>
-          )}
-
-          <View style={styles.keyboardInner}>
-            <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-              {renderStep()}
-            </Animated.View>
-          </View>
-        </ScrollView>
+        <View style={styles.content}>{renderStep()}</View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -397,35 +312,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  keyboardInner: {
-    flex: 1,
-    paddingHorizontal: 24,
-  },
-  logoSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
   },
-  form: {
-    gap: 10,
+  keyboardAvoid: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+  },
+  stepContent: {
+    gap: 16,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    marginLeft: 12,
+    flex: 1,
+  },
+  subtitle: {
+    color: '#888888',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   apiError: {
     color: '#EF4444',
-    textAlign: 'center',
   },
   eyeToggle: {
     position: 'absolute',
@@ -434,67 +350,13 @@ const styles = StyleSheet.create({
     bottom: 16,
     justifyContent: 'center',
   },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#333333',
-  },
-  dividerText: {
-    color: '#666666',
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 13,
-  },
   forgotRow: {
     alignSelf: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   forgotLink: {
     color: '#888888',
     fontFamily: 'Archivo_400Regular',
     fontSize: 14,
-  },
-  helpRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 8,
-  },
-  helpText: {
-    color: '#888888',
-  },
-  helpLink: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_700Bold',
-  },
-  signUpRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#000000',
-  },
-  signUpLink: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_700Bold',
-  },
-  shieldIcon: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  twoFaTitle: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  twoFaSubtitle: {
-    color: '#888888',
-    textAlign: 'center',
-    marginBottom: 8,
   },
 });

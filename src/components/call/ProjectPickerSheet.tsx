@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Plus, FolderOpen, ChevronRight, ArrowLeft } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -77,7 +77,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
               {/* Create new project option */}
               <Pressable style={styles.option} onPress={() => setMode('create')}>
                 <View style={[styles.iconCircle, styles.createCircle]}>
-                  <Ionicons name="add" size={22} color="#3B82F6" />
+                  <Plus size={22} color="#3B82F6" strokeWidth={2.25} />
                 </View>
                 <View style={styles.textContainer}>
                   <Text variant="body" style={styles.createText}>
@@ -94,7 +94,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
                   onPress={() => handleSelectProject(project.id)}
                 >
                   <View style={styles.iconCircle}>
-                    <Ionicons name="folder" size={20} color="#FFF" />
+                    <FolderOpen size={20} color="#FFF" strokeWidth={2.25} />
                   </View>
                   <View style={styles.textContainer}>
                     <Text variant="body" style={styles.projectName} numberOfLines={1}>
@@ -106,7 +106,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
                       </Text>
                     )}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#555" />
+                  <ChevronRight size={18} color="#555" strokeWidth={2.25} />
                 </Pressable>
               ))}
 
@@ -122,7 +122,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
         /* Create mode — inline form */
         <View style={styles.createForm}>
           <Pressable style={styles.backButton} onPress={() => setMode('list')}>
-            <Ionicons name="arrow-back" size={20} color="#888" />
+            <ArrowLeft size={20} color="#888" strokeWidth={2.25} />
             <Text variant="caption" style={styles.backText}>
               {t('common:buttons.back')}
             </Text>

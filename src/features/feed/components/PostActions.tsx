@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MessageCircle, Repeat, Send, Heart } from 'lucide-react-native';
+import { ThumbsUpIcon } from '@/components/ui/ThumbsUpIcon';
 import { formatCount } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
 
@@ -11,6 +12,7 @@ interface PostActionsProps {
   onRepost?: () => void;
   onShare?: () => void;
   onShowSupport?: () => void;
+  onShowInteractors?: (type: 'likes' | 'reposts' | 'shares') => void;
 }
 
 export function PostActions({
@@ -20,6 +22,7 @@ export function PostActions({
   onRepost,
   onShare,
   onShowSupport,
+  onShowInteractors,
 }: PostActionsProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -45,15 +48,13 @@ export function PostActions({
       <View style={styles.leftActions}>
         <TouchableOpacity
           onPress={handleLike}
+          onLongPress={() => onShowInteractors?.('likes')}
+          delayLongPress={400}
           activeOpacity={0.7}
           style={styles.actionItem}
         >
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <MaterialCommunityIcons
-              name={post.isLiked ? 'thumb-up' : 'thumb-up-outline'}
-              size={26}
-              color="#FFFFFF"
-            />
+            <ThumbsUpIcon size={26} color="#FFFFFF" filled={post.isLiked} />
           </Animated.View>
           {post.likesCount > 0 && (
             <Text style={styles.metricText}>{formatCount(post.likesCount)}</Text>
@@ -65,12 +66,7 @@ export function PostActions({
           activeOpacity={0.7}
           style={styles.actionItem}
         >
-          <Ionicons
-            name="chatbubble-outline"
-            size={26}
-            color="#FFF"
-            style={styles.flippedIcon}
-          />
+          <MessageCircle size={26} color="#FFF" strokeWidth={2.25} />
           {post.commentsCount > 0 && (
             <Text style={styles.metricText}>{formatCount(post.commentsCount)}</Text>
           )}
@@ -78,10 +74,12 @@ export function PostActions({
 
         <TouchableOpacity
           onPress={onRepost}
+          onLongPress={() => onShowInteractors?.('reposts')}
+          delayLongPress={400}
           activeOpacity={0.7}
           style={styles.actionItem}
         >
-          <Feather name="repeat" size={24} color="#FFF" />
+          <Repeat size={26} color="#FFF" strokeWidth={2.25} />
           {post.repostsCount > 0 && (
             <Text style={[styles.metricText, post.isReposted && styles.repostedText]}>
               {formatCount(post.repostsCount)}
@@ -89,8 +87,8 @@ export function PostActions({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onShare} activeOpacity={0.7} style={styles.actionItem}>
-          <Ionicons name="paper-plane-outline" size={26} color="#FFF" />
+        <TouchableOpacity onPress={onShare} onLongPress={() => onShowInteractors?.('shares')} delayLongPress={400} activeOpacity={0.7} style={styles.actionItem}>
+          <Send size={26} color="#FFF" strokeWidth={2.25} />
           {post.sharesCount > 0 && (
             <Text style={styles.metricText}>{formatCount(post.sharesCount)}</Text>
           )}
@@ -99,7 +97,7 @@ export function PostActions({
 
       <TouchableOpacity onPress={onShowSupport} activeOpacity={0.7}>
         <View style={styles.heartContainer}>
-          <Ionicons name="heart-outline" size={34} color="#FFF" />
+          <Heart size={34} color="#FFF" strokeWidth={2.25} />
           <View style={styles.dollarStroke} />
           <Text style={styles.heartS}>S</Text>
         </View>
@@ -126,9 +124,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  flippedIcon: {
-    transform: [{ scaleX: -1 }],
-  },
   metricText: {
     color: '#FFF',
     fontSize: 13,
@@ -147,12 +142,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 1.5,
     height: 20,
-    top: 7,
+    top: 8,
     backgroundColor: '#FFF',
   },
   heartS: {
     position: 'absolute',
-    top: 8.5,
+    top: 10.5,
     color: '#FFF',
     fontSize: 12,
     fontFamily: 'Archivo_700Bold',

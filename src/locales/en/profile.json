@@ -1,6 +1,6 @@
 {
   "hero": {
-    "roleBadgeArtist": "Artist",
+    "roleBadgeCreator": "Creator",
     "roleBadgeRepresentative": "Representative",
     "roleBadgeVerified": "Verified",
     "statPosts": "Posts",
@@ -16,7 +16,8 @@
     "memberSinceLabel": "Member since",
     "statusLabel": "Status",
     "statusActive": "Active",
-    "statusPending": "Pending"
+    "statusPending": "Pending",
+    "createCreatorAccount": "Create creator account"
   },
   "security": {
     "sectionTitle": "Security",
@@ -40,10 +41,10 @@
     "errorInvalidCode": "Invalid code",
     "errorFailedToDisable": "Failed to disable 2FA"
   },
-  "artist": {
-    "sectionTitle": "Artist Details",
-    "artistNameLabel": "Artist Name",
-    "artistNameNotSet": "Not set",
+  "creator": {
+    "sectionTitle": "Creator Details",
+    "creatorNameLabel": "Creator Name",
+    "creatorNameNotSet": "Not set",
     "inmateNumberLabel": "Inmate Number",
     "inmateNumberNotSet": "Not set",
     "verifiedLabel": "Verified",
@@ -52,18 +53,18 @@
   },
   "representative": {
     "sectionTitle": "Representative Details",
-    "artistNameLabel": "Artist Name",
-    "artistNameNotSet": "Not set",
+    "creatorNameLabel": "Creator Name",
+    "creatorNameNotSet": "Not set",
     "inmateNumberLabel": "Inmate Number",
     "inmateNumberNotSet": "Not set",
     "inmateStateLabel": "Inmate State",
     "inmateStateNotSet": "Not set",
     "relationshipLabel": "Relationship",
     "relationshipNotSet": "Not set",
-    "artistEmailLabel": "Artist Email",
-    "artistEmailNotSet": "Not set",
-    "artistPhoneLabel": "Artist Phone",
-    "artistPhoneNotSet": "Not set",
+    "creatorEmailLabel": "Creator Email",
+    "creatorEmailNotSet": "Not set",
+    "creatorPhoneLabel": "Creator Phone",
+    "creatorPhoneNotSet": "Not set",
     "consentToRecordLabel": "Consent to Record",
     "consentYes": "Yes",
     "consentNo": "No",
@@ -96,6 +97,10 @@
     "upgradePlan": "Upgrade Plan",
     "manageSubscription": "Manage Subscription"
   },
+  "settings": {
+    "sectionTitle": "Settings",
+    "languageLabel": "Language"
+  },
   "actions": {
     "logout": "Log Out"
   },
@@ -114,21 +119,21 @@
     "usernamePlaceholder": "Enter username",
     "bioLabel": "Bio",
     "bioPlaceholder": "Tell us about yourself",
-    "artistNameLabel": "Artist Name",
-    "artistNamePlaceholder": "Enter artist name",
+    "creatorNameLabel": "Creator Name",
+    "creatorNamePlaceholder": "Enter creator name",
     "inmateNumberLabel": "Inmate Number",
     "inmateNumberPlaceholder": "Enter inmate number",
     "inmateStateLabel": "Inmate State",
     "inmateStatePlaceholder": "Enter inmate state",
-    "artistEmailLabel": "Artist Email",
-    "artistEmailPlaceholder": "Enter artist email (optional)",
-    "artistPhoneLabel": "Artist Phone",
+    "creatorEmailLabel": "Creator Email",
+    "creatorEmailPlaceholder": "Enter creator email (optional)",
+    "creatorPhoneLabel": "Creator Phone",
     "relationshipLabel": "Relationship",
     "relationshipPlaceholder": "Select relationship",
     "relationshipFamily": "Family",
     "relationshipFriend": "Friend",
     "relationshipManager": "Manager",
-    "warningReVerification": "Changing artist info will require re-verification."
+    "warningReVerification": "Changing creator info will require re-verification."
   },
   "publicProfile": {
     "headerTitle": "Profile",
@@ -136,7 +141,7 @@
     "statPosts": "Posts",
     "statFollowers": "Followers",
     "statFollowing": "Following",
-    "roleBadgeArtist": "Artist",
+    "roleBadgeCreator": "Creator",
     "roleBadgeRepresentative": "Representative",
     "roleBadgeVerified": "Verified",
     "followButton": "Follow",

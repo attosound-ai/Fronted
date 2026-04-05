@@ -8,6 +8,7 @@ import enCalls from '@/locales/en/calls.json';
 import enSubscription from '@/locales/en/subscription.json';
 import enFeed from '@/locales/en/feed.json';
 import enValidation from '@/locales/en/validation.json';
+import enNotifications from '@/locales/en/notifications.json';
 
 import esCommon from '@/locales/es/common.json';
 import esAuth from '@/locales/es/auth.json';
@@ -19,6 +20,7 @@ import esCalls from '@/locales/es/calls.json';
 import esSubscription from '@/locales/es/subscription.json';
 import esFeed from '@/locales/es/feed.json';
 import esValidation from '@/locales/es/validation.json';
+import esNotifications from '@/locales/es/notifications.json';
 
 import ptBRCommon from '@/locales/pt-BR/common.json';
 import ptBRAuth from '@/locales/pt-BR/auth.json';
@@ -30,6 +32,7 @@ import ptBRCalls from '@/locales/pt-BR/calls.json';
 import ptBRSubscription from '@/locales/pt-BR/subscription.json';
 import ptBRFeed from '@/locales/pt-BR/feed.json';
 import ptBRValidation from '@/locales/pt-BR/validation.json';
+import ptBRNotifications from '@/locales/pt-BR/notifications.json';
 
 export const resources = {
   en: {
@@ -43,6 +46,7 @@ export const resources = {
     subscription: enSubscription,
     feed: enFeed,
     validation: enValidation,
+    notifications: enNotifications,
   },
   es: {
     common: esCommon,
@@ -55,6 +59,7 @@ export const resources = {
     subscription: esSubscription,
     feed: esFeed,
     validation: esValidation,
+    notifications: esNotifications,
   },
   'pt-BR': {
     common: ptBRCommon,
@@ -67,5 +72,6 @@ export const resources = {
     subscription: ptBRSubscription,
     feed: ptBRFeed,
     validation: ptBRValidation,
+    notifications: ptBRNotifications,
   },
 } as const;

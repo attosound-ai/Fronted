@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Search, XCircle } from 'lucide-react-native';
 
 interface SearchBarProps {
   value: string;
@@ -13,7 +13,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: Se
 
   return (
     <View style={styles.container}>
-      <Ionicons name="search-outline" size={18} color="#888" style={styles.icon} />
+      <Search size={18} color="#888" strokeWidth={2.25} style={styles.icon} />
       <TextInput
         ref={inputRef}
         style={styles.input}
@@ -28,7 +28,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: Se
       />
       {value.length > 0 && (
         <TouchableOpacity onPress={() => onChangeText('')} hitSlop={8}>
-          <Ionicons name="close-circle" size={18} color="#666" />
+          <XCircle size={18} color="#666" strokeWidth={2.25} />
         </TouchableOpacity>
       )}
     </View>

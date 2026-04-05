@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { haptic } from '@/lib/haptics/hapticService';
 
 /**
- * Step 5: How Artist Representation Works
+ * Step 5: How Creator Representation Works
  * Informational step explaining representative responsibilities
  */
 export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
@@ -30,7 +30,7 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
             style={styles.backButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
           </TouchableOpacity>
         )}
         <Text variant="h1" style={styles.title} numberOfLines={2}>

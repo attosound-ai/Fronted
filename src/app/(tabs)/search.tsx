@@ -15,6 +15,7 @@ import { ContentGrid } from '@/features/search/components/ContentGrid';
 import { useUserSearch } from '@/features/search/hooks/useUserSearch';
 import { useContentSearch } from '@/features/search/hooks/useContentSearch';
 import { useExploreGrid } from '@/features/search/hooks/useExploreGrid';
+import { GridSkeleton, UserListSkeleton } from '@/components/ui/Skeleton';
 
 type SearchTab = 'people' | 'content';
 
@@ -47,7 +48,8 @@ export default function SearchScreen() {
   );
 
   const { data: users = [], isLoading: loadingUsers } = useUserSearch(debouncedQuery);
-  const { data: posts = [], isLoading: loadingContent } = useContentSearch(debouncedQuery);
+  const { data: posts = [], isLoading: loadingContent } =
+    useContentSearch(debouncedQuery);
   const {
     posts: explorePosts,
     isLoading: isLoadingExplore,
@@ -75,9 +77,7 @@ export default function SearchScreen() {
       {rawQuery.length === 0 && (
         <>
           {isLoadingExplore ? (
-            <View style={styles.centered}>
-              <ActivityIndicator color="#FFF" />
-            </View>
+            <GridSkeleton count={12} />
           ) : (
             <ContentGrid
               posts={explorePosts}
@@ -118,9 +118,7 @@ export default function SearchScreen() {
           {activeTab === 'people' && (
             <>
               {loadingUsers && debouncedQuery.length > 0 ? (
-                <View style={styles.centered}>
-                  <ActivityIndicator color="#FFF" />
-                </View>
+                <UserListSkeleton count={5} />
               ) : users.length > 0 ? (
                 <FlatList
                   data={users}
@@ -147,9 +145,7 @@ export default function SearchScreen() {
           {activeTab === 'content' && (
             <>
               {loadingContent && debouncedQuery.length > 0 ? (
-                <View style={styles.centered}>
-                  <ActivityIndicator color="#FFF" />
-                </View>
+                <GridSkeleton count={6} />
               ) : posts.length > 0 ? (
                 <ContentGrid posts={posts} />
               ) : debouncedQuery.length > 0 ? (

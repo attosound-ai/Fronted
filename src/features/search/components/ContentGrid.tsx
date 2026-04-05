@@ -1,6 +1,14 @@
-import { Dimensions, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Dimensions,
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Music, Film, FileText, Play } from 'lucide-react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post } from '@/types';
 
@@ -24,13 +32,13 @@ function GridCell({ post }: { post: Post }) {
       ? cloudinaryUrl(
           post.filePaths[0],
           isVideo ? 'video_thumb' : 'thumb',
-          isVideo ? 'video' : 'image',
+          isVideo ? 'video' : 'image'
         )
       : null);
   const textPreview = post.textContent ?? post.content;
 
   const handlePress = () => {
-    router.push({ pathname: '/post/[id]', params: { id: post.id } } as never);
+    router.navigate({ pathname: '/post/[id]', params: { id: post.id } } as never);
   };
 
   return (
@@ -45,23 +53,29 @@ function GridCell({ post }: { post: Post }) {
         </View>
       ) : (
         <View style={[styles.cellImage, styles.cellPlaceholder]}>
-          <Ionicons
-            name={isAudio ? 'musical-notes' : isVideo ? 'film' : 'text'}
-            size={28}
-            color="#555"
-          />
+          {isAudio ? (
+            <Music size={28} color="#555" strokeWidth={2.25} />
+          ) : isVideo ? (
+            <Film size={28} color="#555" strokeWidth={2.25} />
+          ) : (
+            <FileText size={28} color="#555" strokeWidth={2.25} />
+          )}
         </View>
       )}
       {isVideo && (
         <View style={styles.videoIndicator}>
-          <Ionicons name="play" size={12} color="#FFF" />
+          <Play size={12} color="#FFF" strokeWidth={2.25} />
         </View>
       )}
     </TouchableOpacity>
   );
 }
 
-export function ContentGrid({ posts, onEndReached, ListFooterComponent }: ContentGridProps) {
+export function ContentGrid({
+  posts,
+  onEndReached,
+  ListFooterComponent,
+}: ContentGridProps) {
   return (
     <FlatList
       data={posts}

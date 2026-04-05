@@ -8,12 +8,13 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { WifiOff, RefreshCw, Pencil } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
+import { MessagesSkeleton } from '@/components/ui/Skeleton';
 import { useConversations } from '../hooks/useConversations';
 import { ConversationsHeader } from './ConversationsHeader';
 import { ConversationItem } from './ConversationItem';
@@ -45,13 +46,24 @@ export function ConversationList() {
     [handleConversationPress]
   );
 
+  const fab = (
+    <TouchableOpacity
+      onPress={handleNewMessage}
+      style={styles.fab}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={t('header.newMessageAccessibility')}
+    >
+      <Pencil size={24} color="#000" strokeWidth={2.25} />
+    </TouchableOpacity>
+  );
+
   if (isLoading && conversations.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ConversationsHeader onNewMessage={handleNewMessage} />
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={COLORS.white} />
-        </View>
+        <ConversationsHeader />
+        <MessagesSkeleton />
+        {fab}
       </SafeAreaView>
     );
   }
@@ -59,7 +71,7 @@ export function ConversationList() {
   if (error && conversations.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ConversationsHeader onNewMessage={handleNewMessage} />
+        <ConversationsHeader />
         <ScrollView
           contentContainerStyle={styles.error}
           refreshControl={
@@ -70,23 +82,32 @@ export function ConversationList() {
             />
           }
         >
-          <Ionicons name="cloud-offline-outline" size={40} color="#555" />
-          <Text variant="h2" style={styles.errorTitle}>{t('error.loadingMessages')}</Text>
+          <WifiOff size={40} color="#555" strokeWidth={2.25} />
+          <Text variant="h2" style={styles.errorTitle}>
+            {t('error.loadingMessages')}
+          </Text>
           <Text variant="body" style={styles.errorText}>
             {error.message}
           </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={refresh} activeOpacity={0.7}>
-            <Ionicons name="refresh" size={18} color="#000" />
-            <Text style={styles.retryText}>{t('error.retry', { defaultValue: 'Retry' })}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={refresh}
+            activeOpacity={0.7}
+          >
+            <RefreshCw size={18} color="#000" strokeWidth={2.25} />
+            <Text style={styles.retryText}>
+              {t('error.retry', { defaultValue: 'Retry' })}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
+        {fab}
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ConversationsHeader onNewMessage={handleNewMessage} />
+      <ConversationsHeader />
       <FlatList
         data={conversations}
         renderItem={renderItem}
@@ -101,6 +122,7 @@ export function ConversationList() {
         ListEmptyComponent={EmptyConversations}
         showsVerticalScrollIndicator={false}
       />
+      {fab}
     </SafeAreaView>
   );
 }
@@ -144,5 +166,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     color: '#000',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

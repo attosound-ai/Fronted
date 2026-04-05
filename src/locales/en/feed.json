@@ -4,7 +4,16 @@
     "createOptionProjectsTitle": "Projects",
     "createOptionProjectsSubtitle": "Open your audio projects",
     "createOptionUploadTitle": "Upload Post",
-    "createOptionUploadSubtitle": "Share with your audience"
+    "createOptionUploadSubtitle": "Share with your audience",
+    "menuFollowing": "Following",
+    "menuFilters": "Filters",
+    "menuNotifications": "Notifications",
+    "menuStore": "ATTO SOUND Store",
+    "menuAbout": "About ATTO SOUND",
+    "menuDating": "ATTO Encounters",
+    "comingSoonStore": "Shop exclusive merch from your favorite creators. Drops, collabs, and limited editions — all in one place.",
+    "comingSoonAbout": "Learn more about ATTO SOUND, our mission, and how we connect creators with the world.",
+    "comingSoonDating": "Meet people who share your taste in music. Connections powered by sound."
   },
   "post": {
     "followButton": "Follow",
@@ -36,25 +45,28 @@
     "uploadingText": "Uploading... {{progress}}%",
     "reelFromLibrary": "From Library",
     "reelRecord": "Record",
+    "fromGallery": "Gallery",
+    "fromFiles": "Files",
+    "fromProject": "Open Project",
     "addMore": "Add more"
   },
   "verification": {
     "bannerTitle": "Authorization pending",
-    "bannerSubtitle": "Enter Artist code to get consent",
-    "editTitle": "Edit Artist Contact",
+    "bannerSubtitle": "Enter Creator code to get consent",
+    "editTitle": "Edit Creator Contact",
     "labelRelationship": "Relationship",
     "placeholderRelationship": "Select relationship",
     "relationshipFamily": "Family",
     "relationshipFriend": "Friend",
     "relationshipManager": "Manager",
-    "labelArtistName": "Artist Name",
-    "placeholderArtistName": "Enter artist name",
+    "labelCreatorName": "Creator Name",
+    "placeholderCreatorName": "Enter creator name",
     "labelInmateNumber": "Inmate Number",
     "placeholderInmateNumber": "Enter inmate number",
-    "labelArtistEmail": "Artist Email",
-    "placeholderArtistEmail": "Enter artist email (optional)",
-    "labelArtistPhone": "Artist Contact Number",
-    "warningReauthorize": "Changing artist contact information will cancel your current authorization and require re-verification.",
+    "labelCreatorEmail": "Creator Email",
+    "placeholderCreatorEmail": "Enter creator email (optional)",
+    "labelCreatorPhone": "Creator Contact Number",
+    "warningReauthorize": "Changing creator contact information will cancel your current authorization and require re-verification.",
     "saveButton": "Save and reauthorize"
   },
   "list": {
@@ -67,5 +79,26 @@
   },
   "listen": {
     "title": "Projects"
+  },
+  "filters": {
+    "title": "Filters",
+    "creatorsOnly": "Creator Focus",
+    "creatorsOnlyDescription": "Show only posts from creator accounts",
+    "contentType": "Content Focus",
+    "contentTypeDescription": "Show only specific types of posts",
+    "typeText": "Text",
+    "typePhoto": "Photo",
+    "typeVideo": "Video",
+    "typeReel": "Reel",
+    "typeAudio": "Audio",
+    "reset": "Reset filters"
+  },
+  "postPublished": "Your post has been shared!",
+  "postPublishedTap": "Tap to view",
+  "interactors": {
+    "likes": "Likes",
+    "reposts": "Reposts",
+    "shares": "Shares",
+    "noResults": "No one yet"
   }
 }

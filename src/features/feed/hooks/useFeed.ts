@@ -38,6 +38,7 @@ export function useFeed() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
     enabled: isAuthenticated,
     staleTime: 30_000, // 30s — social feed needs freshness
+    refetchOnMount: 'always', // Always refetch when tab is focused (prevents stale persisted data)
   });
 
   const deleteMutation = useMutation({
@@ -79,6 +80,12 @@ export function useFeed() {
       // Invalidate cache first so refetch always hits the server,
       // even if data is still within staleTime window.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId) });
+      // Keep profile posts grid in sync with the feed
+      if (currentUserId) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
+        });
+      }
       return refetch();
     },
     loadMore: fetchNextPage,

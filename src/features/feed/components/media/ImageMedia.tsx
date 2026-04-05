@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,16 @@ import {
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Heart } from 'lucide-react-native';
 import type { FeedPost } from '@/types/post';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
+const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
+
+function clampRatio(w: number, h: number): number {
+  return Math.min(MAX_HEIGHT_RATIO, Math.max(MIN_HEIGHT_RATIO, h / w));
+}
 
 interface ImageMediaProps {
   post: FeedPost;
@@ -24,9 +30,31 @@ interface ImageMediaProps {
 export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
   const images = post.images ?? [];
   const [activeIndex, setActiveIndex] = useState(0);
+  const [heightRatio, setHeightRatio] = useState(() => {
+    if (post.mediaWidth && post.mediaHeight && post.mediaWidth > 0) {
+      return clampRatio(post.mediaWidth, post.mediaHeight);
+    }
+    return 1; // default 1:1 while loading
+  });
   const lastTap = useRef(0);
   const heartScale = useRef(new Animated.Value(0)).current;
   const heartOpacity = useRef(new Animated.Value(0)).current;
+
+  // Detect aspect ratio from first image URL if backend didn't provide dimensions
+  const firstImage = images[0];
+  useEffect(() => {
+    if (post.mediaWidth && post.mediaHeight) return;
+    if (!firstImage) return;
+    Image.getSize(
+      firstImage,
+      (w, h) => {
+        if (w > 0) setHeightRatio(clampRatio(w, h));
+      },
+      () => {},
+    );
+  }, [firstImage, post.mediaWidth, post.mediaHeight]);
+
+  const imageHeight = SCREEN_WIDTH * heightRatio;
 
   const handlePress = useCallback(() => {
     const now = Date.now();
@@ -63,7 +91,11 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
 
   const renderImage = ({ item }: { item: string }) => (
     <Pressable onPress={handlePress}>
-      <Image source={{ uri: item }} style={styles.image} resizeMode="cover" />
+      <Image
+        source={{ uri: item }}
+        style={[styles.image, { height: imageHeight }]}
+        resizeMode="cover"
+      />
     </Pressable>
   );
 
@@ -105,7 +137,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
         ]}
         pointerEvents="none"
       >
-        <Ionicons name="heart" size={80} color="#FFF" />
+        <Heart size={80} color="#FFF" fill="#FFF" strokeWidth={2.25} />
       </Animated.View>
     </View>
   );
@@ -117,7 +149,6 @@ const styles = StyleSheet.create({
   },
   image: {
     width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.25,
     backgroundColor: '#111',
   },
   counter: {

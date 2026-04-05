@@ -20,21 +20,17 @@
       "name": "Record",
       "price": "R$99/ano",
       "features": [
-        "Gravar e enviar conteúdo",
-        "Criar um perfil",
-        "Engajamento com a comunidade",
-        "Número telefônico bridge"
+        "Gravação Ilimitada"
       ]
     },
     "record_pro": {
       "name": "Record Pro",
       "price": "R$139/ano",
       "features": [
-        "Suite de produção avançada",
-        "Vídeos com avatar de IA (4 a 10 seg)",
-        "Gravações ilimitadas",
-        "Analytics avançado",
-        "Algoritmo de descoberta prioritária"
+        "Gravação Ilimitada+",
+        "Suite de Produção Avançada",
+        "Analytics Avançado",
+        "Descoberta Prioritária"
       ]
     },
     "connect_pro": {
@@ -60,5 +56,5 @@
   "errorTitle": "Erro",
   "errorUpgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
   "errorCancelFailed": "Falha ao cancelar. Tente novamente.",
-  "merchantName": "ATTO Sound"
+  "merchantName": "ATTO SOUND"
 }

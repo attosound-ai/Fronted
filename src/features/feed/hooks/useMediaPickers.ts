@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import type { PickedMedia } from '../types';
 
 /**
@@ -103,5 +104,55 @@ export function useMediaPickers() {
     };
   };
 
-  return { pickImages, pickMoreImages, pickVideo, pickReel };
+  const pickDocumentImages = async (): Promise<PickedMedia[] | null> => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'image/*',
+      multiple: true,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets) return null;
+    return result.assets.map((a) => ({
+      uri: a.uri,
+      fileName: a.name,
+      mimeType: a.mimeType ?? 'image/jpeg',
+    }));
+  };
+
+  const pickDocumentVideo = async (): Promise<PickedMedia | null> => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'video/*',
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const a = result.assets[0];
+    return {
+      uri: a.uri,
+      fileName: a.name,
+      mimeType: a.mimeType ?? 'video/mp4',
+    };
+  };
+
+  const pickDocumentAudio = async (): Promise<PickedMedia | null> => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'audio/*',
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return null;
+    const a = result.assets[0];
+    return {
+      uri: a.uri,
+      fileName: a.name,
+      mimeType: a.mimeType ?? 'audio/mpeg',
+    };
+  };
+
+  return {
+    pickImages,
+    pickMoreImages,
+    pickVideo,
+    pickReel,
+    pickDocumentImages,
+    pickDocumentVideo,
+    pickDocumentAudio,
+  };
 }

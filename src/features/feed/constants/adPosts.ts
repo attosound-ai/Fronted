@@ -2,11 +2,57 @@ import type { FeedPost } from '@/types/post';
 
 export const DEMO_ADS: FeedPost[] = [
   {
+    id: 'ad-demo-4',
+    type: 'ad',
+    isAd: true,
+    videoUrl:
+      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1774929698/ssstik.io__apple_1774929444222_nddtf3.mp4',
+    author: {
+      id: 0,
+      username: 'apple',
+      displayName: 'Apple',
+      avatar: 'https://img.icons8.com/ios-filled/200/ffffff/mac-os.png',
+      isFollowing: false,
+    },
+    description: 'Think Different',
+    likesCount: 8417,
+    commentsCount: 521,
+    sharesCount: 347,
+    repostsCount: 189,
+    isLiked: false,
+    isBookmarked: false,
+    isReposted: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+  },
+  {
+    id: 'ad-demo-3',
+    type: 'ad',
+    isAd: true,
+    videoUrl:
+      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1774928437/ssstik.io__rangerover_1774928424114_ywcgtd.mp4',
+    author: {
+      id: 0,
+      username: 'rangerover',
+      displayName: 'Range Rover',
+      avatar: 'https://img.icons8.com/color/200/land-rover.png',
+      isFollowing: false,
+    },
+    description: 'Above and Beyond',
+    likesCount: 3712,
+    commentsCount: 198,
+    sharesCount: 156,
+    repostsCount: 72,
+    isLiked: false,
+    isBookmarked: false,
+    isReposted: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+  },
+  {
     id: 'ad-demo-1',
     type: 'ad',
     isAd: true,
     videoUrl:
-      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1773252179/ssstik.io_1773249823368_qquvgl.mov',
+      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1774927846/ssstik.io__nike_1774926551658_hpimh7.mp4',
     author: {
       id: 0,
       username: 'nike',
@@ -22,14 +68,14 @@ export const DEMO_ADS: FeedPost[] = [
     isLiked: false,
     isBookmarked: false,
     isReposted: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
   },
   {
     id: 'ad-demo-2',
     type: 'ad',
     isAd: true,
     videoUrl:
-      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1773252797/ssstik.io_1773252767701_za6rjf.mov',
+      'https://res.cloudinary.com/dxzcutnlp/video/upload/v1774928304/ssstik.io__mcdonalds_1774928255843_kugoso.mp4',
     author: {
       id: 0,
       username: 'mcdonalds',

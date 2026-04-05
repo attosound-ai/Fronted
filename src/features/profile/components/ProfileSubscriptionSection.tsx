@@ -1,6 +1,6 @@
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Star, Gem, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
@@ -27,11 +27,11 @@ export function ProfileSubscriptionSection() {
       <View style={styles.card}>
         <View style={styles.planRow}>
           <View style={styles.planInfo}>
-            <Ionicons
-              name={isFree ? 'sparkles-outline' : 'diamond'}
-              size={20}
-              color={isFree ? '#666' : '#FFFFFF'}
-            />
+            {isFree ? (
+              <Star size={20} color="#666" strokeWidth={2.25} />
+            ) : (
+              <Gem size={20} color="#FFFFFF" strokeWidth={2.25} />
+            )}
             <Text variant="body" style={styles.planName}>
               {PLAN_LABELS[plan] ?? plan}
             </Text>
@@ -55,7 +55,7 @@ export function ProfileSubscriptionSection() {
               ? t('subscription.upgradePlan')
               : t('subscription.manageSubscription')}
           </Text>
-          <Ionicons name="chevron-forward" size={16} color="#999" />
+          <ChevronRight size={16} color="#999" strokeWidth={2.25} />
         </TouchableOpacity>
       </View>
     </View>

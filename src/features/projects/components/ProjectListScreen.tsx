@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Pressable } from 'react-native';
+import { View, FlatList, StyleSheet, RefreshControl, Pressable, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
@@ -50,12 +50,16 @@ export function ProjectListScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFF" strokeWidth={2.25} />
+        </TouchableOpacity>
         <Text variant="h2" style={styles.title}>
           {t('list.title')}
         </Text>
-        <Pressable style={styles.addButton} onPress={() => setSheetVisible(true)}>
-          <Ionicons name="add" size={32} color="#000" />
-        </Pressable>
+        <View style={{ width: 28 }} />
       </View>
 
       <FlatList
@@ -82,6 +86,13 @@ export function ProjectListScreen() {
         onSubmit={handleCreate}
         isLoading={createProject.isPending}
       />
+      <TouchableOpacity
+        style={styles.fab}
+        activeOpacity={0.8}
+        onPress={() => setSheetVisible(true)}
+      >
+        <Plus size={28} color="#000" strokeWidth={2.25} />
+      </TouchableOpacity>
       <Toast />
     </SafeAreaView>
   );
@@ -102,11 +113,14 @@ const styles = StyleSheet.create({
   title: {
     color: '#FFF',
   },
-  addButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FFF',
+  fab: {
+    position: 'absolute',
+    bottom: 64,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },

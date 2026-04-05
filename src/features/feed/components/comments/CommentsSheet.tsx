@@ -12,7 +12,7 @@ import Animated, {
   useAnimatedProps,
   useDerivedValue,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import { X, SendHorizontal } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet, useBottomSheetScroll } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
@@ -118,7 +118,7 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
             {t('post.replyingTo', { username: replyTo.username })}
           </Text>
           <TouchableOpacity onPress={() => setReplyTo(null)} hitSlop={8}>
-            <Ionicons name="close" size={16} color="#999" />
+            <X size={16} color="#999" strokeWidth={2.25} />
           </TouchableOpacity>
         </View>
       )}
@@ -139,11 +139,12 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
           onPress={handleSend}
           disabled={!text.trim() || isAddingComment}
           hitSlop={8}
+          style={[styles.sendButton, { opacity: text.trim() ? 1 : 0.3 }]}
         >
           {isAddingComment ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color="#000000" size="small" />
           ) : (
-            <Ionicons name="send" size={22} color={text.trim() ? '#FFFFFF' : '#555'} />
+            <SendHorizontal size={18} color="#000000" strokeWidth={2.25} />
           )}
         </TouchableOpacity>
       </View>
@@ -184,9 +185,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
+    marginTop: 12,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
   },
   input: {
     flex: 1,
@@ -195,5 +198,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
     maxHeight: 80,
     paddingVertical: 8,
+  },
+  sendButton: {
+    backgroundColor: '#FFFFFF',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

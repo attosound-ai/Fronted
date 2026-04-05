@@ -3,41 +3,41 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { showToast } from '@/components/ui/Toast';
 
-interface ArtistContactForm {
+interface CreatorContactForm {
   relationship: string;
-  artistName: string;
+  creatorName: string;
   inmateNumber: string;
-  artistEmail: string;
-  artistPhoneCountryCode: string;
-  artistPhone: string;
+  creatorEmail: string;
+  creatorPhoneCountryCode: string;
+  creatorPhone: string;
 }
 
 /**
- * useEditArtistContact — Manages form state for editing artist contact info.
+ * useEditCreatorContact — Manages form state for editing creator contact info.
  *
  * Single Responsibility: Handles validation, submission, and error state.
  */
-export function useEditArtistContact() {
+export function useEditCreatorContact() {
   const { t } = useTranslation(['validation', 'common']);
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
 
-  const [form, setForm] = useState<ArtistContactForm>({
+  const [form, setForm] = useState<CreatorContactForm>({
     relationship: user?.relationship ?? '',
-    artistName: user?.artistName ?? '',
+    creatorName: user?.creatorName ?? '',
     inmateNumber: user?.inmateNumber ?? '',
-    artistEmail: user?.artistEmail ?? '',
-    artistPhoneCountryCode: '+1',
-    artistPhone: user?.artistPhone?.replace(/^\+1/, '') ?? '',
+    creatorEmail: user?.creatorEmail ?? '',
+    creatorPhoneCountryCode: '+1',
+    creatorPhone: user?.creatorPhone?.replace(/^\+1/, '') ?? '',
   });
 
   const [errors, setErrors] = useState<
-    Partial<Record<keyof ArtistContactForm | 'submit', string>>
+    Partial<Record<keyof CreatorContactForm | 'submit', string>>
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = useCallback(
-    <K extends keyof ArtistContactForm>(field: K, value: ArtistContactForm[K]) => {
+    <K extends keyof CreatorContactForm>(field: K, value: CreatorContactForm[K]) => {
       setForm((prev) => ({ ...prev, [field]: value }));
       if (errors[field]) {
         setErrors((prev) => {
@@ -54,13 +54,13 @@ export function useEditArtistContact() {
     const newErrors: typeof errors = {};
 
     if (!form.relationship) newErrors.relationship = t('validation:relationshipRequired');
-    if (!form.artistName.trim())
-      newErrors.artistName = t('validation:artistNameRequired');
+    if (!form.creatorName.trim())
+      newErrors.creatorName = t('validation:creatorNameRequired');
     if (!form.inmateNumber.trim())
       newErrors.inmateNumber = t('validation:inmateNumberRequired');
 
-    if (form.artistEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.artistEmail)) {
-      newErrors.artistEmail = t('validation:emailInvalid');
+    if (form.creatorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.creatorEmail)) {
+      newErrors.creatorEmail = t('validation:emailInvalid');
     }
 
     setErrors(newErrors);
@@ -73,18 +73,18 @@ export function useEditArtistContact() {
     setIsSubmitting(true);
     setErrors({});
     try {
-      const fullPhone = form.artistPhone
-        ? form.artistPhoneCountryCode + form.artistPhone
+      const fullPhone = form.creatorPhone
+        ? form.creatorPhoneCountryCode + form.creatorPhone
         : undefined;
 
       await updateProfile({
-        artistName: form.artistName,
+        creatorName: form.creatorName,
         inmateNumber: form.inmateNumber,
         relationship: form.relationship,
-        artistEmail: form.artistEmail || undefined,
-        artistPhone: fullPhone,
+        creatorEmail: form.creatorEmail || undefined,
+        creatorPhone: fullPhone,
       });
-      showToast(t('common:toasts.artistContactUpdated'));
+      showToast(t('common:toasts.creatorContactUpdated'));
       return true;
     } catch (error: unknown) {
       const msg =

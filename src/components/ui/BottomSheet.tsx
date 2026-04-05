@@ -163,7 +163,9 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
   // ── Animated styles ──
 
   const sheetStyle = useAnimatedStyle(() => ({
-    bottom: keyboardOffset.value,
+    bottom: 0,
+    paddingBottom: keyboardOffset.value > 0 ? keyboardOffset.value + 12 : 40,
+    maxHeight: keyboardOffset.value > 0 ? SCREEN_HEIGHT * 0.95 : SCREEN_HEIGHT * 0.85,
     transform: [{ translateY: translateY.value + dragY.value }],
   }));
 
@@ -216,8 +218,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingHorizontal: 24,
-    paddingBottom: 40,
-    maxHeight: SCREEN_HEIGHT * 0.7,
   },
   handleZone: {
     alignItems: 'center',

@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useQueryClient } from '@tanstack/react-query';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Trash2, Mic } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -72,7 +72,7 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
   const renderSegment = useCallback(
     ({ item }: { item: AudioSegment & { downloadUrl: string } }) => (
       <View style={styles.segmentCard}>
-        <Ionicons name="mic" size={20} color="#FFFFFF" />
+        <Mic size={20} color="#FFFFFF" strokeWidth={2.25} />
         <View style={styles.segmentInfo}>
           <Text variant="body" style={styles.segmentLabel}>
             {item.label ||
@@ -162,7 +162,7 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           activeOpacity={0.5}
         >
-          <Ionicons name="close" size={24} color="#FFF" />
+          <X size={24} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <View style={styles.headerTitle}>
           <Text variant="h3" style={styles.title} numberOfLines={1}>
@@ -175,7 +175,7 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
           ) : null}
         </View>
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-          <Ionicons name="trash-outline" size={22} color="#EF4444" />
+          <Trash2 size={22} color="#EF4444" strokeWidth={2.25} />
         </TouchableOpacity>
       </View>
 

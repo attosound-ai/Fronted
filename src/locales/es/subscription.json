@@ -20,21 +20,17 @@
       "name": "Record",
       "price": "$99/año",
       "features": [
-        "Grabe y suba contenido",
-        "Cree un perfil",
-        "Participación en la comunidad",
-        "Número de teléfono puente"
+        "Grabación Ilimitada"
       ]
     },
     "record_pro": {
       "name": "Record Pro",
       "price": "$139/año",
       "features": [
-        "Suite de producción avanzada",
-        "Videos con avatar de IA (4-10 seg)",
-        "Grabaciones ilimitadas",
-        "Analíticas mejoradas",
-        "Algoritmo de descubrimiento prioritario"
+        "Grabación Ilimitada+",
+        "Suite de Producción Avanzada",
+        "Analíticas Mejoradas",
+        "Descubrimiento Prioritario"
       ]
     },
     "connect_pro": {
@@ -60,5 +56,5 @@
   "errorTitle": "Error",
   "errorUpgradeFailed": "No se pudo procesar la mejora. Por favor intente nuevamente.",
   "errorCancelFailed": "No se pudo cancelar. Por favor intente nuevamente.",
-  "merchantName": "ATTO Sound"
+  "merchantName": "ATTO SOUND"
 }

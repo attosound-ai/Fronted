@@ -6,7 +6,7 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
 import type { FeedPost } from '@/types/post';
@@ -41,8 +41,10 @@ export function AudioMedia({ post }: AudioMediaProps) {
       >
         {showLoading && isPlaying ? (
           <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : isPlaying ? (
+          <Pause size={22} color="#FFFFFF" strokeWidth={2.25} />
         ) : (
-          <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color="#FFFFFF" />
+          <Play size={22} color="#FFFFFF" strokeWidth={2.25} />
         )}
       </TouchableOpacity>
 

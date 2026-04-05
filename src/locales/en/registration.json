@@ -6,8 +6,17 @@
     "emailLabel": "Email",
     "emailPlaceholder": "Enter your email address",
     "phoneLabel": "Phone number",
-    "usePhone": "Create account with phone number instead",
-    "useEmail": "Create account with email instead"
+    "usePhone": "Create account with phone number",
+    "useEmail": "Create account with email",
+    "phoneUnavailableTitle": "Coming soon",
+    "phoneUnavailableMessage": "Phone number registration is not available yet. Please use your email to create an account."
+  },
+  "errors": {
+    "emailTaken": "This email is already associated with an account. Try signing in.",
+    "phoneTaken": "This phone number is already associated with an account. Try signing in.",
+    "networkError": "Could not connect to the server. Check your internet connection and try again.",
+    "serverError": "Something went wrong on our end. Please try again later.",
+    "unknownError": "An unexpected error occurred. Please try again."
   },
   "name": {
     "title": "What's your name?",
@@ -16,7 +25,7 @@
   },
   "dateOfBirth": {
     "title": "When were you born?",
-    "subtitle": "You must be at least 18 years old to use Atto"
+    "subtitle": "You must be at least 18 years old to use ATTO SOUND"
   },
   "credentials": {
     "title": "Create your password",
@@ -33,7 +42,11 @@
     "sending": "Sending...",
     "resendCode": "Resend code",
     "resendCodeCountdown": "Resend code ({{seconds}}s)",
-    "resendFailed": "Failed to resend code"
+    "resendFailed": "Failed to resend code",
+    "editEmailTitle": "Change email",
+    "editPhoneTitle": "Change phone number",
+    "editEmailPlaceholder": "Enter new email address",
+    "editSave": "Send new code"
   },
   "profileSetup": {
     "addProfilePicture": "Add Profile picture",
@@ -49,16 +62,21 @@
     "chooseFromGallery": "Choose from Gallery",
     "takePhoto": "Take Photo",
     "profilePreview": "Profile Preview",
-    "repQuestion": "Will you represent an artist on ATTO SOUND?",
-    "repDescription": "You are creating this account on behalf of an artist and have their permission to manage and publish their content.",
-    "yesRepresent": "Yes, I represent an artist",
+    "repQuestion": "Will you represent a creator on ATTO SOUND?",
+    "repDescription": "You are creating this account on behalf of a creator and have their permission to manage and publish their content.",
+    "yesRepresent": "Yes, I represent a creator",
+    "iAmCreator": "I am a creator",
     "noForMe": "No, this account is for me"
   },
-  "artistAccountSetup": {
-    "title": "Set up the artist account",
-    "subtitle": "Create login credentials for the artist",
-    "displayNamePlaceholder": "Artist nickname",
-    "emailPlaceholder": "Artist email address",
+  "creatorInmate": {
+    "title": "Verify your identity",
+    "subtitle": "Enter your inmate number so we can verify your identity and set up your creator profile."
+  },
+  "creatorAccountSetup": {
+    "title": "Set up the creator account",
+    "subtitle": "Create login credentials for the creator",
+    "displayNamePlaceholder": "Creator nickname",
+    "emailPlaceholder": "Creator email address",
     "emailAvailable": "Available",
     "emailTaken": "This email is already registered",
     "emailChecking": "Checking...",
@@ -66,36 +84,36 @@
     "phoneTaken": "This phone number is already registered",
     "passwordPlaceholder": "Create a password",
     "confirmPlaceholder": "Confirm password",
-    "nameLabel": "Artist name",
+    "nameLabel": "Creator name",
     "emailLabel": "Email (optional)",
     "phoneLabel": "Phone (optional)",
     "passwordTitle": "Create a password",
-    "passwordSubtitle": "This password will be used to log in to the artist account",
-    "profileTitle": "Artist profile",
-    "profileSubtitle": "Set up how the artist appears on Atto",
-    "addProfilePicture": "Add artist photo",
-    "uploadPhotoTitle": "Upload Artist Photo",
+    "passwordSubtitle": "This password will be used to log in to the creator account",
+    "profileTitle": "Creator profile",
+    "profileSubtitle": "Set up how the creator appears on ATTO SOUND",
+    "addProfilePicture": "Add creator photo",
+    "uploadPhotoTitle": "Upload Creator Photo",
     "chooseFromGallery": "Choose from Gallery",
     "takePhoto": "Take Photo"
   },
   "howItWorks": {
-    "title": "How artist representation works",
-    "paragraph": "As a representative, you will manage this account on behalf of the artist.\nYou will be responsible for publishing content, managing interactions, and handling communications related to the artist's profile.",
+    "title": "How creator representation works",
+    "paragraph": "As a representative, you will manage this account on behalf of the creator.\nYou will be responsible for publishing content, managing interactions, and handling communications related to the creator's profile.",
     "bullets": [
-      "You act on behalf of the artist",
+      "You act on behalf of the creator",
       "You must have their explicit consent",
       "All actions are logged for transparency",
-      "The artist can revoke representation at any time"
+      "The creator can revoke representation at any time"
     ]
   },
   "consentForm": {
-    "title": "Artist consent is required",
+    "title": "Creator consent is required",
     "relationshipLabel": "What is your relationship?",
     "relationshipFamily": "Family",
     "relationshipFriend": "Friend",
     "relationshipManager": "Manager / Representative",
-    "artistNameLabel": "Artist Name",
-    "artistNamePlaceholder": "Enter artist's full name",
+    "creatorNameLabel": "Creator Name",
+    "creatorNamePlaceholder": "Enter creator's full name",
     "inmateNumberLabel": "Inmate number",
     "inmateNumberPlaceholder": "Enter number",
     "stateLabel": "State",
@@ -119,10 +137,10 @@
   },
   "whatHappensNext": {
     "title": "What happens next?",
-    "verifyConsentTitle": "Verify Artist Consent",
-    "verifyConsentParagraph": "We will contact the artist directly to verify their consent for you to act as their representative. This is a crucial step to ensure the artist's rights and wishes are respected.",
+    "verifyConsentTitle": "Verify Creator Consent",
+    "verifyConsentParagraph": "We will contact the creator directly to verify their consent for you to act as their representative. This is a crucial step to ensure the creator's rights and wishes are respected.",
     "howCallsWorkTitle": "How calls work",
-    "howCallsWorkParagraph": "All consent verification calls are automatically recorded for legal compliance and your protection. These recordings serve as official documentation of the artist's approval.",
+    "howCallsWorkParagraph": "All consent verification calls are automatically recorded for legal compliance and your protection. These recordings serve as official documentation of the creator's approval.",
     "callFeatures": [
       "Securely stored in a dedicated folder within your profile",
       "Available for you to listen, download or post them to at any time"
@@ -138,24 +156,21 @@
     "hideFeatures": "Hide features",
     "disclaimer": "Cancel anytime. Subscription renews automatically unless canceled before renewal.",
     "continueWithout": "Continue without Subscription",
+    "sharePdf": "Share PDF",
     "plans": {
       "record": {
         "name": "Record",
         "features": [
-          "Record and upload content",
-          "Create a profile",
-          "Community engagement",
-          "Bridge phone number"
+          "Unlimited Recording"
         ]
       },
       "recordPro": {
         "name": "Record Pro",
         "features": [
-          "Advanced production suite",
-          "AI avatar videos (4-10 sec)",
-          "Unlimited recordings",
-          "Enhanced analytics",
-          "Priority discovery algorithm"
+          "Unlimited Recording+",
+          "Advanced Production Suite",
+          "Enhanced Analytics",
+          "Priority Discovery"
         ]
       },
       "connectPro": {
@@ -172,22 +187,22 @@
   },
   "bridgeNumber": {
     "title": "Your Bridge Number",
-    "subtitle": "This is your unique number for connecting with the artist. Share it securely.",
+    "subtitle": "This is your unique number for connecting with the creator. Share it securely.",
     "assigning": "Assigning your unique number...",
     "purchaseFailed": "We could not purchase your number. Please try again later.",
     "notAvailable": "Not available",
     "save": "Save",
-    "shareMessage": "Your ATTO Bridge Number: {{number}}\n\nUse this number to connect with your artist.",
+    "shareMessage": "Your ATTO Bridge Number: {{number}}\n\nUse this number to connect with your creator.",
     "shareTitle": "ATTO Bridge Number",
     "contactPermission": "Permission required",
     "contactPermissionMessage": "Allow access to Contacts to save the bridge number.",
     "saveContactTitle": "Save Bridge Contact",
     "assigningButton": "Assigning number...",
-    "noteSecure": "Keep this number secure. The artist will need it to verify and establish the connection.",
+    "noteSecure": "Keep this number secure. The creator will need it to verify and establish the connection.",
     "noteOtp": "An OTP will be sent to the inmate to verify your representation before the bridge call can be established."
   },
-  "artistTypes": {
-    "title": "What kind of artist?",
+  "creatorTypes": {
+    "title": "What kind of creator?",
     "subtitle": "Select all that apply",
     "types": {
       "singer": "Singer",
@@ -205,9 +220,9 @@
       "other": "Other"
     }
   },
-  "artistGenres": {
+  "creatorGenres": {
     "title": "What genres?",
-    "subtitle": "Select the genres that define the artist",
+    "subtitle": "Select the genres that define the creator",
     "categories": {
       "music": "Music",
       "visual_art": "Visual Art",

@@ -24,3 +24,4 @@ export { AccountSwitcherBottomSheet } from './AccountSwitcherBottomSheet';
 export { ProfileTabIcon } from './ProfileTabIcon';
 export { ImageCropModal } from './ImageCropModal';
 export { DateOfBirthPicker } from './DateOfBirthPicker';
+export { CreatorBadge } from './CreatorBadge';

@@ -1,12 +1,13 @@
 import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Wrench } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from './Text';
 
 interface ComingSoonModalProps {
   visible: boolean;
   onClose: () => void;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: LucideIcon;
   title?: string;
   description?: string;
 }
@@ -14,7 +15,7 @@ interface ComingSoonModalProps {
 export function ComingSoonModal({
   visible,
   onClose,
-  icon,
+  icon: Icon = Wrench,
   title,
   description,
 }: ComingSoonModalProps) {
@@ -24,15 +25,10 @@ export function ComingSoonModal({
       <View style={styles.overlay}>
         <View style={styles.card}>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color="#888" />
+            <X size={24} color="#888" strokeWidth={2.25} />
           </TouchableOpacity>
 
-          <Ionicons
-            name={icon ?? 'construct-outline'}
-            size={56}
-            color="#FFF"
-            style={styles.icon}
-          />
+          <Icon size={56} color="#FFF" strokeWidth={2.25} style={styles.icon} />
 
           <Text variant="h2" style={styles.title}>
             {title ?? t('comingSoon.title')}

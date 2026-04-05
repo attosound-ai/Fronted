@@ -1,10 +1,14 @@
-import { memo } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { Text } from '@/components/ui/Text';
+import { useAuthStore } from '@/stores/authStore';
 import type { FeedPost, PostAuthor } from '@/types/post';
 import { PostHeader } from './PostHeader';
 import { PostMedia } from './media/PostMedia';
 import { PostActions } from './PostActions';
 import { PostEngagement } from './PostEngagement';
+import { InteractorsBottomSheet, type InteractionType } from './InteractorsBottomSheet';
 
 interface FeedPostCardProps {
   post: FeedPost;
@@ -18,6 +22,7 @@ interface FeedPostCardProps {
   onProfilePress?: (author: PostAuthor) => void;
   onShowSupport?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
 }
 
@@ -38,14 +43,26 @@ function FeedPostCardInner({
   onProfilePress,
   onShowSupport,
   onReport,
+  onEdit,
   onDelete,
 }: FeedPostCardProps) {
+  const [interactorsType, setInteractorsType] = useState<InteractionType | null>(null);
+
   const handleDoubleTapLike = () => {
     if (!post.isLiked) {
       onLike?.(post.id);
     }
   };
 
+  const handleShowInteractors = useCallback((type: InteractionType) => {
+    import('@/lib/haptics/hapticService').then(({ haptic }) => haptic('light'));
+    setInteractorsType(type);
+  }, []);
+
+  const { t } = useTranslation('feed');
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isOwnPost =
+    currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const isReel = post.type === 'reel';
   const isAudio = post.type === 'audio';
 
@@ -57,6 +74,7 @@ function FeedPostCardInner({
       onProfilePress={onProfilePress}
       onBookmark={onBookmark}
       onReport={onReport}
+      onEdit={onEdit}
       onDelete={onDelete}
     />
   ) : null;
@@ -86,6 +104,11 @@ function FeedPostCardInner({
         </View>
       ) : (
         <>
+          {isReel && !isOwnPost && !post.author.isFollowing && (
+            <Text variant="small" style={styles.suggestedLabel}>
+              {t('post.suggestedForYou')}
+            </Text>
+          )}
           {header}
           {media}
         </>
@@ -97,8 +120,17 @@ function FeedPostCardInner({
         onRepost={onRepost}
         onShare={onShare}
         onShowSupport={onShowSupport}
+        onShowInteractors={handleShowInteractors}
       />
       <PostEngagement post={post} onViewComments={onComment} />
+      {interactorsType && (
+        <InteractorsBottomSheet
+          visible={!!interactorsType}
+          onClose={() => setInteractorsType(null)}
+          postId={post.id}
+          type={interactorsType}
+        />
+      )}
     </View>
   );
 }
@@ -106,6 +138,7 @@ function FeedPostCardInner({
 export const FeedPostCard = memo(FeedPostCardInner, (prev, next) => {
   return (
     prev.post.id === next.post.id &&
+    prev.post.description === next.post.description &&
     prev.post.likesCount === next.post.likesCount &&
     prev.post.commentsCount === next.post.commentsCount &&
     prev.post.sharesCount === next.post.sharesCount &&
@@ -121,7 +154,13 @@ export const FeedPostCard = memo(FeedPostCardInner, (prev, next) => {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#000',
-    marginBottom: 16,
+  },
+  suggestedLabel: {
+    color: '#888',
+    fontSize: 11,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   audioWrapper: {
     backgroundColor: '#1A1A1A',

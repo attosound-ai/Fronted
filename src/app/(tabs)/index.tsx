@@ -1,5 +1,5 @@
-import { StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Toast } from '@/components/ui/Toast';
 import { FeedHeader } from '@/components/feed/FeedHeader';
@@ -8,13 +8,15 @@ import { VerificationBanner } from '@/features/verification';
 import { SuggestedAccountsCarousel } from '@/features/feed/components/SuggestedAccountsCarousel';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <FeedHeader />
       <VerificationBanner />
       <FeedList ListHeaderComponent={<SuggestedAccountsCarousel />} />
       <Toast />
-    </SafeAreaView>
+    </View>
   );
 }
 

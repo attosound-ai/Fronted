@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, Play, Pause, Mic, MicOff, Volume1, Volume2, Phone, Plus, Music } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
@@ -589,7 +589,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
       {/* Header: call info + controls */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
-          <Ionicons name="arrow-back" size={22} color="#FFF" />
+          <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -605,36 +605,40 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         </View>
 
         <TouchableOpacity onPress={handlePlayPause} style={styles.headerPlayButton}>
-          <Ionicons name={state.isPlaying ? 'pause' : 'play'} size={20} color="#FFF" />
+          {state.isPlaying ? (
+            <Pause size={20} color="#FFF" strokeWidth={2.25} />
+          ) : (
+            <Play size={20} color="#FFF" strokeWidth={2.25} />
+          )}
         </TouchableOpacity>
       </View>
 
       {/* Call controls row */}
       <View style={styles.callControlsRow}>
         <TouchableOpacity style={styles.callControl} onPress={toggleMuteCall}>
-          <Ionicons
-            name={activeCall.isMuted ? 'mic-off' : 'mic'}
-            size={20}
-            color={activeCall.isMuted ? '#EF4444' : '#FFF'}
-          />
+          {activeCall.isMuted ? (
+            <MicOff size={20} color="#EF4444" strokeWidth={2.25} />
+          ) : (
+            <Mic size={20} color="#FFF" strokeWidth={2.25} />
+          )}
           <Text variant="caption" style={styles.callControlLabel}>
             {activeCall.isMuted ? t('active.unmute') : t('active.mute')}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.callControl} onPress={toggleSpeaker}>
-          <Ionicons
-            name={activeCall.isSpeaker ? 'volume-high' : 'volume-low'}
-            size={20}
-            color={activeCall.isSpeaker ? '#3B82F6' : '#FFF'}
-          />
+          {activeCall.isSpeaker ? (
+            <Volume2 size={20} color="#3B82F6" strokeWidth={2.25} />
+          ) : (
+            <Volume1 size={20} color="#FFF" strokeWidth={2.25} />
+          )}
           <Text variant="caption" style={styles.callControlLabel}>
             {t('active.speaker')}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.hangUpButton} onPress={handleHangUp}>
-          <Ionicons name="call" size={18} color="#FFF" style={styles.hangUpIcon} />
+          <Phone size={18} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
           <Text variant="caption" style={styles.hangUpLabel}>
             {t('active.end')}
           </Text>
@@ -790,13 +794,13 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
               { top: RULER_HEIGHT + state.laneCount * TRACK_HEIGHT + LANE_PADDING / 2 },
             ]}
           >
-            <Ionicons name="add" size={14} color="#666" />
+            <Plus size={14} color="#666" strokeWidth={2.25} />
           </Pressable>
         </View>
 
         {state.clips.length === 0 && !isProjectLoading && (
           <View style={styles.emptyOverlay}>
-            <Ionicons name="musical-notes-outline" size={32} color="#333" />
+            <Music size={32} color="#333" strokeWidth={2.25} />
             <Text variant="body" style={styles.emptyText}>
               {t('active.tapToRecord')}
             </Text>
@@ -843,7 +847,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
               {t('active.clipVolume')}
             </Text>
             <View style={styles.volumeSliderRow}>
-              <Ionicons name="volume-low" size={18} color="#888" />
+              <Volume1 size={18} color="#888" strokeWidth={2.25} />
               <Pressable
                 style={styles.volumeTrack}
                 onPress={(e) => {
@@ -863,7 +867,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
                   ]}
                 />
               </Pressable>
-              <Ionicons name="volume-high" size={18} color="#888" />
+              <Volume2 size={18} color="#888" strokeWidth={2.25} />
             </View>
             <Text variant="caption" style={styles.volumePercent}>
               {Math.round(

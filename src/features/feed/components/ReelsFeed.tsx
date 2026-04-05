@@ -19,9 +19,19 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Bookmark,
+  Film,
+  Heart,
+  Megaphone,
+  MessageCircle,
+  Send,
+  Volume2,
+  VolumeX,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
@@ -29,12 +39,15 @@ import { useReelsFeed } from '../hooks/useReelsFeed';
 import { useInteractions } from '../hooks/useInteractions';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import { useFollowStore } from '@/stores/followStore';
+import { LinkedText } from './LinkedText';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { feedService } from '../services/feedService';
 import { DEMO_ADS } from '../constants/adPosts';
 import { injectAds } from '../utils/injectAds';
 import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
 import { formatCount } from '@/utils/formatters';
+import { ReelsSkeleton } from '@/components/ui/Skeleton';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post'; // PostType used in toFeedPost helper
 import type { Post } from '@/types';
 
@@ -65,10 +78,18 @@ function toFeedPost(post: Post): FeedPost {
       displayName: post.author.displayName,
       avatar: post.author.avatar,
       isFollowing: post.isFollowingAuthor ?? false,
+      role: post.author.role,
     },
-    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
-    audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? files[0]) : undefined,
-    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
+    images:
+      type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
+    audioUrl:
+      type === 'audio'
+        ? (cloudinaryUrl(files[0], 'original', 'raw') ?? files[0])
+        : undefined,
+    videoUrl:
+      type === 'video' || type === 'reel'
+        ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0])
+        : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
@@ -104,9 +125,19 @@ interface ReelItemProps {
  * the reel is the currently visible one, pausing automatically when
  * scrolled away. This prevents audio overlap and conserves resources.
  */
-function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment, onShare, onFollow }: ReelItemProps) {
+function ReelItem({
+  post,
+  isActive,
+  currentUserId,
+  onLike,
+  onBookmark,
+  onComment,
+  onShare,
+  onFollow,
+}: ReelItemProps) {
   const { t } = useTranslation('feed');
-  const isOwnPost = currentUserId !== undefined && String(post.author.id) === String(currentUserId);
+  const isOwnPost =
+    currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const [isMuted, setIsMuted] = useState(true);
   const [captionExpanded, setCaptionExpanded] = useState(false);
 
@@ -152,7 +183,7 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noVideoPlaceholder]}>
-          <Ionicons name="film-outline" size={56} color="#555" />
+          <Film size={56} color="#555" strokeWidth={2.25} />
         </View>
       )}
 
@@ -165,11 +196,11 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
 
       {/* ── Mute / unmute ── */}
       <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={12}>
-        <Ionicons
-          name={isMuted ? 'volume-mute' : 'volume-high'}
-          size={20}
-          color="#FFF"
-        />
+        {isMuted ? (
+          <VolumeX size={20} color="#FFF" strokeWidth={2.25} />
+        ) : (
+          <Volume2 size={20} color="#FFF" strokeWidth={2.25} />
+        )}
       </TouchableOpacity>
 
       {/* ── Right-side action column ── */}
@@ -180,10 +211,11 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
           onPress={() => onLike(post.id)}
           activeOpacity={0.75}
         >
-          <Ionicons
-            name={post.isLiked ? 'heart' : 'heart-outline'}
+          <Heart
             size={30}
             color={post.isLiked ? '#EF4444' : '#FFF'}
+            fill={post.isLiked ? '#EF4444' : 'none'}
+            strokeWidth={2.25}
           />
           <Text style={styles.actionCount}>{formatCount(post.likesCount)}</Text>
         </TouchableOpacity>
@@ -194,7 +226,7 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
           onPress={() => onComment(post.id)}
           activeOpacity={0.75}
         >
-          <Ionicons name="chatbubble-outline" size={28} color="#FFF" />
+          <MessageCircle size={28} color="#FFF" strokeWidth={2.25} />
           <Text style={styles.actionCount}>{formatCount(post.commentsCount)}</Text>
         </TouchableOpacity>
 
@@ -204,7 +236,7 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
           onPress={() => onShare(post)}
           activeOpacity={0.75}
         >
-          <Ionicons name="arrow-redo-outline" size={28} color="#FFF" />
+          <Send size={28} color="#FFF" strokeWidth={2.25} />
           <Text style={styles.actionCount}>{formatCount(post.sharesCount)}</Text>
         </TouchableOpacity>
 
@@ -214,10 +246,11 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
           onPress={() => onBookmark(post.id)}
           activeOpacity={0.75}
         >
-          <Ionicons
-            name={post.isBookmarked ? 'bookmark' : 'bookmark-outline'}
+          <Bookmark
             size={28}
             color={post.isBookmarked ? '#FACC15' : '#FFF'}
+            fill={post.isBookmarked ? '#FACC15' : 'none'}
+            strokeWidth={2.25}
           />
         </TouchableOpacity>
       </View>
@@ -226,21 +259,39 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
       <View style={styles.bottomOverlay}>
         {/* Author row */}
         <View style={styles.authorRow}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>
-                {post.author.displayName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.username} numberOfLines={1}>
-            {post.author.displayName}
-          </Text>
-          {post.author.isVerified && (
-            <Ionicons name="checkmark-circle" size={14} color="#3B82F6" style={styles.verified} />
-          )}
+          <TouchableOpacity
+            style={styles.authorTouchable}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (isOwnPost) {
+                router.navigate('/(tabs)/profile');
+              } else {
+                router.navigate({
+                  pathname: '/user/[id]',
+                  params: {
+                    id: String(post.author.id),
+                    displayName: post.author.displayName,
+                    username: post.author.username,
+                    avatar: post.author.avatar ?? '',
+                  },
+                });
+              }
+            }}
+          >
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitial}>
+                  {post.author.displayName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.username} numberOfLines={1}>
+              {post.author.username}
+            </Text>
+            {post.author.role === 'creator' && <CreatorBadge style={styles.verified} />}
+          </TouchableOpacity>
           {!isOwnPost && !post.author.isFollowing && (
             <TouchableOpacity
               onPress={() => onFollow(post.author.id)}
@@ -263,12 +314,12 @@ function ReelItem({ post, isActive, currentUserId, onLike, onBookmark, onComment
             onPress={() => setCaptionExpanded((v) => !v)}
             activeOpacity={0.9}
           >
-            <Text
+            <LinkedText
               style={styles.description}
               numberOfLines={captionExpanded ? undefined : 2}
             >
               {post.description}
-            </Text>
+            </LinkedText>
           </TouchableOpacity>
         )}
       </View>
@@ -322,7 +373,7 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noVideoPlaceholder]}>
-          <Ionicons name="film-outline" size={56} color="#555" />
+          <Film size={56} color="#555" strokeWidth={2.25} />
         </View>
       )}
 
@@ -335,17 +386,17 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
 
       {/* Sponsored badge — top-right */}
       <View style={styles.adSponsoredBadge}>
-        <Ionicons name="megaphone-outline" size={12} color="#CCC" />
+        <Megaphone size={12} color="#CCC" strokeWidth={2.25} />
         <Text style={styles.adSponsoredText}>Sponsored</Text>
       </View>
 
       {/* Mute toggle */}
       <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={12}>
-        <Ionicons
-          name={isMuted ? 'volume-mute' : 'volume-high'}
-          size={20}
-          color="#FFF"
-        />
+        {isMuted ? (
+          <VolumeX size={20} color="#FFF" strokeWidth={2.25} />
+        ) : (
+          <Volume2 size={20} color="#FFF" strokeWidth={2.25} />
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -355,15 +406,10 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
 
 /**
  * ReelsFeed — the full-screen vertical paging list.
- *
- * Filtering logic:
- *   1. Prefer posts where type is 'reel' or 'video'.
- *   2. If none exist (e.g. during testing), fall back to all posts so the
- *      screen is never blank.
+ * Only shows posts with type 'reel' (not 'video').
  */
 export function ReelsFeed() {
-  const { posts, isLoading, isFetchingMore, hasMore, loadMore } =
-    useReelsFeed();
+  const { posts, isLoading, isFetchingMore, hasMore, loadMore } = useReelsFeed();
   const { toggleLike, toggleBookmark, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
   const followedUsers = useFollowStore((s) => s.followedUsers);
@@ -386,10 +432,16 @@ export function ReelsFeed() {
   const reelStartRef = useRef<number>(Date.now());
   const activePostIdRef = useRef<string | null>(null);
 
-  const realPosts = posts.map(toFeedPost).map((p) => ({
-    ...p,
-    author: { ...p.author, isFollowing: getIsFollowing(p.author.id, p.author.isFollowing) },
-  }));
+  const realPosts = posts
+    .map(toFeedPost)
+    .filter((p) => p.type === 'reel')
+    .map((p) => ({
+      ...p,
+      author: {
+        ...p.author,
+        isFollowing: getIsFollowing(p.author.id, p.author.isFollowing),
+      },
+    }));
   const displayPosts: FeedPost[] = injectAds(realPosts, DEMO_ADS);
 
   // Viewability config — a reel is "active" when >= 80% is visible
@@ -460,17 +512,13 @@ export function ReelsFeed() {
   }, [isFetchingMore]);
 
   if (isLoading && displayPosts.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#FFF" />
-      </View>
-    );
+    return <ReelsSkeleton />;
   }
 
   if (displayPosts.length === 0) {
     return (
       <View style={styles.centered}>
-        <Ionicons name="film-outline" size={56} color="#555" />
+        <Film size={56} color="#555" strokeWidth={2.25} />
         <Text style={styles.emptyText}>No reels yet</Text>
         <Text style={styles.emptySubtext}>Check back soon</Text>
       </View>
@@ -479,53 +527,53 @@ export function ReelsFeed() {
 
   return (
     <>
-    <View style={styles.root}>
-      <FlatList
-        data={displayPosts}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        pagingEnabled
-        snapToInterval={REEL_HEIGHT}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={renderFooter}
-        viewabilityConfig={viewabilityConfig.current}
-        onViewableItemsChanged={onViewableItemsChanged.current}
-        // Remove momentum bounce so snapping feels crisp
-        bounces={false}
-        overScrollMode="never"
-        // Prevent unnecessary re-renders of off-screen items
-        removeClippedSubviews
-        windowSize={3}
-        maxToRenderPerBatch={2}
-        initialNumToRender={1}
-        getItemLayout={(_, index) => ({
-          length: REEL_HEIGHT,
-          offset: REEL_HEIGHT * index,
-          index,
-        })}
-      />
-    </View>
+      <View style={styles.root}>
+        <FlatList
+          data={displayPosts}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          pagingEnabled
+          snapToInterval={REEL_HEIGHT}
+          snapToAlignment="start"
+          decelerationRate="fast"
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
+          viewabilityConfig={viewabilityConfig.current}
+          onViewableItemsChanged={onViewableItemsChanged.current}
+          // Remove momentum bounce so snapping feels crisp
+          bounces={false}
+          overScrollMode="never"
+          // Prevent unnecessary re-renders of off-screen items
+          removeClippedSubviews
+          windowSize={3}
+          maxToRenderPerBatch={2}
+          initialNumToRender={1}
+          getItemLayout={(_, index) => ({
+            length: REEL_HEIGHT,
+            offset: REEL_HEIGHT * index,
+            index,
+          })}
+        />
+      </View>
 
-    {commentsPostId && (
-      <CommentsSheet
-        visible
-        onClose={() => setCommentsPostId(null)}
-        postId={commentsPostId}
-      />
-    )}
+      {commentsPostId && (
+        <CommentsSheet
+          visible
+          onClose={() => setCommentsPostId(null)}
+          postId={commentsPostId}
+        />
+      )}
 
-    {sharePost && (
-      <ShareSheet
-        visible
-        onClose={() => setSharePost(null)}
-        post={sharePost}
-        onShareTracked={() => trackShare(sharePost.id)}
-      />
-    )}
+      {sharePost && (
+        <ShareSheet
+          visible
+          onClose={() => setSharePost(null)}
+          post={sharePost}
+          onShareTracked={() => trackShare(sharePost.id)}
+        />
+      )}
     </>
   );
 }
@@ -606,17 +654,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  authorTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1.5,
     borderColor: '#FFF',
   },
   avatarFallback: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#333',
     borderWidth: 1.5,
     borderColor: '#FFF',
@@ -630,7 +683,7 @@ const styles = StyleSheet.create({
   },
   username: {
     color: '#FFF',
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Archivo_600SemiBold',
     flexShrink: 1,
     textShadowColor: 'rgba(0,0,0,0.8)',

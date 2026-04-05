@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { AxiosError } from 'axios';
 import * as Sentry from '@sentry/react-native';
 import i18n from '@/lib/i18n';
 import { authService } from '@/lib/api/authService';
@@ -256,7 +257,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isAuthenticating: false,
       });
 
-      // Persist both accounts when a managed artist was created
+      // Persist both accounts when a managed creator was created
       if (linkedAccount) {
         const { addAccount } = useAccountStore.getState();
         await addAccount({ user, tokens });
@@ -329,9 +330,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       set({ tokens: newTokens });
       return newTokens;
-    } catch {
-      await authStorage.clearAll();
-      set({ ...initialState, isLoading: false });
+    } catch (error: unknown) {
+      // Only clear session on auth errors (401/403) — the refresh token is
+      // genuinely invalid.  Transient failures (429 rate-limit, 500, network
+      // timeout) should NOT nuke the session; the next automatic retry or
+      // user action will try again with the same (still valid) token.
+      const status =
+        error instanceof AxiosError ? error.response?.status : undefined;
+      if (status === 401 || status === 403) {
+        await authStorage.clearAll();
+        set({ ...initialState, isLoading: false });
+      }
       return null;
     }
   },

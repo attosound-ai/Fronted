@@ -24,7 +24,7 @@
     "removeClipsFirst": "Primero elimine los clips de esta pista",
     "noClipsToExport": "No hay clips para exportar",
     "profileUpdated": "Perfil actualizado",
-    "artistContactUpdated": "Contacto del artista actualizado",
+    "creatorContactUpdated": "Contacto del creador actualizado",
     "audioImported": "Audio importado",
     "importFailed": "Error al importar: {{message}}",
     "failedToUpdate": "Error al actualizar",
@@ -40,7 +40,8 @@
   },
   "comingSoon": {
     "title": "Próximamente",
-    "description": "Esta sección está en construcción y estará disponible pronto."
+    "description": "Esta sección está en construcción y estará disponible pronto.",
+    "showSupport": "Muestra tu apoyo a los creadores enviando donaciones directamente. ¡Esta función estará disponible pronto!"
   },
   "paywall": {
     "upgradeRequired": "Se requiere mejorar el plan",
@@ -75,6 +76,7 @@
     "sendOtpFailed": "No se pudo enviar el código de verificación",
     "profileUpdateFailed": "No se pudo actualizar el perfil",
     "uploadFailed": "No se pudo subir su foto: {{message}}",
+    "avatarUploadSkipped": "No se pudo subir la foto. Puedes agregarla después desde tu perfil.",
     "paymentFailed": "El pago falló. Por favor intente nuevamente.",
     "upgradeFailed": "No se pudo procesar la mejora. Por favor intente nuevamente.",
     "cancelFailed": "No se pudo cancelar. Por favor intente nuevamente."

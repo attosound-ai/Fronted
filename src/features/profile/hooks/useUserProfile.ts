@@ -16,26 +16,33 @@ export function useUserProfile(userId: string) {
   const {
     data: user,
     isLoading,
+    isFetching,
+    isPlaceholderData,
+    refetch,
     error,
   } = useQuery<User>({
     queryKey: QUERY_KEYS.USERS.PROFILE(numericId),
     queryFn: async () => {
       // Fetch user profile + real counts from social-service in parallel
-      const [profileRes, followersRes, followingRes, postsRes] = await Promise.all([
+      const [profileRes, statsRes] = await Promise.all([
         apiClient.get(API_ENDPOINTS.USERS.PROFILE(numericId)),
-        apiClient.get(API_ENDPOINTS.USERS.FOLLOWERS(numericId), { params: { page: 1, limit: 1 } }),
-        apiClient.get(API_ENDPOINTS.USERS.FOLLOWING(numericId), { params: { page: 1, limit: 1 } }),
-        apiClient.get(API_ENDPOINTS.POSTS.USER_POSTS(numericId), { params: { limit: 1 } }),
+        apiClient.get(API_ENDPOINTS.USERS.STATS(numericId)),
       ]);
       const profile = profileRes.data.data;
-      // Use real counts from social-service instead of stale user-service columns
-      profile.followersCount = followersRes.data?.meta?.pagination?.total ?? profile.followersCount;
-      profile.followingCount = followingRes.data?.meta?.pagination?.total ?? profile.followingCount;
-      profile.postsCount = postsRes.data?.meta?.total ?? postsRes.data?.data?.length ?? profile.postsCount;
+      const stats = statsRes.data?.data;
+      if (stats) {
+        profile.followersCount = stats.followersCount;
+        profile.followingCount = stats.followingCount;
+        profile.postsCount = stats.postsCount;
+      }
       return profile;
     },
     enabled: !isNaN(numericId) && numericId > 0,
-    staleTime: isOwnProfile ? 30_000 : 1000 * 60 * 5,
+    staleTime: isOwnProfile ? 30_000 : 5 * 60 * 1000, // 5 min for other profiles
+    gcTime: 30 * 60 * 1000, // Keep in memory 30 min
+    // Instant render: use seeded cache data as placeholder while full profile loads
+    placeholderData: () =>
+      queryClient.getQueryData<User>(QUERY_KEYS.USERS.PROFILE(numericId)),
   });
 
   // Effective follow state: global store overrides stale server data
@@ -89,10 +96,17 @@ export function useUserProfile(userId: string) {
     },
   });
 
+  // True when we have seeded/partial data but real profile is still loading
+  const isPartial = isFetching && !!user && user.followersCount === undefined;
+
   return {
     user: user ? { ...user, isFollowing: effectiveIsFollowing } : null,
     isLoading,
+    isFetching,
+    isPartial,
+    isPlaceholderData,
     error,
+    refetch,
     toggleFollow: () =>
       followMutation.mutate({ wasFollowing: effectiveIsFollowing }),
     isToggling: followMutation.isPending,

@@ -13,7 +13,14 @@ import {
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useStripe } from '@stripe/stripe-react-native';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  ChevronLeft,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  AlertCircle,
+  Share2,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import type { PlanId } from '@/types/registration';
@@ -127,6 +134,7 @@ const AVATAR_INSTRUCTIONS_HTML = `<!DOCTYPE html>
 // ─── Avatar Card ──────────────────────────────────────────────────────────────
 
 function AvatarCard() {
+  const { t } = useTranslation('registration');
   const [expanded, setExpanded] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
 
@@ -162,36 +170,16 @@ function AvatarCard() {
 
   return (
     <View style={avatarStyles.card}>
-      {/* Top row: badges */}
-      <View style={avatarStyles.topRow}>
-        <View style={avatarStyles.comingSoonBadge}>
-          <Text style={avatarStyles.comingSoonBadgeText}>COMING SOON</Text>
-        </View>
-        <View style={avatarStyles.newBadge}>
-          <Text style={avatarStyles.newBadgeText}>NEW</Text>
-        </View>
+      {/* Floating badge */}
+      <View style={avatarStyles.floatingBadge}>
+        <Text style={avatarStyles.floatingBadgeText}>NEW</Text>
       </View>
 
       {/* Header row */}
       <View style={avatarStyles.header}>
         <View style={{ flex: 1 }}>
           <Text style={avatarStyles.title}>ATTO Avatar</Text>
-          <Text style={avatarStyles.subtitle}>
-            AI video messages posted on your behalf
-          </Text>
         </View>
-        <TouchableOpacity
-          onPress={handleSharePDF}
-          disabled={isSharing}
-          activeOpacity={0.7}
-          hitSlop={8}
-        >
-          {isSharing ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Ionicons name="share-outline" size={26} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
       </View>
 
       {/* Expandable instructions */}
@@ -199,11 +187,11 @@ function AvatarCard() {
         <Text style={avatarStyles.toggleText}>
           {expanded ? 'Hide instructions' : 'How it works'}
         </Text>
-        <Ionicons
-          name={expanded ? 'chevron-up' : 'chevron-down'}
-          size={14}
-          color="#666"
-        />
+        {expanded ? (
+          <ChevronUp size={14} color="#666" strokeWidth={2.25} />
+        ) : (
+          <ChevronDown size={14} color="#666" strokeWidth={2.25} />
+        )}
       </TouchableOpacity>
 
       {expanded && (
@@ -285,6 +273,22 @@ function AvatarCard() {
             Tip: The more angles you submit over time, the more lifelike your avatar
             becomes.
           </Text>
+
+          <TouchableOpacity
+            onPress={handleSharePDF}
+            disabled={isSharing}
+            activeOpacity={0.7}
+            style={avatarStyles.sharePdfButton}
+          >
+            {isSharing ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <>
+                <Share2 size={16} color="#000000" strokeWidth={2.25} />
+                <Text style={avatarStyles.sharePdfText}>{t('subscription.sharePdf')}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -415,7 +419,7 @@ export const StepSubscription: React.FC<
               style={styles.backButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+              <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
             </TouchableOpacity>
           ) : (
             <View style={styles.backButton} />
@@ -487,11 +491,11 @@ export const StepSubscription: React.FC<
                     ? t('subscription.hideFeatures')
                     : t('subscription.seeFeatures')}
                 </Text>
-                <Ionicons
-                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={14}
-                  color="#666"
-                />
+                {isExpanded ? (
+                  <ChevronUp size={14} color="#666" strokeWidth={2.25} />
+                ) : (
+                  <ChevronDown size={14} color="#666" strokeWidth={2.25} />
+                )}
               </TouchableOpacity>
 
               {isExpanded && (
@@ -502,7 +506,7 @@ export const StepSubscription: React.FC<
                     }) as string[]
                   ).map((feature, index) => (
                     <View key={index} style={styles.featureRow}>
-                      <Ionicons name="checkmark" size={16} color="#AAAAAA" />
+                      <Check size={16} color="#AAAAAA" strokeWidth={2.25} />
                       <Text style={styles.featureText}>{feature}</Text>
                     </View>
                   ))}
@@ -517,7 +521,7 @@ export const StepSubscription: React.FC<
 
         {(paymentError || apiError) && (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={16} color="#FFFFFF" />
+            <AlertCircle size={16} color="#FFFFFF" strokeWidth={2.25} />
             <Text style={styles.errorText}>{paymentError || apiError}</Text>
           </View>
         )}
@@ -724,51 +728,39 @@ const styles = StyleSheet.create({
 const avatarStyles = StyleSheet.create({
   card: {
     backgroundColor: '#111111',
-    borderWidth: 1,
-    borderColor: '#222222',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
     borderRadius: 12,
     marginBottom: 16,
-    marginTop: 6,
-    overflow: 'hidden',
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    overflow: 'visible',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 14,
-  },
-  comingSoonBadge: {
-    backgroundColor: '#222222',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  comingSoonBadgeText: {
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 9,
-    color: '#888888',
-    letterSpacing: 1,
-  },
-  newBadge: {
+  floatingBadge: {
+    position: 'absolute',
+    top: -10,
+    alignSelf: 'center',
+    left: '50%',
+    transform: [{ translateX: -18 }],
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    borderRadius: 10,
+    zIndex: 1,
   },
-  newBadgeText: {
-    fontFamily: 'Archivo_700Bold',
-    fontSize: 9,
+  floatingBadgeText: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 10,
     color: '#000000',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    padding: 20,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingVertical: 12,
   },
   title: {
     fontFamily: 'Archivo_700Bold',
@@ -785,8 +777,7 @@ const avatarStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 8,
   },
   toggleText: {
     fontFamily: 'Archivo_400Regular',
@@ -889,11 +880,15 @@ const avatarStyles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     color: '#FFFFFF',
+    width: 40,
+    textAlign: 'right',
   },
   packPerClip: {
     fontFamily: 'Archivo_400Regular',
     fontSize: 11,
     color: '#6B7280',
+    width: 55,
+    textAlign: 'right',
   },
   tip: {
     fontFamily: 'Archivo_400Regular',
@@ -902,5 +897,20 @@ const avatarStyles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 14,
     lineHeight: 16,
+  },
+  sharePdfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginTop: 18,
+  },
+  sharePdfText: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 14,
+    color: '#000000',
   },
 });

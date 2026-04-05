@@ -7,7 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { Ionicons } from '@expo/vector-icons';
+import { XCircle, Plus, Music, PlayCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { PostType } from '@/types/post';
@@ -45,13 +45,13 @@ export function ComposeMediaPreview({
               onPress={() => onRemoveMedia(i)}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
-              <Ionicons name="close-circle" size={20} color="#FFFFFF" />
+              <XCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             </TouchableOpacity>
           </View>
         ))}
         {media.length < 10 && (
           <TouchableOpacity style={styles.addMoreTile} onPress={onAddMore}>
-            <Ionicons name="add" size={28} color="#888888" />
+            <Plus size={28} color="#888888" strokeWidth={2.25} />
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -66,7 +66,7 @@ export function ComposeMediaPreview({
     const m = media[0];
     return (
       <View style={styles.audioCard}>
-        <Ionicons name="musical-notes" size={24} color="#FFFFFF" />
+        <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
         <View style={styles.audioInfo}>
           <Text variant="body" style={styles.audioName} numberOfLines={1}>
             {m.fileName}
@@ -78,7 +78,7 @@ export function ComposeMediaPreview({
           )}
         </View>
         <TouchableOpacity onPress={() => onRemoveMedia(0)}>
-          <Ionicons name="close-circle" size={22} color="#888888" />
+          <XCircle size={22} color="#888888" strokeWidth={2.25} />
         </TouchableOpacity>
       </View>
     );
@@ -110,14 +110,14 @@ function VideoPreview({
         <View style={[styles.videoThumb, styles.videoPlaceholder]} />
       )}
       <View style={styles.playOverlay}>
-        <Ionicons name="play-circle" size={40} color="#FFFFFF" />
+        <PlayCircle size={40} color="#FFFFFF" strokeWidth={2.25} />
       </View>
       <TouchableOpacity
         style={styles.videoRemove}
         onPress={onRemove}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Ionicons name="close-circle" size={22} color="#FFFFFF" />
+        <XCircle size={22} color="#FFFFFF" strokeWidth={2.25} />
       </TouchableOpacity>
     </View>
   );

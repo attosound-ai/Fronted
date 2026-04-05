@@ -1,6 +1,6 @@
 import type { Role } from './index';
 
-// Relationship between representative and artist
+// Relationship between representative and creator
 export type RepresentativeRelationship = 'family' | 'friend' | 'manager';
 
 // All wizard form data accumulated across steps
@@ -33,24 +33,24 @@ export interface RegistrationWizardState {
 
   // Step 7: Consent Form (only if isRepresentative === true)
   relationship: RepresentativeRelationship | null;
-  artistName: string;
+  creatorName: string;
   inmateNumber: string;
   inmateState: string;
   consentToRecording: boolean;
 
-  // Steps 8-10: Artist Account Setup (only if isRepresentative === true)
-  artistEmail: string;
-  artistPassword: string;
-  artistConfirmPassword: string;
-  artistUsername: string;
-  artistDisplayName: string;
-  artistPhoneCountryCode: string;
-  artistPhoneNumber: string;
-  artistAvatarUri: string | null;
+  // Steps 8-10: Creator Account Setup (only if isRepresentative === true)
+  creatorEmail: string;
+  creatorPassword: string;
+  creatorConfirmPassword: string;
+  creatorUsername: string;
+  creatorDisplayName: string;
+  creatorPhoneCountryCode: string;
+  creatorPhoneNumber: string;
+  creatorAvatarUri: string | null;
 
-  // Steps 11-12: Artist Type & Genres
-  artistTypes: string[];
-  artistGenres: string[];
+  // Steps 11-12: Creator Type & Genres
+  creatorTypes: string[];
+  creatorGenres: string[];
 
   // Step 13: Subscription
   selectedPlan: 'record' | 'record_pro' | 'connect_pro' | 'none' | null;

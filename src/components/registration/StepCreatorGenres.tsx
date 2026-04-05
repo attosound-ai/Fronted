@@ -1,18 +1,18 @@
 import { useEffect, useRef } from 'react';
 import { ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
-import { getGenresForSelectedTypes } from '@/constants/artistData';
+import { getGenresForSelectedTypes } from '@/constants/creatorData';
 import { haptic } from '@/lib/haptics/hapticService';
 
 /**
- * StepArtistGenres - Step 12: Multi-select genre chips, grouped by category.
+ * StepCreatorGenres - Step 12: Multi-select genre chips, grouped by category.
  * Auto-skips if no genres apply (e.g., only "multifaceted" selected).
  */
-export function StepArtistGenres({
+export function StepCreatorGenres({
   state,
   dispatch,
   onNext,
@@ -22,7 +22,7 @@ export function StepArtistGenres({
   const { t } = useTranslation(['registration', 'common']);
   const skippedRef = useRef(false);
 
-  const grouped = getGenresForSelectedTypes(state.artistTypes);
+  const grouped = getGenresForSelectedTypes(state.creatorTypes);
 
   // Auto-skip if no genres to show
   useEffect(() => {
@@ -36,15 +36,15 @@ export function StepArtistGenres({
 
   const handleToggle = (genreId: string) => {
     haptic('light');
-    const current = state.artistGenres;
+    const current = state.creatorGenres;
     const updated = current.includes(genreId)
       ? current.filter((id) => id !== genreId)
       : [...current, genreId];
 
-    dispatch({ type: 'UPDATE_FIELD', field: 'artistGenres', value: updated });
+    dispatch({ type: 'UPDATE_FIELD', field: 'creatorGenres', value: updated });
   };
 
-  const canContinue = state.artistGenres.length > 0;
+  const canContinue = state.creatorGenres.length > 0;
   const showHeaders = grouped.length > 1;
 
   const handleContinue = () => {
@@ -64,15 +64,15 @@ export function StepArtistGenres({
       keyboardShouldPersistTaps="always"
     >
       <Text variant="h2" style={styles.title}>
-        {t('artistGenres.title')}
+        {t('creatorGenres.title')}
       </Text>
       <Text variant="body" style={styles.subtitle}>
-        {t('artistGenres.subtitle')}
+        {t('creatorGenres.subtitle')}
       </Text>
 
       {apiError && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
           <Text variant="small" style={styles.errorBannerText}>
             {apiError}
           </Text>
@@ -89,7 +89,7 @@ export function StepArtistGenres({
             )}
             <View style={styles.grid}>
               {group.genres.map((genre) => {
-                const selected = state.artistGenres.includes(genre.id);
+                const selected = state.creatorGenres.includes(genre.id);
                 return (
                   <TouchableOpacity
                     key={genre.id}

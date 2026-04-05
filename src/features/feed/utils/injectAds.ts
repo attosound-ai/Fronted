@@ -1,27 +1,27 @@
 import type { FeedPost } from '@/types/post';
 
 /**
- * Inserts ad items into a post array at a regular interval.
+ * Distribute ads evenly throughout a list of posts.
  *
- * Pattern: [post, post, AD, post, post, AD, ...]
- *
- * @param posts   Real posts from the feed/reels API
- * @param ads     Ad pool (cycles through if exhausted)
- * @param every   Insert one ad after every N real posts (default: 2)
+ * @param posts  Real feed posts.
+ * @param ads    Ad posts to inject.
+ * @param every  Insert an ad every N real posts (default 2).
+ * @param slotOffset  Skip the first N ad slots (avoids duplicate ads across segments).
  */
 export function injectAds(posts: FeedPost[], ads: FeedPost[], every = 2, slotOffset = 0): FeedPost[] {
-  if (ads.length === 0 || posts.length === 0) return posts;
+  if (ads.length === 0) return posts;
 
   const result: FeedPost[] = [];
-  let adSlot = slotOffset;
+  let adIndex = slotOffset % ads.length;
+  let realCount = 0;
 
-  for (let i = 0; i < posts.length; i++) {
-    result.push(posts[i]);
-    if ((i + 1) % every === 0) {
-      const ad = ads[adSlot % ads.length];
-      // Unique key per position to avoid FlatList key collisions
-      result.push({ ...ad, id: `${ad.id}-slot${adSlot}` });
-      adSlot++;
+  for (const post of posts) {
+    result.push(post);
+    realCount++;
+    if (realCount % every === 0) {
+      const ad = ads[adIndex % ads.length];
+      result.push({ ...ad, id: `${ad.id}-${slotOffset + adIndex}` });
+      adIndex++;
     }
   }
 

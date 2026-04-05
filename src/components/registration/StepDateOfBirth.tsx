@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, DateOfBirthPicker } from '@/components/ui';
@@ -47,7 +47,7 @@ export function StepDateOfBirth({
                 style={styles.backButton}
                 activeOpacity={0.7}
               >
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
               </TouchableOpacity>
             )}
             <Text variant="h2" style={styles.title}>
@@ -58,7 +58,7 @@ export function StepDateOfBirth({
 
         {apiError && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+            <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
             <Text variant="small" style={styles.errorBannerText}>
               {apiError}
             </Text>

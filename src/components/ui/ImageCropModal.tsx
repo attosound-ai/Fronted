@@ -8,8 +8,12 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { GestureDetector, GestureHandlerRootView, Gesture } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  GestureDetector,
+  GestureHandlerRootView,
+  Gesture,
+} from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -47,6 +51,7 @@ export function ImageCropModal({
   onCancel,
 }: ImageCropModalProps) {
   const { width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const circleSize = screenWidth - CIRCLE_PADDING * 2;
   const containerSize = screenWidth;
 
@@ -127,7 +132,11 @@ export function ImageCropModal({
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       'worklet';
-      const c = clamp(savedX.value + e.translationX, savedY.value + e.translationY, scale.value);
+      const c = clamp(
+        savedX.value + e.translationX,
+        savedY.value + e.translationY,
+        scale.value
+      );
       translateX.value = c.x;
       translateY.value = c.y;
     })
@@ -175,8 +184,8 @@ export function ImageCropModal({
       // In unscaled image display coords: divide by s
       // Then convert to pixels: multiply by pxPerPt
 
-      const relX = ((-circleSize / 2) + (bw * s) / 2 - tx) / s;
-      const relY = ((-circleSize / 2) + (bh * s) / 2 - ty) / s;
+      const relX = (-circleSize / 2 + (bw * s) / 2 - tx) / s;
+      const relY = (-circleSize / 2 + (bh * s) / 2 - ty) / s;
       const cropDisplaySize = circleSize / s;
 
       const region: CropRegion = {
@@ -208,7 +217,12 @@ export function ImageCropModal({
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent>
       <GestureHandlerRootView style={styles.root}>
-        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View
+          style={[
+            styles.safeArea,
+            { paddingTop: insets.top, paddingBottom: insets.bottom },
+          ]}
+        >
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity
@@ -216,15 +230,22 @@ export function ImageCropModal({
               onPress={handleCancel}
               disabled={isProcessing}
             >
-              <Text variant="body" style={styles.cancelText}>Cancel</Text>
+              <Text variant="body" style={styles.cancelText}>
+                Cancel
+              </Text>
             </TouchableOpacity>
-            <Text variant="body" style={styles.headerTitle}>Position Photo</Text>
+            <Text variant="body" style={styles.headerTitle}>
+              Position Photo
+            </Text>
             <View style={styles.headerButton}>
               {isProcessing ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <TouchableOpacity onPress={handleApply} disabled={!imgDims}>
-                  <Text variant="body" style={[styles.applyText, !imgDims && styles.dimmed]}>
+                  <Text
+                    variant="body"
+                    style={[styles.applyText, !imgDims && styles.dimmed]}
+                  >
                     Apply
                   </Text>
                 </TouchableOpacity>
@@ -240,7 +261,14 @@ export function ImageCropModal({
             ]}
           >
             <GestureDetector gesture={gesture}>
-              <View style={{ width: containerSize, height: containerSize, justifyContent: 'center', alignItems: 'center' }}>
+              <View
+                style={{
+                  width: containerSize,
+                  height: containerSize,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
                 <Animated.Image
                   source={{ uri: imageUri }}
                   style={animatedStyle}
@@ -251,10 +279,35 @@ export function ImageCropModal({
 
             {/* Dark overlay with circular cutout */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <View style={[styles.overlayRect, { top: 0, left: 0, right: 0, height: circleOffset }]} />
-              <View style={[styles.overlayRect, { top: circleOffset + circleSize, left: 0, right: 0, bottom: 0 }]} />
-              <View style={[styles.overlayRect, { top: circleOffset, left: 0, width: circleOffset, height: circleSize }]} />
-              <View style={[styles.overlayRect, { top: circleOffset, left: circleOffset + circleSize, right: 0, height: circleSize }]} />
+              <View
+                style={[
+                  styles.overlayRect,
+                  { top: 0, left: 0, right: 0, height: circleOffset },
+                ]}
+              />
+              <View
+                style={[
+                  styles.overlayRect,
+                  { top: circleOffset + circleSize, left: 0, right: 0, bottom: 0 },
+                ]}
+              />
+              <View
+                style={[
+                  styles.overlayRect,
+                  { top: circleOffset, left: 0, width: circleOffset, height: circleSize },
+                ]}
+              />
+              <View
+                style={[
+                  styles.overlayRect,
+                  {
+                    top: circleOffset,
+                    left: circleOffset + circleSize,
+                    right: 0,
+                    height: circleSize,
+                  },
+                ]}
+              />
               <View
                 style={{
                   position: 'absolute',
@@ -281,7 +334,7 @@ export function ImageCropModal({
               Drag and pinch to position your photo
             </Text>
           </View>
-        </SafeAreaView>
+        </View>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -290,7 +343,14 @@ export function ImageCropModal({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000' },
   safeArea: { flex: 1, backgroundColor: '#000000', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 8, paddingVertical: 12 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
   headerButton: { width: 80, alignItems: 'center', paddingVertical: 4 },
   headerTitle: { color: '#FFFFFF', fontFamily: 'Archivo_600SemiBold' },
   cancelText: { color: '#888888' },
@@ -298,7 +358,17 @@ const styles = StyleSheet.create({
   dimmed: { opacity: 0.4 },
   imageContainer: { overflow: 'hidden' },
   overlayRect: { position: 'absolute', backgroundColor: OVERLAY_COLOR },
-  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  bottomArea: { paddingHorizontal: 24, paddingVertical: 16, width: '100%', alignItems: 'center' },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomArea: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
   hintText: { color: '#666666', textAlign: 'center' },
 });

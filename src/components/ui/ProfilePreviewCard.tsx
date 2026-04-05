@@ -1,5 +1,5 @@
 import { View, Image, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { User } from 'lucide-react-native';
 import { Text } from './Text';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { formatCount } from '@/utils/formatters';
@@ -10,7 +10,7 @@ interface ProfilePreviewCardProps {
   avatarSource?: string | null;
   bio?: string | null;
   stats?: { posts: number; followers: number; following: number };
-  role?: 'artist' | 'representative' | 'listener';
+  role?: 'creator' | 'representative' | 'listener';
   verified?: boolean;
 }
 
@@ -59,7 +59,7 @@ export function ProfilePreviewCard({
         <Image source={{ uri: resolvedUri }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
-          <Ionicons name="person" size={32} color="#666666" />
+          <User size={32} color="#666666" strokeWidth={2.25} />
         </View>
       )}
 
@@ -85,7 +85,7 @@ export function ProfilePreviewCard({
       {/* Role badge */}
       {role && role !== 'listener' && (
         <Text variant="caption" style={styles.role}>
-          {role === 'artist' ? 'Artist' : 'Representative'}
+          {role === 'creator' ? 'Creator' : 'Representative'}
           {verified ? ' \u2713' : ''}
         </Text>
       )}

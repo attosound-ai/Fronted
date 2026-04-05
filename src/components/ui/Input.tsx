@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TextInput, View, StyleSheet, TextInputProps, ViewStyle } from 'react-native';
+import { TextInput, View, StyleSheet, TextInputProps, ViewStyle, StyleProp, TextStyle } from 'react-native';
 
 import { Text } from './Text';
 
@@ -7,6 +7,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
   error?: string;
   containerStyle?: ViewStyle;
+  style?: StyleProp<TextStyle>;
 }
 
 /**
@@ -16,7 +17,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
  * - Single Responsibility: Solo maneja entrada de texto
  * - Interface Segregation: Props específicas para inputs
  */
-export function Input({ label, error, containerStyle, ...props }: InputProps) {
+export function Input({ label, error, containerStyle, style, ...props }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -31,6 +32,7 @@ export function Input({ label, error, containerStyle, ...props }: InputProps) {
           styles.input,
           isFocused && styles.inputFocused,
           error && styles.inputError,
+          style,
         ]}
         placeholderTextColor="#666666"
         onFocus={() => setIsFocused(true)}

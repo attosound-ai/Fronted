@@ -1,8 +1,9 @@
 import { View, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Check, Plus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { useSuggestedAccounts } from '../hooks/useSuggestedAccounts';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import type { User } from '@/types';
@@ -30,7 +31,7 @@ interface BubbleProps {
 
 function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
   const handleProfilePress = () => {
-    router.push({
+    router.navigate({
       pathname: '/user/[id]',
       params: {
         id: String(user.id),
@@ -44,7 +45,11 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
   return (
     <View style={styles.bubble}>
       <View style={styles.avatarContainer}>
-        <TouchableOpacity onPress={handleProfilePress} activeOpacity={0.8} style={styles.avatarWrapper}>
+        <TouchableOpacity
+          onPress={handleProfilePress}
+          activeOpacity={0.8}
+          style={styles.avatarWrapper}
+        >
           <Avatar uri={user.avatar} size="lg" />
         </TouchableOpacity>
 
@@ -53,17 +58,20 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
           activeOpacity={0.8}
           style={[styles.followBadge, isFollowing && styles.followingBadge]}
         >
-          <Ionicons
-            name={isFollowing ? 'checkmark' : 'add'}
-            size={13}
-            color={isFollowing ? '#888' : '#000'}
-          />
+          {isFollowing ? (
+            <Check size={13} color="#888" strokeWidth={2.25} />
+          ) : (
+            <Plus size={13} color="#000" strokeWidth={2.25} />
+          )}
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.username} numberOfLines={1}>
-        {user.displayName}
-      </Text>
+      <View style={styles.nameRow}>
+        <Text style={styles.username} numberOfLines={1}>
+          {user.displayName}
+        </Text>
+        {user.role === 'creator' && <CreatorBadge size="sm" />}
+      </View>
     </View>
   );
 }
@@ -150,11 +158,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     borderColor: '#000',
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    width: 76,
+  },
   username: {
     fontSize: 11,
     color: '#999',
     fontFamily: 'Archivo_400Regular',
-    width: 72,
+    flexShrink: 1,
     textAlign: 'center',
   },
   divider: {

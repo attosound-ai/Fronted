@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { LinkedText } from './LinkedText';
 import { formatCount, formatRelativeTime } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
 
@@ -28,7 +29,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
             {post.author.username}
           </Text>
           {'  '}
-          {post.description}
+          <LinkedText style={styles.caption}>{post.description}</LinkedText>
         </Text>
       )}
 
@@ -46,6 +47,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       {/* Timestamp */}
       <Text variant="caption" style={styles.timestamp}>
         {formatRelativeTime(post.createdAt)}
+        {post.isEdited && ' · edited'}
       </Text>
     </View>
   );

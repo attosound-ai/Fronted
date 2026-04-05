@@ -1,16 +1,54 @@
-import { ScrollView, View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  ScrollView,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  useWindowDimensions,
+} from 'react-native';
+import {
+  Mic,
+  Music,
+  Megaphone,
+  Headphones,
+  Palette,
+  Box,
+  Camera,
+  BookOpen,
+  PenLine,
+  Film,
+  PersonStanding,
+  Sparkles,
+  MoreHorizontal,
+  AlertCircle,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
-import { ARTIST_TYPES, getValidGenreIds } from '@/constants/artistData';
+import { CREATOR_TYPES, getValidGenreIds } from '@/constants/creatorData';
 import { haptic } from '@/lib/haptics/hapticService';
 
+const CREATOR_TYPE_ICON_MAP: Record<string, LucideIcon> = {
+  mic: Mic,
+  'musical-notes': Music,
+  megaphone: Megaphone,
+  headset: Headphones,
+  'color-palette': Palette,
+  cube: Box,
+  camera: Camera,
+  book: BookOpen,
+  create: PenLine,
+  film: Film,
+  body: PersonStanding,
+  sparkles: Sparkles,
+  'ellipsis-horizontal': MoreHorizontal,
+};
+
 /**
- * StepArtistTypes - Step 11: Multi-select artist type chips
+ * StepCreatorTypes - Step 11: Multi-select creator type chips
  */
-export function StepArtistTypes({
+export function StepCreatorTypes({
   state,
   dispatch,
   onNext,
@@ -18,25 +56,27 @@ export function StepArtistTypes({
   apiError,
 }: StepProps) {
   const { t } = useTranslation(['registration', 'common']);
+  const { height: screenHeight } = useWindowDimensions();
+  const isSmallScreen = screenHeight < 930;
 
   const handleToggle = (typeId: string) => {
     haptic('light');
-    const current = state.artistTypes;
+    const current = state.creatorTypes;
     const updated = current.includes(typeId)
       ? current.filter((id) => id !== typeId)
       : [...current, typeId];
 
-    dispatch({ type: 'UPDATE_FIELD', field: 'artistTypes', value: updated });
+    dispatch({ type: 'UPDATE_FIELD', field: 'creatorTypes', value: updated });
 
     // Clean up orphaned genres
     const validIds = getValidGenreIds(updated);
-    const cleaned = state.artistGenres.filter((id) => validIds.has(id));
-    if (cleaned.length !== state.artistGenres.length) {
-      dispatch({ type: 'UPDATE_FIELD', field: 'artistGenres', value: cleaned });
+    const cleaned = state.creatorGenres.filter((id) => validIds.has(id));
+    if (cleaned.length !== state.creatorGenres.length) {
+      dispatch({ type: 'UPDATE_FIELD', field: 'creatorGenres', value: cleaned });
     }
   };
 
-  const canContinue = state.artistTypes.length > 0;
+  const canContinue = state.creatorTypes.length > 0;
 
   const handleContinue = () => {
     if (!canContinue) {
@@ -55,15 +95,15 @@ export function StepArtistTypes({
       keyboardShouldPersistTaps="always"
     >
       <Text variant="h2" style={styles.title}>
-        {t('artistTypes.title')}
+        {t('creatorTypes.title')}
       </Text>
       <Text variant="body" style={styles.subtitle}>
-        {t('artistTypes.subtitle')}
+        {t('creatorTypes.subtitle')}
       </Text>
 
       {apiError && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
           <Text variant="small" style={styles.errorBannerText}>
             {apiError}
           </Text>
@@ -71,23 +111,36 @@ export function StepArtistTypes({
       )}
 
       <View style={styles.grid}>
-        {ARTIST_TYPES.map((type) => {
-          const selected = state.artistTypes.includes(type.id);
+        {CREATOR_TYPES.map((type) => {
+          const selected = state.creatorTypes.includes(type.id);
           return (
             <TouchableOpacity
               key={type.id}
-              style={[styles.chip, selected && styles.chipSelected]}
+              style={[
+                styles.chip,
+                selected && styles.chipSelected,
+                isSmallScreen && styles.chipSmall,
+              ]}
               onPress={() => handleToggle(type.id)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={type.iconName as any}
-                size={18}
-                color={selected ? '#000000' : '#FFFFFF'}
-              />
+              {(() => {
+                const TypeIcon = CREATOR_TYPE_ICON_MAP[type.iconName] ?? MoreHorizontal;
+                return (
+                  <TypeIcon
+                    size={isSmallScreen ? 15 : 18}
+                    color={selected ? '#000000' : '#FFFFFF'}
+                    strokeWidth={2.25}
+                  />
+                );
+              })()}
               <Text
                 variant="body"
-                style={[styles.chipText, selected && styles.chipTextSelected]}
+                style={[
+                  styles.chipText,
+                  selected && styles.chipTextSelected,
+                  isSmallScreen && styles.chipTextSmall,
+                ]}
               >
                 {t(type.labelKey)}
               </Text>
@@ -173,6 +226,14 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: '#000000',
+  },
+  chipSmall: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  chipTextSmall: {
+    fontSize: 12,
   },
   buttonContainer: {
     paddingHorizontal: 24,

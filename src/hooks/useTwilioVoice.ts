@@ -16,6 +16,7 @@ let pushKitReady = false;
 let activeCallObj: Call | null = null;
 let pendingInvite: CallInvite | null = null;
 let lastToken: string | null = null;
+let isRegistering = false;
 
 function getVoice(): Voice {
   voiceInstance ??= new Voice();
@@ -163,6 +164,7 @@ export function useTwilioVoice() {
   const endCall = useCallStore((s) => s.endCall);
 
   const registerDevice = useCallback(async () => {
+    if (isRegistering) return;
     if (Platform.OS === 'ios' && !pushKitReady) {
       return;
     }
@@ -172,6 +174,7 @@ export function useTwilioVoice() {
       return;
     }
 
+    isRegistering = true;
     try {
       const { token } = await telephonyService.getVoiceToken();
 
@@ -187,6 +190,8 @@ export function useTwilioVoice() {
         tags: { feature: 'twilio-voice', step: 'register' },
       });
       setRegistered(false, message);
+    } finally {
+      isRegistering = false;
     }
   }, [setRegistered]);
 

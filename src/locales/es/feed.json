@@ -4,7 +4,16 @@
     "createOptionProjectsTitle": "Proyectos",
     "createOptionProjectsSubtitle": "Abra sus proyectos de audio",
     "createOptionUploadTitle": "Subir publicación",
-    "createOptionUploadSubtitle": "Comparta con su audiencia"
+    "createOptionUploadSubtitle": "Comparta con su audiencia",
+    "menuFollowing": "Siguiendo",
+    "menuFilters": "Filtros",
+    "menuNotifications": "Notificaciones",
+    "menuStore": "ATTO SOUND Store",
+    "menuAbout": "Acerca de ATTO SOUND",
+    "menuDating": "ATTO Encuentros",
+    "comingSoonStore": "Compra mercancía exclusiva de tus creadores favoritos. Drops, collabs y ediciones limitadas — todo en un solo lugar.",
+    "comingSoonAbout": "Conoce más sobre ATTO SOUND, nuestra misión y cómo conectamos creadores con el mundo.",
+    "comingSoonDating": "Conoce personas que comparten tu gusto musical. Conexiones impulsadas por el sonido."
   },
   "post": {
     "followButton": "Seguir",
@@ -36,25 +45,28 @@
     "uploadingText": "Subiendo... {{progress}}%",
     "reelFromLibrary": "Desde la biblioteca",
     "reelRecord": "Grabar",
+    "fromGallery": "Galería",
+    "fromFiles": "Archivos",
+    "fromProject": "Abrir proyecto",
     "addMore": "Agregar más"
   },
   "verification": {
     "bannerTitle": "Autorización pendiente",
-    "bannerSubtitle": "Ingrese el código del artista para obtener su consentimiento",
-    "editTitle": "Editar contacto del artista",
+    "bannerSubtitle": "Ingrese el código del creador para obtener su consentimiento",
+    "editTitle": "Editar contacto del creador",
     "labelRelationship": "Relación",
     "placeholderRelationship": "Seleccionar relación",
     "relationshipFamily": "Familia",
     "relationshipFriend": "Amigo",
     "relationshipManager": "Manager",
-    "labelArtistName": "Nombre del artista",
-    "placeholderArtistName": "Ingrese el nombre del artista",
+    "labelCreatorName": "Nombre del creador",
+    "placeholderCreatorName": "Ingrese el nombre del creador",
     "labelInmateNumber": "Número de recluso",
     "placeholderInmateNumber": "Ingrese el número de recluso",
-    "labelArtistEmail": "Correo del artista",
-    "placeholderArtistEmail": "Ingrese el correo del artista (opcional)",
-    "labelArtistPhone": "Número de contacto del artista",
-    "warningReauthorize": "Cambiar la información de contacto del artista cancelará su autorización actual y requerirá una nueva verificación.",
+    "labelCreatorEmail": "Correo del creador",
+    "placeholderCreatorEmail": "Ingrese el correo del creador (opcional)",
+    "labelCreatorPhone": "Número de contacto del creador",
+    "warningReauthorize": "Cambiar la información de contacto del creador cancelará su autorización actual y requerirá una nueva verificación.",
     "saveButton": "Guardar y reautorizar"
   },
   "list": {
@@ -67,5 +79,26 @@
   },
   "listen": {
     "title": "Proyectos"
+  },
+  "filters": {
+    "title": "Filtros",
+    "creatorsOnly": "Enfoque en Creadores",
+    "creatorsOnlyDescription": "Mostrar solo publicaciones de cuentas de creadores",
+    "contentType": "Enfoque de Contenido",
+    "contentTypeDescription": "Mostrar solo tipos específicos de publicaciones",
+    "typeText": "Texto",
+    "typePhoto": "Foto",
+    "typeVideo": "Video",
+    "typeReel": "Reel",
+    "typeAudio": "Audio",
+    "reset": "Restablecer filtros"
+  },
+  "postPublished": "¡Tu publicación ha sido compartida!",
+  "postPublishedTap": "Toca para ver",
+  "interactors": {
+    "likes": "Me gusta",
+    "reposts": "Republicaciones",
+    "shares": "Compartidos",
+    "noResults": "Nadie aún"
   }
 }

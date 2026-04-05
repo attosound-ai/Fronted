@@ -2,11 +2,20 @@ import { useState, useCallback, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Smartphone,
+  Ellipsis,
+  VolumeX,
+  Volume2,
+  Bookmark,
+  Flag,
+  Trash2,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
 import { Avatar } from '@/components/ui/Avatar';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import type { FeedPost, PostAuthor } from '@/types/post';
@@ -67,7 +76,7 @@ export function ReelMedia({
   if (!videoUrl) {
     return (
       <View style={styles.placeholder}>
-        <Ionicons name="phone-portrait-outline" size={48} color="#666" />
+        <Smartphone size={48} color="#666" strokeWidth={1.5} />
       </View>
     );
   }
@@ -91,11 +100,9 @@ export function ReelMedia({
           onPress={() => onProfilePress?.(post.author)}
           activeOpacity={0.7}
         >
-          <Avatar uri={post.author.avatar} size="sm" />
-          <Text style={styles.authorName}>{post.author.displayName.toUpperCase()}</Text>
-          {post.author.isVerified && (
-            <Ionicons name="checkmark-circle" size={14} color="#FFF" />
-          )}
+          <Avatar uri={post.author.avatar} size="md" />
+          <Text style={styles.authorName}>{post.author.username}</Text>
+          {post.author.role === 'creator' && <CreatorBadge />}
         </TouchableOpacity>
 
         <View style={styles.spacer} />
@@ -110,10 +117,8 @@ export function ReelMedia({
           </TouchableOpacity>
         )}
 
-        {!isOwnPost && (
-          <Text style={styles.reelFeedLabel}>
-            {post.author.isFollowing ? t('post.following') : t('post.suggestedForYou')}
-          </Text>
+        {!isOwnPost && post.author.isFollowing && (
+          <Text style={styles.reelFeedLabel}>{t('post.following')}</Text>
         )}
 
         <TouchableOpacity
@@ -121,22 +126,16 @@ export function ReelMedia({
           onPress={() => setMenuVisible(true)}
           activeOpacity={0.7}
         >
-          <Ionicons name="ellipsis-horizontal" size={20} color="#FFF" />
+          <Ellipsis size={22} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
       </LinearGradient>
 
-      {/* Bottom gradient with description */}
-      {post.description ? (
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.5)']}
-          style={styles.bottomGradient}
-          pointerEvents="none"
-        >
-          <Text style={styles.description} numberOfLines={2} selectable={false}>
-            {post.description}
-          </Text>
-        </LinearGradient>
-      ) : null}
+      {/* Bottom gradient (visual only — description is shown outside the reel) */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.5)']}
+        style={styles.bottomGradient}
+        pointerEvents="none"
+      />
 
       {/* Mute toggle — bottom-right corner (must render after gradient to be on top) */}
       <TouchableOpacity
@@ -144,7 +143,11 @@ export function ReelMedia({
         onPress={toggleMute}
         activeOpacity={0.7}
       >
-        <Ionicons name={isMuted ? 'volume-mute' : 'volume-high'} size={18} color="#FFF" />
+        {isMuted ? (
+          <VolumeX size={20} color="#FFF" strokeWidth={2.25} />
+        ) : (
+          <Volume2 size={20} color="#FFF" strokeWidth={2.25} />
+        )}
       </TouchableOpacity>
 
       {/* Options bottom sheet */}
@@ -158,10 +161,11 @@ export function ReelMedia({
           }}
         >
           <View style={styles.menuIcon}>
-            <Ionicons
-              name={post.isBookmarked ? 'bookmark' : 'bookmark-outline'}
+            <Bookmark
               size={24}
               color="#FFF"
+              strokeWidth={2.25}
+              fill={post.isBookmarked ? '#FFF' : 'none'}
             />
           </View>
           <Text style={styles.menuText}>
@@ -180,7 +184,7 @@ export function ReelMedia({
           }}
         >
           <View style={styles.menuIcon}>
-            <Ionicons name="flag-outline" size={24} color="#EF4444" />
+            <Flag size={24} color="#EF4444" strokeWidth={2.25} />
           </View>
           <Text style={styles.menuTextDanger}>{t('post.menuReport')}</Text>
         </TouchableOpacity>
@@ -197,7 +201,7 @@ export function ReelMedia({
               }}
             >
               <View style={styles.menuIcon}>
-                <Ionicons name="trash-outline" size={24} color="#EF4444" />
+                <Trash2 size={24} color="#EF4444" strokeWidth={2.25} />
               </View>
               <Text style={styles.menuTextDanger}>Delete post</Text>
             </TouchableOpacity>
@@ -246,7 +250,7 @@ const styles = StyleSheet.create({
   },
   authorName: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: 15,
     fontFamily: 'Archivo_600SemiBold',
   },
   reelFeedLabel: {

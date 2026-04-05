@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { User, Phone } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 interface IncomingCallScreenProps {
@@ -19,7 +19,7 @@ export function IncomingCallScreen({
     <View style={styles.container}>
       <View style={styles.callerInfo}>
         <View style={styles.avatar}>
-          <Ionicons name="person" size={48} color="#666" />
+          <User size={48} color="#666" strokeWidth={2.25} />
         </View>
         <Text style={styles.callerLabel}>{t('incoming.label')}</Text>
         <Text style={styles.callerNumber}>{fromNumber}</Text>
@@ -27,12 +27,12 @@ export function IncomingCallScreen({
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.rejectButton} onPress={onReject}>
-          <Ionicons name="call" size={32} color="#FFF" style={styles.rejectIcon} />
+          <Phone size={32} color="#FFF" strokeWidth={2.25} style={styles.rejectIcon} />
           <Text style={styles.actionLabel}>{t('incoming.decline')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
-          <Ionicons name="call" size={32} color="#FFF" />
+          <Phone size={32} color="#FFF" strokeWidth={2.25} />
           <Text style={styles.actionLabel}>{t('incoming.accept')}</Text>
         </TouchableOpacity>
       </View>

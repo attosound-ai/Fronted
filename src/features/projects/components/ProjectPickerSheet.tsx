@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Plus, FolderOpen, Music, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
@@ -98,7 +98,7 @@ export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPicker
           activeOpacity={0.7}
         >
           <View style={styles.newIconWrap}>
-            <Ionicons name="add" size={20} color="#FFFFFF" />
+            <Plus size={20} color="#FFFFFF" strokeWidth={2.25} />
           </View>
           <Text style={styles.newProjectText}>
             {t('picker.newProject', 'New project')}
@@ -116,7 +116,7 @@ export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPicker
         </View>
       ) : !projects?.length ? (
         <View style={styles.center}>
-          <Ionicons name="folder-open-outline" size={40} color="#555" />
+          <FolderOpen size={40} color="#555" strokeWidth={2.25} />
           <Text style={styles.emptyText}>{t('picker.empty', 'No tienes proyectos aún')}</Text>
         </View>
       ) : (
@@ -132,7 +132,7 @@ export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPicker
               }}
             >
               <View style={styles.iconWrap}>
-                <Ionicons name="musical-notes" size={20} color="#FFFFFF" />
+                <Music size={20} color="#FFFFFF" strokeWidth={2.25} />
               </View>
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -145,7 +145,7 @@ export function ProjectPickerSheet({ visible, onClose, onSelect }: ProjectPicker
                     : ''}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#555" />
+              <ChevronRight size={18} color="#555" strokeWidth={2.25} />
             </TouchableOpacity>
           ))}
         </ScrollView>

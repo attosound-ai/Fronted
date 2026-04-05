@@ -1,5 +1,5 @@
 import { View, StyleSheet, TouchableOpacity, Share } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Copy, Share2, Phone, Activity } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { showToast } from '@/components/ui/Toast';
@@ -54,7 +54,7 @@ export function ProfileBridgeNumberSection() {
   return (
     <ProfileSection title={t('bridgeNumber.sectionTitle')}>
       <ProfileInfoRow
-        icon="call-outline"
+        icon={<Phone size={18} color="#888888" strokeWidth={2.25} />}
         label={t('bridgeNumber.numberLabel')}
         value={
           isLoading
@@ -63,7 +63,7 @@ export function ProfileBridgeNumberSection() {
         }
       />
       <ProfileInfoRow
-        icon="pulse-outline"
+        icon={<Activity size={18} color="#888888" strokeWidth={2.25} />}
         label={t('bridgeNumber.statusLabel')}
         value={statusText}
         valueColor={statusColor}
@@ -76,7 +76,7 @@ export function ProfileBridgeNumberSection() {
             onPress={handleCopy}
             activeOpacity={0.7}
           >
-            <Ionicons name="copy-outline" size={16} color="#FFFFFF" />
+            <Copy size={16} color="#FFFFFF" strokeWidth={2.25} />
             <Text style={styles.actionText}>{t('bridgeNumber.copyButton')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -84,7 +84,7 @@ export function ProfileBridgeNumberSection() {
             onPress={handleShare}
             activeOpacity={0.7}
           >
-            <Ionicons name="share-outline" size={16} color="#FFFFFF" />
+            <Share2 size={16} color="#FFFFFF" strokeWidth={2.25} />
             <Text style={styles.actionText}>{t('bridgeNumber.shareButton')}</Text>
           </TouchableOpacity>
         </View>

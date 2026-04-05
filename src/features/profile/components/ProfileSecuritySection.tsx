@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ShieldCheck, Smartphone, Mail, MessageCircle } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -113,7 +113,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
       <ProfileSection title={t('security.sectionTitle')}>
         <View style={styles.row}>
           <View style={styles.rowLeft}>
-            <Ionicons name="shield-checkmark-outline" size={18} color="#888888" />
+            <ShieldCheck size={18} color="#888888" strokeWidth={2.25} />
             <Text variant="body" style={styles.label}>
               {t('security.twoFactorLabel')}
             </Text>
@@ -127,7 +127,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
         </View>
         {is2FAEnabled && (
           <ProfileInfoRow
-            icon="chatbubble-outline"
+            icon={<MessageCircle size={18} color="#888888" strokeWidth={2.25} />}
             label={t('security.methodLabel')}
             value={methodLabel}
             showDivider={false}
@@ -157,7 +157,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
                 onPress={() => handleSelectMethod('sms')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
+                <Smartphone size={24} color="#3B82F6" strokeWidth={2.25} />
                 <Text variant="body" style={styles.methodText}>
                   {t('security.smsOptionLabel')}
                 </Text>
@@ -171,7 +171,7 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
                 onPress={() => handleSelectMethod('email')}
                 activeOpacity={0.7}
               >
-                <Ionicons name="mail-outline" size={24} color="#3B82F6" />
+                <Mail size={24} color="#3B82F6" strokeWidth={2.25} />
                 <Text variant="body" style={styles.methodText}>
                   {t('security.emailOptionLabel')}
                 </Text>

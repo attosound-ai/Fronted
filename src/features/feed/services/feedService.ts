@@ -18,6 +18,7 @@ function mapApiPost(raw: FeedApiPost): Post {
       username: raw.author?.username || 'unknown',
       displayName: raw.author?.displayName || raw.author?.username || 'Unknown',
       avatar: raw.author?.avatar || null,
+      role: raw.author?.role ?? 'listener',
     } as Post['author'],
     likesCount: raw.interactions?.likesCount ?? 0,
     commentsCount: raw.interactions?.commentsCount ?? 0,
@@ -80,7 +81,7 @@ export const feedService = {
     const response = await apiClient.post<ApiResponse<FeedApiPost>>(
       API_ENDPOINTS.POSTS.CREATE,
       data,
-      { timeout: 60000 },
+      { timeout: 60000 }
     );
     return mapApiPost(response.data.data);
   },
@@ -97,6 +98,20 @@ export const feedService = {
    */
   async unlikePost(postId: string): Promise<void> {
     await apiClient.delete(API_ENDPOINTS.POSTS.LIKE(postId));
+  },
+
+  /**
+   * Edita un post (text/tags only)
+   */
+  async updatePost(
+    postId: string,
+    data: { textContent?: string; tags?: string[] }
+  ): Promise<Post> {
+    const response = await apiClient.put<ApiResponse<FeedApiPost>>(
+      API_ENDPOINTS.POSTS.UPDATE(postId),
+      data
+    );
+    return mapApiPost(response.data.data);
   },
 
   /**
@@ -140,7 +155,8 @@ export const feedService = {
     const body = response.data;
     return {
       data: (body.data || []).map(mapApiPost),
-      nextCursor: body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
+      nextCursor:
+        body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
       hasMore: body.meta?.hasMore ?? false,
       total: body.data?.length ?? 0,
     };
@@ -153,7 +169,8 @@ export const feedService = {
     const body = response.data;
     return {
       data: (body.data || []).map(mapApiPost),
-      nextCursor: body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
+      nextCursor:
+        body.meta?.nextCursor != null ? String(body.meta.nextCursor) : undefined,
       hasMore: body.meta?.hasMore ?? false,
       total: body.data?.length ?? 0,
     };

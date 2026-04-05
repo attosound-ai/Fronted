@@ -3,7 +3,20 @@ import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  Camera,
+  AlertTriangle,
+  Instagram,
+  Music2,
+  Youtube,
+  Cloud,
+  Disc3,
+  Twitter,
+  Globe,
+  MapPin,
+  Building2,
+  Mail,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Input } from '@/components/ui/Input';
@@ -81,7 +94,7 @@ export function EditProfileScreen() {
             <Avatar uri={form.avatarUri} size="xl" />
           )}
           <View style={styles.avatarBadge}>
-            <Ionicons name="camera" size={14} color="#000000" />
+            <Camera size={14} color="#000000" strokeWidth={2.25} />
           </View>
         </TouchableOpacity>
 
@@ -113,15 +126,94 @@ export function EditProfileScreen() {
           style={styles.bioInput}
         />
 
-        {/* Artist Fields */}
-        {user.role === 'artist' && (
+        {/* Social Links + Extended Bio (creators) */}
+        {user.role === 'creator' && (
+          <>
+            <Text style={styles.sectionTitle}>Social Links</Text>
+            <Input
+              label="Instagram"
+              value={form.socialInstagram}
+              onChangeText={(text) => updateField('socialInstagram', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="TikTok"
+              value={form.socialTiktok}
+              onChangeText={(text) => updateField('socialTiktok', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="YouTube"
+              value={form.socialYoutube}
+              onChangeText={(text) => updateField('socialYoutube', text)}
+              placeholder="@channel"
+              autoCapitalize="none"
+            />
+            <Input
+              label="SoundCloud"
+              value={form.socialSoundcloud}
+              onChangeText={(text) => updateField('socialSoundcloud', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="Spotify"
+              value={form.socialSpotify}
+              onChangeText={(text) => updateField('socialSpotify', text)}
+              placeholder="Artist name or URI"
+              autoCapitalize="none"
+            />
+            <Input
+              label="X (Twitter)"
+              value={form.socialTwitter}
+              onChangeText={(text) => updateField('socialTwitter', text)}
+              placeholder="@username"
+              autoCapitalize="none"
+            />
+            <Input
+              label="Website"
+              value={form.website}
+              onChangeText={(text) => updateField('website', text)}
+              placeholder="https://..."
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+
+            <Text style={styles.sectionTitle}>Extended Info</Text>
+            <Input
+              label="Location"
+              value={form.location}
+              onChangeText={(text) => updateField('location', text)}
+              placeholder="City, State"
+            />
+            <Input
+              label="Record Label"
+              value={form.recordLabel}
+              onChangeText={(text) => updateField('recordLabel', text)}
+              placeholder="Independent"
+            />
+            <Input
+              label="Booking Email"
+              value={form.bookingEmail}
+              onChangeText={(text) => updateField('bookingEmail', text)}
+              placeholder="booking@example.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </>
+        )}
+
+        {/* Creator Fields */}
+        {user.role === 'creator' && (
           <>
             <Input
-              label={t('edit.artistNameLabel')}
-              value={form.artistName}
-              onChangeText={(text) => updateField('artistName', text)}
-              placeholder={t('edit.artistNamePlaceholder')}
-              error={errors.artistName}
+              label={t('edit.creatorNameLabel')}
+              value={form.creatorName}
+              onChangeText={(text) => updateField('creatorName', text)}
+              placeholder={t('edit.creatorNamePlaceholder')}
+              error={errors.creatorName}
             />
             <Input
               label={t('edit.inmateNumberLabel')}
@@ -137,7 +229,7 @@ export function EditProfileScreen() {
         {user.role === 'representative' && (
           <>
             <View style={styles.warningContainer}>
-              <Ionicons name="warning-outline" size={16} color="#F59E0B" />
+              <AlertTriangle size={16} color="#F59E0B" strokeWidth={2.25} />
               <Text variant="small" style={styles.warningText}>
                 {t('edit.warningReVerification')}
               </Text>
@@ -153,11 +245,11 @@ export function EditProfileScreen() {
             />
 
             <Input
-              label={t('edit.artistNameLabel')}
-              value={form.artistName}
-              onChangeText={(text) => updateField('artistName', text)}
-              placeholder={t('edit.artistNamePlaceholder')}
-              error={errors.artistName}
+              label={t('edit.creatorNameLabel')}
+              value={form.creatorName}
+              onChangeText={(text) => updateField('creatorName', text)}
+              placeholder={t('edit.creatorNamePlaceholder')}
+              error={errors.creatorName}
             />
 
             <Input
@@ -176,21 +268,21 @@ export function EditProfileScreen() {
             />
 
             <Input
-              label={t('edit.artistEmailLabel')}
-              value={form.artistEmail}
-              onChangeText={(text) => updateField('artistEmail', text)}
-              placeholder={t('edit.artistEmailPlaceholder')}
+              label={t('edit.creatorEmailLabel')}
+              value={form.creatorEmail}
+              onChangeText={(text) => updateField('creatorEmail', text)}
+              placeholder={t('edit.creatorEmailPlaceholder')}
               keyboardType="email-address"
               autoCapitalize="none"
-              error={errors.artistEmail}
+              error={errors.creatorEmail}
             />
 
             <PhoneInput
-              label={t('edit.artistPhoneLabel')}
-              countryCode={form.artistPhoneCountryCode}
-              onCountryCodeChange={(code) => updateField('artistPhoneCountryCode', code)}
-              phoneNumber={form.artistPhone}
-              onPhoneNumberChange={(number) => updateField('artistPhone', number)}
+              label={t('edit.creatorPhoneLabel')}
+              countryCode={form.creatorPhoneCountryCode}
+              onCountryCodeChange={(code) => updateField('creatorPhoneCountryCode', code)}
+              phoneNumber={form.creatorPhone}
+              onPhoneNumberChange={(number) => updateField('creatorPhone', number)}
             />
           </>
         )}
@@ -253,6 +345,15 @@ const styles = StyleSheet.create({
   bioInput: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  sectionTitle: {
+    color: '#888',
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 13,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 20,
+    marginBottom: 4,
   },
   warningContainer: {
     flexDirection: 'row',

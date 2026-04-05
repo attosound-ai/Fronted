@@ -24,7 +24,7 @@
     "removeClipsFirst": "Remova os clipes desta faixa primeiro",
     "noClipsToExport": "Nenhum clipe para exportar",
     "profileUpdated": "Perfil atualizado",
-    "artistContactUpdated": "Contato do artista atualizado",
+    "creatorContactUpdated": "Contato do criador atualizado",
     "audioImported": "Áudio importado",
     "importFailed": "Falha na importação: {{message}}",
     "failedToUpdate": "Falha ao atualizar",
@@ -40,7 +40,8 @@
   },
   "comingSoon": {
     "title": "Em Breve",
-    "description": "Esta seção está em construção e estará disponível em breve."
+    "description": "Esta seção está em construção e estará disponível em breve.",
+    "showSupport": "Mostre seu apoio aos criadores enviando doações diretamente. Esse recurso estará disponível em breve!"
   },
   "paywall": {
     "upgradeRequired": "Upgrade Necessário",
@@ -75,6 +76,7 @@
     "sendOtpFailed": "Falha ao enviar o código de verificação",
     "profileUpdateFailed": "Falha ao atualizar o perfil",
     "uploadFailed": "Não foi possível enviar sua foto: {{message}}",
+    "avatarUploadSkipped": "Não foi possível enviar a foto. Você pode adicioná-la depois no seu perfil.",
     "paymentFailed": "Falha no pagamento. Tente novamente.",
     "upgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
     "cancelFailed": "Falha ao cancelar. Tente novamente."

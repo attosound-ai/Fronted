@@ -24,7 +24,7 @@
     "removeClipsFirst": "Remove clips from this lane first",
     "noClipsToExport": "No clips to export",
     "profileUpdated": "Profile updated",
-    "artistContactUpdated": "Artist contact updated",
+    "creatorContactUpdated": "Creator contact updated",
     "audioImported": "Audio imported",
     "importFailed": "Import failed: {{message}}",
     "failedToUpdate": "Failed to update",
@@ -40,7 +40,8 @@
   },
   "comingSoon": {
     "title": "Coming Soon",
-    "description": "This section is under construction and will be available soon."
+    "description": "This section is under construction and will be available soon.",
+    "showSupport": "Show your support to creators by sending donations directly. This feature is coming soon!"
   },
   "paywall": {
     "upgradeRequired": "Upgrade Required",
@@ -75,6 +76,7 @@
     "sendOtpFailed": "Failed to send verification code",
     "profileUpdateFailed": "Failed to update profile",
     "uploadFailed": "Could not upload your photo: {{message}}",
+    "avatarUploadSkipped": "Photo upload failed. You can add it later from your profile.",
     "paymentFailed": "Payment failed. Please try again.",
     "upgradeFailed": "Failed to process upgrade. Please try again.",
     "cancelFailed": "Failed to cancel. Please try again."

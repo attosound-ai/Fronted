@@ -6,7 +6,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button } from '@/components/ui';
@@ -19,9 +19,9 @@ import { authService } from '@/lib/api/authService';
 type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 /**
- * StepArtistBasicInfo - Step 8: Artist name (read-only), email (optional), phone (optional)
+ * StepCreatorBasicInfo - Step 8: Creator name (read-only), email (optional), phone (optional)
  */
-export function StepArtistBasicInfo({
+export function StepCreatorBasicInfo({
   state,
   dispatch,
   onNext,
@@ -70,17 +70,17 @@ export function StepArtistBasicInfo({
   }, []);
 
   useEffect(() => {
-    checkEmail(state.artistEmail);
+    checkEmail(state.creatorEmail);
     return () => { if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current); };
-  }, [state.artistEmail, checkEmail]);
+  }, [state.creatorEmail, checkEmail]);
 
   useEffect(() => {
-    checkPhone(state.artistPhoneCountryCode, state.artistPhoneNumber);
+    checkPhone(state.creatorPhoneCountryCode, state.creatorPhoneNumber);
     return () => { if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current); };
-  }, [state.artistPhoneCountryCode, state.artistPhoneNumber, checkPhone]);
+  }, [state.creatorPhoneCountryCode, state.creatorPhoneNumber, checkPhone]);
 
-  const emailOk = state.artistEmail.trim() === '' || emailStatus === 'available';
-  const phoneOk = state.artistPhoneNumber.trim() === '' || phoneStatus === 'available';
+  const emailOk = state.creatorEmail.trim() === '' || emailStatus === 'available';
+  const phoneOk = state.creatorPhoneNumber.trim() === '' || phoneStatus === 'available';
   const canContinue = emailOk && phoneOk && emailStatus !== 'checking' && phoneStatus !== 'checking';
 
   const handleContinue = () => {
@@ -92,13 +92,13 @@ export function StepArtistBasicInfo({
   const renderEmailStatus = () => {
     switch (emailStatus) {
       case 'checking':
-        return <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('artistAccountSetup.emailChecking')}</Text></View>;
+        return <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailChecking')}</Text></View>;
       case 'available':
-        return <View style={styles.statusRow}><Ionicons name="checkmark-circle" size={16} color="#FFFFFF" /><Text variant="small" style={styles.statusWhite}>{t('artistAccountSetup.emailAvailable')}</Text></View>;
+        return <View style={styles.statusRow}><CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} /><Text variant="small" style={styles.statusWhite}>{t('creatorAccountSetup.emailAvailable')}</Text></View>;
       case 'taken':
-        return <View style={styles.statusRow}><Ionicons name="close-circle" size={16} color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('artistAccountSetup.emailTaken')}</Text></View>;
+        return <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailTaken')}</Text></View>;
       case 'invalid':
-        return <View style={styles.statusRow}><Ionicons name="close-circle" size={16} color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('artistAccountSetup.emailInvalid')}</Text></View>;
+        return <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailInvalid')}</Text></View>;
       default: return null;
     }
   };
@@ -114,23 +114,23 @@ export function StepArtistBasicInfo({
       bottomOffset={16}
       showsVerticalScrollIndicator={false}
     >
-      <Text variant="h2" style={styles.title}>{t('artistAccountSetup.title')}</Text>
-      <Text variant="body" style={styles.subtitle}>{t('artistAccountSetup.subtitle')}</Text>
+      <Text variant="h2" style={styles.title}>{t('creatorAccountSetup.title')}</Text>
+      <Text variant="body" style={styles.subtitle}>{t('creatorAccountSetup.subtitle')}</Text>
 
       {apiError && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle" size={20} color="#FFFFFF" />
+          <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
           <Text variant="small" style={styles.errorBannerText}>{apiError}</Text>
         </View>
       )}
 
       <View style={styles.formArea}>
-        {/* Artist Name (read-only) */}
+        {/* Creator Name (read-only) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('artistAccountSetup.nameLabel')}</Text>
+          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.nameLabel')}</Text>
           <View style={[styles.inputWrapper, styles.readOnlyInput]}>
             <TextInput
-              value={state.artistName}
+              value={state.creatorName}
               editable={false}
               style={[styles.textInput, styles.readOnlyText]}
             />
@@ -139,12 +139,12 @@ export function StepArtistBasicInfo({
 
         {/* Email (optional) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('artistAccountSetup.emailLabel')}</Text>
+          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.emailLabel')}</Text>
           <View style={[styles.inputWrapper, { borderColor: emailBorder }]}>
             <TextInput
-              value={state.artistEmail}
-              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistEmail', value: v.trim() })}
-              placeholder={t('artistAccountSetup.emailPlaceholder')}
+              value={state.creatorEmail}
+              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorEmail', value: v.trim() })}
+              placeholder={t('creatorAccountSetup.emailPlaceholder')}
               placeholderTextColor="#666666"
               style={styles.textInput}
               autoCapitalize="none"
@@ -152,8 +152,8 @@ export function StepArtistBasicInfo({
               autoComplete="email"
               keyboardType="email-address"
             />
-            {emailStatus === 'available' && <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />}
-            {(emailStatus === 'taken' || emailStatus === 'invalid') && <Ionicons name="close-circle" size={20} color="#888888" />}
+            {emailStatus === 'available' && <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />}
+            {(emailStatus === 'taken' || emailStatus === 'invalid') && <XCircle size={20} color="#888888" strokeWidth={2.25} />}
             {emailStatus === 'checking' && <ActivityIndicator size="small" color="#888888" />}
           </View>
           {renderEmailStatus()}
@@ -161,21 +161,21 @@ export function StepArtistBasicInfo({
 
         {/* Phone (optional) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('artistAccountSetup.phoneLabel')}</Text>
+          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.phoneLabel')}</Text>
           <PhoneInput
-            countryCode={state.artistPhoneCountryCode}
-            phoneNumber={state.artistPhoneNumber}
-            onCountryCodeChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistPhoneCountryCode', value: v })}
-            onPhoneNumberChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'artistPhoneNumber', value: v })}
+            countryCode={state.creatorPhoneCountryCode}
+            phoneNumber={state.creatorPhoneNumber}
+            onCountryCodeChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorPhoneCountryCode', value: v })}
+            onPhoneNumberChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorPhoneNumber', value: v })}
           />
           {phoneStatus === 'checking' && (
-            <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('artistAccountSetup.emailChecking')}</Text></View>
+            <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailChecking')}</Text></View>
           )}
           {phoneStatus === 'taken' && (
-            <View style={styles.statusRow}><Ionicons name="close-circle" size={16} color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('artistAccountSetup.phoneTaken')}</Text></View>
+            <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.phoneTaken')}</Text></View>
           )}
           {phoneStatus === 'available' && (
-            <View style={styles.statusRow}><Ionicons name="checkmark-circle" size={16} color="#FFFFFF" /><Text variant="small" style={styles.statusWhite}>{t('artistAccountSetup.emailAvailable')}</Text></View>
+            <View style={styles.statusRow}><CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} /><Text variant="small" style={styles.statusWhite}>{t('creatorAccountSetup.emailAvailable')}</Text></View>
           )}
         </View>
 

@@ -1,31 +1,31 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Pencil } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 
-interface ArtistInfoCardProps {
-  artistName: string;
+interface CreatorInfoCardProps {
+  creatorName: string;
   email: string;
   onEdit: () => void;
 }
 
 /**
- * ArtistInfoCard — Inline row displaying artist name, email and edit action.
+ * CreatorInfoCard — Inline row displaying creator name, email and edit action.
  */
-export function ArtistInfoCard({ artistName, email, onEdit }: ArtistInfoCardProps) {
+export function CreatorInfoCard({ creatorName, email, onEdit }: CreatorInfoCardProps) {
   const { t } = useTranslation('feed');
   return (
     <View style={styles.container}>
       <View style={styles.info}>
         <Text variant="body" style={styles.name}>
-          {artistName}
+          {creatorName}
         </Text>
         <Text variant="caption" style={styles.email}>
           {email}
         </Text>
       </View>
       <TouchableOpacity onPress={onEdit} hitSlop={8} activeOpacity={0.6}>
-        <Ionicons name="create-outline" size={18} color="#666" />
+        <Pencil size={18} color="#666" strokeWidth={2.25} />
       </TouchableOpacity>
     </View>
   );

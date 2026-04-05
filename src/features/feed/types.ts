@@ -50,6 +50,7 @@ export interface FeedApiPost {
     username: string;
     displayName: string;
     avatar: string | null;
+    role?: 'creator' | 'representative' | 'listener';
   };
   interactions: {
     likesCount: number;

@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Upload, Circle, CloudOff, Play, Pause, Plus, Volume1, Volume2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
@@ -396,24 +396,20 @@ export function TimelineEditor({
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleClose} style={styles.closeButton} activeOpacity={0.5} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={24} color="#FFF" />
+          <X size={24} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text variant="body" style={styles.headerTitle}>
             {t('timeline.editorTitle')}
           </Text>
           <View style={styles.saveStatus}>
-            <Ionicons
-              name={
-                isSaving
-                  ? 'cloud-upload-outline'
-                  : state.isDirty
-                    ? 'ellipse'
-                    : 'cloud-done-outline'
-              }
-              size={10}
-              color={isSaving ? '#888' : state.isDirty ? '#999' : '#FFF'}
-            />
+            {isSaving ? (
+              <Upload size={10} color="#888" strokeWidth={2.25} />
+            ) : state.isDirty ? (
+              <Circle size={10} color="#999" strokeWidth={2.25} />
+            ) : (
+              <CloudOff size={10} color="#FFF" strokeWidth={2.25} />
+            )}
             <Text variant="caption" style={styles.saveStatusText}>
               {isSaving
                 ? t('timeline.saveStatusSaving')
@@ -424,7 +420,11 @@ export function TimelineEditor({
           </View>
         </View>
         <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
-          <Ionicons name={state.isPlaying ? 'pause' : 'play'} size={22} color="#FFF" />
+          {state.isPlaying ? (
+            <Pause size={22} color="#FFF" strokeWidth={2.25} />
+          ) : (
+            <Play size={22} color="#FFF" strokeWidth={2.25} />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -558,7 +558,7 @@ export function TimelineEditor({
               { top: RULER_HEIGHT + state.laneCount * TRACK_HEIGHT + LANE_PADDING / 2 },
             ]}
           >
-            <Ionicons name="add" size={14} color="#666" />
+            <Plus size={14} color="#666" strokeWidth={2.25} />
           </TouchableOpacity>
         </View>
 
@@ -606,7 +606,7 @@ export function TimelineEditor({
               {t('timeline.volumeModalTitle')}
             </Text>
             <View style={styles.volumeSliderRow}>
-              <Ionicons name="volume-low" size={18} color="#888" />
+              <Volume1 size={18} color="#888" strokeWidth={2.25} />
               <TouchableOpacity
                 style={styles.volumeTrack}
                 onPress={(e) => {
@@ -626,7 +626,7 @@ export function TimelineEditor({
                   ]}
                 />
               </TouchableOpacity>
-              <Ionicons name="volume-high" size={18} color="#888" />
+              <Volume2 size={18} color="#888" strokeWidth={2.25} />
             </View>
             <Text variant="caption" style={styles.volumePercent}>
               {Math.round(

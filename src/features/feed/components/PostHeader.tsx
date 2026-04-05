@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ellipsis, Bookmark, Flag, Pencil, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { useAuthStore } from '@/stores/authStore';
+import { apiClient } from '@/lib/api/client';
+import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { PostAuthor, OnProfilePress } from '@/types/post';
 
 interface PostHeaderProps {
@@ -15,6 +20,7 @@ interface PostHeaderProps {
   onProfilePress?: OnProfilePress;
   onBookmark?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
 }
 
@@ -25,12 +31,29 @@ export function PostHeader({
   onProfilePress,
   onBookmark,
   onReport,
+  onEdit,
   onDelete,
 }: PostHeaderProps) {
   const { t } = useTranslation('feed');
   const [menuVisible, setMenuVisible] = useState(false);
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const isOwnPost = currentUserId !== undefined && String(author.id) === String(currentUserId);
+  const isOwnPost =
+    currentUserId !== undefined && String(author.id) === String(currentUserId);
+  const qc = useQueryClient();
+
+  // Prefetch profile on finger-down (before tap completes ~100-200ms later)
+  const handlePressIn = useCallback(() => {
+    if (isOwnPost) return;
+    const id = Number(author.id);
+    qc.prefetchQuery({
+      queryKey: QUERY_KEYS.USERS.PROFILE(id),
+      queryFn: async () => {
+        const res = await apiClient.get(API_ENDPOINTS.USERS.PROFILE(id));
+        return res.data.data;
+      },
+      staleTime: 5 * 60 * 1000,
+    });
+  }, [author.id, isOwnPost, qc]);
 
   return (
     <View>
@@ -42,14 +65,15 @@ export function PostHeader({
       <View style={styles.container}>
         <TouchableOpacity
           style={styles.authorInfo}
+          onPressIn={handlePressIn}
           onPress={() => onProfilePress?.(author)}
           activeOpacity={0.7}
         >
-          <Avatar uri={author.avatar} size="sm" />
+          <Avatar uri={author.avatar} size="md" />
           <Text variant="body" style={styles.username}>
-            {author.displayName.toUpperCase()}
+            {author.username}
           </Text>
-          {author.isVerified && <MaterialIcons name="verified" size={13} color="#3B82F6" />}
+          {author.role === 'creator' && <CreatorBadge size="sm" />}
         </TouchableOpacity>
 
         <View style={styles.spacer} />
@@ -73,73 +97,90 @@ export function PostHeader({
         )}
 
         <TouchableOpacity
-        onPress={() => setMenuVisible(true)}
-        activeOpacity={0.7}
-        style={styles.optionsButton}
-      >
-        <Ionicons name="ellipsis-horizontal" size={20} color="#FFF" />
-      </TouchableOpacity>
-
-      <BottomSheet visible={menuVisible} onClose={() => setMenuVisible(false)}>
-        <TouchableOpacity
-          style={styles.menuItem}
+          onPress={() => setMenuVisible(true)}
           activeOpacity={0.7}
-          onPress={() => {
-            setMenuVisible(false);
-            onBookmark?.();
-          }}
+          style={styles.optionsButton}
         >
-          <View style={styles.menuIcon}>
-            <Ionicons
-              name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
-              size={24}
-              color="#FFF"
-            />
-          </View>
-          <Text variant="body" style={styles.menuText}>
-            {isBookmarked ? t('post.menuUnsave') : t('post.menuSave')}
-          </Text>
+          <Ellipsis size={22} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
 
-        <View style={styles.menuDivider} />
+        <BottomSheet visible={menuVisible} onClose={() => setMenuVisible(false)}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              setMenuVisible(false);
+              onBookmark?.();
+            }}
+          >
+            <View style={styles.menuIcon}>
+              <Bookmark
+                size={24}
+                color="#FFF"
+                strokeWidth={2.25}
+                fill={isBookmarked ? '#FFF' : 'none'}
+              />
+            </View>
+            <Text variant="body" style={styles.menuText}>
+              {isBookmarked ? t('post.menuUnsave') : t('post.menuSave')}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => {
-            setMenuVisible(false);
-            onReport?.();
-          }}
-        >
-          <View style={styles.menuIcon}>
-            <Ionicons name="flag-outline" size={24} color="#EF4444" />
-          </View>
-          <Text variant="body" style={styles.menuTextDanger}>
-            {t('post.menuReport')}
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.menuDivider} />
 
-        {isOwnPost && (
-          <>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity
-              style={styles.menuItem}
-              activeOpacity={0.7}
-              onPress={() => {
-                setMenuVisible(false);
-                onDelete?.();
-              }}
-            >
-              <View style={styles.menuIcon}>
-                <Ionicons name="trash-outline" size={24} color="#EF4444" />
-              </View>
-              <Text variant="body" style={styles.menuTextDanger}>
-                Delete post
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </BottomSheet>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              setMenuVisible(false);
+              onReport?.();
+            }}
+          >
+            <View style={styles.menuIcon}>
+              <Flag size={24} color="#EF4444" strokeWidth={2.25} />
+            </View>
+            <Text variant="body" style={styles.menuTextDanger}>
+              {t('post.menuReport')}
+            </Text>
+          </TouchableOpacity>
+
+          {isOwnPost && (
+            <>
+              <View style={styles.menuDivider} />
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMenuVisible(false);
+                  onEdit?.();
+                }}
+              >
+                <View style={styles.menuIcon}>
+                  <Pencil size={24} color="#FFF" strokeWidth={2.25} />
+                </View>
+                <Text variant="body" style={styles.menuText}>
+                  Edit post
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.menuDivider} />
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setMenuVisible(false);
+                  onDelete?.();
+                }}
+              >
+                <View style={styles.menuIcon}>
+                  <Trash2 size={24} color="#EF4444" strokeWidth={2.25} />
+                </View>
+                <Text variant="body" style={styles.menuTextDanger}>
+                  Delete post
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </BottomSheet>
       </View>
     </View>
   );
@@ -161,17 +202,19 @@ const styles = StyleSheet.create({
     color: '#888888',
     fontSize: 11,
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   feedLabel: {
     color: '#888888',
-    fontSize: 11,
-    marginHorizontal: 24,
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 14,
+    marginRight: 8,
   },
   username: {
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
-    fontSize: 14,
+    fontSize: 15,
   },
   followButton: {
     backgroundColor: '#333',

@@ -8,12 +8,14 @@ import {
   rollbackPostCaches,
   patchPostInCaches,
 } from '../utils/postCacheSync';
+import type { Role } from '@/types';
 
 export interface CommentAuthor {
   id: string;
   username: string;
   displayName: string;
   avatar: string | null;
+  role?: Role;
 }
 
 export interface Comment {
@@ -86,21 +88,26 @@ export function useComments(postId: string) {
       queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), (old: any) => {
         if (!old?.pages?.length) {
           return {
-            pages: [{ data: [optimisticComment], meta: { pagination: { page: 1, totalPages: 1 } } }],
+            pages: [
+              {
+                data: [optimisticComment],
+                meta: { pagination: { page: 1, totalPages: 1 } },
+              },
+            ],
             pageParams: [1],
           };
         }
         return {
           ...old,
           pages: old.pages.map((page: any, i: number) =>
-            i === 0 ? { ...page, data: [optimisticComment, ...(page.data ?? [])] } : page,
+            i === 0 ? { ...page, data: [optimisticComment, ...(page.data ?? [])] } : page
           ),
         };
       });
 
       return { snapshot, prevComments };
     },
-    onError: (_err, { }, context) => {
+    onError: (_err, {}, context) => {
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }

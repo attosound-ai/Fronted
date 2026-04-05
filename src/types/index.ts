@@ -5,7 +5,7 @@
  */
 
 // Roles de usuario
-export type Role = 'artist' | 'representative' | 'listener';
+export type Role = 'creator' | 'representative' | 'listener';
 
 // Usuario (matches backend UserProfile exactly)
 export interface User {
@@ -19,15 +19,27 @@ export interface User {
   bio: string | null;
   role: Role;
   inmateNumber?: string;
-  artistName?: string;
+  creatorName?: string;
   inmateState?: string;
   relationship?: string;
-  artistEmail?: string;
-  artistPhone?: string;
+  creatorEmail?: string;
+  creatorPhone?: string;
   consentToRecording?: boolean;
-  artistTypes?: string[];
-  artistGenres?: string[];
+  creatorTypes?: string[];
+  creatorGenres?: string[];
   dateOfBirth?: string | null;
+  // Social media links
+  socialInstagram?: string | null;
+  socialTiktok?: string | null;
+  socialYoutube?: string | null;
+  socialSoundcloud?: string | null;
+  socialSpotify?: string | null;
+  socialTwitter?: string | null;
+  website?: string | null;
+  // Extended bio
+  location?: string | null;
+  recordLabel?: string | null;
+  bookingEmail?: string | null;
   profileVerified: boolean;
   twoFactorEnabled: boolean;
   twoFactorMethod: 'sms' | 'email' | '';
@@ -68,7 +80,7 @@ export interface RegisterDTO {
   phoneNumber?: string;
   inmateNumber?: string;
   representativeFields?: {
-    artistName: string;
+    creatorName: string;
     inmateState: string;
     relationship: string;
     consentToRecording: boolean;
@@ -91,12 +103,12 @@ export interface CompleteRegistrationDTO {
   role: Role;
   inmateNumber?: string;
   representativeFields?: {
-    artistName: string;
+    creatorName: string;
     inmateState: string;
     relationship: string;
     consentToRecording: boolean;
   };
-  managedArtistFields?: {
+  managedCreatorFields?: {
     email: string;
     password: string;
     username: string;
@@ -104,8 +116,8 @@ export interface CompleteRegistrationDTO {
     phoneCountryCode?: string;
     phoneNumber?: string;
     avatar?: string;
-    artistTypes?: string[];
-    artistGenres?: string[];
+    creatorTypes?: string[];
+    creatorGenres?: string[];
   };
 }
 
@@ -116,12 +128,23 @@ export interface UpdateProfileDTO {
   bio?: string;
   username?: string;
   // Representative fields
-  artistName?: string;
+  creatorName?: string;
   inmateNumber?: string;
   inmateState?: string;
   relationship?: string;
-  artistEmail?: string;
-  artistPhone?: string;
+  creatorEmail?: string;
+  creatorPhone?: string;
+  // Social media links + extended bio
+  socialInstagram?: string;
+  socialTiktok?: string;
+  socialYoutube?: string;
+  socialSoundcloud?: string;
+  socialSpotify?: string;
+  socialTwitter?: string;
+  website?: string;
+  location?: string;
+  recordLabel?: string;
+  bookingEmail?: string;
 }
 
 // Inmate lookup response from DOC scraper
@@ -192,7 +215,7 @@ export interface Post {
   id: string;
   content: string;
   images: string[];
-  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar'>;
+  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar' | 'role'>;
   likesCount: number;
   commentsCount: number;
   isLiked: boolean;
@@ -215,7 +238,7 @@ export interface Post {
 export interface Comment {
   id: string;
   content: string;
-  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar'>;
+  author: Pick<User, 'id' | 'username' | 'displayName' | 'avatar' | 'role'>;
   createdAt: string;
 }
 

@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCreatePostStore } from '@/stores/createPostStore';
@@ -14,7 +15,8 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
+import { X, Images, Video, Film, Music, Camera, FolderOpen } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -30,13 +32,13 @@ import type { PickedMedia } from '@/features/feed/types';
 const MAX_CHARS = 2200;
 
 function ToolbarButton({
-  icon,
+  Icon,
   label,
   active,
   disabled,
   onPress,
 }: {
-  icon: string;
+  Icon: LucideIcon;
   label: string;
   active: boolean;
   disabled: boolean;
@@ -50,7 +52,7 @@ function ToolbarButton({
       style={styles.toolbarIcon}
       activeOpacity={0.6}
     >
-      <Ionicons name={icon as any} size={20} color={color} />
+      <Icon size={20} color={color} strokeWidth={2.25} />
       <Text style={[styles.toolbarLabel, { color }]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -60,17 +62,25 @@ export default function CreatePostScreen() {
   const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
   const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
-  const canPublishAudio = user?.role === 'artist' && hasRecordUpload;
+  const canPublishAudio = user?.role === 'creator' && hasRecordUpload;
 
   const [textContent, setTextContent] = useState('');
   const [media, setMedia] = useState<PickedMedia[]>([]);
   const [attachmentType, setAttachmentType] = useState<PostType | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
-  const [reelSheetVisible, setReelSheetVisible] = useState(false);
+  const [sourceSheet, setSourceSheet] = useState<PostType | null>(null);
 
   const { createPost, isCreating } = useCreatePost();
-  const { pickImages, pickMoreImages, pickVideo, pickReel } = useMediaPickers();
+  const {
+    pickImages,
+    pickMoreImages,
+    pickVideo,
+    pickReel,
+    pickDocumentImages,
+    pickDocumentVideo,
+    pickDocumentAudio,
+  } = useMediaPickers();
   const pendingAudio = useCreatePostStore((s) => s.pendingAudio);
   const clearPendingAudio = useCreatePostStore((s) => s.clearPendingAudio);
 
@@ -117,42 +127,62 @@ export default function CreatePostScreen() {
   // ── Attachment handlers ──
 
   const handlePickPhoto = () => {
-    const action = async () => {
-      const picked = await pickImages();
-      if (picked) {
-        setAttachmentType('image');
-        setMedia(picked);
-      }
-    };
-    if (attachmentType === 'image') {
-      // Already in image mode — add more
-      action();
+    if (attachmentType && attachmentType !== 'image') {
+      confirmReplaceAttachment(() => setSourceSheet('image'));
     } else {
-      confirmReplaceAttachment(action);
+      setSourceSheet('image');
     }
   };
 
   const handlePickVideo = () => {
-    confirmReplaceAttachment(async () => {
-      const picked = await pickVideo();
-      if (picked) {
-        setAttachmentType('video');
-        setMedia([picked]);
-      }
-    });
+    confirmReplaceAttachment(() => setSourceSheet('video'));
   };
 
   const handlePickReel = () => {
-    confirmReplaceAttachment(() => {
-      setReelSheetVisible(true);
-    });
+    confirmReplaceAttachment(() => setSourceSheet('reel'));
   };
 
-  const handleReelChoice = (fromCamera: boolean) => {
-    setReelSheetVisible(false);
-    // Delay to let the bottom sheet dismiss animation finish before opening picker
+  const handlePickProject = () => {
+    confirmReplaceAttachment(() => setSourceSheet('audio'));
+  };
+
+  // ── Source choice handlers ──
+
+  const handleSourceGallery = () => {
+    const type = sourceSheet;
+    setSourceSheet(null);
     setTimeout(async () => {
-      const picked = await pickReel(fromCamera);
+      if (type === 'image') {
+        if (attachmentType === 'image') {
+          const updated = await pickMoreImages(media);
+          if (updated) setMedia(updated);
+        } else {
+          const picked = await pickImages();
+          if (picked) {
+            setAttachmentType('image');
+            setMedia(picked);
+          }
+        }
+      } else if (type === 'video') {
+        const picked = await pickVideo();
+        if (picked) {
+          setAttachmentType('video');
+          setMedia([picked]);
+        }
+      } else if (type === 'reel') {
+        const picked = await pickReel(false);
+        if (picked) {
+          setAttachmentType('reel');
+          setMedia([picked]);
+        }
+      }
+    }, 400);
+  };
+
+  const handleSourceRecord = () => {
+    setSourceSheet(null);
+    setTimeout(async () => {
+      const picked = await pickReel(true);
       if (picked) {
         setAttachmentType('reel');
         setMedia([picked]);
@@ -160,10 +190,46 @@ export default function CreatePostScreen() {
     }, 400);
   };
 
-  const handlePickProject = () => {
-    confirmReplaceAttachment(() => {
-      setProjectPickerVisible(true);
-    });
+  const handleSourceFiles = () => {
+    const type = sourceSheet;
+    setSourceSheet(null);
+    setTimeout(async () => {
+      if (type === 'image') {
+        const picked = await pickDocumentImages();
+        if (picked) {
+          if (attachmentType === 'image') {
+            const remaining = 10 - media.length;
+            setMedia([...media, ...picked.slice(0, remaining)]);
+          } else {
+            setAttachmentType('image');
+            setMedia(picked.slice(0, 10));
+          }
+        }
+      } else if (type === 'video') {
+        const picked = await pickDocumentVideo();
+        if (picked) {
+          setAttachmentType('video');
+          setMedia([picked]);
+        }
+      } else if (type === 'reel') {
+        const picked = await pickDocumentVideo();
+        if (picked) {
+          setAttachmentType('reel');
+          setMedia([picked]);
+        }
+      } else if (type === 'audio') {
+        const picked = await pickDocumentAudio();
+        if (picked) {
+          setAttachmentType('audio');
+          setMedia([picked]);
+        }
+      }
+    }, 400);
+  };
+
+  const handleSourceProject = () => {
+    setSourceSheet(null);
+    setProjectPickerVisible(true);
   };
 
   const handleAddMoreImages = async () => {
@@ -199,7 +265,13 @@ export default function CreatePostScreen() {
         poemText: isTextOnly ? textContent : '',
         onProgress: setUploadProgress,
       });
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/');  // Explicit index route to land on feed tab
+      // Scroll feed to top and show published banner after navigation settles
+      setTimeout(() => {
+        DeviceEventEmitter.emit('feedScrollToTop');
+        const { showPostPublished } = require('@/components/ui/PostPublishedBanner');
+        showPostPublished();
+      }, 400);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Something went wrong';
@@ -215,7 +287,7 @@ export default function CreatePostScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="close" size={24} color="#FFFFFF" />
+          <X size={24} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.postButton, !canPost && styles.postButtonDisabled]}
@@ -283,21 +355,21 @@ export default function CreatePostScreen() {
         <View style={styles.toolbar}>
           <View style={styles.toolbarIcons}>
             <ToolbarButton
-              icon="image-outline"
+              Icon={Images}
               label={t('create.attachPhoto')}
               active={attachmentType === 'image'}
               disabled={attachmentType !== null && attachmentType !== 'image'}
               onPress={handlePickPhoto}
             />
             <ToolbarButton
-              icon="videocam-outline"
+              Icon={Video}
               label={t('create.attachVideo')}
               active={attachmentType === 'video'}
               disabled={attachmentType !== null && attachmentType !== 'video'}
               onPress={handlePickVideo}
             />
             <ToolbarButton
-              icon="phone-portrait-outline"
+              Icon={Film}
               label={t('create.attachReel')}
               active={attachmentType === 'reel'}
               disabled={attachmentType !== null && attachmentType !== 'reel'}
@@ -305,7 +377,7 @@ export default function CreatePostScreen() {
             />
             {canPublishAudio && (
               <ToolbarButton
-                icon="musical-notes-outline"
+                Icon={Music}
                 label={t('create.attachProject')}
                 active={attachmentType === 'audio'}
                 disabled={attachmentType !== null && attachmentType !== 'audio'}
@@ -323,30 +395,75 @@ export default function CreatePostScreen() {
         </View>
       </KeyboardStickyView>
 
-      {/* Reel picker sheet */}
+      {/* Source picker sheet */}
       <BottomSheet
-        visible={reelSheetVisible}
-        onClose={() => setReelSheetVisible(false)}
-        title="Reel"
+        visible={sourceSheet !== null}
+        onClose={() => setSourceSheet(null)}
+        title={
+          sourceSheet === 'image'
+            ? t('create.attachPhoto')
+            : sourceSheet === 'video'
+              ? t('create.attachVideo')
+              : sourceSheet === 'reel'
+                ? t('create.attachReel')
+                : sourceSheet === 'audio'
+                  ? t('create.attachProject')
+                  : ''
+        }
       >
         <View style={styles.reelOptions}>
-          <TouchableOpacity
-            style={[styles.reelOption, styles.reelOptionPrimary]}
-            onPress={() => handleReelChoice(false)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="images-outline" size={20} color="#000000" />
-            <Text style={styles.reelOptionPrimaryText}>
-              {t('create.reelFromLibrary')}
-            </Text>
-          </TouchableOpacity>
+          {/* Gallery — photo, video, reel */}
+          {sourceSheet !== 'audio' && (
+            <TouchableOpacity
+              style={[styles.reelOption, styles.reelOptionPrimary]}
+              onPress={handleSourceGallery}
+              activeOpacity={0.7}
+            >
+              <Images size={20} color="#000000" strokeWidth={2.25} />
+              <Text style={styles.reelOptionPrimaryText}>
+                {t('create.fromGallery')}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Record — reel only */}
+          {sourceSheet === 'reel' && (
+            <TouchableOpacity
+              style={styles.reelOption}
+              onPress={handleSourceRecord}
+              activeOpacity={0.7}
+            >
+              <Camera size={20} color="#FFFFFF" strokeWidth={2.25} />
+              <Text style={styles.reelOptionText}>
+                {t('create.reelRecord')}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Open Project — audio only */}
+          {sourceSheet === 'audio' && (
+            <TouchableOpacity
+              style={[styles.reelOption, styles.reelOptionPrimary]}
+              onPress={handleSourceProject}
+              activeOpacity={0.7}
+            >
+              <Music size={20} color="#000000" strokeWidth={2.25} />
+              <Text style={styles.reelOptionPrimaryText}>
+                {t('create.fromProject')}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Files — all types */}
           <TouchableOpacity
             style={styles.reelOption}
-            onPress={() => handleReelChoice(true)}
+            onPress={handleSourceFiles}
             activeOpacity={0.7}
           >
-            <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.reelOptionText}>{t('create.reelRecord')}</Text>
+            <FolderOpen size={20} color="#FFFFFF" strokeWidth={2.25} />
+            <Text style={styles.reelOptionText}>
+              {t('create.fromFiles')}
+            </Text>
           </TouchableOpacity>
         </View>
       </BottomSheet>
@@ -465,7 +582,7 @@ const styles = StyleSheet.create({
     gap: 10,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    borderRadius: 8,
+    borderRadius: 100,
     paddingVertical: 14,
     paddingHorizontal: 24,
   },

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import {
   DeviceEventEmitter,
   FlatList,
@@ -10,22 +17,28 @@ import {
   type ViewToken,
 } from 'react-native';
 
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { Text } from '@/components/ui/Text';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { COLORS, SPACING } from '@/constants/theme';
+import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useFeed } from '../hooks/useFeed';
 import { useInteractions } from '../hooks/useInteractions';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import { useFollowStore } from '@/stores/followStore';
+import { useAuthStore } from '@/stores/authStore';
 import { FeedPostCard } from './FeedPostCard';
 import { AdCard } from './AdCard';
 import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
-import { PLACEHOLDER_POSTS } from '../constants/placeholderPosts';
+import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
+import { Heart } from 'lucide-react-native';
+import { FeedSkeleton } from '@/components/ui/Skeleton';
 import { DEMO_ADS } from '../constants/adPosts';
 import { injectAds } from '../utils/injectAds';
+import { useFeedFilterStore } from '@/stores/feedFilterStore';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import type { Post } from '@/types';
 
@@ -54,10 +67,18 @@ function toFeedPost(post: Post): FeedPost {
       displayName: post.author.displayName,
       avatar: post.author.avatar,
       isFollowing: post.isFollowingAuthor ?? false,
+      role: post.author.role,
     },
-    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
-    audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined) : undefined,
-    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
+    images:
+      type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
+    audioUrl:
+      type === 'audio'
+        ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined)
+        : undefined,
+    videoUrl:
+      type === 'video' || type === 'reel'
+        ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0])
+        : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
@@ -69,6 +90,7 @@ function toFeedPost(post: Post): FeedPost {
     isBookmarked: post.isBookmarked,
     isReposted: post.isReposted,
     createdAt: post.createdAt,
+    isEdited: post.updatedAt !== post.createdAt && !!post.updatedAt,
     isFollowingAuthor: post.isFollowingAuthor,
   };
 }
@@ -96,19 +118,45 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
 
   const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
+  const feedFilters = useFeedFilterStore((s) => s.filters);
   const followedUsers = useFollowStore((s) => s.followedUsers);
   const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
+  const qc = useQueryClient();
 
   const flatListRef = useRef<FlatList<FeedPost>>(null);
 
-  // Hydrate follow store from API data on feed load
+  // Hydrate follow store + seed profile cache from feed data
   useEffect(() => {
     if (posts.length === 0) return;
     const entries = posts
       .filter((p) => p.isFollowingAuthor !== undefined)
       .map((p) => ({ userId: Number(p.author.id), isFollowing: p.isFollowingAuthor! }));
     if (entries.length > 0) hydrateFromApi(entries);
-  }, [posts, hydrateFromApi]);
+
+    // Seed profile query cache from feed author data (Instagram pattern)
+    const seenIds = new Set<number>();
+    for (const post of posts) {
+      const authorId = Number(post.author.id);
+      if (seenIds.has(authorId)) continue;
+      seenIds.add(authorId);
+      // Only seed if not already cached with real data
+      if (!qc.getQueryData(QUERY_KEYS.USERS.PROFILE(authorId))) {
+        qc.setQueryData(QUERY_KEYS.USERS.PROFILE(authorId), {
+          id: authorId,
+          username: post.author.username,
+          displayName: post.author.displayName,
+          avatar: post.author.avatar,
+          role: post.author.role,
+          isFollowing: post.isFollowingAuthor ?? false,
+        });
+        // Mark as stale so it refetches when the profile screen mounts
+        qc.invalidateQueries({
+          queryKey: QUERY_KEYS.USERS.PROFILE(authorId),
+          refetchType: 'none',
+        });
+      }
+    }
+  }, [posts, hydrateFromApi, qc]);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('feedScrollToTop', () => {
@@ -135,9 +183,16 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   // Sheet state
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
+  const [supportModalVisible, setSupportModalVisible] = useState(false);
+
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const handleProfilePress = useCallback((author: PostAuthor) => {
-    router.push({
+    if (author.id === currentUserId) {
+      router.navigate('/(tabs)/profile');
+      return;
+    }
+    router.navigate({
       pathname: '/user/[id]',
       params: {
         id: String(author.id),
@@ -150,15 +205,24 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   }, []);
 
   const feedPosts = useMemo(() => {
-    const realPosts = posts.map(toFeedPost).map((p) => ({
+    let realPosts = posts.map(toFeedPost).map((p) => ({
       ...p,
-      author: { ...p.author, isFollowing: getIsFollowing(p.author.id, p.author.isFollowing) },
+      author: {
+        ...p.author,
+        isFollowing: getIsFollowing(p.author.id, p.author.isFollowing),
+      },
     }));
-    const feedWithAds = injectAds(realPosts, DEMO_ADS);
-    const realAdCount = Math.floor(realPosts.length / 2);
-    const placeholdersWithAds = injectAds(PLACEHOLDER_POSTS, DEMO_ADS, 1, realAdCount);
-    return [...feedWithAds, ...placeholdersWithAds];
-  }, [posts, getIsFollowing, followedUsers]);
+
+    // Apply filters
+    if (feedFilters.creatorsOnly) {
+      realPosts = realPosts.filter((p) => p.author.role === 'creator');
+    }
+    if (feedFilters.contentTypes.length > 0) {
+      realPosts = realPosts.filter((p) => feedFilters.contentTypes.includes(p.type));
+    }
+
+    return injectAds(realPosts, DEMO_ADS);
+  }, [posts, getIsFollowing, followedUsers, feedFilters]);
 
   const handleFollow = useCallback(
     (userId: number) => {
@@ -179,23 +243,33 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
           />
         );
       }
-      const isPlaceholder = item.id.startsWith('placeholder-');
       return (
         <FeedPostCard
           post={item}
           isVisible={visibleIdsRef.current.has(item.id)}
-          onLike={isPlaceholder ? undefined : toggleLike}
-          onFollow={isPlaceholder ? undefined : handleFollow}
-          onComment={isPlaceholder ? undefined : () => setCommentsPostId(item.id)}
-          onRepost={isPlaceholder ? undefined : () => toggleRepost(item.id)}
-          onShare={isPlaceholder ? undefined : () => setSharePost(item)}
-          onBookmark={isPlaceholder ? undefined : () => toggleBookmark(item.id)}
+          onLike={toggleLike}
+          onFollow={handleFollow}
+          onComment={() => setCommentsPostId(item.id)}
+          onRepost={() => toggleRepost(item.id)}
+          onShare={() => setSharePost(item)}
+          onBookmark={() => toggleBookmark(item.id)}
           onProfilePress={handleProfilePress}
-          onDelete={isPlaceholder ? undefined : () => deletePost(item.id)}
+          onShowSupport={() => setSupportModalVisible(true)}
+          onEdit={() =>
+            router.push({ pathname: '/edit-post', params: { postId: item.id } } as Href)
+          }
+          onDelete={() => deletePost(item.id)}
         />
       );
     },
-    [toggleLike, handleFollow, toggleRepost, toggleBookmark, handleProfilePress, deletePost]
+    [
+      toggleLike,
+      handleFollow,
+      toggleRepost,
+      toggleBookmark,
+      handleProfilePress,
+      deletePost,
+    ]
   );
 
   const renderFooter = useCallback(() => {
@@ -228,17 +302,17 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
 
   if (isLoading && posts.length === 0) {
     return (
-      <View style={styles.loading}>
+      <ScrollView style={styles.loading} showsVerticalScrollIndicator={false}>
         {ListHeaderComponent}
-        <ActivityIndicator size="large" color={COLORS.white} />
-      </View>
+        <FeedSkeleton />
+      </ScrollView>
     );
   }
 
   if (error && posts.length === 0) {
     return (
       <ScrollView
-        contentContainerStyle={styles.error}
+        contentContainerStyle={styles.errorContainer}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -248,16 +322,20 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
         }
       >
         {ListHeaderComponent}
-        <Text variant="h2">{t('list.errorLoadTitle')}</Text>
-        <Text variant="body" style={styles.errorText}>
-          {error.message}
-        </Text>
-        <Text variant="body" style={styles.errorText}>
-          {t('list.errorLoadRetry')}
-        </Text>
+        <View style={styles.errorContent}>
+          <Text variant="h2">{t('list.errorLoadTitle')}</Text>
+          <Text variant="body" style={styles.errorText}>
+            {error.message}
+          </Text>
+          <Text variant="body" style={styles.errorText}>
+            {t('list.errorLoadRetry')}
+          </Text>
+        </View>
       </ScrollView>
     );
   }
+
+  const ItemSeparator = () => <View style={styles.separator} />;
 
   return (
     <>
@@ -284,6 +362,7 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
         windowSize={7}
         initialNumToRender={5}
         updateCellsBatchingPeriod={100}
+        ItemSeparatorComponent={ItemSeparator}
       />
 
       {commentsPostId && (
@@ -302,6 +381,14 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
           onShareTracked={() => trackShare(sharePost.id)}
         />
       )}
+
+      <ComingSoonModal
+        visible={supportModalVisible}
+        onClose={() => setSupportModalVisible(false)}
+        icon={Heart}
+        title={t('comingSoon.title', { ns: 'common' })}
+        description={t('comingSoon.showSupport', { ns: 'common' })}
+      />
     </>
   );
 }
@@ -309,10 +396,11 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  error: {
+  errorContainer: {
+    flexGrow: 1,
+  },
+  errorContent: {
     flex: 1,
     justifyContent: 'center',
     padding: SPACING.lg,
@@ -320,6 +408,11 @@ const styles = StyleSheet.create({
   errorText: {
     color: COLORS.gray[500],
     marginTop: SPACING.sm,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#222',
+    marginVertical: 8,
   },
   footer: {
     paddingVertical: SPACING.lg,

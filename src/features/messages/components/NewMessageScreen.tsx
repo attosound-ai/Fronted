@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Search } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -80,12 +80,7 @@ export function NewMessageScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Ionicons
-          name="search-outline"
-          size={18}
-          color={COLORS.gray[500]}
-          style={styles.searchIcon}
-        />
+        <Search size={18} color={COLORS.gray[500]} strokeWidth={2.25} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder={t('newMessage.searchPlaceholder')}

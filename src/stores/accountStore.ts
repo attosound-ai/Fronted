@@ -14,6 +14,7 @@ import {
   getActiveAccountId,
 } from '@/lib/auth/storage';
 import { queryClient } from '@/lib/queryClient';
+import { pauseRequests, resumeRequests, clearRefreshQueue } from '@/lib/api/client';
 import type { TokenPair, User } from '@/types';
 
 export interface AccountEntry {
@@ -104,6 +105,11 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       }
 
       // ── Phase A: Synchronous swap (target: <50ms) ──
+      // Block all API requests while tokens are being swapped to prevent
+      // race conditions where requests use the old account's token.
+      pauseRequests();
+      clearRefreshQueue();
+
       await Promise.all([
         authStorage.setToken(entry.tokens.accessToken),
         authStorage.setRefreshToken(entry.tokens.refreshToken),
@@ -117,15 +123,19 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           activeAccountId !== userId ? activeAccountId : get().previousAccountId,
       });
 
-      // Invalidate non-scoped query caches (feed is already scoped by userId)
-      queryClient.removeQueries({ queryKey: ['messages'] });
-      queryClient.removeQueries({ queryKey: ['notifications'] });
-      queryClient.removeQueries({ queryKey: ['projects'] });
-      queryClient.removeQueries({ queryKey: ['payments'] });
+      // Invalidate ALL query caches to prevent stale data from previous account
+      queryClient.clear();
+
+      // Reset unread badge immediately so it doesn't flash the old account's count
+      const { useChatStore } = await import('@/features/messages/stores/chatStore');
+      useChatStore.getState().setTotalUnread(0);
 
       // Sync authStore with cached user immediately
       const { useAuthStore } = await import('./authStore');
       useAuthStore.getState().setUser(entry.user);
+
+      // Unblock requests — they will now use the new token
+      resumeRequests();
 
       // End animation NOW — user sees the new account immediately
       useAccountSwitchAnimationStore.getState().endFlip();
@@ -149,6 +159,15 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           phoenixSocket.disconnect();
           phoenixSocket.connect(String(userId));
         }),
+        // Refresh unread message badge for new account
+        Promise.all([
+          import('@/features/messages/services/messageService'),
+          import('@/features/messages/stores/chatStore'),
+        ]).then(async ([{ messageService }, { useChatStore }]) => {
+          const convos = await messageService.getConversations();
+          const unread = convos.reduce((sum: number, c: { unreadCount: number }) => sum + c.unreadCount, 0);
+          useChatStore.getState().setTotalUnread(unread);
+        }),
       ]).catch(() => {
         // All errors are non-fatal — cached data is already displayed
       });
@@ -168,6 +187,7 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         await setActiveAccountId(prevActiveId);
         set({ activeAccountId: prevActiveId });
       }
+      resumeRequests(); // Unblock requests even on failure
       useAccountSwitchAnimationStore.getState().endFlip();
     }
   },

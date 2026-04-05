@@ -48,7 +48,7 @@ export const QUERY_KEYS = {
 
   // Messages
   MESSAGES: {
-    CONVERSATIONS: ['messages', 'conversations'] as const,
+    CONVERSATIONS: () => ['messages', 'conversations'] as const,
     CHAT: (chatId: string) => ['messages', 'chat', chatId] as const,
   },
 

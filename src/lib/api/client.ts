@@ -1,7 +1,126 @@
-import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosError,
+  AxiosResponse,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import { API_CONFIG } from '@/constants/config';
 import { authStorage } from '@/lib/auth/storage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+
+// ── Request-body sanitisation ────────────────────────────────────
+// Fields whose values must never leave the device.
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'confirmPassword',
+  'creatorPassword',
+  'creatorConfirmPassword',
+  'newPassword',
+  'oldPassword',
+  'refreshToken',
+  'accessToken',
+  'token',
+  'tempToken',
+  'otp',
+  'otpCode',
+  'code',
+  'cardNumber',
+  'cvc',
+  'cvv',
+]);
+
+const MAX_BODY_LENGTH = 4_000; // PostHog truncates large properties anyway
+
+function sanitiseBody(body: unknown): string | undefined {
+  if (body == null) return undefined;
+
+  let obj: unknown = body;
+  if (typeof body === 'string') {
+    try {
+      obj = JSON.parse(body);
+    } catch {
+      // Not JSON — redact the whole thing if it's too long
+      return body.length > MAX_BODY_LENGTH ? body.slice(0, MAX_BODY_LENGTH) + '…' : body;
+    }
+  }
+
+  if (typeof obj === 'object' && obj !== null) {
+    const redacted = redactSensitive(obj as Record<string, unknown>);
+    const serialised = JSON.stringify(redacted);
+    return serialised.length > MAX_BODY_LENGTH
+      ? serialised.slice(0, MAX_BODY_LENGTH) + '…'
+      : serialised;
+  }
+
+  return String(body).slice(0, MAX_BODY_LENGTH);
+}
+
+function redactSensitive(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (SENSITIVE_KEYS.has(key)) {
+      result[key] = '[REDACTED]';
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      result[key] = redactSensitive(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function sanitiseHeaders(
+  headers: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!headers) return undefined;
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = key.toLowerCase();
+    if (lower === 'authorization' || lower === 'cookie' || lower === 'set-cookie') {
+      safe[key] = '[REDACTED]';
+    } else {
+      safe[key] = value;
+    }
+  }
+  return safe;
+}
+
+/** Build a rich PostHog event payload from any Axios request/response. */
+function buildRequestProperties(
+  config: InternalAxiosRequestConfig | undefined,
+  response: AxiosResponse | undefined,
+  error?: AxiosError
+): Record<string, unknown> {
+  return {
+    // ── Request ──
+    url: config?.url,
+    base_url: config?.baseURL,
+    method: config?.method?.toUpperCase(),
+    request_headers: sanitiseHeaders(config?.headers?.toJSON?.() ?? config?.headers),
+    request_body: sanitiseBody(config?.data),
+    request_params: config?.params ? JSON.stringify(config.params) : undefined,
+    timeout: config?.timeout,
+
+    // ── Response ──
+    status: response?.status,
+    status_text: response?.statusText,
+    response_headers: sanitiseHeaders(
+      response?.headers as unknown as Record<string, unknown>
+    ),
+    response_body: sanitiseBody(response?.data),
+
+    // ── Meta ──
+    success: !error,
+    error_message: error
+      ? (response?.data as Record<string, unknown>)?.error ||
+        (response?.data as Record<string, unknown>)?.message ||
+        error.message
+      : undefined,
+    error_code: error?.code,
+    is_timeout: error?.code === 'ECONNABORTED',
+    is_network_error: error?.message === 'Network Error',
+  };
+}
 
 /**
  * ApiClient — HTTP client with JWT interceptors and token refresh queue.
@@ -9,6 +128,9 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
  * Request interceptor: attaches Bearer token from SecureStore.
  * Response interceptor: on 401, refreshes token and retries.
  * Concurrent 401s are queued so only one refresh happens at a time.
+ *
+ * Account switching: call `pauseRequests()` before swapping tokens,
+ * then `resumeRequests()` after. Queued requests will use the new token.
  */
 
 export const apiClient: AxiosInstance = axios.create({
@@ -31,9 +153,37 @@ const PUBLIC_ROUTES = [
   '/auth/reset-password',
 ];
 
+// ── Account switch guard ──
+// When true, requests are queued until the token swap completes.
+let _paused = false;
+let _resumeQueue: Array<() => void> = [];
+
+/** Block all outgoing requests until resumeRequests() is called. */
+export function pauseRequests(): void {
+  _paused = true;
+}
+
+/** Unblock requests — all queued requests will proceed with the new token. */
+export function resumeRequests(): void {
+  _paused = false;
+  const queue = _resumeQueue;
+  _resumeQueue = [];
+  queue.forEach((resolve) => resolve());
+}
+
+function waitUntilResumed(): Promise<void> {
+  if (!_paused) return Promise.resolve();
+  return new Promise((resolve) => {
+    _resumeQueue.push(resolve);
+  });
+}
+
 // --- Request Interceptor: Attach Bearer token ---
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    // Wait if account switch is in progress
+    await waitUntilResumed();
+
     const token = await authStorage.getToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -78,24 +228,54 @@ const processQueue = (error: unknown, token: string | null = null): void => {
   failedQueue = [];
 };
 
+/** Clear the refresh queue — call during account switch to prevent stale refreshes. */
+export function clearRefreshQueue(): void {
+  isRefreshing = false;
+  failedQueue = [];
+}
+
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Track every successful request with full context (sensitive fields redacted)
+    analytics.capture(
+      ANALYTICS_EVENTS.NETWORK.API_REQUEST,
+      buildRequestProperties(response.config, response)
+    );
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
 
-    // Track API errors
-    analytics.capture(ANALYTICS_EVENTS.ERROR.API_ERROR, {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      error_message:
-        (error.response?.data as Record<string, unknown>)?.error || error.message,
-    });
+    // Track failed requests with full context (sensitive fields redacted)
+    const props = buildRequestProperties(
+      error.config as InternalAxiosRequestConfig | undefined,
+      error.response as AxiosResponse | undefined,
+      error
+    );
+    analytics.capture(ANALYTICS_EVENTS.NETWORK.API_REQUEST, props);
+    analytics.capture(ANALYTICS_EVENTS.ERROR.API_ERROR, props);
 
     // Only handle 401, only once per request
     if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // Don't try to refresh during account switch
+    if (_paused) {
+      return Promise.reject(error);
+    }
+
+    // Don't refresh if the token changed since this request was sent
+    // (account was switched while the request was in-flight).
+    // Refreshing with the wrong account's token would corrupt the session.
+    const requestToken = originalRequest.headers.Authorization?.toString().replace(
+      'Bearer ',
+      ''
+    );
+    const currentToken = await authStorage.getToken();
+    if (requestToken !== currentToken) {
       return Promise.reject(error);
     }
 

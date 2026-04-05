@@ -6,8 +6,10 @@ import {
   StyleSheet,
   Platform,
   Keyboard,
+  type TextInput as TextInputType,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { SendHorizontal } from 'lucide-react-native';
+import { PostHogMaskView } from 'posthog-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -23,6 +25,8 @@ const TYPING_DEBOUNCE_MS = 2000;
 export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps) {
   const { t } = useTranslation('messages');
   const [text, setText] = useState('');
+  const inputRef = useRef<TextInputType>(null);
+  const justSentRef = useRef(false);
   const insets = useSafeAreaInsets();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +66,16 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
 
   const handleChangeText = useCallback(
     (value: string) => {
+      // After sending, iOS autocorrect may fire onChangeText with the
+      // pending suggestion. Ignore it and force-clear the input.
+      if (justSentRef.current) {
+        justSentRef.current = false;
+        if (value.trim()) {
+          setText('');
+          inputRef.current?.setNativeProps({ text: '' });
+        }
+        return;
+      }
       setText(value);
       emitTyping(value);
     },
@@ -80,7 +94,9 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
     if (typingTimeout.current) clearTimeout(typingTimeout.current);
 
     onSend(trimmed);
+    justSentRef.current = true;
     setText('');
+    inputRef.current?.setNativeProps({ text: '' });
   };
 
   const canSend = text.trim().length > 0 && !isSending;
@@ -91,18 +107,21 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPadding }]}>
-      <TextInput
-        style={styles.input}
-        placeholder={t('chat.inputPlaceholder')}
-        placeholderTextColor={COLORS.gray[500]}
-        value={text}
-        onChangeText={handleChangeText}
-        multiline
-        maxLength={2000}
-        returnKeyType={Platform.OS === 'ios' ? 'default' : 'send'}
-        blurOnSubmit={false}
-        accessibilityLabel={t('chat.inputAccessibilityLabel')}
-      />
+      <PostHogMaskView style={styles.inputWrapper}>
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          placeholder={t('chat.inputPlaceholder')}
+          placeholderTextColor={COLORS.gray[500]}
+          value={text}
+          onChangeText={handleChangeText}
+          multiline
+          maxLength={2000}
+          returnKeyType={Platform.OS === 'ios' ? 'default' : 'send'}
+          blurOnSubmit={false}
+          accessibilityLabel={t('chat.inputAccessibilityLabel')}
+        />
+      </PostHogMaskView>
       <TouchableOpacity
         onPress={handleSend}
         disabled={!canSend}
@@ -110,10 +129,10 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
         accessibilityRole="button"
         accessibilityLabel={t('chat.sendAccessibilityLabel')}
       >
-        <Ionicons
-          name="send"
+        <SendHorizontal
           size={18}
-          color={canSend ? COLORS.white : COLORS.gray[600]}
+          color={canSend ? '#000000' : COLORS.gray[600]}
+          strokeWidth={2.25}
           style={styles.sendIcon}
         />
       </TouchableOpacity>
@@ -132,8 +151,10 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border.dark,
     gap: SPACING.sm,
   },
-  input: {
+  inputWrapper: {
     flex: 1,
+  },
+  input: {
     backgroundColor: COLORS.background.secondary,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
@@ -157,7 +178,7 @@ const styles = StyleSheet.create({
     marginBottom: Platform.OS === 'ios' ? 2 : 1,
   },
   sendButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#FFFFFF',
   },
   sendIcon: {
     marginLeft: 2,

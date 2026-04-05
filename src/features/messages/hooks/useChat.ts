@@ -60,7 +60,7 @@ export function useChat(conversationId: string) {
       );
       // Invalidate conversation list to update last message preview
       queryClient.invalidateQueries({
-        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS,
+        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
       });
     },
     onError: () => {

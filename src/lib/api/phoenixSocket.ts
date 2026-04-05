@@ -82,6 +82,10 @@ class PhoenixSocketManager {
       onTyping?: MessageHandler;
       onMessagesRead?: MessageHandler;
       onMessageHistory?: MessageHandler;
+      onReactionAdded?: MessageHandler;
+      onReactionRemoved?: MessageHandler;
+      onMessageEdited?: MessageHandler;
+      onMessageDeleted?: MessageHandler;
     } = {}
   ): Channel | null {
     if (!this.socket) return null;
@@ -96,6 +100,12 @@ class PhoenixSocketManager {
     if (handlers.onMessagesRead) channel.on('messages_read', handlers.onMessagesRead);
     if (handlers.onMessageHistory)
       channel.on('message_history', handlers.onMessageHistory);
+    if (handlers.onReactionAdded) channel.on('reaction_added', handlers.onReactionAdded);
+    if (handlers.onReactionRemoved)
+      channel.on('reaction_removed', handlers.onReactionRemoved);
+    if (handlers.onMessageEdited) channel.on('message_edited', handlers.onMessageEdited);
+    if (handlers.onMessageDeleted)
+      channel.on('message_deleted', handlers.onMessageDeleted);
 
     channel
       .join()
@@ -123,7 +133,8 @@ class PhoenixSocketManager {
   pushMessage(
     conversationId: string,
     content: string,
-    contentType = 'text'
+    contentType = 'text',
+    replyTo?: { id: string; content: string; sender: string }
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const channel = this.channels.get(conversationId);
@@ -132,8 +143,15 @@ class PhoenixSocketManager {
         return;
       }
 
+      const payload: Record<string, string> = { content, content_type: contentType };
+      if (replyTo) {
+        payload.reply_to_id = replyTo.id;
+        payload.reply_to_content = replyTo.content;
+        payload.reply_to_sender = replyTo.sender;
+      }
+
       channel
-        .push('new_message', { content, content_type: contentType })
+        .push('new_message', payload)
         .receive('ok', resolve)
         .receive('error', reject)
         .receive('timeout', () => reject(new Error('Timeout')));
@@ -144,6 +162,61 @@ class PhoenixSocketManager {
   sendTyping(conversationId: string, isTyping: boolean): void {
     const channel = this.channels.get(conversationId);
     channel?.push('typing', { is_typing: isTyping });
+  }
+
+  /** Add an emoji reaction to a message. */
+  addReaction(conversationId: string, messageId: string, emoji: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'add_reaction', {
+      message_id: messageId,
+      emoji,
+    });
+  }
+
+  /** Remove an emoji reaction from a message. */
+  removeReaction(
+    conversationId: string,
+    messageId: string,
+    emoji: string
+  ): Promise<void> {
+    return this.pushToChannel(conversationId, 'remove_reaction', {
+      message_id: messageId,
+      emoji,
+    });
+  }
+
+  /** Edit a message's content. */
+  editMessage(conversationId: string, messageId: string, content: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'edit_message', {
+      message_id: messageId,
+      content,
+    });
+  }
+
+  /** Soft-delete a message. */
+  deleteMessage(conversationId: string, messageId: string): Promise<void> {
+    return this.pushToChannel(conversationId, 'delete_message', {
+      message_id: messageId,
+    });
+  }
+
+  /** Generic push helper that returns a promise. */
+  private pushToChannel(
+    conversationId: string,
+    event: string,
+    payload: Record<string, unknown>
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const channel = this.channels.get(conversationId);
+      if (!channel) {
+        reject(new Error('Channel not joined'));
+        return;
+      }
+      channel
+        .push(event, payload)
+        .receive('ok', () => resolve())
+        .receive('error', reject)
+        .receive('timeout', () => reject(new Error('Timeout')));
+    });
   }
 
   /** Mark all messages as read in a conversation.
@@ -165,7 +238,10 @@ class PhoenixSocketManager {
   /** Join the user-level channel for conversation list updates. */
   joinUserChannel(
     userId: string,
-    handlers: { onConversationUpdated?: MessageHandler } = {}
+    handlers: {
+      onConversationUpdated?: MessageHandler;
+      onNewNotification?: MessageHandler;
+    } = {}
   ): Channel | null {
     if (!this.socket) return null;
     if (this.userChannel?.state === 'joined') return this.userChannel;
@@ -174,6 +250,9 @@ class PhoenixSocketManager {
 
     if (handlers.onConversationUpdated) {
       channel.on('conversation_updated', handlers.onConversationUpdated);
+    }
+    if (handlers.onNewNotification) {
+      channel.on('new_notification', handlers.onNewNotification);
     }
 
     channel

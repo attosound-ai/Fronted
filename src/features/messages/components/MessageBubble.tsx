@@ -1,22 +1,91 @@
 import { memo } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Animated, { withSpring, withTiming, Easing } from 'react-native-reanimated';
+import { CheckCheck, Check, Clock, AlertCircle } from 'lucide-react-native';
+import { PostHogMaskView } from 'posthog-react-native';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
 import type { ChatMessage } from '../types';
+
+/**
+ * Telegram-style message send animation.
+ * The bubble slides up ~35pt from below, scales from 0.92 to 1.0,
+ * and fades in over 150ms. Spring is critically damped (no bounce).
+ */
+const messageSendEntering = () => {
+  'worklet';
+  return {
+    initialValues: {
+      opacity: 0,
+      transform: [{ translateY: 35 }, { scale: 0.92 }],
+    },
+    animations: {
+      opacity: withTiming(1, { duration: 150, easing: Easing.out(Easing.ease) }),
+      transform: [
+        { translateY: withSpring(0, { damping: 120, stiffness: 900, mass: 1 }) },
+        { scale: withSpring(1, { damping: 120, stiffness: 900, mass: 1 }) },
+      ],
+    },
+  };
+};
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface MessageBubbleProps {
   message: ChatMessage;
   isOwn: boolean;
+  isNew?: boolean;
 }
 
-function MessageBubbleInner({ message, isOwn }: MessageBubbleProps) {
+function StatusIcon({ message }: { message: ChatMessage }) {
+  if (message.status === 'sending') {
+    return (
+      <Clock
+        size={12}
+        color="rgba(0,0,0,0.35)"
+        strokeWidth={2.25}
+        style={styles.readIcon}
+      />
+    );
+  }
+  if (message.status === 'failed') {
+    return (
+      <AlertCircle size={12} color="#EF4444" strokeWidth={2.25} style={styles.readIcon} />
+    );
+  }
+  if (message.isRead) {
+    return (
+      <CheckCheck
+        size={14}
+        color={COLORS.black}
+        strokeWidth={2.25}
+        style={styles.readIcon}
+      />
+    );
+  }
   return (
-    <View style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}>
-      <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
+    <Check
+      size={14}
+      color="rgba(0,0,0,0.35)"
+      strokeWidth={2.25}
+      style={styles.readIcon}
+    />
+  );
+}
+
+function MessageBubbleInner({ message, isOwn, isNew }: MessageBubbleProps) {
+  const isSending = message.status === 'sending';
+
+  const bubble = (
+    <PostHogMaskView>
+      <View
+        style={[
+          styles.bubble,
+          isOwn ? styles.bubbleOwn : styles.bubbleOther,
+          isSending && styles.bubbleSending,
+        ]}
+      >
         <Text variant="body" style={[styles.content, isOwn && styles.contentOwn]}>
           {message.content}
         </Text>
@@ -24,16 +93,27 @@ function MessageBubbleInner({ message, isOwn }: MessageBubbleProps) {
           <Text variant="small" style={[styles.time, isOwn && styles.timeOwn]}>
             {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
           </Text>
-          {isOwn && (
-            <Ionicons
-              name={message.isRead ? 'checkmark-done' : 'checkmark'}
-              size={14}
-              color={message.isRead ? COLORS.black : 'rgba(0,0,0,0.35)'}
-              style={styles.readIcon}
-            />
-          )}
+          {isOwn && <StatusIcon message={message} />}
         </View>
       </View>
+    </PostHogMaskView>
+  );
+
+  // Telegram-style slide-up animation for newly sent own messages
+  if (isNew && isOwn) {
+    return (
+      <Animated.View
+        entering={messageSendEntering}
+        style={[styles.wrapper, styles.wrapperOwn]}
+      >
+        {bubble}
+      </Animated.View>
+    );
+  }
+
+  return (
+    <View style={[styles.wrapper, isOwn ? styles.wrapperOwn : styles.wrapperOther]}>
+      {bubble}
     </View>
   );
 }
@@ -60,6 +140,9 @@ const styles = StyleSheet.create({
   bubbleOwn: {
     backgroundColor: COLORS.white,
     borderBottomRightRadius: 4,
+  },
+  bubbleSending: {
+    opacity: 0.7,
   },
   bubbleOther: {
     backgroundColor: COLORS.gray[800],

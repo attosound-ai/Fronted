@@ -38,11 +38,14 @@ export const API_ENDPOINTS = {
     FOLLOWERS: (userId: number) => `/users/${userId}/followers`,
     FOLLOWING: (userId: number) => `/users/${userId}/following`,
     FOLLOW: (userId: number) => `/users/${userId}/follow`,
+    STATS: (userId: number) => `/users/${userId}/stats`,
     SEARCH: '/users/search',
     DISCOVER: '/users/discover',
     VERIFICATION_SEND_OTP: '/users/me/verification/send-otp',
     VERIFICATION_VERIFY: '/users/me/verification/verify',
     LINKED_ACCOUNTS: '/users/me/linked-accounts',
+    DELETE_ACCOUNT: '/users/me/account',
+    PUSH_TOKEN: '/users/me/push-token',
   },
 
   POSTS: {
@@ -53,11 +56,14 @@ export const API_ENDPOINTS = {
     SEARCH: '/content/search',
     CREATE: '/posts',
     DETAIL: (postId: string) => `/posts/${postId}`,
+    UPDATE: (postId: string) => `/posts/${postId}`,
     LIKE: (postId: string) => `/posts/${postId}/like`,
     COMMENTS: (postId: string) => `/posts/${postId}/comments`,
     BOOKMARK: (postId: string) => `/posts/${postId}/bookmark`,
     REPOST: (postId: string) => `/posts/${postId}/repost`,
     SHARE: (postId: string) => `/posts/${postId}/share`,
+    INTERACTORS: (postId: string, type: string) =>
+      `/posts/${postId}/interactions/${type}`,
     BOOKMARKS_LIST: '/posts/bookmarks',
     USER_POSTS: (userId: number) => `/posts/user/${userId}`,
     DELETE: (postId: string) => `/content/${postId}`,
@@ -74,6 +80,9 @@ export const API_ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: '/notifications',
     MARK_READ: (id: string) => `/notifications/${id}/read`,
+    MARK_READ_BY_ACTOR: '/notifications/read-by-actor',
+    MARK_ALL_READ: '/notifications/read-all',
+    UNREAD_COUNT: '/notifications/unread-count',
   },
 
   MEDIA: {
@@ -97,6 +106,11 @@ export const API_ENDPOINTS = {
     PLANS: '/payments/subscriptions/plans',
     ENTITLEMENTS: '/payments/subscriptions/me/entitlements',
     UPGRADE: '/payments/subscriptions/me/upgrade',
+  },
+  CREATOR_LOGOS: {
+    LIST: '/creator-logos',
+    VOTE: (id: string) => `/creator-logos/${id}/vote`,
+    VOTERS: (id: string, type: string) => `/creator-logos/${id}/voters/${type}`,
   },
   TELEPHONY: {
     VOICE_TOKEN: '/telephony/tokens/voice',

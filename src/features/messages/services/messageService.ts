@@ -5,9 +5,11 @@ import type {
   BackendConversation,
   BackendMessage,
   BackendMessagesResponse,
+  BackendReaction,
   ChatConversation,
   ChatMessage,
   ChatMessagesPage,
+  Reaction,
   SendMessageDTO,
   CreateConversationDTO,
 } from '../types';
@@ -35,7 +37,18 @@ function mapMessage(m: BackendMessage): ChatMessage {
     content: m.content,
     contentType: m.content_type,
     isRead: m.is_read,
+    isEdited: m.is_edited || false,
+    editedAt: m.edited_at || null,
+    isDeleted: m.is_deleted || false,
+    replyToId: m.reply_to_id || null,
+    replyToContent: m.reply_to_content || null,
+    replyToSender: m.reply_to_sender || null,
     createdAt: m.created_at || null,
+    reactions: (m.reactions ?? []).map((r) => ({
+      messageId: r.message_id,
+      userId: r.user_id,
+      emoji: r.emoji,
+    })),
   };
 }
 
@@ -46,7 +59,17 @@ export const messageService = {
     const response = await apiClient.get<ApiSuccessResponse<BackendConversation[]>>(
       API_ENDPOINTS.MESSAGES.CONVERSATIONS
     );
-    return response.data.data.map(mapConversation);
+    const all = response.data.data.map(mapConversation);
+
+    // Deduplicate by participantId — keep the most recently updated one
+    const seen = new Map<string, ChatConversation>();
+    for (const conv of all) {
+      const existing = seen.get(conv.participantId);
+      if (!existing || conv.updatedAt > existing.updatedAt) {
+        seen.set(conv.participantId, conv);
+      }
+    }
+    return Array.from(seen.values());
   },
 
   async getMessages(chatId: string, before?: string): Promise<ChatMessagesPage> {
@@ -88,5 +111,36 @@ export const messageService = {
       participantName: dto.participantName || '',
     });
     return response.data.data.conversation_id;
+  },
+
+  // ── Edit / Delete ──────────────────────────────
+
+  async editMessage(chatId: string, messageId: string, content: string): Promise<void> {
+    await apiClient.patch(`/messages/${chatId}/${messageId}`, { content });
+  },
+
+  async deleteMessage(chatId: string, messageId: string): Promise<void> {
+    await apiClient.delete(`/messages/${chatId}/${messageId}`);
+  },
+
+  // ── Reactions ──────────────────────────────────
+
+  async getReactions(chatId: string, messageId: string): Promise<Reaction[]> {
+    const response = await apiClient.get<ApiSuccessResponse<BackendReaction[]>>(
+      `/messages/${chatId}/${messageId}/reactions`
+    );
+    return response.data.data.map((r) => ({
+      messageId: r.message_id,
+      userId: r.user_id,
+      emoji: r.emoji,
+    }));
+  },
+
+  async addReaction(chatId: string, messageId: string, emoji: string): Promise<void> {
+    await apiClient.post(`/messages/${chatId}/${messageId}/reactions`, { emoji });
+  },
+
+  async removeReaction(chatId: string, messageId: string, emoji: string): Promise<void> {
+    await apiClient.delete(`/messages/${chatId}/${messageId}/reactions/${emoji}`);
   },
 };

@@ -25,7 +25,11 @@
         "simulator": false,
         "buildConfiguration": "Release"
       },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
+        "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_API_URL": "https://api-gateway-kong-production.up.railway.app/api/v1",
         "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dxzcutnlp",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51T3IztBYw6jRcyWb4rLSUKM9WC26V3O9QEOPt6B0qWqZB3VuqbJu3HXAb73tMVBnrgMI9chR0hhYhqZOwdvEZlGZ001RIGNGEx",

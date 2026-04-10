@@ -35,7 +35,12 @@ import type {
 } from 'react-native-gifted-chat';
 import { SendHorizontal, Check, CheckCheck, Clock, X, Pencil } from 'lucide-react-native';
 import { PostHogMaskView } from 'posthog-react-native';
-import { ContextMenuView } from 'react-native-ios-context-menu';
+import { Platform } from 'react-native';
+
+const ContextMenuView =
+  Platform.OS === 'ios'
+    ? require('react-native-ios-context-menu').ContextMenuView
+    : ({ children }: { children: React.ReactNode }) => <>{children}</>;
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';

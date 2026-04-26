@@ -29,7 +29,7 @@ export function InCallTopBar() {
     activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
 
   // Hide on the dedicated call screen (it has its own controls)
-  const isOnCallScreen = pathname === '/call';
+  const isOnCallScreen = pathname === '/call' || pathname === '/recording' || pathname === '/(tabs)/recording';
 
   // Elapsed timer
   useEffect(() => {
@@ -84,7 +84,9 @@ export function InCallTopBar() {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.hangUpBtn} onPress={hangUpCall}>
-            <Phone size={16} color="#FFF" strokeWidth={2.25} style={styles.hangUpIcon} />
+            <View style={styles.hangUpIcon}>
+              <Phone size={18} color="#FFF" strokeWidth={2.25} />
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -94,12 +96,7 @@ export function InCallTopBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     backgroundColor: '#22C55E',
-    zIndex: 999,
   },
   content: {
     flexDirection: 'row',

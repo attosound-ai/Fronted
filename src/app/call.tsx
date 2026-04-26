@@ -2,8 +2,14 @@ import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
-import { acceptIncomingCall, rejectIncomingCall } from '@/hooks/useTwilioVoice';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import {
+  acceptIncomingCall,
+  rejectIncomingCall,
+  hangUpCall,
+} from '@/hooks/useTwilioVoice';
 import { IncomingCallScreen } from '@/components/call/IncomingCallScreen';
+import { OutgoingCallScreen } from '@/components/call/OutgoingCallScreen';
 
 function dismiss() {
   if (router.canDismiss()) {
@@ -16,10 +22,26 @@ function dismiss() {
 export default function CallScreen() {
   const activeCall = useCallStore((s) => s.activeCall);
 
-  // Dismiss when call is no longer ringing. Polls every 100ms to handle
-  // cold-start race where the nav stack isn't ready immediately.
+  // When call connects: non-pro users go straight to recording,
+  // pro users dismiss to tabs (where CallBanner lets them pick a project).
   useEffect(() => {
-    if (activeCall?.state === 'ringing') return;
+    if (activeCall?.state === 'ringing' || activeCall?.state === 'ringing-outgoing')
+      return;
+
+    if (activeCall?.state === 'connected') {
+      const canRecord = useSubscriptionStore.getState().hasEntitlement('record_upload');
+      if (canRecord) {
+        const hasPro = useSubscriptionStore.getState().hasEntitlement('advanced_production');
+        if (!hasPro) {
+          // record plan: dismiss call modal, then navigate to recording inside tabs
+          if (router.canDismiss()) router.dismiss();
+          setTimeout(() => router.push('/(tabs)/recording'), 100);
+          return;
+        }
+      }
+      // connect_free: no recording, just dismiss to tabs
+      // record_pro: dismiss to tabs, CallBanner lets them pick a project
+    }
 
     const id = setInterval(() => {
       if (router.canDismiss()) {
@@ -39,21 +61,30 @@ export default function CallScreen() {
     };
   }, [activeCall]);
 
-  if (activeCall?.state !== 'ringing') {
-    // Tappable black screen so user can escape if dismiss fails
+  if (activeCall?.state === 'ringing') {
     return (
-      <Pressable style={styles.container} onPress={dismiss}>
-        <View />
-      </Pressable>
+      <IncomingCallScreen
+        fromNumber={activeCall.fromNumber}
+        onAccept={acceptIncomingCall}
+        onReject={rejectIncomingCall}
+      />
     );
   }
 
+  if (activeCall?.state === 'ringing-outgoing') {
+    return (
+      <OutgoingCallScreen
+        recipientName={activeCall.recipientName || activeCall.recipientId || 'Unknown'}
+        onCancel={hangUpCall}
+      />
+    );
+  }
+
+  // Tappable black screen so user can escape if dismiss fails
   return (
-    <IncomingCallScreen
-      fromNumber={activeCall.fromNumber}
-      onAccept={acceptIncomingCall}
-      onReject={rejectIncomingCall}
-    />
+    <Pressable style={styles.container} onPress={dismiss}>
+      <View />
+    </Pressable>
   );
 }
 

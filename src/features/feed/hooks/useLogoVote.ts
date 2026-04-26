@@ -5,45 +5,35 @@ import type { CreatorLogo } from './useCreatorLogos';
 
 interface VoteParams {
   logoId: string;
-  vote: 1 | -1;
-  currentVote: number | null;
+  rating: 1 | 2 | 3 | 4 | 5;
+  currentRating: number | null;
 }
 
 export function useLogoVote() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ logoId, vote, currentVote }: VoteParams) => {
-      // Toggle off: same vote again → remove
-      if (currentVote === vote) {
-        return apiClient.delete(API_ENDPOINTS.CREATOR_LOGOS.VOTE(logoId));
-      }
-      // New vote or change vote
-      return apiClient.post(API_ENDPOINTS.CREATOR_LOGOS.VOTE(logoId), { vote });
-    },
+    mutationFn: ({ logoId, rating }: VoteParams) =>
+      apiClient.post(API_ENDPOINTS.CREATOR_LOGOS.VOTE(logoId), { rating }),
 
-    onMutate: async ({ logoId, vote, currentVote }) => {
+    onMutate: async ({ logoId, rating, currentRating }) => {
       await queryClient.cancelQueries({ queryKey: ['creator-logos'] });
       const prev = queryClient.getQueryData<CreatorLogo[]>(['creator-logos']);
-      const isToggleOff = currentVote === vote;
 
       queryClient.setQueryData<CreatorLogo[]>(['creator-logos'], (old) =>
         old?.map((logo) => {
           if (logo.id !== logoId) return logo;
-          if (isToggleOff) {
-            return {
-              ...logo,
-              userVote: null,
-              likes: logo.likes + (vote === 1 ? -1 : 0),
-              dislikes: logo.dislikes + (vote === -1 ? -1 : 0),
-            };
-          }
+
+          const isNewVote = currentRating === null;
+          const newCount = isNewVote ? logo.ratingCount + 1 : logo.ratingCount;
+          const oldSum = logo.rating * logo.ratingCount;
+          const newSum = oldSum - (currentRating ?? 0) + rating;
+
           return {
             ...logo,
-            userVote: vote,
-            likes: logo.likes + (vote === 1 ? 1 : 0) + (currentVote === 1 ? -1 : 0),
-            dislikes:
-              logo.dislikes + (vote === -1 ? 1 : 0) + (currentVote === -1 ? -1 : 0),
+            userRating: rating,
+            ratingCount: newCount,
+            rating: newCount > 0 ? newSum / newCount : 0,
           };
         })
       );

@@ -6,7 +6,8 @@ export type NotificationType =
   | 'repost'
   | 'share'
   | 'message'
-  | 'welcome';
+  | 'welcome'
+  | 'new_post';
 
 export interface NotificationActor {
   id: string;

@@ -32,13 +32,13 @@ export function NewMessageScreen() {
       try {
         const conversationId = await messageService.createConversation({
           participantId: String(user.id),
-          participantName: user.displayName || user.username,
+          participantName: user.username,
         });
         router.replace({
           pathname: '/chat',
           params: {
             conversationId,
-            participantName: user.displayName || user.username,
+            participantName: user.username,
             participantId: String(user.id),
           },
         });
@@ -60,16 +60,13 @@ export function NewMessageScreen() {
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={t('newMessage.messageUserAccessibility', {
-          name: item.displayName || item.username,
+          name: item.username,
         })}
       >
         <Avatar uri={item.avatar} size="md" />
         <View style={styles.userInfo}>
           <Text variant="h3" numberOfLines={1}>
-            {item.displayName || item.username}
-          </Text>
-          <Text variant="caption" numberOfLines={1}>
-            @{item.username}
+            {item.username}
           </Text>
         </View>
       </TouchableOpacity>

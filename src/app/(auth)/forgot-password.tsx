@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { OtpInput } from '@/components/ui/OtpInput';
 import { authService } from '@/lib/api/authService';
 import { isValidEmail, isStrongPassword } from '@/utils/validators';
 
-type Step = 'email' | 'reset';
+type Step = 'email' | 'otp' | 'password';
 
 export default function ForgotPasswordScreen() {
   const { t, i18n } = useTranslation('auth');
@@ -23,6 +23,7 @@ export default function ForgotPasswordScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [otpError, setOtpError] = useState('');
   const [passwordError, setPasswordError] = useState('');
@@ -49,21 +50,28 @@ export default function ForgotPasswordScreen() {
       // Always advance to prevent email enumeration
     } finally {
       setIsLoading(false);
-      setStep('reset');
+      setStep('otp');
     }
   }, [email, i18n.language]);
 
-  const handleReset = useCallback(async () => {
+  const handleVerifyOtp = useCallback(() => {
     setOtpError('');
+    setApiError('');
+
+    if (otp.length !== 6) {
+      setOtpError(t('forgotPassword.otpError'));
+      return;
+    }
+
+    setStep('password');
+  }, [otp]);
+
+  const handleReset = useCallback(async () => {
     setPasswordError('');
     setConfirmError('');
     setApiError('');
 
     let hasError = false;
-    if (otp.length !== 6) {
-      setOtpError(t('forgotPassword.otpError'));
-      hasError = true;
-    }
     if (!isStrongPassword(password)) {
       setPasswordError(t('forgotPassword.passwordError'));
       hasError = true;
@@ -91,6 +99,43 @@ export default function ForgotPasswordScreen() {
     }
   }, [email, otp, password, confirmPassword]);
 
+  const handleBack = useCallback(() => {
+    if (step === 'email') {
+      router.back();
+    } else if (step === 'otp') {
+      setStep('email');
+    } else {
+      setStep('otp');
+    }
+  }, [step]);
+
+  const renderHeader = (title: string, subtitle: string) => (
+    <>
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text variant="h2" style={styles.headerTitle}>
+          {title}
+        </Text>
+      </View>
+      <Text variant="body" style={styles.subtitle}>
+        {subtitle}
+      </Text>
+    </>
+  );
+
+  const renderError = () =>
+    apiError ? (
+      <View style={styles.errorBanner}>
+        <AlertCircle size={20} color="#EF4444" strokeWidth={2.25} />
+        <Text variant="small" style={styles.errorBannerText}>
+          {apiError}
+        </Text>
+      </View>
+    ) : null;
+
+  // Step 1: Email
   if (step === 'email') {
     return (
       <SafeAreaView style={styles.container}>
@@ -101,17 +146,10 @@ export default function ForgotPasswordScreen() {
           bottomOffset={16}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-            </TouchableOpacity>
-            <Text variant="h2" style={styles.headerTitle}>
-              {t('forgotPassword.title')}
-            </Text>
-          </View>
-          <Text variant="body" style={styles.subtitle}>
-            {t('forgotPassword.subtitle')}
-          </Text>
+          {renderHeader(
+            t('forgotPassword.title'),
+            t('forgotPassword.subtitle')
+          )}
 
           {apiError ? (
             <Text variant="small" style={styles.apiError}>
@@ -129,6 +167,7 @@ export default function ForgotPasswordScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+            textContentType="emailAddress"
             error={emailError}
           />
 
@@ -143,6 +182,46 @@ export default function ForgotPasswordScreen() {
     );
   }
 
+  // Step 2: OTP verification
+  if (step === 'otp') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          bottomOffset={16}
+          showsVerticalScrollIndicator={false}
+        >
+          {renderHeader(
+            t('forgotPassword.enterCode'),
+            t('forgotPassword.codeSubtitle')
+          )}
+
+          {renderError()}
+
+          <OtpInput
+            length={6}
+            value={otp}
+            onChange={(v: string) => {
+              setOtp(v);
+              setOtpError('');
+            }}
+            error={otpError || undefined}
+          />
+
+          <Button
+            title={t('forgotPassword.verifyCode')}
+            onPress={handleVerifyOtp}
+            loading={isLoading}
+            disabled={isLoading || otp.length !== 6}
+          />
+        </KeyboardAwareScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Step 3: New password
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAwareScrollView
@@ -152,61 +231,57 @@ export default function ForgotPasswordScreen() {
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => setStep('email')} style={styles.backButton}>
-            <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-          <Text variant="h2" style={styles.headerTitle}>
-            {t('forgotPassword.enterCode')}
-          </Text>
-        </View>
-        <Text variant="body" style={styles.subtitle}>
-          {t('forgotPassword.codeSubtitle')}
-        </Text>
+        {renderHeader(
+          t('forgotPassword.newPasswordTitle'),
+          t('forgotPassword.newPasswordSubtitle')
+        )}
 
-        {apiError ? (
-          <View style={styles.errorBanner}>
-            <AlertCircle size={20} color="#EF4444" strokeWidth={2.25} />
-            <Text variant="small" style={styles.errorBannerText}>
-              {apiError}
-            </Text>
-          </View>
-        ) : null}
+        {renderError()}
 
-        <OtpInput
-          length={6}
-          value={otp}
-          onChange={(v: string) => {
-            setOtp(v);
-            setOtpError('');
-          }}
-          error={otpError || undefined}
+        {/*
+          Hidden username field paired with the password inputs below so
+          iOS Password AutoFill can offer to save the new credential for
+          the correct account. Without this, the QuickType bar suggests
+          unrelated emails from Contacts.
+        */}
+        <TextInput
+          value={email}
+          editable={false}
+          autoComplete="username"
+          textContentType="username"
+          importantForAutofill="yes"
+          style={styles.hiddenUsername}
+          accessibilityElementsHidden
+          aria-hidden
         />
 
-        <View>
-          <Input
-            label={t('forgotPassword.newPasswordLabel')}
-            value={password}
-            onChangeText={(v: string) => {
-              setPassword(v);
-              setPasswordError('');
-            }}
-            secureTextEntry={!showPassword}
-            autoCapitalize="none"
-            error={passwordError}
-          />
-          <TouchableOpacity
-            style={styles.eyeToggle}
-            onPress={() => setShowPassword((v) => !v)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            {showPassword ? (
-              <EyeOff size={20} color="#888888" strokeWidth={2.25} />
-            ) : (
-              <Eye size={20} color="#888888" strokeWidth={2.25} />
-            )}
-          </TouchableOpacity>
-        </View>
+        <Input
+          label={t('forgotPassword.newPasswordLabel')}
+          value={password}
+          onChangeText={(v: string) => {
+            setPassword(v);
+            setPasswordError('');
+          }}
+          secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoComplete="password-new"
+          textContentType="newPassword"
+          passwordRules="minlength: 8; required: lower; required: upper; required: digit;"
+          error={passwordError}
+          style={{ paddingRight: 48 }}
+          rightElement={
+            <TouchableOpacity
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {showPassword ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
+            </TouchableOpacity>
+          }
+        />
 
         <Input
           label={t('forgotPassword.confirmPasswordLabel')}
@@ -215,9 +290,24 @@ export default function ForgotPasswordScreen() {
             setConfirmPassword(v);
             setConfirmError('');
           }}
-          secureTextEntry
+          secureTextEntry={!showConfirmPassword}
           autoCapitalize="none"
+          autoComplete="password-new"
+          textContentType="newPassword"
           error={confirmError}
+          style={{ paddingRight: 48 }}
+          rightElement={
+            <TouchableOpacity
+              onPress={() => setShowConfirmPassword((v) => !v)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {showConfirmPassword ? (
+                <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+              ) : (
+                <Eye size={20} color="#888888" strokeWidth={2.25} />
+              )}
+            </TouchableOpacity>
+          }
         />
 
         <Button
@@ -279,9 +369,14 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     flex: 1,
   },
-  eyeToggle: {
+  // Off-screen + zero-size — still focusable so iOS treats it as part of
+  // the form for Password AutoFill pairing.
+  hiddenUsername: {
     position: 'absolute',
-    right: 16,
-    bottom: 14,
+    width: 1,
+    height: 1,
+    opacity: 0,
+    top: -1000,
+    left: -1000,
   },
 });

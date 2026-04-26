@@ -26,6 +26,8 @@ export interface BackendMessage {
   is_edited: boolean;
   edited_at: string | null;
   is_deleted: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   reply_to_id: string | null;
   reply_to_content: string | null;
   reply_to_sender: string | null;
@@ -70,6 +72,8 @@ export interface ChatMessage {
   isEdited?: boolean;
   editedAt?: string | null;
   isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   replyToId?: string | null;
   replyToContent?: string | null;
   replyToSender?: string | null;
@@ -103,6 +107,30 @@ export interface ChatMessagesPage {
   messages: ChatMessage[];
   nextCursor: string | null;
   hasMore: boolean;
+}
+
+// Chat wallpapers (remote-managed via content-service)
+
+export interface BackendChatWallpaper {
+  id: string;
+  name: string;
+  imageUrl: string;
+  thumbnailUrl?: string | null;
+  tintColor?: string | null;
+  overlayOpacity?: number | null;
+  sortOrder?: number;
+  createdAt?: string | null;
+}
+
+export interface ChatWallpaper {
+  id: string;
+  name: string;
+  imageUrl: string;
+  thumbnailUrl: string | null;
+  tintColor: string | null;
+  overlayOpacity: number | null;
+  sortOrder: number;
+  createdAt: string | null;
 }
 
 // Constants

@@ -27,12 +27,18 @@ export function IncomingCallScreen({
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.rejectButton} onPress={onReject}>
-          <Phone size={32} color="#FFF" strokeWidth={2.25} style={styles.rejectIcon} />
+          <View style={styles.rejectCircle}>
+            <View style={{ transform: [{ rotate: '135deg' }] }}>
+              <Phone size={28} color="#FFF" strokeWidth={2.25} />
+            </View>
+          </View>
           <Text style={styles.actionLabel}>{t('incoming.decline')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
-          <Phone size={32} color="#FFF" strokeWidth={2.25} />
+          <View style={styles.acceptCircle}>
+            <Phone size={32} color="#FFF" strokeWidth={2.25} />
+          </View>
           <Text style={styles.actionLabel}>{t('incoming.accept')}</Text>
         </TouchableOpacity>
       </View>
@@ -80,19 +86,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  rejectIcon: {
-    transform: [{ rotate: '135deg' }],
+  rejectCircle: {
     backgroundColor: '#EF4444',
     width: 64,
     height: 64,
     borderRadius: 32,
-    textAlign: 'center',
-    lineHeight: 64,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   acceptButton: {
     alignItems: 'center',
     gap: 8,
+  },
+  acceptCircle: {
+    backgroundColor: '#22C55E',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionLabel: {
     color: '#FFF',

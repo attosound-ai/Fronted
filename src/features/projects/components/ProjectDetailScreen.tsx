@@ -132,6 +132,13 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
 
     return (
       <TimelineEditor
+        // Force a fresh mount whenever the server-side data changes
+        // (e.g. after a refetch). This guarantees `useTimeline`'s
+        // `useReducer` lazy init reads the latest lanes/clips instead
+        // of holding onto stale state from the previous mount, which
+        // would persist indefinitely because React's `useReducer`
+        // doesn't react to changes in its initial-state argument.
+        key={`${projectId}-${project.updatedAt}`}
         projectId={projectId}
         clips={clips}
         segments={segments}

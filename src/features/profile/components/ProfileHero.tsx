@@ -10,7 +10,6 @@ import {
   StyleSheet,
 } from 'react-native';
 import {
-  Camera,
   X,
   Instagram,
   Music2,
@@ -28,7 +27,9 @@ import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
+import { GoldRing } from '@/components/ui/GoldRing';
 import { Logo } from '@/components/ui/Logo';
+import { GOLD_FLAT } from '@/constants/gold';
 import { formatCount } from '@/utils/formatters';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { User } from '@/types';
@@ -99,10 +100,15 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
         activeOpacity={0.7}
         style={styles.avatarContainer}
       >
-        <Avatar uri={user.avatar} size="xl" />
-        <View style={styles.avatarBadge}>
-          <Camera size={14} color="#000" strokeWidth={2.25} />
-        </View>
+        {user.role === 'creator' ? (
+          <GoldRing size={104} thickness={2}>
+            <Avatar uri={user.avatar} size="xl" />
+          </GoldRing>
+        ) : (
+          <View style={styles.avatarRing}>
+            <Avatar uri={user.avatar} size="xl" />
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Avatar fullscreen modal */}
@@ -135,7 +141,13 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
         </Pressable>
       </Modal>
 
-      <Text variant="h2" style={styles.name}>
+      <Text
+        variant="h2"
+        style={styles.name}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+      >
         @{user.username}
       </Text>
 
@@ -168,7 +180,7 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
       )}
 
       {/* Social links row */}
-      {user.role === 'creator' && <SocialLinksRow user={user} />}
+      <SocialLinksRow user={user} />
 
       {user.role !== 'listener' && (
         <View style={styles.badge}>
@@ -184,7 +196,13 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
       <View style={styles.stats}>
         <View style={styles.stat}>
           <Text variant="h2">{formatCount(user.postsCount)}</Text>
-          <Text variant="caption" style={styles.statLabel}>
+          <Text
+            variant="caption"
+            style={styles.statLabel}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {t('hero.statPosts')}
           </Text>
         </View>
@@ -194,7 +212,13 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
           onPress={() => navigateToList('followers')}
         >
           <Text variant="h2">{formatCount(user.followersCount)}</Text>
-          <Text variant="caption" style={styles.statLabel}>
+          <Text
+            variant="caption"
+            style={styles.statLabel}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {t('hero.statFollowers')}
           </Text>
         </TouchableOpacity>
@@ -204,7 +228,13 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
           onPress={() => navigateToList('following')}
         >
           <Text variant="h2">{formatCount(user.followingCount)}</Text>
-          <Text variant="caption" style={styles.statLabel}>
+          <Text
+            variant="caption"
+            style={styles.statLabel}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
             {t('hero.statFollowing')}
           </Text>
         </TouchableOpacity>
@@ -231,21 +261,24 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: 'relative',
   },
-  avatarBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  avatarRing: {
+    width: 100,
+    height: 100,
+    borderWidth: 2,
+    borderColor: '#CCCCCC',
+    borderRadius: 50,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
+  },
+  avatarRingCreator: {
+    borderColor: GOLD_FLAT,
   },
   name: {
     marginTop: 8,
+    paddingHorizontal: 32,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   username: {
     color: '#888',

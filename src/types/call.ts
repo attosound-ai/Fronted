@@ -46,11 +46,19 @@ export interface AudioSegment {
   createdAt: string;
 }
 
-export type ActiveCallState = 'idle' | 'ringing' | 'connected' | 'reconnecting';
+export type ActiveCallState =
+  | 'idle'
+  | 'ringing'
+  | 'ringing-outgoing'
+  | 'connected'
+  | 'reconnecting';
 
 export interface ActiveCall {
   callSid: string;
   fromNumber: string;
+  direction: 'inbound' | 'outbound';
+  recipientId?: string;
+  recipientName?: string;
   state: ActiveCallState;
   isMuted: boolean;
   isOnHold: boolean;

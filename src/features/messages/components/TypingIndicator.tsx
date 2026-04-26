@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 
@@ -11,6 +12,7 @@ const DOT_SIZE = 6;
 const DOT_COUNT = 3;
 
 export function TypingIndicator({ name }: TypingIndicatorProps) {
+  const { t } = useTranslation('messages');
   const dots = useRef(
     Array.from({ length: DOT_COUNT }, () => new Animated.Value(0))
   ).current;
@@ -66,7 +68,7 @@ export function TypingIndicator({ name }: TypingIndicatorProps) {
       </View>
       {name && (
         <Text variant="small" style={styles.label}>
-          {name} is typing...
+          {t('typing.full', { name })}
         </Text>
       )}
     </View>

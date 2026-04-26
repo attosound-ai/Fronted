@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated } from 'react-native';
-import { usePathname } from 'expo-router';
+import { usePathname, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { ProjectPickerSheet } from './ProjectPickerSheet';
 
 // ── CallBanner ─────────────────────────────────────────────
@@ -19,9 +20,13 @@ export function CallBanner() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [pickerVisible, setPickerVisible] = useState(false);
 
+  const hasAdvancedProduction = useSubscriptionStore((s) =>
+    s.hasEntitlement('advanced_production'),
+  );
+
   const isConnected =
     activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
-  const isOnRecordingScreen = pathname === '/recording';
+  const isOnRecordingScreen = pathname === '/recording' || pathname === '/(tabs)/recording';
 
   // Pulsing white dot
   useEffect(() => {
@@ -47,7 +52,10 @@ export function CallBanner() {
     return () => animation.stop();
   }, [isConnected, pulseAnim]);
 
-  if (!isConnected || isOnRecordingScreen) return null;
+  const canRecord = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
+
+  // Hide banner if: no active call, already on recording screen, or no recording entitlement
+  if (!isConnected || isOnRecordingScreen || !canRecord) return null;
 
   // Position above tab bar (49pt) + bottom safe area
   const bottomOffset = 49 + insets.bottom;
@@ -56,7 +64,14 @@ export function CallBanner() {
     <View style={[bannerStyles.wrapper, { bottom: bottomOffset + 8 }]}>
       <TouchableOpacity
         style={bannerStyles.container}
-        onPress={() => setPickerVisible(true)}
+        onPress={() => {
+          if (hasAdvancedProduction) {
+            setPickerVisible(true);
+          } else {
+            // record plan: no projects, go straight to simple recording
+            router.push('/(tabs)/recording');
+          }
+        }}
         activeOpacity={0.8}
       >
         <Animated.View style={[bannerStyles.recordCircle, { opacity: pulseAnim }]}>
@@ -64,7 +79,7 @@ export function CallBanner() {
         </Animated.View>
         <View style={bannerStyles.textContainer}>
           <Text variant="small" style={bannerStyles.title}>
-            {t('banner.tapToRecord')}
+            {hasAdvancedProduction ? t('banner.tapToRecord') : t('banner.openRecordScreen', 'Open Record')}
           </Text>
           <Text variant="small" style={bannerStyles.subtitle}>
             {t('banner.callInProgress')}

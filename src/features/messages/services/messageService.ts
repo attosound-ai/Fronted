@@ -40,6 +40,8 @@ function mapMessage(m: BackendMessage): ChatMessage {
     isEdited: m.is_edited || false,
     editedAt: m.edited_at || null,
     isDeleted: m.is_deleted || false,
+    deletedAt: m.deleted_at ?? null,
+    deletedBy: m.deleted_by ?? null,
     replyToId: m.reply_to_id || null,
     replyToContent: m.reply_to_content || null,
     replyToSender: m.reply_to_sender || null,

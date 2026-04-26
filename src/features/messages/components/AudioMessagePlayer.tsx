@@ -6,17 +6,21 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
+import { useCallStore } from '@/stores/callStore';
+import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
 
 interface AudioMessagePlayerProps {
   audioUrl: string;
 }
 
 export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
-  const player = useAudioPlayer(audioUrl);
+  const { t } = useTranslation('messages');
+  const player = useAudioPlayer(audioUrl, { keepAudioSessionActive: true });
   const status = useAudioPlayerStatus(player);
   const [loadError, setLoadError] = useState(false);
 
@@ -28,11 +32,29 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
     if (status.error) setLoadError(true);
   }, [status.error]);
 
-  const togglePlayback = useCallback(() => {
+  const togglePlayback = useCallback(async () => {
     try {
       if (isPlaying) {
         player.pause();
+        // Reclaim VoIP audio session after pausing
+        const callOnPause = useCallStore.getState().activeCall;
+        if (callOnPause?.state === 'connected' || callOnPause?.state === 'reconnecting') {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            allowsRecording: true,
+            interruptionMode: 'mixWithOthers',
+          });
+          reclaimAudioSession();
+        }
       } else {
+        const call = useCallStore.getState().activeCall;
+        if (call?.state === 'connected' || call?.state === 'reconnecting') {
+          await setAudioModeAsync({
+            playsInSilentMode: true,
+            allowsRecording: true,
+            interruptionMode: 'mixWithOthers',
+          });
+        }
         player.play();
       }
     } catch {
@@ -52,7 +74,7 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
   if (loadError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.time}>Audio unavailable</Text>
+        <Text style={styles.time}>{t('media.audioUnavailable')}</Text>
       </View>
     );
   }

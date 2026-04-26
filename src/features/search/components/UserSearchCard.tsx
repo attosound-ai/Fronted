@@ -41,7 +41,6 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
       pathname: '/user/[id]',
       params: {
         id: String(user.id),
-        displayName: user.displayName,
         username: user.username,
         avatar: user.avatar ?? '',
       },
@@ -50,18 +49,15 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
 
   return (
     <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
-      <Avatar uri={user.avatar} size="md" />
+      <Avatar uri={user.avatar} size="md" creatorRing={user.role === 'creator'} />
 
       <View style={styles.info}>
         <View style={styles.nameRow}>
-          <Text variant="body" style={styles.displayName} numberOfLines={1}>
-            {user.displayName}
+          <Text variant="body" style={styles.username} numberOfLines={1}>
+            {user.username}
           </Text>
           {user.role === 'creator' && <CreatorBadge size="sm" />}
         </View>
-        <Text variant="caption" style={styles.username} numberOfLines={1}>
-          @{user.username}
-        </Text>
       </View>
 
       <TouchableOpacity
@@ -102,14 +98,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  displayName: {
+  username: {
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
-  },
-  username: {
-    color: '#888',
-    fontSize: 12,
   },
   followButton: {
     flexDirection: 'row',

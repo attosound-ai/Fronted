@@ -6,6 +6,7 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  ScrollView,
   useWindowDimensions,
 } from 'react-native';
 import { KeyboardAwareScrollView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
@@ -282,10 +283,11 @@ export function StepCreatorProfile({
               usernameStatus === 'taken' ||
               usernameStatus === 'invalid') && (
               <View style={styles.suggestionsSection}>
-                <Text variant="small" style={styles.suggestionsLabel}>
-                  {t('profileSetup.suggestions')}
-                </Text>
-                <View style={styles.suggestionsRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.suggestionsRow}
+                >
                   {suggestions.map((s, i) => (
                     <TouchableOpacity
                       key={`${s}-${i}`}
@@ -298,7 +300,7 @@ export function StepCreatorProfile({
                       </Text>
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             )}
         </View>
@@ -446,7 +448,7 @@ const styles = StyleSheet.create({
   statusWhite: { color: '#FFFFFF' },
   suggestionsSection: { marginTop: 10, gap: 8 },
   suggestionsLabel: { color: '#888888' },
-  suggestionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  suggestionsRow: { flexDirection: 'row', gap: 8 },
   suggestionChip: {
     backgroundColor: '#111111',
     borderRadius: 16,

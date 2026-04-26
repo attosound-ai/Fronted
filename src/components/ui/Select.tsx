@@ -58,6 +58,8 @@ export function Select({
         <Text
           variant="body"
           style={[styles.triggerText, !selectedOption && styles.placeholderText]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
         >
           {selectedOption?.label ?? placeholder}
         </Text>
@@ -87,6 +89,8 @@ export function Select({
               <Text
                 variant="body"
                 style={[styles.optionText, item.value === value && styles.optionSelected]}
+                numberOfLines={2}
+                maxFontSizeMultiplier={1.15}
               >
                 {item.label}
               </Text>

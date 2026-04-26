@@ -17,7 +17,12 @@ export function EditProfileHeader({ onSave, isSubmitting }: EditProfileHeaderPro
       <TouchableOpacity onPress={() => router.back()} hitSlop={8} activeOpacity={0.6}>
         <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
       </TouchableOpacity>
-      <Text variant="h2" style={styles.headerTitle}>
+      <Text
+        variant="h2"
+        style={styles.headerTitle}
+        numberOfLines={1}
+        maxFontSizeMultiplier={1.1}
+      >
         {t('edit.headerTitle')}
       </Text>
       <TouchableOpacity
@@ -29,7 +34,9 @@ export function EditProfileHeader({ onSave, isSubmitting }: EditProfileHeaderPro
         {isSubmitting ? (
           <ActivityIndicator size="small" color="#FFFFFF" />
         ) : (
-          <Text style={styles.saveText}>{t('edit.saveButton')}</Text>
+          <Text style={styles.saveText} numberOfLines={1} maxFontSizeMultiplier={1.1}>
+            {t('edit.saveButton')}
+          </Text>
         )}
       </TouchableOpacity>
     </View>

@@ -1,14 +1,22 @@
 import { useRef } from 'react';
 import { Animated, PanResponder, StyleSheet, Dimensions } from 'react-native';
+import { usePathname } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
+
+// Routes where the bug report FAB would cover critical UI. Matched as a
+// startsWith against the current pathname.
+const HIDDEN_ROUTE_PREFIXES = ['/project/', '/call', '/(tabs)/recording'];
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const FAB_SIZE = 48;
 const EDGE_MARGIN = 16;
 
 export function BugReportFAB() {
+  const pathname = usePathname();
+  const isHidden = HIDDEN_ROUTE_PREFIXES.some((prefix) => pathname?.startsWith(prefix));
+
   const pan = useRef(
-    new Animated.ValueXY({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 }),
+    new Animated.ValueXY({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 })
   ).current;
   const lastOffset = useRef({ x: SCREEN_W - FAB_SIZE - EDGE_MARGIN, y: SCREEN_H - 180 });
 
@@ -35,7 +43,7 @@ export function BugReportFAB() {
         // Clamp Y within screen bounds
         const clampedY = Math.max(
           EDGE_MARGIN + 50,
-          Math.min(rawY, SCREEN_H - FAB_SIZE - 100),
+          Math.min(rawY, SCREEN_H - FAB_SIZE - 100)
         );
 
         lastOffset.current = { x: snapX, y: clampedY };
@@ -46,19 +54,21 @@ export function BugReportFAB() {
           friction: 7,
         }).start();
       },
-    }),
+    })
   ).current;
 
   const handlePress = () => {
     Sentry.showFeedbackWidget();
   };
 
+  if (isHidden) return null;
+
   return (
     <Animated.View
       style={[styles.fab, { left: pan.x, top: pan.y }]}
       {...panResponder.panHandlers}
     >
-      <Animated.Text style={styles.icon} onPress={handlePress}>
+      <Animated.Text style={styles.icon} onPress={handlePress} allowFontScaling={false}>
         💬
       </Animated.Text>
     </Animated.View>

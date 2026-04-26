@@ -81,7 +81,7 @@ export function useUserChannel() {
             })
             .then((profile) => {
               showMessageNotification({
-                senderName: (profile?.displayName as string) || 'User',
+                senderName: (profile?.username as string) || 'User',
                 senderAvatar: (profile?.avatar as string) || null,
                 message: lastMessage,
                 conversationId,

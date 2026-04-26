@@ -44,7 +44,9 @@ export function PhoneInput({
             error && styles.errorBorder,
           ]}
         >
-          <Text style={styles.prefix}>{prefix}</Text>
+          <Text style={styles.prefix} maxFontSizeMultiplier={1.0}>
+            {prefix}
+          </Text>
           <TextInput
             style={styles.input}
             value={phoneNumber}
@@ -54,6 +56,7 @@ export function PhoneInput({
             placeholderTextColor="#666666"
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
+            maxFontSizeMultiplier={1.0}
           />
         </View>
       </PostHogMaskView>
@@ -90,6 +93,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
+    lineHeight: 20,
   },
   input: {
     flex: 1,
@@ -97,6 +101,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
     padding: 0,
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   focused: {
     borderColor: '#3B82F6',

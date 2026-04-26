@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
+  Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -108,19 +109,30 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
   return (
     <View style={[styles.container, { paddingBottom: bottomPadding }]}>
       <PostHogMaskView style={styles.inputWrapper}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          placeholder={t('chat.inputPlaceholder')}
-          placeholderTextColor={COLORS.gray[500]}
-          value={text}
-          onChangeText={handleChangeText}
-          multiline
-          maxLength={2000}
-          returnKeyType={Platform.OS === 'ios' ? 'default' : 'send'}
-          blurOnSubmit={false}
-          accessibilityLabel={t('chat.inputAccessibilityLabel')}
-        />
+        <View style={styles.inputContainer}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            value={text}
+            onChangeText={handleChangeText}
+            multiline
+            maxLength={2000}
+            returnKeyType={Platform.OS === 'ios' ? 'default' : 'send'}
+            blurOnSubmit={false}
+            accessibilityLabel={t('chat.inputAccessibilityLabel')}
+            allowFontScaling={false}
+          />
+          {text.length === 0 && (
+            <Text
+              style={styles.placeholderOverlay}
+              pointerEvents="none"
+              allowFontScaling={false}
+              numberOfLines={1}
+            >
+              {t('chat.inputPlaceholder')}
+            </Text>
+          )}
+        </View>
       </PostHogMaskView>
       <TouchableOpacity
         onPress={handleSend}
@@ -154,19 +166,30 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flex: 1,
   },
+  inputContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
   input: {
     backgroundColor: COLORS.background.secondary,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.border.light,
     paddingHorizontal: SPACING.md,
-    paddingTop: Platform.OS === 'ios' ? 10 : 8,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     maxHeight: 120,
-    minHeight: 40,
+    minHeight: 44,
     color: COLORS.white,
     fontFamily: 'Archivo_400Regular',
     fontSize: 15,
+  },
+  placeholderOverlay: {
+    position: 'absolute',
+    left: SPACING.md + 1,
+    right: SPACING.md,
+    color: COLORS.gray[500],
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 12,
   },
   sendButton: {
     width: 36,

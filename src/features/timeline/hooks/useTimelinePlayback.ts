@@ -2,15 +2,17 @@ import { useEffect, useRef, useCallback } from 'react';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { useCallStore } from '@/stores/callStore';
-import type { LocalClip } from '../types';
+import type { LocalClip, LaneMeta } from '../types';
 import type { AudioSegment } from '@/types/call';
 import { getTimelineDuration } from '../utils/clipOperations';
+import { computeLaneEffectiveVolume, hasAnySoloedLane } from '../utils/laneMixer';
 
 interface UseTimelinePlaybackProps {
   clips: LocalClip[];
   segments: (AudioSegment & { downloadUrl: string })[];
   playbackPositionMs: number;
   isPlaying: boolean;
+  laneMeta: Record<number, LaneMeta>;
   onPositionChange: (positionMs: number) => void;
   onPlayingChange: (playing: boolean) => void;
 }
@@ -55,19 +57,39 @@ function waitForLoaded(player: AudioPlayer, timeoutMs = 5000): Promise<boolean> 
   });
 }
 
+/**
+ * Multi-lane audio playback for the timeline editor.
+ *
+ * Uses `expo-audio` (NOT `react-native-audio-api`) because the latter
+ * registers global AVAudioSession observers at module-load time that
+ * interfere with the Twilio Voice call audio path. expo-audio is
+ * Twilio-safe — its `createAudioPlayer` doesn't touch the audio session
+ * unless you explicitly call `setAudioModeAsync`, which we guard
+ * against during active calls.
+ *
+ * Tradeoff: stereo pan is NOT applied to the audible output here. The
+ * `pan` value in `LaneMeta` still gets persisted (it controls the UI
+ * thumb position) but `expo-audio.AudioPlayer` doesn't expose a pan
+ * property. We accept this regression in exchange for not breaking
+ * call audio. A future migration to a Twilio-compatible audio engine
+ * could restore audible pan.
+ */
 export function useTimelinePlayback({
   clips,
   segments,
   playbackPositionMs,
   isPlaying,
+  laneMeta,
   onPositionChange,
   onPlayingChange,
 }: UseTimelinePlaybackProps) {
   // Configure audio routing.
   // During a Twilio call, Twilio owns the AVAudioSession (.playAndRecord).
-  // Calling setAudioModeAsync would reconfigure it and kill call audio.
-  // expo-audio players can still play() under Twilio's session, so we
-  // only configure when there is NO active call.
+  // Calling setAudioModeAsync would reconfigure it and kill call audio,
+  // so we only configure when there is NO active call. expo-audio
+  // players created with `keepAudioSessionActive: true` (see getPlayer
+  // below) coexist safely with Twilio's session, so the user can
+  // listen to clips and feed posts while still on the call.
   const hasActiveCall = useCallStore((s) => s.activeCall !== null);
   useEffect(() => {
     if (hasActiveCall) return;
@@ -88,6 +110,8 @@ export function useTimelinePlayback({
   clipsRef.current = clips;
   const segmentsRef = useRef(segments);
   segmentsRef.current = segments;
+  const laneMetaRef = useRef(laneMeta);
+  laneMetaRef.current = laneMeta;
 
   // Derive which lanes exist
   const laneIndices = useRef<number[]>([]);
@@ -101,11 +125,19 @@ export function useTimelinePlayback({
     [] // uses ref, no dependency needed
   );
 
-  // Get or create a player for a lane
+  // Get or create a player for a lane.
+  //
+  // CRITICAL: `keepAudioSessionActive: true` prevents expo-audio from
+  // calling `AVAudioSession.setActive(false, .notifyOthersOnDeactivation)`
+  // when the player is paused or finishes playing. Without this, every
+  // pause() during a Twilio call would tear down the call's audio
+  // session and silence the conversation. With it set, timeline
+  // playback (and any other expo-audio playback in the app) coexists
+  // peacefully with the active call.
   const getPlayer = useCallback((laneIndex: number): AudioPlayer => {
     let player = playersRef.current.get(laneIndex);
     if (!player) {
-      player = createAudioPlayer(null);
+      player = createAudioPlayer(null, { keepAudioSessionActive: true });
       playersRef.current.set(laneIndex, player);
     }
     return player;
@@ -139,7 +171,18 @@ export function useTimelinePlayback({
         sourceChanged = true;
       }
 
-      player.volume = clip.volume;
+      // Apply the full mixer chain: clip volume × lane gain, muted by mute/solo rules
+      const meta = laneMetaRef.current[laneIndex];
+      player.volume = computeLaneEffectiveVolume({
+        clipVolume: clip.volume,
+        laneGainDb: meta?.gainDb ?? 0,
+        laneMuted: meta?.muted ?? false,
+        laneSolo: meta?.solo ?? false,
+        anyLaneSoloed: hasAnySoloedLane(laneMetaRef.current),
+      });
+      // NOTE: pan is NOT applied here. expo-audio's AudioPlayer doesn't
+      // expose a pan property. The pan UI/state is preserved for when
+      // we can switch to a Twilio-safe audio engine that supports it.
 
       const offsetInSegment = positionMs - clip.positionInTimeline + clip.startInSegment;
       await player.seekTo(offsetInSegment / 1000);
@@ -150,8 +193,8 @@ export function useTimelinePlayback({
   );
 
   // Pre-load players whenever position/clips/segments change while paused.
-  // replace() on a paused player only swaps the AVPlayerItem without
-  // activating the AVAudioSession, so it's safe during Twilio calls.
+  // Safe during a call because players use `keepAudioSessionActive: true`,
+  // so replace()/seekTo()/pause() never deactivate the AVAudioSession.
   useEffect(() => {
     if (isPlaying) return;
     for (const lane of laneIndices.current) {
@@ -159,6 +202,28 @@ export function useTimelinePlayback({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playbackPositionMs, isPlaying, syncLanePlayer, clips, segments]);
+
+  // Apply mixer changes (mute/solo/gain) immediately without waiting
+  // for the next animation frame or user interaction.
+  useEffect(() => {
+    const anySoloed = hasAnySoloedLane(laneMeta);
+    for (const lane of laneIndices.current) {
+      const player = playersRef.current.get(lane);
+      if (!player) continue;
+      const activeClipId = activeClipIdsRef.current.get(lane);
+      const clip = activeClipId
+        ? clipsRef.current.find((c) => c.id === activeClipId)
+        : null;
+      const meta = laneMeta[lane];
+      player.volume = computeLaneEffectiveVolume({
+        clipVolume: clip?.volume ?? 1,
+        laneGainDb: meta?.gainDb ?? 0,
+        laneMuted: meta?.muted ?? false,
+        laneSolo: meta?.solo ?? false,
+        anyLaneSoloed: anySoloed,
+      });
+    }
+  }, [laneMeta]);
 
   // Animate playhead AND sync audio at clip boundaries
   const startAnimation = useCallback(() => {
@@ -260,6 +325,9 @@ export function useTimelinePlayback({
         stopAnimation();
       };
     } else {
+      // pause() is safe even during a Twilio call because the players
+      // were created with `keepAudioSessionActive: true`, so pause does
+      // NOT trigger expo-audio's deactivateSession.
       for (const [, player] of playersRef.current) {
         player.pause();
       }

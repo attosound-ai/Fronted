@@ -54,10 +54,12 @@ export function PostActions({
           style={styles.actionItem}
         >
           <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-            <ThumbsUpIcon size={26} color="#FFFFFF" filled={post.isLiked} />
+            <ThumbsUpIcon size={28} color="#FFFFFF" filled={post.isLiked} />
           </Animated.View>
           {post.likesCount > 0 && (
-            <Text style={styles.metricText}>{formatCount(post.likesCount)}</Text>
+            <Text style={styles.metricText} maxFontSizeMultiplier={1.0}>
+              {formatCount(post.likesCount)}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -66,9 +68,11 @@ export function PostActions({
           activeOpacity={0.7}
           style={styles.actionItem}
         >
-          <MessageCircle size={26} color="#FFF" strokeWidth={2.25} />
+          <MessageCircle size={28} color="#FFF" strokeWidth={2.25} />
           {post.commentsCount > 0 && (
-            <Text style={styles.metricText}>{formatCount(post.commentsCount)}</Text>
+            <Text style={styles.metricText} maxFontSizeMultiplier={1.0}>
+              {formatCount(post.commentsCount)}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -79,27 +83,44 @@ export function PostActions({
           activeOpacity={0.7}
           style={styles.actionItem}
         >
-          <Repeat size={26} color="#FFF" strokeWidth={2.25} />
+          <Repeat size={28} color="#FFF" strokeWidth={2.25} />
           {post.repostsCount > 0 && (
-            <Text style={[styles.metricText, post.isReposted && styles.repostedText]}>
+            <Text
+              style={[styles.metricText, post.isReposted && styles.repostedText]}
+              maxFontSizeMultiplier={1.0}
+            >
               {formatCount(post.repostsCount)}
             </Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={onShare} onLongPress={() => onShowInteractors?.('shares')} delayLongPress={400} activeOpacity={0.7} style={styles.actionItem}>
-          <Send size={26} color="#FFF" strokeWidth={2.25} />
+        <TouchableOpacity
+          onPress={onShare}
+          onLongPress={() => onShowInteractors?.('shares')}
+          delayLongPress={400}
+          activeOpacity={0.7}
+          style={styles.actionItem}
+        >
+          <Send size={28} color="#FFF" strokeWidth={2.25} />
           {post.sharesCount > 0 && (
-            <Text style={styles.metricText}>{formatCount(post.sharesCount)}</Text>
+            <Text style={styles.metricText} maxFontSizeMultiplier={1.0}>
+              {formatCount(post.sharesCount)}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity onPress={onShowSupport} activeOpacity={0.7}>
         <View style={styles.heartContainer}>
-          <Heart size={34} color="#FFF" strokeWidth={2.25} />
+          <Heart size={36} color="#FFF" strokeWidth={2.25} />
           <View style={styles.dollarStroke} />
-          <Text style={styles.heartS}>S</Text>
+          <Text
+            style={styles.heartS}
+            maxFontSizeMultiplier={1.0}
+            allowFontScaling={false}
+          >
+            S
+          </Text>
         </View>
       </TouchableOpacity>
     </View>
@@ -133,23 +154,23 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   heartContainer: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dollarStroke: {
     position: 'absolute',
     width: 1.5,
-    height: 20,
-    top: 8,
+    height: 21,
+    top: 8.5,
     backgroundColor: '#FFF',
   },
   heartS: {
     position: 'absolute',
-    top: 10.5,
+    top: 11,
     color: '#FFF',
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Archivo_700Bold',
   },
 });

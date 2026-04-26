@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -18,9 +18,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import type { FeedPost, PostAuthor } from '@/types/post';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ReelMediaProps {
   post: FeedPost;
@@ -41,6 +40,7 @@ export function ReelMedia({
   onReport,
   onDelete,
 }: ReelMediaProps) {
+  const { contentWidth } = useDeviceLayout();
   const { t } = useTranslation('feed');
   const currentUserId = useAuthStore((s) => s.user?.id);
   const isOwnPost =
@@ -49,7 +49,7 @@ export function ReelMedia({
   const [menuVisible, setMenuVisible] = useState(false);
 
   const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'original', 'video') ?? post.videoUrl)
+    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
     : null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
@@ -75,14 +75,16 @@ export function ReelMedia({
 
   if (!videoUrl) {
     return (
-      <View style={styles.placeholder}>
+      <View
+        style={[styles.placeholder, { width: contentWidth, height: contentWidth * 1.6 }]}
+      >
         <Smartphone size={48} color="#666" strokeWidth={1.5} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { width: contentWidth, height: contentWidth * 1.6 }]}>
       <VideoView
         player={player}
         style={styles.video}
@@ -100,8 +102,14 @@ export function ReelMedia({
           onPress={() => onProfilePress?.(post.author)}
           activeOpacity={0.7}
         >
-          <Avatar uri={post.author.avatar} size="md" />
-          <Text style={styles.authorName}>{post.author.username}</Text>
+          <Avatar
+            uri={post.author.avatar}
+            size="md"
+            creatorRing={post.author.role === 'creator'}
+          />
+          <Text style={styles.authorName} numberOfLines={1} maxFontSizeMultiplier={1.15}>
+            {post.author.username}
+          </Text>
           {post.author.role === 'creator' && <CreatorBadge />}
         </TouchableOpacity>
 
@@ -113,12 +121,20 @@ export function ReelMedia({
             onPress={() => onFollow?.(post.author.id)}
             activeOpacity={0.7}
           >
-            <Text style={styles.followText}>{t('post.followButton')}</Text>
+            <Text style={styles.followText} maxFontSizeMultiplier={1.0}>
+              {t('post.followButton')}
+            </Text>
           </TouchableOpacity>
         )}
 
         {!isOwnPost && post.author.isFollowing && (
-          <Text style={styles.reelFeedLabel}>{t('post.following')}</Text>
+          <Text
+            style={styles.reelFeedLabel}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.0}
+          >
+            {t('post.following')}
+          </Text>
         )}
 
         <TouchableOpacity
@@ -168,7 +184,7 @@ export function ReelMedia({
               fill={post.isBookmarked ? '#FFF' : 'none'}
             />
           </View>
-          <Text style={styles.menuText}>
+          <Text style={styles.menuText} maxFontSizeMultiplier={1.2}>
             {post.isBookmarked ? t('post.menuUnsave') : t('post.menuSave')}
           </Text>
         </TouchableOpacity>
@@ -186,7 +202,9 @@ export function ReelMedia({
           <View style={styles.menuIcon}>
             <Flag size={24} color="#EF4444" strokeWidth={2.25} />
           </View>
-          <Text style={styles.menuTextDanger}>{t('post.menuReport')}</Text>
+          <Text style={styles.menuTextDanger} maxFontSizeMultiplier={1.2}>
+            {t('post.menuReport')}
+          </Text>
         </TouchableOpacity>
 
         {isOwnPost && (
@@ -203,7 +221,9 @@ export function ReelMedia({
               <View style={styles.menuIcon}>
                 <Trash2 size={24} color="#EF4444" strokeWidth={2.25} />
               </View>
-              <Text style={styles.menuTextDanger}>Delete post</Text>
+              <Text style={styles.menuTextDanger} maxFontSizeMultiplier={1.2}>
+                Delete post
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -214,8 +234,6 @@ export function ReelMedia({
 
 const styles = StyleSheet.create({
   container: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.6,
     backgroundColor: '#000',
     position: 'relative',
   },
@@ -224,8 +242,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   placeholder: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH * 1.6,
     backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',

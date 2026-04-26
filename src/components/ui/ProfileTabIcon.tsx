@@ -8,8 +8,8 @@ interface ProfileTabIconProps {
   focused: boolean;
 }
 
-const SINGLE_SIZE = 26;
-const MULTI_SIZE = 22;
+const SINGLE_SIZE = 35;
+const MULTI_SIZE = 30;
 const MULTI_OFFSET = 8;
 
 /**
@@ -35,13 +35,13 @@ export function ProfileTabIcon({ color, focused }: ProfileTabIconProps) {
       <View style={styles.multiStack}>
         <Avatar
           uri={other.user.avatar}
-          fallbackText={other.user.displayName}
+          fallbackText={other.user.username}
           style={styles.backAvatar}
           size="sm"
         />
         <Avatar
           uri={active.user.avatar}
-          fallbackText={active.user.displayName}
+          fallbackText={active.user.username}
           style={[styles.frontAvatar, focused && styles.frontAvatarFocused]}
           size="sm"
         />
@@ -52,7 +52,7 @@ export function ProfileTabIcon({ color, focused }: ProfileTabIconProps) {
   return (
     <Avatar
       uri={user?.avatar}
-      fallbackText={user?.displayName}
+      fallbackText={user?.username}
       style={[styles.singleAvatar, focused && styles.singleAvatarFocused]}
       size="sm"
     />

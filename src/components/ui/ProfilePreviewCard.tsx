@@ -63,17 +63,10 @@ export function ProfilePreviewCard({
         </View>
       )}
 
-      {/* Name */}
+      {/* Username — always the primary handle on previews. */}
       <Text variant="h2" style={styles.name}>
-        {displayName || 'Your Name'}
+        {normalizedUsername || 'Your Name'}
       </Text>
-
-      {/* Username */}
-      {normalizedUsername && (
-        <Text variant="caption" style={styles.username}>
-          {normalizedUsername}
-        </Text>
-      )}
 
       {/* Bio */}
       {bio && (

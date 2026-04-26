@@ -45,7 +45,6 @@ function navigateForType(type: NotificationType, group: GroupedNotification) {
         pathname: '/user/[id]',
         params: {
           id: group.actors[0].id,
-          displayName: group.actors[0].displayName,
           username: group.actors[0].username,
           avatar: group.actors[0].avatar ?? '',
         },
@@ -55,6 +54,7 @@ function navigateForType(type: NotificationType, group: GroupedNotification) {
     case 'comment':
     case 'repost':
     case 'share':
+    case 'new_post':
       if (group.referenceId) {
         router.navigate({
           pathname: '/post/[id]',
@@ -93,11 +93,11 @@ export function NotificationRow({ group, onMarkRead }: Props) {
   const i18nParams: Record<string, string | number> = {};
 
   if (actors.length >= 1) {
-    i18nParams.actor = actors[0].displayName;
-    i18nParams.actor1 = actors[0].displayName;
+    i18nParams.actor = actors[0].username;
+    i18nParams.actor1 = actors[0].username;
   }
   if (actors.length >= 2) {
-    i18nParams.actor2 = actors[1].displayName;
+    i18nParams.actor2 = actors[1].username;
   }
   if (type === 'message' && count > 1) {
     i18nParams.count = count;
@@ -131,12 +131,17 @@ export function NotificationRow({ group, onMarkRead }: Props) {
                 <Avatar
                   uri={secondAvatarUri}
                   size="sm"
-                  fallbackText={actors[1]?.displayName}
+                  fallbackText={actors[1]?.username}
                 />
               </View>
             )}
             <View style={actors.length >= 2 ? styles.firstAvatar : undefined}>
-              <Avatar uri={avatarUri} size="sm" fallbackText={actors[0]?.displayName} />
+              <Avatar
+                uri={avatarUri}
+                size="sm"
+                fallbackText={actors[0]?.username}
+                creatorRing={actors[0]?.role === 'creator'}
+              />
             </View>
           </>
         )}

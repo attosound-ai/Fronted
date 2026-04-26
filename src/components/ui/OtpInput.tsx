@@ -203,6 +203,7 @@ export function OtpInput({
           autoFocus={autoFocus}
           caretHidden
           textContentType="oneTimeCode"
+          autoComplete="one-time-code"
           style={styles.hiddenInput}
         />
 

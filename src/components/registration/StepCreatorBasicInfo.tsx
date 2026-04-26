@@ -150,6 +150,7 @@ export function StepCreatorBasicInfo({
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="email"
+              textContentType="emailAddress"
               keyboardType="email-address"
             />
             {emailStatus === 'available' && <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />}

@@ -18,6 +18,8 @@ function mapBackendMessage(m: BackendMessage): ChatMessage {
     isEdited: m.is_edited || false,
     editedAt: m.edited_at || null,
     isDeleted: m.is_deleted || false,
+    deletedAt: m.deleted_at ?? null,
+    deletedBy: m.deleted_by ?? null,
     replyToId: m.reply_to_id || null,
     replyToContent: m.reply_to_content || null,
     replyToSender: m.reply_to_sender || null,
@@ -180,11 +182,21 @@ export function useRealtimeChat(conversationId: string) {
         }));
       },
       onMessageDeleted: (payload) => {
-        const { message_id } = payload as { message_id: string };
+        const {
+          message_id,
+          deleted_at,
+          deleted_by,
+        } = payload as {
+          message_id: string;
+          deleted_at?: string;
+          deleted_by?: string;
+        };
         updateMessageInCache(message_id, (m) => ({
           ...m,
           isDeleted: true,
           content: '',
+          deletedAt: deleted_at ?? m.deletedAt ?? null,
+          deletedBy: deleted_by ?? m.deletedBy ?? null,
         }));
       },
     });

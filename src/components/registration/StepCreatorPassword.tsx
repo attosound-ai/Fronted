@@ -61,6 +61,23 @@ export function StepCreatorPassword({
       )}
 
       <View style={styles.formArea}>
+        {/*
+          Hidden username field paired with the password inputs so iOS
+          Password AutoFill can save the new credential under the
+          creator account's email (instead of suggesting unrelated
+          emails from Contacts in the QuickType bar).
+        */}
+        <TextInput
+          value={state.creatorEmail || ''}
+          editable={false}
+          autoComplete="username"
+          textContentType="username"
+          importantForAutofill="yes"
+          style={styles.hiddenUsername}
+          accessibilityElementsHidden
+          aria-hidden
+        />
+
         {/* Password */}
         <View>
           <View style={styles.passwordWrapper}>
@@ -72,7 +89,9 @@ export function StepCreatorPassword({
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
-              autoComplete="off"
+              autoComplete="password-new"
+              textContentType="newPassword"
+              passwordRules="minlength: 8; required: lower; required: upper; required: digit;"
             />
             <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               {showPassword ? (
@@ -115,7 +134,8 @@ export function StepCreatorPassword({
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
-              autoComplete="off"
+              autoComplete="password-new"
+              textContentType="newPassword"
             />
             <TouchableOpacity onPress={() => setShowConfirm((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               {showConfirm ? (
@@ -161,4 +181,14 @@ const styles = StyleSheet.create({
   strengthMet: { color: '#22C55E' },
   matchSuccess: { color: '#22C55E', marginTop: 6 },
   matchError: { color: '#888888', marginTop: 6 },
+  // Off-screen + zero-size — still focusable so iOS treats it as part
+  // of the form for Password AutoFill pairing.
+  hiddenUsername: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    top: -1000,
+    left: -1000,
+  },
 });

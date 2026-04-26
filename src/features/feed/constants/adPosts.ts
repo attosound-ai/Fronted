@@ -1,6 +1,8 @@
 import type { FeedPost } from '@/types/post';
 
+// TODO: re-upload ad videos to Cloudinary and restore entries
 export const DEMO_ADS: FeedPost[] = [
+/*
   {
     id: 'ad-demo-4',
     type: 'ad',
@@ -93,4 +95,4 @@ export const DEMO_ADS: FeedPost[] = [
     isReposted: false,
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
   },
-];
+*/];

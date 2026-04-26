@@ -8,6 +8,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { useCallStore } from '@/stores/callStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronDown } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -37,12 +38,15 @@ import { ProfileSubscriptionSection } from '@/features/profile/components/Profil
 import { ProfileSettingsSection } from '@/features/profile/components/ProfileSettingsSection';
 import { DeleteAccountBottomSheet } from '@/features/profile/components/DeleteAccountBottomSheet';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 
 export default function ProfileScreen() {
   const authUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   // Fetch real counts from social-service
-  const { user: enrichedUser, refetch: refetchProfile } = useUserProfile(String(authUser?.id ?? 0));
+  const { user: enrichedUser, refetch: refetchProfile } = useUserProfile(
+    String(authUser?.id ?? 0)
+  );
   const user = enrichedUser ?? authUser;
   const hasEntitlement = useSubscriptionStore((s) => s.hasEntitlement);
 
@@ -50,15 +54,12 @@ export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const contentTabsRef = useRef<ProfileContentTabsHandle>(null);
 
-  const handleScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 200) {
-        contentTabsRef.current?.handleScrollNearEnd();
-      }
-    },
-    [],
-  );
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 200) {
+      contentTabsRef.current?.handleScrollNearEnd();
+    }
+  }, []);
 
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [logoutVisible, setLogoutVisible] = useState(false);
@@ -93,82 +94,99 @@ export default function ProfileScreen() {
     }
   };
 
+  const isInCall = useCallStore(
+    (s) => s.activeCall?.state === 'connected' || s.activeCall?.state === 'reconnecting'
+  );
+
   if (!user) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => setSwitcherVisible(true)}
-          activeOpacity={0.7}
-          style={styles.headerButton}
-        >
-          <Text variant="h2">@{user.username}</Text>
-          <ChevronDown size={18} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={400}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor="#FFF"
-          />
-        }
-      >
-        {/* Hero — padded section */}
-        <View style={styles.heroSection}>
-          <ProfileHero user={user} onEditProfile={() => router.push('/edit-profile')} />
+    <SafeAreaView
+      style={[styles.container, isInCall && { paddingTop: 8 }]}
+      edges={isInCall ? [] : ['top']}
+    >
+      <ResponsiveContentWrapper>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => setSwitcherVisible(true)}
+            activeOpacity={0.7}
+            style={styles.headerButton}
+          >
+            <Text
+              variant="h2"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              style={styles.headerUsername}
+            >
+              @{user.username}
+            </Text>
+            <ChevronDown size={18} color="#FFFFFF" strokeWidth={2.25} />
+          </TouchableOpacity>
         </View>
 
-        {/* Content tabs — posts / saved / settings */}
-        <ProfileContentTabs
-          ref={contentTabsRef}
-          userId={user.id}
-          settingsContent={
-            <>
-              <ProfileAccountSection user={user} />
-              <ProfileSecuritySection user={user} />
-              {user.role === 'creator' && <ProfileCreatorSection user={user} />}
-              {user.role === 'representative' && (
-                <ProfileRepresentativeSection user={user} />
-              )}
-              {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
-              <ProfileSubscriptionSection />
-              <ProfileSettingsSection />
-              <ProfileActionsSection
-                onLogout={() => setLogoutVisible(true)}
-                onDeleteAccount={() => setDeleteAccountVisible(true)}
-              />
-            </>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={400}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#FFF"
+            />
           }
+        >
+          {/* Hero — padded section */}
+          <View style={styles.heroSection}>
+            <ProfileHero user={user} onEditProfile={() => router.push('/edit-profile')} />
+          </View>
+
+          {/* Content tabs — posts / saved / settings */}
+          <ProfileContentTabs
+            ref={contentTabsRef}
+            userId={user.id}
+            settingsContent={
+              <>
+                <ProfileAccountSection user={user} />
+                <ProfileSecuritySection user={user} />
+                {user.role === 'creator' && <ProfileCreatorSection user={user} />}
+                {user.role === 'representative' && (
+                  <ProfileRepresentativeSection user={user} />
+                )}
+                {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
+                <ProfileSubscriptionSection />
+                <ProfileSettingsSection />
+                <ProfileActionsSection
+                  onLogout={() => setLogoutVisible(true)}
+                  onDeleteAccount={() => setDeleteAccountVisible(true)}
+                />
+              </>
+            }
+          />
+        </ScrollView>
+
+        <AccountSwitcherBottomSheet
+          visible={switcherVisible}
+          onClose={() => setSwitcherVisible(false)}
         />
-      </ScrollView>
 
-      <AccountSwitcherBottomSheet
-        visible={switcherVisible}
-        onClose={() => setSwitcherVisible(false)}
-      />
+        <LogoutBottomSheet
+          visible={logoutVisible}
+          onClose={() => setLogoutVisible(false)}
+          onConfirm={handleLogout}
+          isLoading={isLoggingOut}
+        />
 
-      <LogoutBottomSheet
-        visible={logoutVisible}
-        onClose={() => setLogoutVisible(false)}
-        onConfirm={handleLogout}
-        isLoading={isLoggingOut}
-      />
+        <DeleteAccountBottomSheet
+          visible={deleteAccountVisible}
+          onClose={() => setDeleteAccountVisible(false)}
+          user={user}
+        />
 
-      <DeleteAccountBottomSheet
-        visible={deleteAccountVisible}
-        onClose={() => setDeleteAccountVisible(false)}
-        user={user}
-      />
-
-      <Toast />
+        <Toast />
+      </ResponsiveContentWrapper>
     </SafeAreaView>
   );
 }
@@ -188,6 +206,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    maxWidth: '90%',
+  },
+  headerUsername: {
+    flexShrink: 1,
   },
   scrollView: {
     flex: 1,

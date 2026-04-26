@@ -7,6 +7,7 @@
     "createOptionUploadSubtitle": "Share with your audience",
     "menuFollowing": "Following",
     "menuFilters": "Filters",
+    "menuAllFilters": "All filters",
     "menuNotifications": "Notifications",
     "menuStore": "ATTO SOUND Store",
     "menuAbout": "About ATTO SOUND",
@@ -31,7 +32,7 @@
     "linkCopied": "Link copied to clipboard",
     "comments": "Comments",
     "noCommentsYet": "No comments yet. Be the first!",
-    "replyingTo": "Replying to @{{username}}",
+    "replyingTo": "Replying to {{username}}",
     "addCommentPlaceholder": "Add a comment..."
   },
   "create": {

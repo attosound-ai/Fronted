@@ -6,6 +6,7 @@ import {
   Switch,
   StyleSheet,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { ShieldCheck, Smartphone, Mail, MessageCircle } from 'lucide-react-native';
 
@@ -236,6 +237,22 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
             </Text>
           ) : null}
 
+          {/*
+            Hidden username field paired with the password input so iOS
+            Password AutoFill offers the saved credential for this
+            account instead of unrelated emails from Contacts.
+          */}
+          <TextInput
+            value={user.email || user.username || ''}
+            editable={false}
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
+            style={styles.hiddenUsername}
+            accessibilityElementsHidden
+            aria-hidden
+          />
+
           <Input
             placeholder={t('security.passwordPlaceholder')}
             value={password}
@@ -245,6 +262,8 @@ export function ProfileSecuritySection({ user }: ProfileSecuritySectionProps) {
             }}
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="password"
+            textContentType="password"
           />
 
           <Button
@@ -309,5 +328,15 @@ const styles = StyleSheet.create({
   },
   methodDesc: {
     color: '#888888',
+  },
+  // Off-screen + zero-size — still focusable so iOS treats it as part
+  // of the form for Password AutoFill pairing.
+  hiddenUsername: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    top: -1000,
+    left: -1000,
   },
 });

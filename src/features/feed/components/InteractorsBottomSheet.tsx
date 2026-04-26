@@ -84,8 +84,7 @@ export function InteractorsBottomSheet({
             >
               <Avatar uri={item.avatar} size="sm" />
               <View style={styles.textCol}>
-                <Text style={styles.displayName}>{item.displayName}</Text>
-                <Text style={styles.username}>@{item.username}</Text>
+                <Text style={styles.displayName}>{item.username}</Text>
               </View>
             </TouchableOpacity>
           )}

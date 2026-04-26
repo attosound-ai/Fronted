@@ -306,6 +306,11 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } else {
         processQueue(new Error('Refresh failed'), null);
+        // Expire session explicitly — refreshTokens() no longer does this
+        // as a side effect, so the interceptor is the right place to decide.
+        if (useAuthStore.getState().isAuthenticated) {
+          useAuthStore.getState().expireSession('interceptor_refresh_failed');
+        }
         return Promise.reject(error);
       }
     } catch (refreshError) {

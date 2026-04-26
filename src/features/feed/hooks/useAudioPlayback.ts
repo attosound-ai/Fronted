@@ -3,10 +3,7 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
   useAudioSampleListener,
-  setAudioModeAsync,
 } from 'expo-audio';
-import { useMountEffect } from '@/hooks';
-
 const BAR_COUNT = 40;
 const UPDATE_MS = 80; // ~12 fps
 
@@ -18,14 +15,13 @@ function formatTime(seconds: number): string {
 }
 
 export function useAudioPlayback(url: string | undefined) {
-  const player = useAudioPlayer(url ?? null, { updateInterval: 200 });
+  const player = useAudioPlayer(url ?? null, {
+    updateInterval: 200,
+    keepAudioSessionActive: true,
+  });
   const status = useAudioPlayerStatus(player);
   const [barAmplitudes, setBarAmplitudes] = useState<number[]>([]);
   const lastUpdateRef = useRef(0);
-
-  useMountEffect(() => {
-    setAudioModeAsync({ playsInSilentMode: true });
-  });
 
   // Real-time PCM amplitude → bar heights
   useAudioSampleListener(player, (sample) => {

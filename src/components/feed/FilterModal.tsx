@@ -1,9 +1,8 @@
-import { View, Switch, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Type, ImageIcon, Video, Clapperboard, Music } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
-import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { useFeedFilterStore } from '@/stores/feedFilterStore';
 import type { PostType } from '@/types/post';
 
@@ -23,32 +22,10 @@ interface FilterModalProps {
 export function FilterModal({ visible, onClose }: FilterModalProps) {
   const { t } = useTranslation('feed');
   const filters = useFeedFilterStore((s) => s.filters);
-  const setFilter = useFeedFilterStore((s) => s.setFilter);
   const toggleContentType = useFeedFilterStore((s) => s.toggleContentType);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={t('filters.title')}>
-      {/* Creators only toggle */}
-      <View style={styles.row}>
-        <View style={styles.labelRow}>
-          <CreatorBadge size="sm" />
-          <View style={styles.textCol}>
-            <Text variant="body" style={styles.label}>
-              {t('filters.creatorsOnly')}
-            </Text>
-            <Text variant="small" style={styles.description}>
-              {t('filters.creatorsOnlyDescription')}
-            </Text>
-          </View>
-        </View>
-        <Switch
-          value={filters.creatorsOnly}
-          onValueChange={(v) => setFilter('creatorsOnly', v)}
-          trackColor={{ false: '#333', true: '#F59E0B' }}
-          thumbColor="#FFF"
-        />
-      </View>
-
+    <BottomSheet visible={visible} onClose={onClose} title={t('header.menuAllFilters')}>
       {/* Content type chips */}
       <View style={styles.section}>
         <Text variant="body" style={styles.sectionLabel}>
@@ -84,31 +61,10 @@ export function FilterModal({ visible, onClose }: FilterModalProps) {
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  textCol: {
-    flex: 1,
-    gap: 2,
-  },
-  label: {
-    color: '#FFF',
-    fontFamily: 'Archivo_500Medium',
-  },
   description: {
     color: '#888',
   },
   section: {
-    marginTop: 20,
     gap: 6,
   },
   sectionLabel: {

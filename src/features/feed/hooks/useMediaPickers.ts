@@ -47,6 +47,45 @@ export function useMediaPickers() {
     return [...existing, ...newMedia];
   };
 
+  const takePhoto = async (): Promise<PickedMedia[] | null> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return null;
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets[0]) return null;
+    const a = result.assets[0];
+    return [
+      {
+        uri: a.uri,
+        fileName: a.fileName ?? `photo_${Date.now()}.jpg`,
+        mimeType: a.mimeType ?? 'image/jpeg',
+        width: a.width,
+        height: a.height,
+      },
+    ];
+  };
+
+  const recordVideo = async (): Promise<PickedMedia | null> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return null;
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['videos'],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets[0]) return null;
+    const a = result.assets[0];
+    return {
+      uri: a.uri,
+      fileName: a.fileName ?? `video_${Date.now()}.mp4`,
+      mimeType: a.mimeType ?? 'video/mp4',
+      width: a.width,
+      height: a.height,
+      duration: a.duration ? a.duration / 1000 : undefined,
+    };
+  };
+
   const pickVideo = async (): Promise<PickedMedia | null> => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos'],
@@ -64,9 +103,7 @@ export function useMediaPickers() {
     };
   };
 
-  const pickReel = async (
-    fromCamera: boolean
-  ): Promise<PickedMedia | null> => {
+  const pickReel = async (fromCamera: boolean): Promise<PickedMedia | null> => {
     if (fromCamera) {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') return null;
@@ -149,6 +186,8 @@ export function useMediaPickers() {
   return {
     pickImages,
     pickMoreImages,
+    takePhoto,
+    recordVideo,
     pickVideo,
     pickReel,
     pickDocumentImages,

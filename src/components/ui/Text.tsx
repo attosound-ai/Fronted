@@ -1,4 +1,5 @@
 import { Text as RNText, StyleSheet, TextProps as RNTextProps } from 'react-native';
+import { VARIANT_MAX_SCALE } from '@/lib/textScaling';
 
 type TextVariant = 'logo' | 'h1' | 'h2' | 'h3' | 'body' | 'caption' | 'small';
 
@@ -14,9 +15,19 @@ const FONTS = {
   bold: 'Archivo_700Bold',
 } as const;
 
-export function Text({ variant = 'body', style, children, ...props }: TextProps) {
+export function Text({
+  variant = 'body',
+  style,
+  children,
+  maxFontSizeMultiplier,
+  ...props
+}: TextProps) {
   return (
-    <RNText style={[styles.base, styles[variant], style]} {...props}>
+    <RNText
+      style={[styles.base, styles[variant], style]}
+      maxFontSizeMultiplier={maxFontSizeMultiplier ?? VARIANT_MAX_SCALE[variant]}
+      {...props}
+    >
       {children}
     </RNText>
   );
@@ -61,7 +72,7 @@ const styles = StyleSheet.create({
   small: {
     fontSize: 11,
     fontFamily: FONTS.regular,
-    lineHeight: 14,
+    lineHeight: 16,
     color: '#888888',
   },
 });

@@ -36,7 +36,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       {/* Comments */}
       {post.commentsCount > 0 && (
         <TouchableOpacity onPress={onViewComments} activeOpacity={0.7}>
-          <Text variant="body" style={styles.viewComments}>
+          <Text variant="body" style={styles.viewComments} maxFontSizeMultiplier={1.1}>
             {t('post.viewAllComments', {
               count: formatCount(post.commentsCount),
             } as Record<string, unknown>)}
@@ -45,7 +45,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       )}
 
       {/* Timestamp */}
-      <Text variant="caption" style={styles.timestamp}>
+      <Text variant="caption" style={styles.timestamp} maxFontSizeMultiplier={1.1}>
         {formatRelativeTime(post.createdAt)}
         {post.isEdited && ' · edited'}
       </Text>

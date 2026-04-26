@@ -1,9 +1,8 @@
 import { memo } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Text as RNText } from 'react-native';
 import Animated, { withSpring, withTiming, Easing } from 'react-native-reanimated';
 import { CheckCheck, Check, Clock, AlertCircle } from 'lucide-react-native';
 import { PostHogMaskView } from 'posthog-react-native';
-import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
 import type { ChatMessage } from '../types';
@@ -86,13 +85,16 @@ function MessageBubbleInner({ message, isOwn, isNew }: MessageBubbleProps) {
           isSending && styles.bubbleSending,
         ]}
       >
-        <Text variant="body" style={[styles.content, isOwn && styles.contentOwn]}>
+        <RNText
+          style={[styles.content, isOwn && styles.contentOwn]}
+          allowFontScaling={false}
+        >
           {message.content}
-        </Text>
+        </RNText>
         <View style={styles.meta}>
-          <Text variant="small" style={[styles.time, isOwn && styles.timeOwn]}>
+          <RNText style={[styles.time, isOwn && styles.timeOwn]} allowFontScaling={false}>
             {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
-          </Text>
+          </RNText>
           {isOwn && <StatusIcon message={message} />}
         </View>
       </View>
@@ -150,6 +152,9 @@ const styles = StyleSheet.create({
   },
   content: {
     color: COLORS.white,
+    fontSize: 15,
+    fontFamily: 'Archivo_400Regular',
+    lineHeight: 20,
   },
   contentOwn: {
     color: COLORS.black,
@@ -163,6 +168,8 @@ const styles = StyleSheet.create({
   },
   time: {
     color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    fontFamily: 'Archivo_400Regular',
   },
   timeOwn: {
     color: 'rgba(0,0,0,0.45)',

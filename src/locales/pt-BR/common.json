@@ -36,7 +36,8 @@
     "minuteShort": "m",
     "hourShort": "h",
     "dayShort": "d",
-    "weekShort": "sem"
+    "weekShort": "sem",
+    "yesterday": "Ontem"
   },
   "comingSoon": {
     "title": "Em Breve",

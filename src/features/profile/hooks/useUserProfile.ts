@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useFollowStore } from '@/stores/followStore';
 import { useAuthStore } from '@/stores/authStore';
+import { safeCount, analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { User } from '@/types';
 
 export function useUserProfile(userId: string) {
@@ -40,9 +41,6 @@ export function useUserProfile(userId: string) {
     enabled: !isNaN(numericId) && numericId > 0,
     staleTime: isOwnProfile ? 30_000 : 5 * 60 * 1000, // 5 min for other profiles
     gcTime: 30 * 60 * 1000, // Keep in memory 30 min
-    // Instant render: use seeded cache data as placeholder while full profile loads
-    placeholderData: () =>
-      queryClient.getQueryData<User>(QUERY_KEYS.USERS.PROFILE(numericId)),
   });
 
   // Effective follow state: global store overrides stale server data
@@ -65,14 +63,33 @@ export function useUserProfile(userId: string) {
         QUERY_KEYS.USERS.PROFILE(numericId)
       );
       if (previous) {
+        const nextFollowers = wasFollowing
+          ? previous.followersCount - 1
+          : previous.followersCount + 1;
         queryClient.setQueryData<User>(QUERY_KEYS.USERS.PROFILE(numericId), {
           ...previous,
           isFollowing: !wasFollowing,
-          followersCount: wasFollowing
-            ? previous.followersCount - 1
-            : previous.followersCount + 1,
+          followersCount: safeCount(nextFollowers, {
+            field: 'followersCount',
+            source: 'useUserProfile.followMutation',
+            extra: {
+              profile_id: numericId,
+              actor_id: currentUserId,
+              action: wasFollowing ? 'unfollow' : 'follow',
+              prev_value: previous.followersCount,
+            },
+          }),
         });
       }
+      analytics.capture(
+        wasFollowing
+          ? ANALYTICS_EVENTS.SOCIAL.UNFOLLOW
+          : ANALYTICS_EVENTS.SOCIAL.FOLLOW,
+        {
+          profile_id: numericId,
+          source: 'public_profile',
+        },
+      );
       return { previous, wasFollowing };
     },
     onSuccess: () => {

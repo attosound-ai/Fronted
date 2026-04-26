@@ -36,7 +36,8 @@
     "minuteShort": "m",
     "hourShort": "h",
     "dayShort": "d",
-    "weekShort": "w"
+    "weekShort": "w",
+    "yesterday": "Yesterday"
   },
   "comingSoon": {
     "title": "Coming Soon",

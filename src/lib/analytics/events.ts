@@ -11,7 +11,9 @@ export const ANALYTICS_EVENTS = {
     LOGIN_FAILED: 'auth_login_failed',
     LOGOUT: 'auth_logout',
     TOKEN_REFRESHED: 'auth_token_refreshed',
+    TOKEN_REFRESH_FAILED: 'auth_token_refresh_failed',
     SESSION_RESTORED: 'auth_session_restored',
+    SESSION_EXPIRED: 'auth_session_expired',
   },
 
   // ── Registration (funnel) ──────────────────────
@@ -94,6 +96,7 @@ export const ANALYTICS_EVENTS = {
     CAPTURE_STOPPED: 'call_capture_stopped',
     TWILIO_REGISTERED: 'call_twilio_registered',
     TWILIO_REGISTRATION_FAILED: 'call_twilio_registration_failed',
+    OUTGOING_INITIATED: 'call_outgoing_initiated',
   },
 
   // ── Messages ───────────────────────────────────
@@ -188,5 +191,20 @@ export const ANALYTICS_EVENTS = {
     API_ERROR: 'error_api',
     UNHANDLED_EXCEPTION: 'error_unhandled_exception',
     NETWORK_ERROR: 'error_network',
+  },
+
+  // ── Social graph ───────────────────────────────
+  SOCIAL: {
+    FOLLOW: 'social_follow',
+    UNFOLLOW: 'social_unfollow',
+    FOLLOW_FAILED: 'social_follow_failed',
+  },
+
+  // ── Data integrity (invariant violations) ─────
+  // Fired when a count would go below zero or otherwise break a basic
+  // invariant. We never let it ship a bad number to the UI — we clamp —
+  // but we capture the incident so we can find the upstream cause.
+  INTEGRITY: {
+    COUNT_INVARIANT_VIOLATED: 'integrity_count_invariant_violated',
   },
 } as const;

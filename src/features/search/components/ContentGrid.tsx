@@ -1,5 +1,4 @@
 import {
-  Dimensions,
   FlatList,
   Image,
   StyleSheet,
@@ -10,18 +9,32 @@ import {
 import { router } from 'expo-router';
 import { Music, Film, FileText, Play } from 'lucide-react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import type { Post } from '@/types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CELL_SIZE = (SCREEN_WIDTH - 4) / 3; // 3 columns with 2px gaps
+import type { PostFeedSource } from '@/features/feed/hooks/usePostFeed';
 
 interface ContentGridProps {
   posts: Post[];
   onEndReached?: () => void;
   ListFooterComponent?: React.ReactElement | null;
+  /** Context for infinite-scroll when a post is tapped open. */
+  sourceContext?: {
+    source: PostFeedSource;
+    sourceUserId?: number;
+    sourceQuery?: string;
+    sourceContentType?: string;
+  };
 }
 
-function GridCell({ post }: { post: Post }) {
+function GridCell({
+  post,
+  cellSize,
+  sourceContext,
+}: {
+  post: Post;
+  cellSize: number;
+  sourceContext?: ContentGridProps['sourceContext'];
+}) {
   const isVideo = post.contentType === 'video' || post.contentType === 'reel';
   const isAudio = post.contentType === 'audio';
   const isText = post.contentType === 'text';
@@ -38,11 +51,22 @@ function GridCell({ post }: { post: Post }) {
   const textPreview = post.textContent ?? post.content;
 
   const handlePress = () => {
-    router.navigate({ pathname: '/post/[id]', params: { id: post.id } } as never);
+    const params: Record<string, string> = { id: post.id };
+    if (sourceContext) {
+      params.source = sourceContext.source;
+      if (sourceContext.sourceUserId != null) {
+        params.sourceUserId = String(sourceContext.sourceUserId);
+      }
+      if (sourceContext.sourceQuery) params.sourceQuery = sourceContext.sourceQuery;
+      if (sourceContext.sourceContentType) {
+        params.sourceContentType = sourceContext.sourceContentType;
+      }
+    }
+    router.navigate({ pathname: '/post/[id]', params } as never);
   };
 
   return (
-    <TouchableOpacity style={styles.cell} onPress={handlePress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.cell, { width: cellSize, height: cellSize }]} onPress={handlePress} activeOpacity={0.85}>
       {thumbnail ? (
         <Image source={{ uri: thumbnail }} style={styles.cellImage} resizeMode="cover" />
       ) : isText && textPreview ? (
@@ -75,19 +99,27 @@ export function ContentGrid({
   posts,
   onEndReached,
   ListFooterComponent,
+  sourceContext,
 }: ContentGridProps) {
+  const { contentWidth } = useDeviceLayout();
+  const cellSize = (contentWidth - 4) / 3;
+
   return (
     <FlatList
       data={posts}
       keyExtractor={(item) => item.id}
       numColumns={3}
-      renderItem={({ item }) => <GridCell post={item} />}
+      renderItem={({ item }) => (
+        <GridCell post={item} cellSize={cellSize} sourceContext={sourceContext} />
+      )}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       columnWrapperStyle={styles.row}
       showsVerticalScrollIndicator={false}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.3}
       ListFooterComponent={ListFooterComponent}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
     />
   );
 }
@@ -100,8 +132,6 @@ const styles = StyleSheet.create({
     height: 2,
   },
   cell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
     backgroundColor: '#111',
     overflow: 'hidden',
   },

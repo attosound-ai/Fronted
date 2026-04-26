@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
+import { CounterBadge } from '@/components/ui/CounterBadge';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
@@ -16,19 +17,22 @@ interface ConversationItemProps {
     participantName: string,
     participantId: string
   ) => void;
+  isSelected?: boolean;
 }
 
-function ConversationItemInner({ conversation, onPress }: ConversationItemProps) {
+function ConversationItemInner({
+  conversation,
+  onPress,
+  isSelected,
+}: ConversationItemProps) {
   const { t } = useTranslation('messages');
-  const { avatarUri, displayName, role } = useParticipantProfile(
-    conversation.participantId
-  );
+  const { avatarUri, username, role } = useParticipantProfile(conversation.participantId);
   const name =
-    conversation.participantName || displayName || t('conversation.fallbackUserName');
+    username || conversation.participantName || t('conversation.fallbackUserName');
 
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[styles.container, isSelected && styles.selected]}
       onPress={() =>
         onPress(conversation.conversationId, name, conversation.participantId)
       }
@@ -43,31 +47,49 @@ function ConversationItemInner({ conversation, onPress }: ConversationItemProps)
           : name
       }
     >
-      <Avatar uri={avatarUri} size="md" fallbackText={name} />
+      <Avatar
+        uri={avatarUri}
+        size="md"
+        fallbackText={name}
+        creatorRing={role === 'creator'}
+      />
       <View style={styles.content}>
         <View style={styles.topRow}>
           <View style={styles.nameRow}>
-            <Text variant="h3" numberOfLines={1} style={styles.name}>
+            <Text
+              variant="h3"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              maxFontSizeMultiplier={1.0}
+              style={styles.name}
+            >
               {name}
             </Text>
             {role === 'creator' && <CreatorBadge size="sm" />}
           </View>
           {conversation.lastMessageAt && (
-            <Text variant="small" style={styles.time}>
+            <Text variant="small" style={styles.time} maxFontSizeMultiplier={1.0}>
               {formatRelativeTime(conversation.lastMessageAt)}
             </Text>
           )}
         </View>
         <View style={styles.bottomRow}>
-          <Text variant="caption" numberOfLines={1} style={styles.preview}>
+          <Text
+            variant="caption"
+            numberOfLines={1}
+            style={styles.preview}
+            maxFontSizeMultiplier={1.0}
+          >
             {conversation.lastMessage || ''}
           </Text>
           {conversation.unreadCount > 0 && (
-            <View style={styles.badge}>
-              <Text variant="small" style={styles.badgeText}>
-                {conversation.unreadCount > 99 ? '99+' : String(conversation.unreadCount)}
-              </Text>
-            </View>
+            <CounterBadge
+              count={conversation.unreadCount}
+              color={COLORS.white}
+              textColor="#000000"
+              fontWeight="semibold"
+            />
           )}
         </View>
       </View>
@@ -86,6 +108,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: COLORS.border.dark,
     gap: SPACING.md,
+  },
+  selected: {
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
   },
   content: {
     flex: 1,
@@ -119,20 +144,5 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.gray[500],
     marginRight: SPACING.sm,
-  },
-  badge: {
-    backgroundColor: COLORS.white,
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    color: '#000000',
-    fontSize: 11,
-    fontFamily: 'Archivo_600SemiBold',
-    lineHeight: 14,
   },
 });

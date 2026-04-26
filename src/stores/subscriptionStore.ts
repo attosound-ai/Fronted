@@ -34,6 +34,7 @@ interface SubscriptionActions {
   fetchSubscription: () => Promise<void>;
   hasEntitlement: (entitlement: Entitlement) => boolean;
   getPlan: () => PlanId;
+  getPendingChange: () => UserSubscription['pendingChange'];
   clear: () => void;
 }
 
@@ -60,6 +61,8 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
     },
 
     getPlan: () => normalizePlan(get().subscription?.plan ?? 'connect_free'),
+
+    getPendingChange: () => get().subscription?.pendingChange ?? null,
 
     clear: () => set({ subscription: null, isLoading: false }),
   })

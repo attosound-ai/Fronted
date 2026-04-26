@@ -8,7 +8,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { useCallStore } from '@/stores/callStore';
 import { Text } from '@/components/ui/Text';
+import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 import { SearchBar } from '@/features/search/components/SearchBar';
 import { UserSearchCard } from '@/features/search/components/UserSearchCard';
 import { ContentGrid } from '@/features/search/components/ContentGrid';
@@ -62,105 +64,125 @@ export default function SearchScreen() {
     { id: 'content', label: t('search.tabContent', 'Content') },
   ];
 
+  const isInCall = useCallStore(
+    (s) => s.activeCall?.state === 'connected' || s.activeCall?.state === 'reconnecting'
+  );
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Search bar — always visible */}
-      <View style={styles.searchRow}>
-        <SearchBar
-          value={rawQuery}
-          onChangeText={handleChange}
-          placeholder={t('search.placeholder', 'Search...')}
-        />
-      </View>
+    <SafeAreaView
+      style={[styles.container, isInCall && { paddingTop: 8 }]}
+      edges={isInCall ? [] : ['top']}
+    >
+      <ResponsiveContentWrapper>
+        {/* Search bar — always visible */}
+        <View style={styles.searchRow}>
+          <SearchBar
+            value={rawQuery}
+            onChangeText={handleChange}
+            placeholder={t('search.placeholder', 'Search...')}
+          />
+        </View>
 
-      {/* State: no query → Explore grid */}
-      {rawQuery.length === 0 && (
-        <>
-          {isLoadingExplore ? (
-            <GridSkeleton count={12} />
-          ) : (
-            <ContentGrid
-              posts={explorePosts}
-              onEndReached={loadMore}
-              ListFooterComponent={
-                isFetchingMore ? (
-                  <ActivityIndicator color="#555" style={styles.footerSpinner} />
-                ) : null
-              }
-            />
-          )}
-        </>
-      )}
+        {/* State: no query → Explore grid */}
+        {rawQuery.length === 0 && (
+          <>
+            {isLoadingExplore ? (
+              <GridSkeleton count={12} />
+            ) : (
+              <ContentGrid
+                posts={explorePosts}
+                onEndReached={loadMore}
+                sourceContext={{ source: 'feed' }}
+                ListFooterComponent={
+                  isFetchingMore ? (
+                    <ActivityIndicator color="#555" style={styles.footerSpinner} />
+                  ) : null
+                }
+              />
+            )}
+          </>
+        )}
 
-      {/* State: with query → Search results with tabs */}
-      {rawQuery.length > 0 && (
-        <>
-          {/* Tab bar */}
-          <View style={styles.tabBar}>
-            {tabs.map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-                onPress={() => setActiveTab(tab.id)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  variant="body"
-                  style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}
+        {/* State: with query → Search results with tabs */}
+        {rawQuery.length > 0 && (
+          <>
+            {/* Tab bar */}
+            <View style={styles.tabBar}>
+              {tabs.map((tab) => (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.tab, activeTab === tab.id && styles.tabActive]}
+                  onPress={() => setActiveTab(tab.id)}
+                  activeOpacity={0.7}
                 >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* People tab */}
-          {activeTab === 'people' && (
-            <>
-              {loadingUsers && debouncedQuery.length > 0 ? (
-                <UserListSkeleton count={5} />
-              ) : users.length > 0 ? (
-                <FlatList
-                  data={users}
-                  keyExtractor={(u) => String(u.id)}
-                  renderItem={({ item }: { item: (typeof users)[number] }) => (
-                    <UserSearchCard user={item} />
-                  )}
-                  showsVerticalScrollIndicator={false}
-                  ItemSeparatorComponent={() => <View style={styles.divider} />}
-                />
-              ) : debouncedQuery.length > 0 ? (
-                <View style={styles.centered}>
-                  <Text variant="body" style={styles.emptyText}>
-                    {t('search.noResults', 'No results for "{{query}}"', {
-                      query: debouncedQuery,
-                    })}
+                  <Text
+                    variant="body"
+                    style={[
+                      styles.tabLabel,
+                      activeTab === tab.id && styles.tabLabelActive,
+                    ]}
+                    maxFontSizeMultiplier={1.1}
+                    numberOfLines={1}
+                  >
+                    {tab.label}
                   </Text>
-                </View>
-              ) : null}
-            </>
-          )}
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          {/* Content tab */}
-          {activeTab === 'content' && (
-            <>
-              {loadingContent && debouncedQuery.length > 0 ? (
-                <GridSkeleton count={6} />
-              ) : posts.length > 0 ? (
-                <ContentGrid posts={posts} />
-              ) : debouncedQuery.length > 0 ? (
-                <View style={styles.centered}>
-                  <Text variant="body" style={styles.emptyText}>
-                    {t('search.noResults', 'No results for "{{query}}"', {
-                      query: debouncedQuery,
-                    })}
-                  </Text>
-                </View>
-              ) : null}
-            </>
-          )}
-        </>
-      )}
+            {/* People tab */}
+            {activeTab === 'people' && (
+              <>
+                {loadingUsers && debouncedQuery.length > 0 ? (
+                  <UserListSkeleton count={5} />
+                ) : users.length > 0 ? (
+                  <FlatList
+                    data={users}
+                    keyExtractor={(u) => String(u.id)}
+                    renderItem={({ item }: { item: (typeof users)[number] }) => (
+                      <UserSearchCard user={item} />
+                    )}
+                    showsVerticalScrollIndicator={false}
+                    ItemSeparatorComponent={() => <View style={styles.divider} />}
+                    keyboardDismissMode="on-drag"
+                    keyboardShouldPersistTaps="handled"
+                  />
+                ) : debouncedQuery.length > 0 ? (
+                  <View style={styles.centered}>
+                    <Text variant="body" style={styles.emptyText}>
+                      {t('search.noResults', 'No results for "{{query}}"', {
+                        query: debouncedQuery,
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+
+            {/* Content tab */}
+            {activeTab === 'content' && (
+              <>
+                {loadingContent && debouncedQuery.length > 0 ? (
+                  <GridSkeleton count={6} />
+                ) : posts.length > 0 ? (
+                  <ContentGrid
+                    posts={posts}
+                    sourceContext={{ source: 'search', sourceQuery: debouncedQuery }}
+                  />
+                ) : debouncedQuery.length > 0 ? (
+                  <View style={styles.centered}>
+                    <Text variant="body" style={styles.emptyText}>
+                      {t('search.noResults', 'No results for "{{query}}"', {
+                        query: debouncedQuery,
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+          </>
+        )}
+      </ResponsiveContentWrapper>
     </SafeAreaView>
   );
 }

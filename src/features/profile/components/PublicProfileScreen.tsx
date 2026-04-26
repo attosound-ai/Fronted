@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Animated,
   Image,
+  Linking,
   Modal,
   Pressable,
   Dimensions,
@@ -13,18 +14,36 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ChevronLeft, ArrowLeft, Music, FileText, Play, X, MessageCircle } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  Music,
+  FileText,
+  Play,
+  X,
+  MessageCircle,
+  Instagram,
+  Music2,
+  Youtube,
+  Cloud,
+  Disc3,
+  Twitter,
+  Globe,
+  MapPin,
+  Building2,
+  Mail,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
+import { GoldRing } from '@/components/ui/GoldRing';
+import { GOLD_FLAT } from '@/constants/gold';
 import { formatCount } from '@/utils/formatters';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { feedService } from '@/features/feed/services/feedService';
-import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { FeedPost, PostType } from '@/types/post';
 import type { Post } from '@/types';
@@ -58,11 +77,12 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0])
+        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
         : undefined,
-    thumbnailUrl: post.metadata?.thumbnailUrl
-      ?? (type === 'reel' ? cloudinaryUrl(files[0], 'reel_thumb', 'video') : undefined)
-      ?? (type === 'video' ? cloudinaryUrl(files[0], 'video_thumb', 'video') : undefined),
+    thumbnailUrl:
+      post.metadata?.thumbnailUrl ??
+      (type === 'reel' ? cloudinaryUrl(files[0], 'reel_thumb', 'video') : undefined) ??
+      (type === 'video' ? cloudinaryUrl(files[0], 'video_thumb', 'video') : undefined),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
@@ -100,10 +120,28 @@ export function PublicProfileScreen({
 }: PublicProfileScreenProps) {
   const { t } = useTranslation('profile');
   const numericId = Number(userId);
-  const { user, isLoading, isFetching, isPartial, error, refetch, toggleFollow, isToggling } =
-    useUserProfile(userId);
-  const [previewPost, setPreviewPost] = useState<FeedPost | null>(null);
+  const {
+    user,
+    isLoading,
+    isFetching,
+    isPartial,
+    error,
+    refetch,
+    toggleFollow,
+    isToggling,
+  } = useUserProfile(userId);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+
+  const openPost = (post: FeedPost) => {
+    router.push({
+      pathname: '/post/[id]',
+      params: {
+        id: post.id,
+        source: 'profile',
+        sourceUserId: String(numericId),
+      },
+    });
+  };
 
   // Use API data if available, otherwise use fallback from navigation params
   const profile = user ?? null;
@@ -119,8 +157,8 @@ export function PublicProfileScreen({
     enabled: numericId > 0,
   });
 
-  const userPosts: FeedPost[] = (postsData?.pages.flatMap((p) => p.data) ?? []).map(
-    (p) => toFeedPost(p as Post)
+  const userPosts: FeedPost[] = (postsData?.pages.flatMap((p) => p.data) ?? []).map((p) =>
+    toFeedPost(p as Post)
   );
 
   const navigateToList = (mode: 'followers' | 'following') => {
@@ -166,11 +204,12 @@ export function PublicProfileScreen({
     );
   }
 
-  // Merge: full profile from API, or minimal fallback from navigation params
-  const displayName =
-    (profile?.displayName || profile?.creatorName || profile?.username) ??
-    fallbackAuthor!.displayName;
+  // Merge: full profile from API, or minimal fallback from navigation params.
+  // `displayName` is reused only as the chat participantName when starting a
+  // conversation — it must be the bare username (no `@`), since chat headers
+  // show it without the prefix.
   const username = profile?.username ?? fallbackAuthor!.username;
+  const displayName = username;
   const avatar = profile?.avatar ?? fallbackAuthor?.avatar ?? null;
   const isVerified = profile?.profileVerified ?? fallbackAuthor?.isVerified ?? false;
   const bio = profile?.bio ?? null;
@@ -206,10 +245,24 @@ export function PublicProfileScreen({
             onPress={() => setAvatarModalVisible(true)}
             activeOpacity={0.7}
           >
-            <Avatar uri={avatar} size="xl" />
+            {role === 'creator' ? (
+              <GoldRing size={104} thickness={2}>
+                <Avatar uri={avatar} size="xl" />
+              </GoldRing>
+            ) : (
+              <View style={styles.avatarRing}>
+                <Avatar uri={avatar} size="xl" />
+              </View>
+            )}
           </TouchableOpacity>
 
-          <Text variant="h2" style={styles.name}>
+          <Text
+            variant="h2"
+            style={styles.name}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
             @{username}
           </Text>
 
@@ -218,6 +271,81 @@ export function PublicProfileScreen({
               {bio}
             </Text>
           )}
+
+          {/* Location + Record Label */}
+          {(profile?.location || profile?.recordLabel) && (
+            <View style={styles.metaBadges}>
+              {profile?.location && (
+                <View style={styles.metaBadge}>
+                  <MapPin size={12} color="#888" strokeWidth={2} />
+                  <Text variant="caption" style={styles.metaBadgeText}>
+                    {profile.location}
+                  </Text>
+                </View>
+              )}
+              {profile?.recordLabel && (
+                <View style={styles.metaBadge}>
+                  <Building2 size={12} color="#888" strokeWidth={2} />
+                  <Text variant="caption" style={styles.metaBadgeText}>
+                    {profile.recordLabel}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Social links */}
+          {profile &&
+            (() => {
+              const links = [
+                {
+                  key: 'socialInstagram',
+                  icon: Instagram,
+                  prefix: 'https://instagram.com/',
+                },
+                { key: 'socialTiktok', icon: Music2, prefix: 'https://tiktok.com/@' },
+                { key: 'socialYoutube', icon: Youtube, prefix: 'https://youtube.com/@' },
+                {
+                  key: 'socialSoundcloud',
+                  icon: Cloud,
+                  prefix: 'https://soundcloud.com/',
+                },
+                {
+                  key: 'socialSpotify',
+                  icon: Disc3,
+                  prefix: 'https://open.spotify.com/search/',
+                },
+                { key: 'socialTwitter', icon: Twitter, prefix: 'https://x.com/' },
+                { key: 'website', icon: Globe, prefix: '' },
+                { key: 'bookingEmail', icon: Mail, prefix: 'mailto:' },
+              ].filter((l) => profile[l.key as keyof typeof profile]);
+              if (links.length === 0) return null;
+              return (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.socialRow}
+                  contentContainerStyle={styles.socialRowContent}
+                >
+                  {links.map((link) => {
+                    const handle = String(
+                      profile[link.key as keyof typeof profile]
+                    ).replace(/^@/, '');
+                    const url = link.key === 'website' ? handle : link.prefix + handle;
+                    return (
+                      <TouchableOpacity
+                        key={link.key}
+                        style={styles.socialIcon}
+                        onPress={() => Linking.openURL(url)}
+                        activeOpacity={0.6}
+                      >
+                        <link.icon size={18} color="#FFF" strokeWidth={2} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
 
           {role && role !== 'listener' && (
             <View style={styles.badge}>
@@ -237,7 +365,13 @@ export function PublicProfileScreen({
               ) : (
                 <Text variant="h2">{formatCount(postsCount)}</Text>
               )}
-              <Text variant="caption" style={styles.statLabel}>
+              <Text
+                variant="caption"
+                style={styles.statLabel}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {t('publicProfile.statPosts')}
               </Text>
             </View>
@@ -252,7 +386,13 @@ export function PublicProfileScreen({
               ) : (
                 <Text variant="h2">{formatCount(followersCount)}</Text>
               )}
-              <Text variant="caption" style={styles.statLabel}>
+              <Text
+                variant="caption"
+                style={styles.statLabel}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {t('publicProfile.statFollowers')}
               </Text>
             </TouchableOpacity>
@@ -267,7 +407,13 @@ export function PublicProfileScreen({
               ) : (
                 <Text variant="h2">{formatCount(followingCount)}</Text>
               )}
-              <Text variant="caption" style={styles.statLabel}>
+              <Text
+                variant="caption"
+                style={styles.statLabel}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {t('publicProfile.statFollowing')}
               </Text>
             </TouchableOpacity>
@@ -326,11 +472,7 @@ export function PublicProfileScreen({
         ) : userPosts.length > 0 ? (
           <View style={styles.grid}>
             {userPosts.map((post) => (
-              <PostTile
-                key={post.id}
-                post={post}
-                onPress={() => setPreviewPost(post)}
-              />
+              <PostTile key={post.id} post={post} onPress={() => openPost(post)} />
             ))}
           </View>
         ) : (
@@ -372,30 +514,6 @@ export function PublicProfileScreen({
         </Pressable>
       </Modal>
 
-      {/* Post preview modal */}
-      <Modal
-        visible={previewPost !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewPost(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.modalBack}
-            onPress={() => setPreviewPost(null)}
-            hitSlop={16}
-          >
-            <ArrowLeft size={32} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-
-          <ScrollView
-            contentContainerStyle={styles.modalScroll}
-            showsVerticalScrollIndicator={false}
-          >
-            {previewPost && <FeedPostCard post={previewPost} />}
-          </ScrollView>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -431,12 +549,12 @@ function PostTile({ post, onPress }: { post: FeedPost; onPress: () => void }) {
       )}
       {post.type === 'audio' && (
         <View style={styles.tileTypeIcon}>
-          <Music size={14} color="#FFF" strokeWidth={2.25} />
+          <Music size={12} color="#FFF" strokeWidth={2.5} />
         </View>
       )}
-      {post.type === 'video' && (
+      {(post.type === 'video' || post.type === 'reel') && (
         <View style={styles.tileTypeIcon}>
-          <Play size={14} color="#FFF" strokeWidth={2.25} />
+          <Play size={12} color="#FFF" fill="#FFF" strokeWidth={0} />
         </View>
       )}
     </TouchableOpacity>
@@ -503,7 +621,13 @@ const skeletonStyles = StyleSheet.create({
   username: { width: 100, height: 14, borderRadius: 4 },
   statsRow: { flexDirection: 'row', gap: 32, marginTop: 8 },
   stat: { width: 50, height: 36, borderRadius: 4 },
-  buttonsRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginHorizontal: 24, marginTop: 4 },
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignSelf: 'stretch',
+    marginHorizontal: 24,
+    marginTop: 4,
+  },
   button: { flex: 1, height: 42, borderRadius: 8 },
   gridRow: { flexDirection: 'row', gap: GRID_GAP, marginTop: GRID_GAP },
   gridTile: { width: TILE_SIZE, height: TILE_SIZE, borderRadius: 0 },
@@ -536,8 +660,24 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 24,
   },
+  avatarRing: {
+    width: 100,
+    height: 100,
+    borderWidth: 2,
+    borderColor: '#CCCCCC',
+    borderRadius: 50,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRingCreator: {
+    borderColor: GOLD_FLAT,
+  },
   name: {
     marginTop: 8,
+    paddingHorizontal: 32,
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   username: {
     color: '#888',
@@ -545,6 +685,38 @@ const styles = StyleSheet.create({
   bio: {
     color: '#888',
     textAlign: 'center',
+  },
+  metaBadges: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  metaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaBadgeText: {
+    color: '#888',
+    fontSize: 12,
+  },
+  socialRow: {
+    marginTop: 4,
+    maxHeight: 40,
+  },
+  socialRowContent: {
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  socialIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   badge: {
     flexDirection: 'row',
@@ -677,18 +849,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6,
     right: 6,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  modalBack: {
-    paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 12,
-  },
-  modalScroll: {
-    flexGrow: 1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyPosts: {
     paddingVertical: 48,

@@ -3,7 +3,6 @@ import {
   View,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Animated,
   Text as RNText,
 } from 'react-native';
@@ -12,11 +11,9 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Text } from '@/components/ui/Text';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { formatCount } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const VIDEO_HEIGHT = SCREEN_WIDTH * 1.6;
 
 interface AdCardProps {
   post: FeedPost;
@@ -26,6 +23,8 @@ interface AdCardProps {
 }
 
 export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardProps) {
+  const { contentWidth } = useDeviceLayout();
+  const VIDEO_HEIGHT = contentWidth * 1.6;
   const [isMuted, setIsMuted] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
@@ -81,7 +80,9 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
   return (
     <View style={styles.container}>
       {/* Video */}
-      <View style={styles.videoContainer}>
+      <View
+        style={[styles.videoContainer, { width: contentWidth, height: VIDEO_HEIGHT }]}
+      >
         {post.videoUrl ? (
           <VideoView
             player={player}
@@ -90,7 +91,9 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             nativeControls={false}
           />
         ) : (
-          <View style={styles.placeholder}>
+          <View
+            style={[styles.placeholder, { width: contentWidth, height: VIDEO_HEIGHT }]}
+          >
             <Ionicons name="videocam-off-outline" size={48} color="#666" />
           </View>
         )}
@@ -106,7 +109,9 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             <Text style={styles.authorName}>{post.author.displayName}</Text>
             <View style={styles.sponsoredBadge}>
               <Ionicons name="megaphone-outline" size={11} color="#CCC" />
-              <Text style={styles.sponsoredText}>Sponsored</Text>
+              <Text style={styles.sponsoredText} allowFontScaling={false}>
+                Sponsored
+              </Text>
             </View>
           </View>
         </LinearGradient>
@@ -120,14 +125,22 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
 
         {/* Mute toggle */}
         <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={8}>
-          <Ionicons name={isMuted ? 'volume-mute' : 'volume-high'} size={18} color="#FFF" />
+          <Ionicons
+            name={isMuted ? 'volume-mute' : 'volume-high'}
+            size={18}
+            color="#FFF"
+          />
         </TouchableOpacity>
       </View>
 
       {/* Actions (outside video) */}
       <View style={styles.actions}>
         <View style={styles.leftActions}>
-          <TouchableOpacity onPress={handleLike} activeOpacity={0.7} style={styles.actionItem}>
+          <TouchableOpacity
+            onPress={handleLike}
+            activeOpacity={0.7}
+            style={styles.actionItem}
+          >
             <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
               <MaterialCommunityIcons
                 name={isLiked ? 'thumb-up' : 'thumb-up-outline'}
@@ -140,7 +153,11 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onComment} activeOpacity={0.7} style={styles.actionItem}>
+          <TouchableOpacity
+            onPress={onComment}
+            activeOpacity={0.7}
+            style={styles.actionItem}
+          >
             <Ionicons
               name="chatbubble-outline"
               size={26}
@@ -152,7 +169,11 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleRepost} activeOpacity={0.7} style={styles.actionItem}>
+          <TouchableOpacity
+            onPress={handleRepost}
+            activeOpacity={0.7}
+            style={styles.actionItem}
+          >
             <Feather name="repeat" size={24} color="#FFF" />
             {repostsCount > 0 && (
               <RNText style={[styles.metricText, isReposted && styles.repostedText]}>
@@ -161,7 +182,11 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onShare} activeOpacity={0.7} style={styles.actionItem}>
+          <TouchableOpacity
+            onPress={onShare}
+            activeOpacity={0.7}
+            style={styles.actionItem}
+          >
             <Ionicons name="paper-plane-outline" size={26} color="#FFF" />
             {post.sharesCount > 0 && (
               <RNText style={styles.metricText}>{formatCount(post.sharesCount)}</RNText>
@@ -196,8 +221,6 @@ const styles = StyleSheet.create({
 
   // Video
   videoContainer: {
-    width: SCREEN_WIDTH,
-    height: VIDEO_HEIGHT,
     backgroundColor: '#000',
     position: 'relative',
   },
@@ -206,8 +229,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   placeholder: {
-    width: SCREEN_WIDTH,
-    height: VIDEO_HEIGHT,
     backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',
@@ -259,7 +280,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: VIDEO_HEIGHT * 0.25,
+    height: '25%',
   },
 
   // Actions (outside video)

@@ -133,7 +133,12 @@
     "relationshipFamily": "Família",
     "relationshipFriend": "Amigo(a)",
     "relationshipManager": "Gerente",
-    "warningReVerification": "Alterar informações do criador exigirá nova verificação."
+    "warningReVerification": "Alterar informações do criador exigirá nova verificação.",
+    "avatarSheetTitle": "Foto do perfil",
+    "avatarSheetEditCurrent": "Editar foto atual",
+    "avatarSheetFromGallery": "Escolher da galeria",
+    "avatarSheetFromCamera": "Tirar uma foto",
+    "avatarSheetCancel": "Cancelar"
   },
   "publicProfile": {
     "headerTitle": "Perfil",

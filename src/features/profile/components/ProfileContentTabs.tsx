@@ -14,55 +14,21 @@ import {
   View,
   TouchableOpacity,
   Image,
-  Modal,
-  ScrollView,
   Dimensions,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { Grid2x2, Bookmark, User, Music, Play, ArrowLeft } from 'lucide-react-native';
+import { Grid2x2, Bookmark, User, Music, Play } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
-import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
-import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { feedService } from '@/features/feed/services/feedService';
 import { useBookmarks } from '@/features/feed/hooks/useBookmarks';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post } from '@/types';
-import type { FeedPost, PostType } from '@/types/post';
 import type { FeedResponse } from '@/features/feed/types';
-
-function toFeedPost(post: Post): FeedPost {
-  const type: PostType = (post.contentType as PostType) || 'text';
-  const files = post.filePaths ?? post.images ?? [];
-  return {
-    id: post.id,
-    type,
-    author: {
-      id: post.author.id,
-      username: post.author.username,
-      displayName: post.author.displayName,
-      avatar: post.author.avatar,
-      isFollowing: false,
-      role: post.author.role,
-    },
-    audioUrl: type === 'audio' ? (cloudinaryUrl(files[0], 'original', 'raw') ?? undefined) : undefined,
-    videoUrl: type === 'video' || type === 'reel' ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0]) : undefined,
-    images: type === 'image' ? files.map((f) => cloudinaryUrl(f, 'feed') ?? f) : undefined,
-    title: post.textContent ?? undefined,
-    description: post.textContent ?? undefined,
-    likesCount: post.likesCount ?? 0,
-    commentsCount: post.commentsCount ?? 0,
-    sharesCount: post.sharesCount ?? 0,
-    repostsCount: post.repostsCount ?? 0,
-    isLiked: post.isLiked ?? false,
-    isBookmarked: post.isBookmarked ?? false,
-    isReposted: post.isReposted ?? false,
-    createdAt: post.createdAt,
-  };
-}
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -106,7 +72,7 @@ function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) 
       activeOpacity={0.8}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Post by ${post.author.displayName}`}
+      accessibilityLabel={`Post by ${post.author.username}`}
     >
       {firstImage && !isAudio && !isText ? (
         <>
@@ -116,9 +82,9 @@ function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) 
             resizeMode="cover"
             accessibilityElementsHidden
           />
-          {isVideo && (
-            <View style={styles.cellOverlay} pointerEvents="none">
-              <Play size={28} color="#FFFFFF" strokeWidth={2.25} />
+          {(isVideo || isReel) && (
+            <View style={styles.cellTypeBadge} pointerEvents="none">
+              <Play size={12} color="#FFFFFF" fill="#FFFFFF" strokeWidth={0} />
             </View>
           )}
         </>
@@ -191,11 +157,7 @@ function TabContent({
     >
       <View style={styles.grid}>
         {activeData.map((item) => (
-          <PostThumbnail
-            key={item.id}
-            post={item}
-            onPress={() => onPostPress?.(item)}
-          />
+          <PostThumbnail key={item.id} post={item} onPress={() => onPostPress?.(item)} />
         ))}
       </View>
       {activeFetchingMore && (
@@ -213,11 +175,37 @@ export interface ProfileContentTabsHandle {
   handleScrollNearEnd: () => void;
 }
 
-export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileContentTabsProps>(
-  function ProfileContentTabs({ userId, settingsContent }, ref) {
+export const ProfileContentTabs = forwardRef<
+  ProfileContentTabsHandle,
+  ProfileContentTabsProps
+>(function ProfileContentTabs({ userId, settingsContent }, ref) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('posts');
-  const [previewPost, setPreviewPost] = useState<Post | null>(null);
-  const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
+
+  // Tapping a grid cell opens the post detail screen with the appropriate
+  // source so it can continue scrolling into the user's other posts or the
+  // bookmarks list. The same infinite-scroll pattern used on the home feed.
+  const handleOpenPost = useCallback(
+    (post: Post) => {
+      if (activeTab === 'posts') {
+        router.push({
+          pathname: '/post/[id]',
+          params: {
+            id: post.id,
+            source: 'profile',
+            sourceUserId: String(userId),
+          },
+        });
+      } else if (activeTab === 'saved') {
+        router.push({
+          pathname: '/post/[id]',
+          params: { id: post.id, source: 'bookmarks' },
+        });
+      } else {
+        router.push({ pathname: '/post/[id]', params: { id: post.id } });
+      }
+    },
+    [activeTab, userId]
+  );
 
   // ── posts query ──────────────────────────────────────────────────────────
   const {
@@ -259,12 +247,16 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
   }, [savedHasMore, savedFetchingMore, fetchMoreSaved]);
 
   // Expose infinite-scroll trigger to parent ScrollView
-  useImperativeHandle(ref, () => ({
-    handleScrollNearEnd: () => {
-      if (activeTab === 'posts') handleEndReachedPosts();
-      else if (activeTab === 'saved') handleEndReachedSaved();
-    },
-  }), [activeTab, handleEndReachedPosts, handleEndReachedSaved]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      handleScrollNearEnd: () => {
+        if (activeTab === 'posts') handleEndReachedPosts();
+        else if (activeTab === 'saved') handleEndReachedSaved();
+      },
+    }),
+    [activeTab, handleEndReachedPosts, handleEndReachedSaved]
+  );
 
   // ── derived state ─────────────────────────────────────────────────────────
   const activeData = activeTab === 'posts' ? posts : bookmarks;
@@ -279,7 +271,7 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
       {/* Tab bar */}
       <View style={styles.tabBar} accessibilityRole="tablist">
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'posts' && styles.tabActive]}
+          style={styles.tab}
           onPress={() => setActiveTab('posts')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'posts' }}
@@ -290,10 +282,11 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
             color={activeTab === 'posts' ? '#FFFFFF' : '#666666'}
             strokeWidth={2.25}
           />
+          {activeTab === 'posts' && <View style={styles.tabIndicator} />}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
+          style={styles.tab}
           onPress={() => setActiveTab('saved')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'saved' }}
@@ -304,10 +297,11 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
             color={activeTab === 'saved' ? '#FFFFFF' : '#666666'}
             strokeWidth={2.25}
           />
+          {activeTab === 'saved' && <View style={styles.tabIndicator} />}
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'settings' && styles.tabActive]}
+          style={styles.tab}
           onPress={() => setActiveTab('settings')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'settings' }}
@@ -318,6 +312,7 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
             color={activeTab === 'settings' ? '#FFFFFF' : '#666666'}
             strokeWidth={2.25}
           />
+          {activeTab === 'settings' && <View style={styles.tabIndicator} />}
         </TouchableOpacity>
       </View>
 
@@ -329,48 +324,8 @@ export const ProfileContentTabs = forwardRef<ProfileContentTabsHandle, ProfileCo
         activeData={activeData}
         activeFetchingMore={activeFetchingMore}
         emptyMessage={emptyMessage}
-        onPostPress={setPreviewPost}
+        onPostPress={handleOpenPost}
       />
-
-      {/* Post preview modal */}
-      <Modal
-        visible={previewPost !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewPost(null)}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={styles.modalBack}
-            onPress={() => setPreviewPost(null)}
-            hitSlop={16}
-          >
-            <ArrowLeft size={32} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-          <ScrollView
-            contentContainerStyle={styles.modalScroll}
-            showsVerticalScrollIndicator={false}
-          >
-            {previewPost && (
-              <FeedPostCard
-                post={toFeedPost(previewPost)}
-                onComment={() => {
-                  console.log('[Profile] onComment tapped, postId:', previewPost.id);
-                  setCommentsPostId(previewPost.id);
-                }}
-              />
-            )}
-          </ScrollView>
-
-          {commentsPostId && (
-            <CommentsSheet
-              visible
-              onClose={() => setCommentsPostId(null)}
-              postId={commentsPostId}
-            />
-          )}
-        </View>
-      </Modal>
     </View>
   );
 });
@@ -387,16 +342,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 0.5,
     borderBottomColor: '#222222',
+    marginBottom: 2,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
   },
-  tabActive: {
-    borderBottomColor: '#FFFFFF',
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    width: 56,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#FFFFFF',
   },
 
   // Grid
@@ -429,8 +388,14 @@ const styles = StyleSheet.create({
     color: '#AAAAAA',
     lineHeight: 16,
   },
-  cellOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  cellTypeBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -457,22 +422,5 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 48,
     gap: 24,
-  },
-
-  // Modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  modalBack: {
-    position: 'absolute',
-    top: 56,
-    left: 16,
-    zIndex: 10,
-    padding: 8,
-  },
-  modalScroll: {
-    paddingTop: 100,
-    paddingBottom: 40,
   },
 });

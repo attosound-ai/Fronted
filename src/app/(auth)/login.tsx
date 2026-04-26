@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  TextInput,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -180,7 +181,9 @@ export default function LoginScreen() {
               }}
               autoCapitalize="none"
               autoCorrect={false}
-              autoComplete="username"
+              autoComplete="email"
+              textContentType="emailAddress"
+              keyboardType="email-address"
               autoFocus
               error={identifierError}
               onSubmitEditing={handleContinue}
@@ -204,35 +207,56 @@ export default function LoginScreen() {
               </Text>
             )}
 
-            <View>
-              <Input
-                placeholder={t('login.passwordPlaceholder')}
-                value={password}
-                onChangeText={(v: string) => {
-                  setPassword(v);
-                  setPasswordError('');
-                  clearError();
-                }}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoComplete="password"
-                autoFocus
-                error={passwordError}
-                onSubmitEditing={handleLogin}
-                returnKeyType="done"
-              />
-              <TouchableOpacity
-                style={styles.eyeToggle}
-                onPress={() => setShowPassword((v) => !v)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {showPassword ? (
-                  <EyeOff size={20} color="#888888" strokeWidth={2.25} />
-                ) : (
-                  <Eye size={20} color="#888888" strokeWidth={2.25} />
-                )}
-              </TouchableOpacity>
-            </View>
+            {/*
+              Hidden username field. iOS Password AutoFill only offers a
+              saved credential when a username input with the matching
+              content type is present on the same screen as the password
+              field. Without this, the QuickType bar suggests unrelated
+              emails from Contacts instead of the saved password.
+              The field is off-screen but focusable so iOS recognizes it
+              as part of the form.
+            */}
+            <TextInput
+              value={identifier}
+              editable={false}
+              autoComplete="username"
+              textContentType="username"
+              importantForAutofill="yes"
+              style={styles.hiddenUsername}
+              accessibilityElementsHidden
+              aria-hidden
+            />
+
+            <Input
+              placeholder={t('login.passwordPlaceholder')}
+              value={password}
+              onChangeText={(v: string) => {
+                setPassword(v);
+                setPasswordError('');
+                clearError();
+              }}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoComplete="password"
+              textContentType="password"
+              autoFocus
+              error={passwordError}
+              onSubmitEditing={handleLogin}
+              returnKeyType="done"
+              style={{ paddingRight: 48 }}
+              rightElement={
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color="#888888" strokeWidth={2.25} />
+                  ) : (
+                    <Eye size={20} color="#888888" strokeWidth={2.25} />
+                  )}
+                </TouchableOpacity>
+              }
+            />
 
             <Button
               title={t('login.signIn')}
@@ -343,13 +367,6 @@ const styles = StyleSheet.create({
   apiError: {
     color: '#EF4444',
   },
-  eyeToggle: {
-    position: 'absolute',
-    right: 16,
-    top: 0,
-    bottom: 16,
-    justifyContent: 'center',
-  },
   forgotRow: {
     alignSelf: 'center',
     marginTop: 4,
@@ -358,5 +375,15 @@ const styles = StyleSheet.create({
     color: '#888888',
     fontFamily: 'Archivo_400Regular',
     fontSize: 14,
+  },
+  // Off-screen + zero-size — still focusable so iOS treats it as part of
+  // the form for Password AutoFill pairing.
+  hiddenUsername: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    top: -1000,
+    left: -1000,
   },
 });

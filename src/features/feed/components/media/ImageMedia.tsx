@@ -4,7 +4,6 @@ import {
   Text,
   Image,
   StyleSheet,
-  Dimensions,
   Animated,
   Pressable,
   FlatList,
@@ -13,8 +12,7 @@ import {
 } from 'react-native';
 import { Heart } from 'lucide-react-native';
 import type { FeedPost } from '@/types/post';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
 const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
 
@@ -28,6 +26,7 @@ interface ImageMediaProps {
 }
 
 export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
+  const { contentWidth } = useDeviceLayout();
   const images = post.images ?? [];
   const [activeIndex, setActiveIndex] = useState(0);
   const [heightRatio, setHeightRatio] = useState(() => {
@@ -54,7 +53,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     );
   }, [firstImage, post.mediaWidth, post.mediaHeight]);
 
-  const imageHeight = SCREEN_WIDTH * heightRatio;
+  const imageHeight = contentWidth * heightRatio;
 
   const handlePress = useCallback(() => {
     const now = Date.now();
@@ -83,7 +82,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
   }, [onDoubleTap, heartScale, heartOpacity]);
 
   const onMomentumEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const index = Math.round(e.nativeEvent.contentOffset.x / contentWidth);
     setActiveIndex(index);
   }, []);
 
@@ -93,7 +92,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     <Pressable onPress={handlePress}>
       <Image
         source={{ uri: item }}
-        style={[styles.image, { height: imageHeight }]}
+        style={[styles.image, { width: contentWidth, height: imageHeight }]}
         resizeMode="cover"
       />
     </Pressable>
@@ -148,7 +147,6 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   image: {
-    width: SCREEN_WIDTH,
     backgroundColor: '#111',
   },
   counter: {

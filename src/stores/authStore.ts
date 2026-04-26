@@ -44,6 +44,7 @@ interface AuthActions {
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<TokenPair | null>;
+  expireSession: (reason: string) => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
   verify2FALogin: (code: string) => Promise<void>;
@@ -59,6 +60,17 @@ const initialState: AuthState = {
   error: null,
   pending2FA: null,
 };
+
+/**
+ * Register a freshly authenticated session with accountStore so the switcher
+ * reflects the current user. Without this, activeAccountId can remain pointing
+ * to a previously switched account while authStore shows the new one.
+ */
+async function registerActiveSession(user: User, tokens: TokenPair): Promise<void> {
+  const accountStore = useAccountStore.getState();
+  await accountStore.addAccount({ user, tokens });
+  await accountStore.setActive(user.id);
+}
 
 export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   ...initialState,
@@ -100,7 +112,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         Sentry.setUser({
           id: String(freshUser.id),
           email: freshUser.email,
-          name: freshUser.displayName || freshUser.username,
+          name: freshUser.username,
           username: freshUser.username,
         });
         analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
@@ -113,17 +125,14 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
             await authStorage.setUser(freshUser);
             set({ user: freshUser, isAuthenticated: true, isLoading: false });
           } catch {
-            await authStorage.clearAll();
-            set({ ...initialState, isLoading: false });
+            await get().expireSession('init_getme_after_refresh');
           }
         } else {
-          await authStorage.clearAll();
-          set({ ...initialState, isLoading: false });
+          await get().expireSession('init_refresh_failed');
         }
       }
     } catch {
-      await authStorage.clearAll();
-      set({ ...initialState, isLoading: false });
+      await get().expireSession('init_unexpected_error');
     }
   },
 
@@ -151,6 +160,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
+      await registerActiveSession(user, tokens);
 
       set({
         user,
@@ -163,7 +173,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        name: user.displayName || user.username,
+        name: user.username,
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);
@@ -185,6 +195,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
+      await registerActiveSession(user, tokens);
 
       set({
         user,
@@ -197,7 +208,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        name: user.displayName || user.username,
+        name: user.username,
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.COMPLETED, { role: user.role });
@@ -217,6 +228,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
+      await registerActiveSession(user, tokens);
 
       set({
         user,
@@ -229,7 +241,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        name: user.displayName || user.username,
+        name: user.username,
         username: user.username,
       });
     } catch (error: unknown) {
@@ -249,6 +261,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
+      await registerActiveSession(user, tokens);
 
       set({
         user,
@@ -257,18 +270,18 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         isAuthenticating: false,
       });
 
-      // Persist both accounts when a managed creator was created
+      // Persist the managed creator alongside the representative account
       if (linkedAccount) {
-        const { addAccount } = useAccountStore.getState();
-        await addAccount({ user, tokens });
-        await addAccount({ user: linkedAccount.user, tokens: linkedAccount.tokens });
+        await useAccountStore
+          .getState()
+          .addAccount({ user: linkedAccount.user, tokens: linkedAccount.tokens });
       }
 
       analytics.identify(user);
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        name: user.displayName || user.username,
+        name: user.username,
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.COMPLETED, { role: user.role });
@@ -329,20 +342,43 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setRefreshToken(newTokens.refreshToken);
 
       set({ tokens: newTokens });
+
+      // Keep accountStore tokens in sync so cached entries stay fresh
+      const activeId = useAccountStore.getState().activeAccountId;
+      const currentUser = get().user;
+      if (activeId && currentUser) {
+        useAccountStore.getState().addAccount({ user: currentUser, tokens: newTokens });
+      }
+
+      analytics.capture(ANALYTICS_EVENTS.AUTH.TOKEN_REFRESHED);
       return newTokens;
     } catch (error: unknown) {
-      // Only clear session on auth errors (401/403) — the refresh token is
-      // genuinely invalid.  Transient failures (429 rate-limit, 500, network
-      // timeout) should NOT nuke the session; the next automatic retry or
-      // user action will try again with the same (still valid) token.
-      const status =
-        error instanceof AxiosError ? error.response?.status : undefined;
-      if (status === 401 || status === 403) {
-        await authStorage.clearAll();
-        set({ ...initialState, isLoading: false });
-      }
+      const status = error instanceof AxiosError ? error.response?.status : undefined;
+      const isAuthError = status === 401 || status === 403;
+      analytics.capture(ANALYTICS_EVENTS.AUTH.TOKEN_REFRESH_FAILED, {
+        status,
+        is_auth_error: isAuthError,
+        is_network_error:
+          error instanceof AxiosError && error.message === 'Network Error',
+        error_code: error instanceof AxiosError ? error.code : undefined,
+      });
+      // Do NOT clear the session here — callers (initialize, interceptor)
+      // decide whether to expire the session based on context.
       return null;
     }
+  },
+
+  /**
+   * Explicitly expire the session and redirect to login.
+   * Called by initialize() and the response interceptor when a refresh
+   * definitively fails — never as a side effect of refreshTokens().
+   */
+  expireSession: async (reason: string) => {
+    analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_EXPIRED, { reason });
+    analytics.reset();
+    Sentry.setUser(null);
+    await authStorage.clearAll();
+    set({ ...initialState, isLoading: false });
   },
 
   verify2FALogin: async (code: string) => {
@@ -360,6 +396,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
+      await registerActiveSession(user, tokens);
 
       set({
         user,
@@ -373,7 +410,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       Sentry.setUser({
         id: String(user.id),
         email: user.email,
-        name: user.displayName || user.username,
+        name: user.username,
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);

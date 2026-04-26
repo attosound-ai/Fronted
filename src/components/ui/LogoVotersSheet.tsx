@@ -20,33 +20,36 @@ interface Voter {
   avatar: string | null;
 }
 
+const RATING_EMOJIS = ['😡', '😔', '😐', '🙂', '😁'] as const;
+
 interface LogoVotersSheetProps {
   visible: boolean;
   logoId: string;
-  type: 'likes' | 'dislikes';
+  ratingFilter: number;
   onClose: () => void;
 }
 
 export function LogoVotersSheet({
   visible,
   logoId,
-  type,
+  ratingFilter,
   onClose,
 }: LogoVotersSheetProps) {
   const [users, setUsers] = useState<Voter[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const title = type === 'likes' ? 'Liked by' : 'Disliked by';
+  const emoji = RATING_EMOJIS[ratingFilter - 1] ?? '';
+  const title = `${emoji} Rated ${ratingFilter}`;
 
   useEffect(() => {
     if (!visible || !logoId) return;
     setIsLoading(true);
     apiClient
-      .get(API_ENDPOINTS.CREATOR_LOGOS.VOTERS(logoId, type))
+      .get(API_ENDPOINTS.CREATOR_LOGOS.VOTERS(logoId, String(ratingFilter)))
       .then((res) => setUsers(res.data.data ?? []))
       .catch(() => setUsers([]))
       .finally(() => setIsLoading(false));
-  }, [visible, logoId, type]);
+  }, [visible, logoId, ratingFilter]);
 
   const handleUserPress = (userId: string) => {
     onClose();
@@ -72,8 +75,7 @@ export function LogoVotersSheet({
             >
               <Avatar uri={item.avatar} size="sm" />
               <View style={styles.textCol}>
-                <Text style={styles.displayName}>{item.displayName}</Text>
-                <Text style={styles.username}>@{item.username}</Text>
+                <Text style={styles.displayName}>{item.username}</Text>
               </View>
             </TouchableOpacity>
           )}

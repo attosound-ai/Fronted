@@ -30,8 +30,9 @@ export function AccountSwitcherBottomSheet({
   const currentUser = useAuthStore((s) => s.user);
   const [switching, setSwitching] = useState<number | null>(null);
 
-  // Use activeAccountId from accountStore, fallback to authStore user.id
-  const currentId = activeAccountId ?? currentUser?.id ?? null;
+  // The authenticated user is the source of truth for "who is active now".
+  // activeAccountId is a SecureStore mirror that may briefly lag behind.
+  const currentId = currentUser?.id ?? activeAccountId ?? null;
 
   const handleSwitch = async (entry: AccountEntry) => {
     if (entry.user.id === currentId) {
@@ -65,13 +66,13 @@ export function AccountSwitcherBottomSheet({
               <View style={isActive ? styles.avatarRingActive : undefined}>
                 <Avatar
                   uri={entry.user.avatar}
-                  fallbackText={entry.user.displayName}
+                  fallbackText={entry.user.username}
                   size="md"
                 />
               </View>
               <View style={styles.info}>
                 <Text style={styles.displayName} numberOfLines={1}>
-                  {entry.user.displayName}
+                  {entry.user.username}
                 </Text>
                 <Text style={[styles.role, isActive && styles.roleActive]}>
                   {isActive
@@ -129,7 +130,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#FFFFFF',
     borderRadius: 100,
-    padding: 1,
   },
   info: {
     flex: 1,

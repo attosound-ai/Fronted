@@ -3,7 +3,7 @@ import { create } from 'zustand';
 type Phase = 'idle' | 'flipping' | 'holding' | 'done';
 
 interface TargetUser {
-  displayName: string;
+  username: string;
   avatar: string | null;
 }
 

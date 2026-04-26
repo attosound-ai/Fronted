@@ -9,6 +9,7 @@ interface LinkedTextProps {
   style?: TextStyle;
   numberOfLines?: number;
   onPress?: () => void;
+  maxFontSizeMultiplier?: number;
 }
 
 /**
@@ -17,7 +18,13 @@ interface LinkedTextProps {
  * Detects http/https links and makes them tappable (opens browser).
  * Drop-in replacement for plain text strings inside <Text> components.
  */
-export function LinkedText({ children, style, numberOfLines, onPress }: LinkedTextProps) {
+export function LinkedText({
+  children,
+  style,
+  numberOfLines,
+  onPress,
+  maxFontSizeMultiplier,
+}: LinkedTextProps) {
   const handleLinkPress = useCallback((url: string) => {
     Linking.openURL(url);
   }, []);
@@ -27,7 +34,12 @@ export function LinkedText({ children, style, numberOfLines, onPress }: LinkedTe
   const parts = children.split(URL_REGEX);
 
   return (
-    <Text style={style} numberOfLines={numberOfLines} onPress={onPress}>
+    <Text
+      style={style}
+      numberOfLines={numberOfLines}
+      onPress={onPress}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
+    >
       {parts.map((part, i) => {
         URL_REGEX.lastIndex = 0;
         return URL_REGEX.test(part) ? (
@@ -35,6 +47,7 @@ export function LinkedText({ children, style, numberOfLines, onPress }: LinkedTe
             key={i}
             style={[style, styles.link]}
             onPress={() => handleLinkPress(part)}
+            maxFontSizeMultiplier={maxFontSizeMultiplier}
           >
             {part}
           </Text>

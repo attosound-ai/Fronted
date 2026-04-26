@@ -169,6 +169,7 @@ export function StepBasicInfo({
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              textContentType="emailAddress"
               error={errors.email}
             />
           ) : (

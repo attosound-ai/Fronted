@@ -1,7 +1,8 @@
 {
   "header": {
     "title": "Messages",
-    "newMessageAccessibility": "New message"
+    "newMessageAccessibility": "New message",
+    "settingsAccessibility": "Messages settings"
   },
   "empty": {
     "title": "No messages yet",
@@ -22,6 +23,18 @@
     "emptyMessages": "No messages yet. Say hello!",
     "errorFailedToSend": "Failed to send message"
   },
+  "chatHeader": {
+    "backAccessibilityLabel": "Go back",
+    "voiceCallAccessibilityLabel": "Voice call"
+  },
+  "typing": {
+    "suffix": " is typing",
+    "full": "{{name}} is typing..."
+  },
+  "media": {
+    "audioUnavailable": "Audio unavailable",
+    "videoUnavailable": "Video unavailable"
+  },
   "newMessage": {
     "headerTitle": "New Message",
     "searchPlaceholder": "Search users...",
@@ -30,5 +43,12 @@
     "creatingConversation": "Creating conversation...",
     "errorFailedToStart": "Failed to start conversation",
     "messageUserAccessibility": "Message {{name}}"
+  },
+  "wallpaperPicker": {
+    "title": "Chat wallpaper",
+    "subtitle": "Choose a background. The change applies to all your chats.",
+    "noneLabel": "None",
+    "loading": "Loading wallpapers...",
+    "error": "Could not load wallpapers. Please try again later."
   }
 }

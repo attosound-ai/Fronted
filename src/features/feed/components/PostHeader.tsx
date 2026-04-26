@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ellipsis, Bookmark, Flag, Pencil, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,19 +37,33 @@ export function PostHeader({
   const { t } = useTranslation('feed');
   const [menuVisible, setMenuVisible] = useState(false);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  // Cap fontScale to 1.2 so the Follow button grows with the text but stays
+  // bounded — keeps padding proportional even at AX5 accessibility sizes.
+  const { fontScale } = useWindowDimensions();
+  const cappedFontScale = Math.min(fontScale, 1.2);
   const isOwnPost =
     currentUserId !== undefined && String(author.id) === String(currentUserId);
   const qc = useQueryClient();
 
-  // Prefetch profile on finger-down (before tap completes ~100-200ms later)
+  // Prefetch profile + stats on finger-down (before tap completes ~100-200ms later)
   const handlePressIn = useCallback(() => {
     if (isOwnPost) return;
     const id = Number(author.id);
     qc.prefetchQuery({
       queryKey: QUERY_KEYS.USERS.PROFILE(id),
       queryFn: async () => {
-        const res = await apiClient.get(API_ENDPOINTS.USERS.PROFILE(id));
-        return res.data.data;
+        const [profileRes, statsRes] = await Promise.all([
+          apiClient.get(API_ENDPOINTS.USERS.PROFILE(id)),
+          apiClient.get(API_ENDPOINTS.USERS.STATS(id)),
+        ]);
+        const profile = profileRes.data.data;
+        const stats = statsRes.data?.data;
+        if (stats) {
+          profile.followersCount = stats.followersCount;
+          profile.followingCount = stats.followingCount;
+          profile.postsCount = stats.postsCount;
+        }
+        return profile;
       },
       staleTime: 5 * 60 * 1000,
     });
@@ -58,7 +72,7 @@ export function PostHeader({
   return (
     <View>
       {!isOwnPost && !author.isFollowing && (
-        <Text variant="small" style={styles.suggestedLabel}>
+        <Text variant="small" style={styles.suggestedLabel} maxFontSizeMultiplier={1.0}>
           {t('post.suggestedForYou')}
         </Text>
       )}
@@ -69,8 +83,15 @@ export function PostHeader({
           onPress={() => onProfilePress?.(author)}
           activeOpacity={0.7}
         >
-          <Avatar uri={author.avatar} size="md" />
-          <Text variant="body" style={styles.username}>
+          <Avatar uri={author.avatar} size="md" creatorRing={author.role === 'creator'} />
+          <Text
+            variant="body"
+            style={styles.username}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+            maxFontSizeMultiplier={1.0}
+          >
             {author.username}
           </Text>
           {author.role === 'creator' && <CreatorBadge size="sm" />}
@@ -82,9 +103,15 @@ export function PostHeader({
           <TouchableOpacity
             onPress={() => onFollow?.(author.id)}
             activeOpacity={0.7}
-            style={styles.followButton}
+            style={[
+              styles.followButton,
+              {
+                paddingHorizontal: 10 * cappedFontScale,
+                paddingVertical: 4 * cappedFontScale,
+              },
+            ]}
           >
-            <Text variant="body" style={styles.followText}>
+            <Text variant="body" style={styles.followText} maxFontSizeMultiplier={1.2}>
               {t('post.followButton')}
             </Text>
           </TouchableOpacity>
@@ -218,15 +245,20 @@ const styles = StyleSheet.create({
   },
   followButton: {
     backgroundColor: '#333',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     marginRight: 8,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   followText: {
     color: '#FFF',
     fontFamily: 'Archivo_700Bold',
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 16,
+    includeFontPadding: false,
   },
   spacer: {
     flex: 1,

@@ -5,8 +5,16 @@
  * audio/video players, optimistic sends, dark theme.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Alert, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Alert,
+  ImageBackground,
+  TouchableOpacity,
+  Pressable,
+  StyleSheet,
+  Text as RNText,
+} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,6 +33,8 @@ import {
   InputToolbar,
   Composer,
   Send,
+  Day,
+  LinkParser,
 } from 'react-native-gifted-chat';
 import type {
   IMessage,
@@ -64,18 +74,33 @@ import { ChatHeader } from './ChatHeader';
 import { ReactionPicker } from './ReactionPicker';
 import { TypingIndicator } from './TypingIndicator';
 import { ReactionBar } from './ReactionBar';
+import { useChatWallpapers } from '../hooks/useChatWallpapers';
+import {
+  CHAT_WALLPAPER_NONE_ID,
+  useChatWallpaperStore,
+} from '@/stores/chatWallpaperStore';
 import * as Clipboard from 'expo-clipboard';
 import { AudioMessagePlayer } from './AudioMessagePlayer';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
 
 import type { ChatMessagesPage } from '../types';
 
+// Text component used by LinkParser inside chat bubbles. Caps font scaling
+// so iOS Larger Text / Android Display Size can't blow the bubble layout
+// past what the bubble can fit. Defined at module scope so React doesn't
+// remount the parsed text tree on every render.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CappedText(props: any) {
+  return <RNText {...props} maxFontSizeMultiplier={1.0} />;
+}
+
 /** Typing indicator with bouncing dots */
 function TypingFooter({ name }: { name: string }) {
+  const { t } = useTranslation('messages');
   return (
     <View style={typingStyles.container}>
       <Text style={typingStyles.name}>{name}</Text>
-      <Text style={typingStyles.label}> is typing</Text>
+      <Text style={typingStyles.label}>{t('typing.suffix')}</Text>
       <View style={typingStyles.dots}>
         {[0, 1, 2].map((i) => (
           <TypingDot key={i} delay={i * 150} />
@@ -142,6 +167,8 @@ interface ChatScreenProps {
   participantName: string;
   participantId?: string;
   participantAvatar?: string | null;
+  /** Rendered inline in iPad split-view (hides back button, skips router.back) */
+  inline?: boolean;
 }
 
 export function ChatScreen({
@@ -149,6 +176,7 @@ export function ChatScreen({
   participantName,
   participantId,
   participantAvatar,
+  inline,
 }: ChatScreenProps) {
   const { t } = useTranslation('messages');
   const queryClient = useQueryClient();
@@ -178,6 +206,23 @@ export function ChatScreen({
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
   const [inputText, setInputText] = useState('');
+
+  // Chat wallpaper — remote-managed, user picks from the settings gear
+  // on the messages tab (ConversationsHeader).
+  // `null` selectedWallpaperId means no explicit user choice yet, so we use
+  // the first active wallpaper from the backend catalogue as global default.
+  // `CHAT_WALLPAPER_NONE_ID` means user explicitly chose black/no wallpaper.
+  const { data: wallpapersCatalogue = [] } = useChatWallpapers();
+  const selectedWallpaperId = useChatWallpaperStore((s) => s.selectedWallpaperId);
+  const activeWallpaper = useMemo(() => {
+    if (selectedWallpaperId === CHAT_WALLPAPER_NONE_ID) {
+      return null;
+    }
+    if (!selectedWallpaperId) {
+      return wallpapersCatalogue[0] ?? null;
+    }
+    return wallpapersCatalogue.find((w) => w.id === selectedWallpaperId) ?? null;
+  }, [selectedWallpaperId, wallpapersCatalogue]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const sentMessageIds = useRef(new Set<string>()).current;
@@ -458,10 +503,57 @@ export function ChatScreen({
 
   const handleBack = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
-    router.back();
-  }, [queryClient]);
+    if (!inline) router.back();
+  }, [queryClient, inline]);
 
   // ── Custom renderers ──
+
+  // gifted-chat v3 ignores `textProps` on Bubble (its internal MessageText
+  // and Time don't forward the prop), so we render the text and timestamp
+  // ourselves and apply `maxFontSizeMultiplier` directly. Without this the
+  // bubble grows uncontrollably under iOS Larger Text / Android Display
+  // Size accessibility settings.
+  const renderMessageText = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (textProps: any) => {
+      const position: 'left' | 'right' = textProps?.position ?? 'left';
+      const text: string = textProps?.currentMessage?.text ?? '';
+      const isRight = position === 'right';
+      return (
+        <View style={styles.messageTextContainer}>
+          <LinkParser
+            text={text}
+            textStyle={isRight ? styles.textRight : styles.textLeft}
+            linkStyle={isRight ? styles.linkRight : styles.linkLeft}
+            TextComponent={CappedText}
+          />
+        </View>
+      );
+    },
+    []
+  );
+
+  const renderTime = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (timeProps: any) => {
+      const position: 'left' | 'right' = timeProps?.position ?? 'left';
+      const createdAt = timeProps?.currentMessage?.createdAt;
+      if (!createdAt) return null;
+      const formatted = new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(new Date(createdAt));
+      return (
+        <RNText
+          style={position === 'right' ? styles.timeRight : styles.timeLeft}
+          maxFontSizeMultiplier={1.0}
+        >
+          {formatted}
+        </RNText>
+      );
+    },
+    []
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- GiftedChat generic props are overly strict with extended IMessage types
   const renderBubble = useCallback(
@@ -550,6 +642,8 @@ export function ChatScreen({
                   left: styles.timeLeft,
                   right: styles.timeRight,
                 }}
+                renderMessageText={renderMessageText}
+                renderTime={renderTime}
                 isCustomViewBottom={false}
                 renderCustomView={() => {
                   if (!msg.replyToId || !msg.replyToContent) return null;
@@ -619,7 +713,7 @@ export function ChatScreen({
         </PostHogMaskView>
       );
     },
-    [userId, toggleReaction, handleMenuAction, t]
+    [userId, toggleReaction, handleMenuAction, t, renderMessageText, renderTime]
   );
 
   const renderMessageAudio = useCallback((props: { currentMessage?: AttoMessage }) => {
@@ -694,6 +788,14 @@ export function ChatScreen({
                   ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
                   : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
               }
+              // Must merge — overwriting drops the onChangeText/ref that
+              // GiftedChat injects, breaking controlled input (every
+              // keystroke would re-render with the stale `text` prop and
+              // erase what the user typed).
+              textInputProps={{
+                ...((props as any).textInputProps ?? {}),
+                maxFontSizeMultiplier: 1.0,
+              }}
             />
           </PostHogMaskView>
           <Send {...props} containerStyle={styles.sendContainer}>
@@ -714,20 +816,56 @@ export function ChatScreen({
   const renderComposer = useCallback(() => null, []);
   const renderSend = useCallback(() => null, []);
 
+  // Cap date label scaling so "Today" / "FRI 8:10 PM" stay compact at AX5.
+  const renderDay = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (dayProps: any) => <Day {...dayProps} textProps={{ maxFontSizeMultiplier: 1.0 }} />,
+    []
+  );
+
   if (!user) return null;
+
+  // Render the wallpaper (if any) as an absolutely-positioned layer behind
+  // GiftedChat, with a dark overlay on top so the bubbles remain legible.
+  // The overlay colour + opacity come from the wallpaper document so admins
+  // can tune contrast remotely without a rebuild.
+  const wallpaperLayer = activeWallpaper ? (
+    <View style={styles.wallpaperLayer} pointerEvents="none">
+      <ImageBackground
+        source={{ uri: activeWallpaper.imageUrl }}
+        style={StyleSheet.absoluteFillObject}
+        imageStyle={{
+          backgroundColor: activeWallpaper.tintColor ?? '#000',
+        }}
+        resizeMode="repeat"
+      >
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: `rgba(0,0,0,${activeWallpaper.overlayOpacity ?? 0.7})`,
+            },
+          ]}
+        />
+      </ImageBackground>
+    </View>
+  ) : null;
 
   return (
     <View style={styles.container}>
+      {wallpaperLayer}
+
       <ChatHeader
         participantName={participantName}
         participantId={participantId || ''}
         onBack={handleBack}
+        hideBack={inline}
       />
 
       <GiftedChat<AttoMessage>
         messages={giftedMessages}
         onSend={handleSend}
-        user={{ _id: userId, name: user.displayName, avatar: user.avatar ?? undefined }}
+        user={{ _id: userId, name: user.username, avatar: user.avatar ?? undefined }}
         // Keyboard
         keyboardAvoidingViewProps={{ keyboardVerticalOffset: -(insets.bottom - 8) }}
         // Input — controlled mode for edit support
@@ -741,7 +879,6 @@ export function ChatScreen({
             : t('chat.inputPlaceholder', { defaultValue: 'Message...' }),
           onChangeText: (text: string) => {
             setInputText(text);
-            // Emit typing indicator
             if (text.length > 0 && !isTypingRef.current) {
               isTypingRef.current = true;
               sendTyping(true);
@@ -762,6 +899,7 @@ export function ChatScreen({
         renderSend={renderSend}
         renderMessageAudio={renderMessageAudio}
         renderMessageVideo={renderMessageVideo}
+        renderDay={renderDay}
         renderAvatar={null}
         // Interactions
         onPressMessage={(_context: unknown, message: IMessage) => {
@@ -805,8 +943,10 @@ export function ChatScreen({
         }}
         // Locale
         locale="en"
-        // Style overrides
-        messagesContainerStyle={styles.messagesContainer}
+        // Style overrides — transparent over wallpaper so the pattern shows through.
+        messagesContainerStyle={
+          activeWallpaper ? styles.messagesContainerTransparent : styles.messagesContainer
+        }
       />
 
       <ReactionPicker
@@ -835,6 +975,12 @@ const styles = StyleSheet.create({
   messagesContainer: {
     backgroundColor: COLORS.black,
   },
+  messagesContainerTransparent: {
+    backgroundColor: 'transparent',
+  },
+  wallpaperLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
   // Bubbles
   bubbleLeft: {
     backgroundColor: COLORS.gray[800],
@@ -846,17 +992,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 2,
   },
+  messageTextContainer: {
+    marginVertical: 5,
+    marginHorizontal: 10,
+  },
   textLeft: {
     color: COLORS.white,
+    fontSize: 13,
+    lineHeight: 17,
   },
   textRight: {
     color: COLORS.black,
+    fontSize: 13,
+    lineHeight: 17,
   },
   timeLeft: {
     color: 'rgba(255,255,255,0.5)',
+    fontSize: 9,
   },
   timeRight: {
     color: 'rgba(0,0,0,0.4)',
+    fontSize: 9,
+  },
+  linkLeft: {
+    color: '#7DB9FF',
+    textDecorationLine: 'underline',
+  },
+  linkRight: {
+    color: '#1B62D1',
+    textDecorationLine: 'underline',
   },
   // Deleted message
   deletedBubble: {
@@ -913,12 +1077,13 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderWidth: 0,
     paddingHorizontal: 14,
-    paddingTop: 0,
-    paddingBottom: 0,
+    paddingTop: 6,
+    paddingBottom: 6,
     maxHeight: 120,
     color: COLORS.white,
     fontFamily: 'Archivo_400Regular',
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: 18,
     marginLeft: 0,
     marginRight: 0,
   },

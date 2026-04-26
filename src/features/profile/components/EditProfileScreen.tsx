@@ -25,10 +25,12 @@ import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Avatar } from '@/components/ui/Avatar';
 import { Toast } from '@/components/ui/Toast';
 import { ImageCropModal } from '@/components/ui/ImageCropModal';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useEditProfile } from '../hooks/useEditProfile';
 import { EditProfileHeader } from './EditProfileHeader';
+import { AvatarPickerSheet } from './AvatarPickerSheet';
 
 export function EditProfileScreen() {
   const { t } = useTranslation('profile');
@@ -40,17 +42,43 @@ export function EditProfileScreen() {
     { label: t('edit.relationshipManager'), value: 'manager' },
   ];
   const { form, errors, isSubmitting, updateField, setAvatar, save } = useEditProfile();
-  const { pickFromGallery } = useImagePicker();
+  const { pickFromGallery, takePhoto } = useImagePicker();
   const [showCropModal, setShowCropModal] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [showAvatarSheet, setShowAvatarSheet] = useState(false);
 
   const handleSave = async () => {
     const success = await save();
     if (success) router.back();
   };
 
-  const handlePickAvatar = async () => {
+  const openAvatarSheet = () => setShowAvatarSheet(true);
+  const closeAvatarSheet = () => setShowAvatarSheet(false);
+
+  const handleEditCurrent = () => {
+    if (!form.avatarUri) return;
+    setShowAvatarSheet(false);
+    // Local file URIs (re-cropping a just-picked photo) pass through unchanged;
+    // Cloudinary public_ids get resolved to a full delivery URL.
+    const resolved = form.avatarUri.startsWith('file://')
+      ? form.avatarUri
+      : (cloudinaryUrl(form.avatarUri, 'original') ?? form.avatarUri);
+    setPendingUri(resolved);
+    setShowCropModal(true);
+  };
+
+  const handlePickFromGallery = async () => {
+    setShowAvatarSheet(false);
     const uri = await pickFromGallery();
+    if (uri) {
+      setPendingUri(uri);
+      setShowCropModal(true);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    setShowAvatarSheet(false);
+    const uri = await takePhoto();
     if (uri) {
       setPendingUri(uri);
       setShowCropModal(true);
@@ -84,7 +112,7 @@ export function EditProfileScreen() {
       >
         {/* Avatar Picker */}
         <TouchableOpacity
-          onPress={handlePickAvatar}
+          onPress={openAvatarSheet}
           activeOpacity={0.7}
           style={styles.avatarContainer}
         >
@@ -126,10 +154,16 @@ export function EditProfileScreen() {
           style={styles.bioInput}
         />
 
-        {/* Social Links + Extended Bio (creators) */}
-        {user.role === 'creator' && (
+        {/* Social Links + Extended Bio */}
+        {
           <>
-            <Text style={styles.sectionTitle}>Social Links</Text>
+            <Text
+              style={styles.sectionTitle}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
+              Social Links
+            </Text>
             <Input
               label="Instagram"
               value={form.socialInstagram}
@@ -181,7 +215,13 @@ export function EditProfileScreen() {
               keyboardType="url"
             />
 
-            <Text style={styles.sectionTitle}>Extended Info</Text>
+            <Text
+              style={styles.sectionTitle}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
+              Extended Info
+            </Text>
             <Input
               label="Location"
               value={form.location}
@@ -203,7 +243,7 @@ export function EditProfileScreen() {
               keyboardType="email-address"
             />
           </>
-        )}
+        }
 
         {/* Creator Fields */}
         {user.role === 'creator' && (
@@ -295,6 +335,15 @@ export function EditProfileScreen() {
       </KeyboardAwareScrollView>
 
       <Toast />
+
+      <AvatarPickerSheet
+        visible={showAvatarSheet}
+        hasCurrentPhoto={!!form.avatarUri}
+        onClose={closeAvatarSheet}
+        onEditCurrent={handleEditCurrent}
+        onPickFromGallery={handlePickFromGallery}
+        onTakePhoto={handleTakePhoto}
+      />
 
       <ImageCropModal
         visible={showCropModal}

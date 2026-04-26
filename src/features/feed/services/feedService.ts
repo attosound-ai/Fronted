@@ -211,4 +211,18 @@ export const feedService = {
     });
     return response.data;
   },
+
+  async editComment(postId: string, commentId: string, text: string) {
+    const response = await apiClient.put(API_ENDPOINTS.POSTS.COMMENT(postId, commentId), {
+      comment: text,
+    });
+    return response.data;
+  },
+
+  async deleteComment(postId: string, commentId: string) {
+    const response = await apiClient.delete(
+      API_ENDPOINTS.POSTS.COMMENT(postId, commentId)
+    );
+    return response.data;
+  },
 };

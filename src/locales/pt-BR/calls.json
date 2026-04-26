@@ -4,7 +4,12 @@
     "decline": "Recusar",
     "accept": "Aceitar"
   },
+  "outgoing": {
+    "label": "Chamando...",
+    "cancel": "Cancelar"
+  },
   "active": {
+    "loading": "Carregando projeto…",
     "mute": "Silenciar",
     "unmute": "Ativar som",
     "speaker": "Alto-falante",
@@ -33,6 +38,14 @@
   "banner": {
     "tapToRecord": "Toque para Gravar",
     "callInProgress": "Chamada em andamento"
+  },
+  "simple": {
+    "delete": "Excluir",
+    "upload": "Enviar",
+    "uploadSuccess": "Gravação enviada com sucesso",
+    "uploadFailed": "Falha ao enviar",
+    "deleteConfirm": "Excluir Gravação?",
+    "deleteConfirmMessage": "Isso excluirá permanentemente o áudio gravado."
   },
   "projectPicker": {
     "selectProject": "Selecionar Projeto",

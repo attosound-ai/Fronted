@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Play } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS } from '@/constants/theme';
 
@@ -20,6 +21,7 @@ interface VideoMessagePlayerProps {
 }
 
 export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
+  const { t } = useTranslation('messages');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [VideoModule, setVideoModule] = useState<any>(null);
   const [loadError, setLoadError] = useState(false);
@@ -34,7 +36,7 @@ export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
   if (loadError) {
     return (
       <View style={styles.container}>
-        <Text style={styles.fallbackText}>Video unavailable</Text>
+        <Text style={styles.fallbackText}>{t('media.videoUnavailable')}</Text>
       </View>
     );
   }

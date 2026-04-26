@@ -1,15 +1,16 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { PenLine, Music } from 'lucide-react-native';
+import { PenLine, Music, Mic } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 
 interface CreateActionSheetProps {
   visible: boolean;
   onClose: () => void;
+  hasAdvancedProduction: boolean;
 }
 
-export function CreateActionSheet({ visible, onClose }: CreateActionSheetProps) {
+export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: CreateActionSheetProps) {
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.options}>
@@ -28,20 +29,37 @@ export function CreateActionSheet({ visible, onClose }: CreateActionSheetProps) 
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.option}
-          activeOpacity={0.7}
-          onPress={() => {
-            onClose();
-            router.push('/projects');
-          }}
-        >
-          <Music size={22} color="#FFFFFF" strokeWidth={2.25} />
-          <View style={styles.optionText}>
-            <Text style={styles.optionTitle}>Projects</Text>
-            <Text style={styles.optionSubtitle}>Record and produce music</Text>
-          </View>
-        </TouchableOpacity>
+        {hasAdvancedProduction ? (
+          <TouchableOpacity
+            style={styles.option}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose();
+              router.push('/projects');
+            }}
+          >
+            <Music size={22} color="#FFFFFF" strokeWidth={2.25} />
+            <View style={styles.optionText}>
+              <Text style={styles.optionTitle}>Projects</Text>
+              <Text style={styles.optionSubtitle}>Record and produce music</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.option}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose();
+              router.push('/(tabs)/recording');
+            }}
+          >
+            <Mic size={22} color="#FFFFFF" strokeWidth={2.25} />
+            <View style={styles.optionText}>
+              <Text style={styles.optionTitle}>Record</Text>
+              <Text style={styles.optionSubtitle}>Record and publish audio</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
     </BottomSheet>
   );

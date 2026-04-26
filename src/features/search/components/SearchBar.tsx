@@ -8,7 +8,11 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
-export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: SearchBarProps) {
+export function SearchBar({
+  value,
+  onChangeText,
+  placeholder = 'Search...',
+}: SearchBarProps) {
   const inputRef = useRef<TextInput>(null);
 
   return (
@@ -25,6 +29,7 @@ export function SearchBar({ value, onChangeText, placeholder = 'Search...' }: Se
         autoCorrect={false}
         autoCapitalize="none"
         clearButtonMode="never"
+        maxFontSizeMultiplier={1.0}
       />
       {value.length > 0 && (
         <TouchableOpacity onPress={() => onChangeText('')} hitSlop={8}>
@@ -54,5 +59,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Archivo_400Regular',
     padding: 0,
+    // Pin the input height. Without this, iOS sizes the TextInput's
+    // intrinsic content using the OS font scale BEFORE applying
+    // maxFontSizeMultiplier, so under Larger Text the bar grows tall
+    // even though the placeholder text is correctly capped.
+    height: 22,
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
 });

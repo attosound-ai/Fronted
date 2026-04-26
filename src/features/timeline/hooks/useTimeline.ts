@@ -1,11 +1,21 @@
-import { useReducer, useCallback, useRef } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
 import type { LocalClip, LaneMeta, TimelineState, TimelineAction } from '../types';
 import {
   splitClipAtPosition,
   deleteClip,
-  recalculatePositions,
+  endOfLaneMs,
+  normalizeOrders,
   findClipAtPositionOnLane,
+  clampClipPosition,
+  findNearestFreeSlot,
 } from '../utils/clipOperations';
+import { clampDb } from '../utils/dbConversion';
+
+/** Snapshot captured by the undo/redo stack. */
+interface HistorySnapshot {
+  clips: LocalClip[];
+  laneMeta: Record<number, LaneMeta>;
+}
 
 const LANE_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
@@ -27,12 +37,18 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
       return { ...state, clips: action.clips, isDirty: true };
 
     case 'ADD_CLIP': {
+      // Place the new clip at the rightmost edge of its lane so it
+      // doesn't overlap with existing clips. The user can then drag it
+      // to a different position via the long-press drag gesture.
+      const laneIndex = action.clip.laneIndex ?? state.activeLaneIndex;
+      const lanePosition = endOfLaneMs(state.clips, laneIndex);
       const clipWithLane = {
         ...action.clip,
-        laneIndex: action.clip.laneIndex ?? state.activeLaneIndex,
+        laneIndex,
+        positionInTimeline: lanePosition,
       };
-      const combined = [...state.clips, clipWithLane];
-      return { ...state, clips: recalculatePositions(combined), isDirty: true };
+      const next = normalizeOrders([...state.clips, clipWithLane]);
+      return { ...state, clips: next, isDirty: true };
     }
 
     case 'SELECT_CLIP': {
@@ -81,6 +97,9 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
     }
 
     case 'TRIM_CLIP': {
+      // Trimming the in/out points of a clip does NOT shift other
+      // clips' positions. The trimmed clip stays anchored where it
+      // was on the timeline.
       const newClips = state.clips.map((c) =>
         c.id === action.clipId
           ? {
@@ -90,11 +109,7 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
             }
           : c
       );
-      return {
-        ...state,
-        clips: recalculatePositions(newClips),
-        isDirty: true,
-      };
+      return { ...state, clips: newClips, isDirty: true };
     }
 
     case 'SET_PLAYBACK_POSITION':
@@ -146,7 +161,7 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
           : state.activeLaneIndex;
       return {
         ...state,
-        clips: recalculatePositions(updatedClips),
+        clips: updatedClips,
         laneCount: state.laneCount - 1,
         activeLaneIndex: newActiveLane,
         laneMeta: newMeta,
@@ -162,22 +177,82 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
       };
 
     case 'MOVE_CLIP': {
+      // Move a clip between lanes. We try to land it at the same
+      // x-position it had on the source lane, snapped to the closest
+      // free slot of the right size on the target lane (so it doesn't
+      // overlap an existing clip there). Falls back to the end of the
+      // target lane if no slot fits. If the user is dropping back on
+      // the same lane, no-op.
       const clip = state.clips.find((c) => c.id === action.clipId);
       if (!clip || clip.laneIndex === action.toLane) return state;
-      const targetLaneClips = state.clips.filter((c) => c.laneIndex === action.toLane);
-      const maxOrder =
-        targetLaneClips.length > 0
-          ? Math.max(...targetLaneClips.map((c) => c.order))
-          : -1;
+      const duration = clip.endInSegment - clip.startInSegment;
+      const newPosition = findNearestFreeSlot(
+        state.clips,
+        action.toLane,
+        duration,
+        clip.positionInTimeline
+      );
       const updatedClips = state.clips.map((c) =>
         c.id === action.clipId
-          ? { ...c, laneIndex: action.toLane, order: maxOrder + 1 }
+          ? { ...c, laneIndex: action.toLane, positionInTimeline: newPosition }
           : c
       );
       return {
         ...state,
-        clips: recalculatePositions(updatedClips),
+        clips: normalizeOrders(updatedClips),
         isDirty: true,
+      };
+    }
+
+    case 'MOVE_CLIP_TO_POSITION': {
+      // Free positioning: drag a clip to any absolute position on its
+      // lane. Clamps to >=0 AND to the wall rule so it can't overlap
+      // its neighbors on the same lane.
+      const clamped = clampClipPosition(
+        state.clips,
+        action.clipId,
+        action.positionMs
+      );
+      const updatedClips = state.clips.map((c) =>
+        c.id === action.clipId ? { ...c, positionInTimeline: clamped } : c
+      );
+      const next = normalizeOrders(updatedClips);
+      return {
+        ...state,
+        clips: next,
+        isDirty: true,
+      };
+    }
+
+    case 'DUPLICATE_CLIP': {
+      // Insert a copy of the clip immediately after the original on the
+      // same lane (back-to-back, no gap). If there's no room directly
+      // after, fall back to the closest gap that fits via
+      // `findNearestFreeSlot`.
+      const source = state.clips.find((c) => c.id === action.clipId);
+      if (!source) return state;
+      const duration = source.endInSegment - source.startInSegment;
+      const preferredPosition = source.positionInTimeline + duration;
+      const dropPosition = findNearestFreeSlot(
+        state.clips,
+        source.laneIndex,
+        duration,
+        preferredPosition
+      );
+      const newClip: LocalClip = {
+        ...source,
+        id:
+          'clip_' +
+          Date.now().toString(36) +
+          '_' +
+          Math.random().toString(36).slice(2, 9),
+        positionInTimeline: dropPosition,
+      };
+      return {
+        ...state,
+        clips: normalizeOrders([...state.clips, newClip]),
+        isDirty: true,
+        selectedClipId: newClip.id,
       };
     }
 
@@ -188,6 +263,64 @@ function reducer(state: TimelineState, action: TimelineAction): TimelineState {
           : c
       );
       return { ...state, clips: newClips, isDirty: true };
+    }
+
+    case 'SET_LANE_MUTE': {
+      const existing = state.laneMeta[action.laneIndex] ?? { name: '', color: '' };
+      return {
+        ...state,
+        laneMeta: {
+          ...state.laneMeta,
+          [action.laneIndex]: { ...existing, muted: action.muted },
+        },
+        isDirty: true,
+      };
+    }
+
+    case 'SET_LANE_SOLO': {
+      const existing = state.laneMeta[action.laneIndex] ?? { name: '', color: '' };
+      return {
+        ...state,
+        laneMeta: {
+          ...state.laneMeta,
+          [action.laneIndex]: { ...existing, solo: action.solo },
+        },
+        isDirty: true,
+      };
+    }
+
+    case 'SET_LANE_GAIN': {
+      const existing = state.laneMeta[action.laneIndex] ?? { name: '', color: '' };
+      return {
+        ...state,
+        laneMeta: {
+          ...state.laneMeta,
+          [action.laneIndex]: { ...existing, gainDb: clampDb(action.gainDb) },
+        },
+        isDirty: true,
+      };
+    }
+
+    case 'SET_LANE_PAN': {
+      const existing = state.laneMeta[action.laneIndex] ?? { name: '', color: '' };
+      const clamped = Math.max(-1, Math.min(1, action.pan));
+      return {
+        ...state,
+        laneMeta: {
+          ...state.laneMeta,
+          [action.laneIndex]: { ...existing, pan: clamped },
+        },
+        isDirty: true,
+      };
+    }
+
+    case 'RESTORE_SNAPSHOT': {
+      return {
+        ...state,
+        clips: action.clips,
+        laneMeta: action.laneMeta,
+        isDirty: true,
+      };
     }
 
     default:
@@ -219,18 +352,52 @@ export function useTimeline(
     laneMeta: defaultMeta,
   });
 
-  // Undo/redo stacks
-  const undoStack = useRef<LocalClip[][]>([]);
-  const redoStack = useRef<LocalClip[][]>([]);
+  // Re-sync state when the caller passes new initial data (e.g. after a
+  // background refetch resolves with fresher data). `useReducer`'s
+  // initial-state argument is read once on mount, so without this effect
+  // we'd silently keep stale data forever. Callers can also force a
+  // remount via a `key` prop on the host component for the same effect.
+  const initialClipsRef = useRef(initialClips);
+  const initialLaneMetaRef = useRef(initialLaneMeta);
+  useEffect(() => {
+    if (
+      initialClipsRef.current === initialClips &&
+      initialLaneMetaRef.current === initialLaneMeta
+    ) {
+      return;
+    }
+    initialClipsRef.current = initialClips;
+    initialLaneMetaRef.current = initialLaneMeta;
+    dispatch({
+      type: 'RESTORE_SNAPSHOT',
+      clips: initialClips,
+      laneMeta: defaultMeta,
+    });
+  }, [initialClips, initialLaneMeta, defaultMeta]);
+
+  // Undo/redo stacks — snapshots capture BOTH clips and laneMeta so mixer
+  // changes (mute/solo/gain/pan/name/color) are fully undoable.
+  const undoStack = useRef<HistorySnapshot[]>([]);
+  const redoStack = useRef<HistorySnapshot[]>([]);
 
   // Ref for always-current playback position (avoids stale closure in splitAtPlayhead)
   const positionMsRef = useRef(state.playbackPositionMs);
   positionMsRef.current = state.playbackPositionMs;
 
+  const snapshot = useCallback(
+    (): HistorySnapshot => ({
+      clips: state.clips.map((c) => ({ ...c })),
+      laneMeta: Object.fromEntries(
+        Object.entries(state.laneMeta).map(([k, v]) => [k, { ...v }])
+      ),
+    }),
+    [state.clips, state.laneMeta]
+  );
+
   const pushUndo = useCallback(() => {
-    undoStack.current.push(state.clips.map((c) => ({ ...c })));
+    undoStack.current.push(snapshot());
     redoStack.current = [];
-  }, [state.clips]);
+  }, [snapshot]);
 
   const setClips = useCallback((clips: LocalClip[]) => {
     dispatch({ type: 'SET_CLIPS', clips });
@@ -299,14 +466,47 @@ export function useTimeline(
     dispatch({ type: 'ADD_LANE' });
   }, []);
 
-  const setLaneMeta = useCallback((laneIndex: number, meta: LaneMeta) => {
-    dispatch({ type: 'SET_LANE_META', laneIndex, meta });
-  }, []);
+  const setLaneMeta = useCallback(
+    (laneIndex: number, meta: LaneMeta) => {
+      // Snapshot before mutating so Undo can restore the previous name /
+      // color. This runs on explicit save (from LaneEditSheet) rather
+      // than per keystroke, so the undo stack stays coarse-grained.
+      pushUndo();
+      dispatch({ type: 'SET_LANE_META', laneIndex, meta });
+    },
+    [pushUndo]
+  );
 
   const moveClip = useCallback(
     (clipId: string, toLane: number) => {
       pushUndo();
       dispatch({ type: 'MOVE_CLIP', clipId, toLane });
+    },
+    [pushUndo]
+  );
+
+  /**
+   * Free-positioning drag — set a clip's absolute position in
+   * milliseconds. Snapshot is pushed once per drag (at start), so undo
+   * restores the pre-drag position cleanly.
+   */
+  const moveClipToPosition = useCallback(
+    (clipId: string, positionMs: number) => {
+      pushUndo();
+      dispatch({ type: 'MOVE_CLIP_TO_POSITION', clipId, positionMs });
+    },
+    [pushUndo]
+  );
+
+  /**
+   * Duplicate a clip — inserts a copy back-to-back to the right of
+   * the original on the same lane. Falls back to the closest free
+   * slot if there's no room directly after.
+   */
+  const duplicateClip = useCallback(
+    (clipId: string) => {
+      pushUndo();
+      dispatch({ type: 'DUPLICATE_CLIP', clipId });
     },
     [pushUndo]
   );
@@ -321,19 +521,52 @@ export function useTimeline(
     [state.clips, pushUndo]
   );
 
+  // ── Per-lane mixer controls ──
+  const setLaneMute = useCallback(
+    (laneIndex: number, muted: boolean) => {
+      pushUndo();
+      dispatch({ type: 'SET_LANE_MUTE', laneIndex, muted });
+    },
+    [pushUndo]
+  );
+
+  const setLaneSolo = useCallback(
+    (laneIndex: number, solo: boolean) => {
+      pushUndo();
+      dispatch({ type: 'SET_LANE_SOLO', laneIndex, solo });
+    },
+    [pushUndo]
+  );
+
+  const setLaneGain = useCallback(
+    (laneIndex: number, gainDb: number) => {
+      pushUndo();
+      dispatch({ type: 'SET_LANE_GAIN', laneIndex, gainDb });
+    },
+    [pushUndo]
+  );
+
+  const setLanePan = useCallback(
+    (laneIndex: number, pan: number) => {
+      pushUndo();
+      dispatch({ type: 'SET_LANE_PAN', laneIndex, pan });
+    },
+    [pushUndo]
+  );
+
   const undo = useCallback(() => {
     const prev = undoStack.current.pop();
     if (!prev) return;
-    redoStack.current.push(state.clips.map((c) => ({ ...c })));
-    dispatch({ type: 'SET_CLIPS', clips: prev });
-  }, [state.clips]);
+    redoStack.current.push(snapshot());
+    dispatch({ type: 'RESTORE_SNAPSHOT', clips: prev.clips, laneMeta: prev.laneMeta });
+  }, [snapshot]);
 
   const redo = useCallback(() => {
     const next = redoStack.current.pop();
     if (!next) return;
-    undoStack.current.push(state.clips.map((c) => ({ ...c })));
-    dispatch({ type: 'SET_CLIPS', clips: next });
-  }, [state.clips]);
+    undoStack.current.push(snapshot());
+    dispatch({ type: 'RESTORE_SNAPSHOT', clips: next.clips, laneMeta: next.laneMeta });
+  }, [snapshot]);
 
   return {
     state,
@@ -351,8 +584,14 @@ export function useTimeline(
     setActiveLane,
     addLane,
     moveClip,
+    moveClipToPosition,
+    duplicateClip,
     removeLane,
     setLaneMeta,
+    setLaneMute,
+    setLaneSolo,
+    setLaneGain,
+    setLanePan,
     undo,
     redo,
     canUndo: undoStack.current.length > 0,

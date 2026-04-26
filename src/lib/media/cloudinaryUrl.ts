@@ -16,6 +16,9 @@ const PRESETS: Record<string, string> = {
   avatar_md: 'c_thumb,g_face,w_80,h_80,f_auto,q_auto',
   avatar_lg: 'c_thumb,g_face,w_200,h_200,f_auto,q_auto',
 
+  // Brand logos — fit inside square, no crop, black background
+  brand_avatar: 'c_pad,w_100,h_100,b_rgb:000000,f_png',
+
   // Content images — responsive widths
   thumb: 'c_limit,w_300,f_auto,q_auto',
   feed: 'c_limit,w_1500,f_auto,q_auto',
@@ -28,6 +31,9 @@ const PRESETS: Record<string, string> = {
   // Video thumbnails (so_0 = first frame)
   video_thumb: 'c_limit,w_750,h_750,f_jpg,q_auto,so_0',
   reel_thumb: 'c_limit,w_480,h_854,f_jpg,q_auto,so_0',
+
+  // Video/audio streaming — no format conversion (HEVC passthrough)
+  video_original: '',
 
   // Original (no transforms, only format + quality)
   original: 'f_auto,q_auto',
@@ -56,5 +62,8 @@ export function cloudinaryUrl(
   if (publicId.startsWith('http')) return publicId;
 
   const transform = PRESETS[preset] ?? PRESETS.original;
+  if (!transform) {
+    return `${BASE}/${resourceType}/upload/${publicId}`;
+  }
   return `${BASE}/${resourceType}/upload/${transform}/${publicId}`;
 }

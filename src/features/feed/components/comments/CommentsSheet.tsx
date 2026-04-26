@@ -12,11 +12,12 @@ import Animated, {
   useAnimatedProps,
   useDerivedValue,
 } from 'react-native-reanimated';
-import { X, SendHorizontal } from 'lucide-react-native';
+import { X, SendHorizontal, Pencil } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet, useBottomSheetScroll } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { useComments, type Comment } from '../../hooks/useComments';
+import { useCommentActions } from '../../hooks/useCommentActions';
 import { usePostChannel } from '../../hooks/usePostChannel';
 import { CommentItem } from './CommentItem';
 
@@ -40,6 +41,8 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
     isAddingComment,
   } = useComments(postId);
 
+  const { editComment, deleteComment, canEditOrDelete } = useCommentActions(postId);
+
   usePostChannel(visible ? postId : null);
 
   const sheetScroll = useBottomSheetScroll();
@@ -62,25 +65,55 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
 
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; originalText: string } | null>(
+    null
+  );
   const inputRef = useRef<TextInput>(null);
 
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    // Fire-and-forget: optimistic update handles UI instantly
-    addComment(trimmed, replyTo?.id);
+    if (editing) {
+      editComment(editing.id, trimmed);
+      setEditing(null);
+    } else {
+      addComment(trimmed, replyTo?.id);
+      setReplyTo(null);
+    }
     setText('');
-    setReplyTo(null);
   };
 
   const handleReply = (commentId: string, username: string) => {
+    setEditing(null);
     setReplyTo({ id: commentId, username });
     inputRef.current?.focus();
   };
 
+  const handleEdit = (commentId: string, currentText: string) => {
+    setReplyTo(null);
+    setEditing({ id: commentId, originalText: currentText });
+    setText(currentText);
+    inputRef.current?.focus();
+  };
+
+  const handleDelete = (commentId: string) => {
+    deleteComment(commentId);
+  };
+
+  const cancelEditing = () => {
+    setEditing(null);
+    setText('');
+  };
+
   const renderComment = ({ item }: { item: Comment }) => (
-    <CommentItem comment={item} onReply={handleReply} />
+    <CommentItem
+      comment={item}
+      onReply={handleReply}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      canModify={canEditOrDelete(item.userId)}
+    />
   );
 
   return (
@@ -112,12 +145,25 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
       </View>
 
       {/* Reply indicator */}
-      {replyTo && (
-        <View style={styles.replyBar}>
-          <Text variant="caption" style={styles.replyText}>
+      {replyTo && !editing && (
+        <View style={styles.contextBar}>
+          <Text variant="caption" style={styles.contextText}>
             {t('post.replyingTo', { username: replyTo.username })}
           </Text>
           <TouchableOpacity onPress={() => setReplyTo(null)} hitSlop={8}>
+            <X size={16} color="#999" strokeWidth={2.25} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Editing indicator */}
+      {editing && (
+        <View style={styles.contextBar}>
+          <Pencil size={14} color="#3B82F6" strokeWidth={2.25} />
+          <Text variant="caption" style={styles.editingText}>
+            Editing comment
+          </Text>
+          <TouchableOpacity onPress={cancelEditing} hitSlop={8} style={styles.cancelBtn}>
             <X size={16} color="#999" strokeWidth={2.25} />
           </TouchableOpacity>
         </View>
@@ -128,12 +174,13 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder={t('post.addCommentPlaceholder')}
+          placeholder={editing ? 'Edit your comment...' : t('post.addCommentPlaceholder')}
           placeholderTextColor="#555"
           value={text}
           onChangeText={setText}
           multiline
           maxLength={2000}
+          maxFontSizeMultiplier={1.0}
         />
         <TouchableOpacity
           onPress={handleSend}
@@ -168,18 +215,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 40,
   },
-  replyBar: {
+  contextBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     paddingVertical: 6,
     paddingHorizontal: 4,
     borderTopWidth: 1,
     borderTopColor: '#333',
   },
-  replyText: {
+  contextText: {
     color: '#999',
     fontSize: 12,
+    flex: 1,
+  },
+  editingText: {
+    color: '#3B82F6',
+    fontSize: 12,
+    flex: 1,
+  },
+  cancelBtn: {
+    marginLeft: 'auto',
   },
   inputRow: {
     flexDirection: 'row',

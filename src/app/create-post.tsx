@@ -53,7 +53,13 @@ function ToolbarButton({
       activeOpacity={0.6}
     >
       <Icon size={20} color={color} strokeWidth={2.25} />
-      <Text style={[styles.toolbarLabel, { color }]}>{label}</Text>
+      <Text
+        style={[styles.toolbarLabel, { color }]}
+        numberOfLines={1}
+        maxFontSizeMultiplier={1.0}
+      >
+        {label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -75,6 +81,8 @@ export default function CreatePostScreen() {
   const {
     pickImages,
     pickMoreImages,
+    takePhoto,
+    recordVideo,
     pickVideo,
     pickReel,
     pickDocumentImages,
@@ -179,13 +187,32 @@ export default function CreatePostScreen() {
     }, 400);
   };
 
-  const handleSourceRecord = () => {
+  const handleSourceCamera = () => {
+    const type = sourceSheet;
     setSourceSheet(null);
     setTimeout(async () => {
-      const picked = await pickReel(true);
-      if (picked) {
-        setAttachmentType('reel');
-        setMedia([picked]);
+      if (type === 'image') {
+        const picked = await takePhoto();
+        if (picked) {
+          if (attachmentType === 'image') {
+            setMedia([...media, ...picked]);
+          } else {
+            setAttachmentType('image');
+            setMedia(picked);
+          }
+        }
+      } else if (type === 'video') {
+        const picked = await recordVideo();
+        if (picked) {
+          setAttachmentType('video');
+          setMedia([picked]);
+        }
+      } else if (type === 'reel') {
+        const picked = await pickReel(true);
+        if (picked) {
+          setAttachmentType('reel');
+          setMedia([picked]);
+        }
       }
     }, 400);
   };
@@ -265,7 +292,7 @@ export default function CreatePostScreen() {
         poemText: isTextOnly ? textContent : '',
         onProgress: setUploadProgress,
       });
-      router.replace('/(tabs)/');  // Explicit index route to land on feed tab
+      router.replace('/(tabs)/'); // Explicit index route to land on feed tab
       // Scroll feed to top and show published banner after navigation settles
       setTimeout(() => {
         DeviceEventEmitter.emit('feedScrollToTop');
@@ -273,8 +300,7 @@ export default function CreatePostScreen() {
         showPostPublished();
       }, 400);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Something went wrong';
+      const message = err instanceof Error ? err.message : 'Something went wrong';
       Alert.alert(t('create.errorTitle'), message);
     }
   };
@@ -298,7 +324,13 @@ export default function CreatePostScreen() {
           {isCreating ? (
             <ActivityIndicator size="small" color="#000000" />
           ) : (
-            <Text style={styles.postButtonText}>{t('create.postButton')}</Text>
+            <Text
+              style={styles.postButtonText}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
+              {t('create.postButton')}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -307,7 +339,10 @@ export default function CreatePostScreen() {
       {isCreating && uploadProgress > 0 && (
         <View style={styles.progressBar}>
           <View
-            style={[styles.progressFill, { width: `${Math.round(uploadProgress * 100)}%` }]}
+            style={[
+              styles.progressFill,
+              { width: `${Math.round(uploadProgress * 100)}%` },
+            ]}
           />
         </View>
       )}
@@ -323,7 +358,7 @@ export default function CreatePostScreen() {
         <View style={styles.composeRow}>
           <Avatar
             uri={user?.avatar}
-            fallbackText={user?.displayName}
+            fallbackText={user?.username}
             size="sm"
             style={styles.avatar}
           />
@@ -336,6 +371,7 @@ export default function CreatePostScreen() {
             onChangeText={setTextContent}
             maxLength={MAX_CHARS}
             autoFocus
+            maxFontSizeMultiplier={1.0}
           />
         </View>
 
@@ -389,6 +425,8 @@ export default function CreatePostScreen() {
           <Text
             variant="small"
             style={[styles.charCount, nearLimit && styles.charCountWarn]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.0}
           >
             {charCount}/{MAX_CHARS}
           </Text>
@@ -420,22 +458,36 @@ export default function CreatePostScreen() {
               activeOpacity={0.7}
             >
               <Images size={20} color="#000000" strokeWidth={2.25} />
-              <Text style={styles.reelOptionPrimaryText}>
+              <Text
+                style={styles.reelOptionPrimaryText}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.15}
+              >
                 {t('create.fromGallery')}
               </Text>
             </TouchableOpacity>
           )}
 
-          {/* Record — reel only */}
-          {sourceSheet === 'reel' && (
+          {/* Camera — photo, video, reel */}
+          {(sourceSheet === 'image' ||
+            sourceSheet === 'video' ||
+            sourceSheet === 'reel') && (
             <TouchableOpacity
               style={styles.reelOption}
-              onPress={handleSourceRecord}
+              onPress={handleSourceCamera}
               activeOpacity={0.7}
             >
               <Camera size={20} color="#FFFFFF" strokeWidth={2.25} />
-              <Text style={styles.reelOptionText}>
-                {t('create.reelRecord')}
+              <Text
+                style={styles.reelOptionText}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.15}
+              >
+                {sourceSheet === 'image'
+                  ? t('create.takePhoto', { defaultValue: 'Camera' })
+                  : sourceSheet === 'video'
+                    ? t('create.recordVideo', { defaultValue: 'Record' })
+                    : t('create.reelRecord')}
               </Text>
             </TouchableOpacity>
           )}
@@ -448,7 +500,11 @@ export default function CreatePostScreen() {
               activeOpacity={0.7}
             >
               <Music size={20} color="#000000" strokeWidth={2.25} />
-              <Text style={styles.reelOptionPrimaryText}>
+              <Text
+                style={styles.reelOptionPrimaryText}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.15}
+              >
                 {t('create.fromProject')}
               </Text>
             </TouchableOpacity>
@@ -461,7 +517,11 @@ export default function CreatePostScreen() {
             activeOpacity={0.7}
           >
             <FolderOpen size={20} color="#FFFFFF" strokeWidth={2.25} />
-            <Text style={styles.reelOptionText}>
+            <Text
+              style={styles.reelOptionText}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.15}
+            >
               {t('create.fromFiles')}
             </Text>
           </TouchableOpacity>
@@ -542,6 +602,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     minHeight: 80,
     padding: 0,
+    includeFontPadding: false,
   },
   toolbar: {
     flexDirection: 'row',

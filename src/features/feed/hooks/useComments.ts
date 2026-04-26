@@ -25,6 +25,8 @@ export interface Comment {
   comment: string;
   parentId?: string | null;
   createdAt: string;
+  isEdited?: boolean;
+  isDeleted?: boolean;
   author?: CommentAuthor;
   replies?: Comment[];
 }

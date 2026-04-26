@@ -8,6 +8,8 @@ import { MessageNotificationBanner } from '@/components/ui/MessageNotificationBa
 import { PostPublishedBanner } from '@/components/ui/PostPublishedBanner';
 import { ProfileTabIcon } from '@/components/ui/ProfileTabIcon';
 import { ProfileTabButton } from '@/components/ui/ProfileTabButton';
+import { TabBarRouter } from '@/components/navigation/TabBarRouter';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/features/messages/stores/chatStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
@@ -57,6 +59,12 @@ export default function TabsLayout() {
   // Join user-level channel for real-time conversation list updates
   useUserChannel();
 
+  // NOTE: every hook must be called before any early return — React
+  // enforces a stable hook order across renders. `useDeviceLayout` used
+  // to live below the logout short-circuit, which caused a "Rendered
+  // fewer hooks than expected" crash on sign-out.
+  const { isTablet, sidebarWidth } = useDeviceLayout();
+
   // Don't render tabs (which trigger feed/Twilio requests) until auth is confirmed
   if (isLoading || !isAuthenticated) {
     return null;
@@ -65,13 +73,11 @@ export default function TabsLayout() {
   return (
     <>
       <Tabs
+        tabBar={(props) => <TabBarRouter {...props} />}
         screenOptions={{
           headerShown: false,
           lazy: true,
-          tabBarStyle: styles.tabBar,
-          tabBarActiveTintColor: '#FFFFFF',
-          tabBarInactiveTintColor: '#888888',
-          tabBarShowLabel: false,
+          sceneStyle: isTablet ? { paddingLeft: sidebarWidth } : undefined,
         }}
       >
         <Tabs.Screen
@@ -116,6 +122,12 @@ export default function TabsLayout() {
             tabBarIcon: ({ color, focused }) => (
               <Search size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
             ),
+          }}
+        />
+        <Tabs.Screen
+          name="recording"
+          options={{
+            href: null, // hidden from tab bar
           }}
         />
         <Tabs.Screen

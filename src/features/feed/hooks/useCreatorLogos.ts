@@ -3,13 +3,21 @@ import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 
+export interface LogoCreator {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string | null;
+}
+
 export interface CreatorLogo {
   id: string;
   imageUrl: string;
   sortOrder: number;
-  likes: number;
-  dislikes: number;
-  userVote: number | null;
+  rating: number;
+  ratingCount: number;
+  userRating: number | null;
+  creator: LogoCreator | null;
 }
 
 const FALLBACK_LOGOS: CreatorLogo[] = [
@@ -18,36 +26,40 @@ const FALLBACK_LOGOS: CreatorLogo[] = [
     imageUrl:
       'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775357201/Disen%CC%83o_sin_ti%CC%81tulo_fgumjh.png',
     sortOrder: 0,
-    likes: 0,
-    dislikes: 0,
-    userVote: null,
+    rating: 0,
+    ratingCount: 0,
+    userRating: null,
+    creator: null,
   },
   {
     id: 'fallback-2',
     imageUrl:
       'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/3_r97kll.png',
     sortOrder: 1,
-    likes: 0,
-    dislikes: 0,
-    userVote: null,
+    rating: 0,
+    ratingCount: 0,
+    userRating: null,
+    creator: null,
   },
   {
     id: 'fallback-3',
     imageUrl:
       'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/4_zvaaqc.png',
     sortOrder: 2,
-    likes: 0,
-    dislikes: 0,
-    userVote: null,
+    rating: 0,
+    ratingCount: 0,
+    userRating: null,
+    creator: null,
   },
   {
     id: 'fallback-4',
     imageUrl:
       'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/2_gl1k9h.png',
     sortOrder: 3,
-    likes: 0,
-    dislikes: 0,
-    userVote: null,
+    rating: 0,
+    ratingCount: 0,
+    userRating: null,
+    creator: null,
   },
 ];
 

@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Dimensions, StyleSheet, View, type ViewStyle } from 'react-native';
-
-const SCREEN_W = Dimensions.get('window').width;
+import { Animated, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 const BASE_COLOR = '#1A1A1A';
 
 // ── Primitives ──────────────────────────────────────────────────────────────
@@ -59,6 +58,7 @@ export function BoneRow({
 
 /** Post card skeleton — matches FeedPostCard layout. */
 export function PostCardSkeleton() {
+  const { contentWidth } = useDeviceLayout();
   return (
     <View style={tpl.postCard}>
       <BoneRow style={tpl.postHeader}>
@@ -68,7 +68,7 @@ export function PostCardSkeleton() {
           <Bone width={80} height={10} />
         </View>
       </BoneRow>
-      <Bone width={SCREEN_W} height={SCREEN_W * 0.75} radius={0} />
+      <Bone width={contentWidth} height={contentWidth * 0.75} radius={0} />
       <BoneRow gap={16} style={tpl.postActions}>
         <Bone width={26} height={26} radius={13} />
         <Bone width={26} height={26} radius={13} />
@@ -168,14 +168,15 @@ export function ProfileSkeleton() {
           <Bone width={50} height={10} />
         </View>
       </BoneRow>
-      <Bone width={SCREEN_W - 32} height={36} radius={8} style={{ marginTop: 16 }} />
+      <Bone width={'90%'} height={36} radius={8} style={{ marginTop: 16 }} />
     </View>
   );
 }
 
 /** Grid tile skeleton — for search explore, bookmarks, user posts grid. */
 export function GridSkeleton({ count = 9 }: { count?: number }) {
-  const tileSize = (SCREEN_W - 4) / 3;
+  const { contentWidth } = useDeviceLayout();
+  const tileSize = (contentWidth - 4) / 3;
   return (
     <View style={tpl.grid}>
       {Array.from({ length: count }).map((_, i) => (
@@ -193,13 +194,14 @@ export function GridSkeleton({ count = 9 }: { count?: number }) {
 
 /** Reels / Listen tab skeleton — fullscreen vertical cards. */
 export function ReelsSkeleton() {
+  const { contentWidth } = useDeviceLayout();
   return (
     <View style={tpl.reelsContainer}>
-      <Bone width={SCREEN_W} height={SCREEN_W * 1.5} radius={0} />
+      <Bone width={contentWidth} height={contentWidth * 1.5} radius={0} />
       <View style={tpl.reelsOverlay}>
         <Bone width={36} height={36} radius={18} />
         <Bone width={120} height={14} />
-        <Bone width={SCREEN_W * 0.7} height={12} style={{ marginTop: 8 }} />
+        <Bone width={contentWidth * 0.7} height={12} style={{ marginTop: 8 }} />
       </View>
     </View>
   );

@@ -13,6 +13,8 @@ import {
   Dimensions,
   FlatList,
   Image,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -88,7 +90,7 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0])
+        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
         : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
@@ -142,7 +144,7 @@ function ReelItem({
   const [captionExpanded, setCaptionExpanded] = useState(false);
 
   const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'original', 'video') ?? post.videoUrl)
+    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
     : null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
@@ -159,6 +161,24 @@ function ReelItem({
       player.pause();
     }
   }, [isActive, player]);
+
+  // Auto-recover from error state
+  useEffect(() => {
+    if (!player || !videoUrl) return;
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error' && isActive) {
+        setTimeout(() => {
+          try {
+            player.replace(videoUrl);
+            player.play();
+          } catch {
+            // ignore
+          }
+        }, 1000);
+      }
+    });
+    return () => sub.remove();
+  }, [player, isActive, videoUrl]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -217,7 +237,9 @@ function ReelItem({
             fill={post.isLiked ? '#EF4444' : 'none'}
             strokeWidth={2.25}
           />
-          <Text style={styles.actionCount}>{formatCount(post.likesCount)}</Text>
+          <Text style={styles.actionCount} maxFontSizeMultiplier={1.0}>
+            {formatCount(post.likesCount)}
+          </Text>
         </TouchableOpacity>
 
         {/* Comment */}
@@ -227,7 +249,9 @@ function ReelItem({
           activeOpacity={0.75}
         >
           <MessageCircle size={28} color="#FFF" strokeWidth={2.25} />
-          <Text style={styles.actionCount}>{formatCount(post.commentsCount)}</Text>
+          <Text style={styles.actionCount} maxFontSizeMultiplier={1.0}>
+            {formatCount(post.commentsCount)}
+          </Text>
         </TouchableOpacity>
 
         {/* Share */}
@@ -237,7 +261,9 @@ function ReelItem({
           activeOpacity={0.75}
         >
           <Send size={28} color="#FFF" strokeWidth={2.25} />
-          <Text style={styles.actionCount}>{formatCount(post.sharesCount)}</Text>
+          <Text style={styles.actionCount} maxFontSizeMultiplier={1.0}>
+            {formatCount(post.sharesCount)}
+          </Text>
         </TouchableOpacity>
 
         {/* Bookmark */}
@@ -257,6 +283,18 @@ function ReelItem({
 
       {/* ── Bottom author + description overlay ── */}
       <View style={styles.bottomOverlay}>
+        {/* Context label — sits ABOVE the author row so it never competes
+            for horizontal space with username + Follow button. Inline
+            placement broke at fontScale > 1.0. */}
+        {!isOwnPost && (
+          <Text
+            style={styles.reelFeedLabel}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.0}
+          >
+            {post.author.isFollowing ? t('post.following') : t('post.suggestedForYou')}
+          </Text>
+        )}
         {/* Author row */}
         <View style={styles.authorRow}>
           <TouchableOpacity
@@ -270,7 +308,6 @@ function ReelItem({
                   pathname: '/user/[id]',
                   params: {
                     id: String(post.author.id),
-                    displayName: post.author.displayName,
                     username: post.author.username,
                     avatar: post.author.avatar ?? '',
                   },
@@ -282,12 +319,12 @@ function ReelItem({
               <Image source={{ uri: avatarUri }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial}>
-                  {post.author.displayName.charAt(0).toUpperCase()}
+                <Text style={styles.avatarInitial} maxFontSizeMultiplier={1.0}>
+                  {post.author.username.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
-            <Text style={styles.username} numberOfLines={1}>
+            <Text style={styles.username} numberOfLines={1} maxFontSizeMultiplier={1.15}>
               {post.author.username}
             </Text>
             {post.author.role === 'creator' && <CreatorBadge style={styles.verified} />}
@@ -298,13 +335,10 @@ function ReelItem({
               activeOpacity={0.7}
               style={styles.followButton}
             >
-              <Text style={styles.followText}>+ Follow</Text>
+              <Text style={styles.followText} maxFontSizeMultiplier={1.0}>
+                + Follow
+              </Text>
             </TouchableOpacity>
-          )}
-          {!isOwnPost && (
-            <Text style={styles.reelFeedLabel}>
-              {post.author.isFollowing ? t('post.following') : t('post.suggestedForYou')}
-            </Text>
           )}
         </View>
 
@@ -317,6 +351,7 @@ function ReelItem({
             <LinkedText
               style={styles.description}
               numberOfLines={captionExpanded ? undefined : 2}
+              maxFontSizeMultiplier={1.2}
             >
               {post.description}
             </LinkedText>
@@ -387,7 +422,9 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
       {/* Sponsored badge — top-right */}
       <View style={styles.adSponsoredBadge}>
         <Megaphone size={12} color="#CCC" strokeWidth={2.25} />
-        <Text style={styles.adSponsoredText}>Sponsored</Text>
+        <Text style={styles.adSponsoredText} maxFontSizeMultiplier={1.0}>
+          Sponsored
+        </Text>
       </View>
 
       {/* Mute toggle */}
@@ -409,7 +446,8 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
  * Only shows posts with type 'reel' (not 'video').
  */
 export function ReelsFeed() {
-  const { posts, isLoading, isFetchingMore, hasMore, loadMore } = useReelsFeed();
+  const { posts, isLoading, isRefreshing, isFetchingMore, hasMore, loadMore, refresh } =
+    useReelsFeed();
   const { toggleLike, toggleBookmark, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
   const followedUsers = useFollowStore((s) => s.followedUsers);
@@ -517,11 +555,24 @@ export function ReelsFeed() {
 
   if (displayPosts.length === 0) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        contentContainerStyle={styles.centered}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={refresh}
+            tintColor="#FFF"
+          />
+        }
+      >
         <Film size={56} color="#555" strokeWidth={2.25} />
-        <Text style={styles.emptyText}>No reels yet</Text>
-        <Text style={styles.emptySubtext}>Check back soon</Text>
-      </View>
+        <Text style={styles.emptyText} maxFontSizeMultiplier={1.2}>
+          No reels yet
+        </Text>
+        <Text style={styles.emptySubtext} maxFontSizeMultiplier={1.2}>
+          Pull down to refresh
+        </Text>
+      </ScrollView>
     );
   }
 
@@ -542,9 +593,13 @@ export function ReelsFeed() {
           ListFooterComponent={renderFooter}
           viewabilityConfig={viewabilityConfig.current}
           onViewableItemsChanged={onViewableItemsChanged.current}
-          // Remove momentum bounce so snapping feels crisp
-          bounces={false}
-          overScrollMode="never"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={refresh}
+              tintColor="#FFF"
+            />
+          }
           // Prevent unnecessary re-renders of off-screen items
           removeClippedSubviews
           windowSize={3}
@@ -709,7 +764,10 @@ const styles = StyleSheet.create({
   reelFeedLabel: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 11,
-    marginLeft: 8,
+    fontFamily: 'Archivo_500Medium',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   description: {
     color: '#FFF',

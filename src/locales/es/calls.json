@@ -4,7 +4,12 @@
     "decline": "Rechazar",
     "accept": "Aceptar"
   },
+  "outgoing": {
+    "label": "Llamando...",
+    "cancel": "Cancelar"
+  },
   "active": {
+    "loading": "Cargando proyecto…",
     "mute": "Silenciar",
     "unmute": "Activar sonido",
     "speaker": "Altavoz",
@@ -33,6 +38,23 @@
   "banner": {
     "tapToRecord": "Toque para grabar",
     "callInProgress": "Llamada en curso"
+  },
+  "simple": {
+    "delete": "Eliminar",
+    "upload": "Subir",
+    "uploadSuccess": "Grabación subida exitosamente",
+    "uploadFailed": "Error al subir",
+    "uploadSheetTitle": "Elige una opción",
+    "uploadOptionTitle": "Postear grabación",
+    "uploadOptionSubtitle": "Continuar para crear la publicación",
+    "exportOptionTitle": "Exportar a Files",
+    "exportOptionSubtitle": "Guardar audio en tu dispositivo",
+    "exportDialogTitle": "Exportar audio",
+    "exportNotAvailableTitle": "No disponible",
+    "exportNotAvailableMessage": "La exportación de archivos no está disponible en este dispositivo.",
+    "exportFailed": "No se pudo exportar el audio: {{message}}",
+    "deleteConfirm": "¿Eliminar grabación?",
+    "deleteConfirmMessage": "Esto eliminará permanentemente el audio grabado."
   },
   "projectPicker": {
     "selectProject": "Seleccionar proyecto",

@@ -1,9 +1,8 @@
-import { useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { AccountSwitcherBottomSheet } from './AccountSwitcherBottomSheet';
-import { useAccountStore } from '@/stores/accountStore';
-import { haptic } from '@/lib/haptics/hapticService';
+import { useProfileTabGestures } from '@/hooks/useProfileTabGestures';
 
 interface ProfileTabButtonProps {
   children: React.ReactNode;
@@ -12,53 +11,21 @@ interface ProfileTabButtonProps {
 }
 
 /**
- * ProfileTabButton — custom tabBarButton for the profile tab.
+ * ProfileTabButton — custom tabBarButton for the profile tab on iPhone.
  *
  * - Single tap: navigates to profile immediately
- * - Double-tap: switches to previous account (no delay on first tap)
- * - Long-press (500ms): opens AccountSwitcherBottomSheet with haptic feedback
+ * - Double-tap: switches to previous account
+ * - Long-press (500ms): opens AccountSwitcherBottomSheet
+ *
+ * The iPad sidebar uses the same gestures via `useProfileTabGestures` in
+ * `SidebarTabBar` — keep gesture behavior in sync by editing the hook.
  */
 export function ProfileTabButton(props: ProfileTabButtonProps | BottomTabBarButtonProps) {
   const { children, onPress, style } = props;
-  const [switcherVisible, setSwitcherVisible] = useState(false);
 
-  const accounts = useAccountStore((s) => s.accounts);
-  const activeAccountId = useAccountStore((s) => s.activeAccountId);
-  const previousAccountId = useAccountStore((s) => s.previousAccountId);
-  const switchToAccount = useAccountStore((s) => s.switchToAccount);
-
-  const lastTapRef = useRef(0);
-  const switchingRef = useRef(false);
-
-  const handlePress = (e: any) => {
-    const now = Date.now();
-    const delta = now - lastTapRef.current;
-    lastTapRef.current = now;
-
-    // Double-tap: switch to the other account
-    if (delta < 400 && accounts.length > 1 && !switchingRef.current) {
-      // Use previousAccountId if available, otherwise find the other account
-      const targetId =
-        previousAccountId ?? accounts.find((a) => a.user.id !== activeAccountId)?.user.id;
-
-      if (targetId) {
-        switchingRef.current = true;
-        haptic('light');
-        switchToAccount(targetId).finally(() => {
-          switchingRef.current = false;
-        });
-        return;
-      }
-    }
-
-    // Single tap: navigate to profile immediately
-    onPress?.(e);
-  };
-
-  const handleLongPress = () => {
-    haptic('light');
-    setSwitcherVisible(true);
-  };
+  const singleTap = useCallback(() => onPress?.(), [onPress]);
+  const { handlePress, handleLongPress, switcherVisible, closeSwitcher } =
+    useProfileTabGestures(singleTap);
 
   return (
     <>
@@ -71,10 +38,7 @@ export function ProfileTabButton(props: ProfileTabButtonProps | BottomTabBarButt
         {children}
       </Pressable>
 
-      <AccountSwitcherBottomSheet
-        visible={switcherVisible}
-        onClose={() => setSwitcherVisible(false)}
-      />
+      <AccountSwitcherBottomSheet visible={switcherVisible} onClose={closeSwitcher} />
     </>
   );
 }

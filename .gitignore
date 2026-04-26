@@ -46,3 +46,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Claude Code dev tooling — local skills cache, not for the repo
+.claude/
+skills-lock.json
+
+# Stale npm lockfile — this project uses pnpm (see pnpm-lock.yaml)
+package-lock.json

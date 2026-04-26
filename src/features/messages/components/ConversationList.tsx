@@ -21,18 +21,36 @@ import { ConversationItem } from './ConversationItem';
 import { EmptyConversations } from './EmptyConversations';
 import type { ChatConversation } from '../types';
 
-export function ConversationList() {
+interface ConversationListProps {
+  /** iPad split-view: highlight the active conversation */
+  selectedConversationId?: string;
+  /** iPad split-view: open chat inline instead of pushing a route */
+  onSelectConversation?: (
+    conversationId: string,
+    participantName: string,
+    participantId: string
+  ) => void;
+}
+
+export function ConversationList({
+  selectedConversationId,
+  onSelectConversation,
+}: ConversationListProps = {}) {
   const { t } = useTranslation('messages');
   const { conversations, isLoading, isRefreshing, error, refresh } = useConversations();
 
   const handleConversationPress = useCallback(
     (conversationId: string, participantName: string, participantId: string) => {
-      router.push({
-        pathname: '/chat',
-        params: { conversationId, participantName, participantId },
-      });
+      if (onSelectConversation) {
+        onSelectConversation(conversationId, participantName, participantId);
+      } else {
+        router.push({
+          pathname: '/chat',
+          params: { conversationId, participantName, participantId },
+        });
+      }
     },
-    []
+    [onSelectConversation]
   );
 
   const handleNewMessage = useCallback(() => {
@@ -41,9 +59,13 @@ export function ConversationList() {
 
   const renderItem = useCallback(
     ({ item }: { item: ChatConversation }) => (
-      <ConversationItem conversation={item} onPress={handleConversationPress} />
+      <ConversationItem
+        conversation={item}
+        onPress={handleConversationPress}
+        isSelected={item.conversationId === selectedConversationId}
+      />
     ),
-    [handleConversationPress]
+    [handleConversationPress, selectedConversationId]
   );
 
   const fab = (

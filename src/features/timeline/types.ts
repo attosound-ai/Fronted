@@ -15,6 +15,14 @@ export interface LocalClip {
 export interface LaneMeta {
   name: string;
   color: string;
+  /** Whether the lane is muted. Default: false. */
+  muted?: boolean;
+  /** Whether the lane is soloed. Default: false. */
+  solo?: boolean;
+  /** Lane gain in dB. Default: 0. Range: -60..+12. */
+  gainDb?: number;
+  /** Stereo pan. -1 = full left, 0 = center, 1 = full right. Default: 0. */
+  pan?: number;
 }
 
 export interface TimelineState {
@@ -44,7 +52,14 @@ export type TimelineAction =
   | { type: 'ADD_LANE' }
   | { type: 'REMOVE_LANE'; laneIndex: number }
   | { type: 'SET_LANE_META'; laneIndex: number; meta: LaneMeta }
+  | { type: 'SET_LANE_MUTE'; laneIndex: number; muted: boolean }
+  | { type: 'SET_LANE_SOLO'; laneIndex: number; solo: boolean }
+  | { type: 'SET_LANE_GAIN'; laneIndex: number; gainDb: number }
+  | { type: 'SET_LANE_PAN'; laneIndex: number; pan: number }
+  | { type: 'RESTORE_SNAPSHOT'; clips: LocalClip[]; laneMeta: Record<number, LaneMeta> }
   | { type: 'MOVE_CLIP'; clipId: string; toLane: number }
+  | { type: 'MOVE_CLIP_TO_POSITION'; clipId: string; positionMs: number }
+  | { type: 'DUPLICATE_CLIP'; clipId: string }
   | { type: 'SET_VOLUME'; clipId: string; volume: number };
 
 export function clipToInput(clip: LocalClip): TimelineClipInput {

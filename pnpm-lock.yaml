@@ -172,6 +172,9 @@ importers:
       react-native:
         specifier: 0.83.4
         version: 0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
+      react-native-audio-api:
+        specifier: ^0.11.7
+        version: 0.11.7(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-bottom-tabs:
         specifier: ^1.1.0
         version: 1.1.0(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -4077,6 +4080,13 @@ packages:
 
   react-is@19.2.4:
     resolution: {integrity: sha512-W+EWGn2v0ApPKgKKCy/7s7WHXkboGcsrXE+2joLyVxkbyVQfO3MUEaUQDHoSmb8TFFrSKYa9mw64WZHNHSDzYA==}
+
+  react-native-audio-api@0.11.7:
+    resolution: {integrity: sha512-2oIoP77Tn2nlouRVfEC3bAsuSyKU6xhGNkSnVXTLLQQZslEDoYX2cN9pVRZoWOqhFrLT8q4IZI9HaFgYL13L1A==}
+    hasBin: true
+    peerDependencies:
+      react: '*'
+      react-native: '*'
 
   react-native-bottom-tabs@1.1.0:
     resolution: {integrity: sha512-Uu1gvM3i1Hb4DjVvR/38J1QVQEs0RkPc7K6yon99HgvRWWOyLs7kjPDhUswtb8ije4pKW712skIXWJ0lgKzbyQ==}
@@ -9456,6 +9466,12 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.2.4: {}
+
+  react-native-audio-api@0.11.7(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+    dependencies:
+      react: 19.2.0
+      react-native: 0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
+      semver: 7.7.4
 
   react-native-bottom-tabs@1.1.0(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:

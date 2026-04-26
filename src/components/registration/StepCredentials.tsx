@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { ArrowLeft, AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -102,6 +102,22 @@ export function StepCredentials({
 
         {/* Form Fields */}
         <View style={styles.form}>
+          {/*
+            Hidden username field paired with the password inputs so iOS
+            Password AutoFill offers to save the new credential against
+            the correct account (the email/phone captured in a prior step).
+          */}
+          <TextInput
+            value={state.email || state.phoneNumber || ''}
+            editable={false}
+            autoComplete="username"
+            textContentType="username"
+            importantForAutofill="yes"
+            style={styles.hiddenUsername}
+            accessibilityElementsHidden
+            aria-hidden
+          />
+
           <View>
             <Input
               label={t('credentials.passwordLabel')}
@@ -114,6 +130,7 @@ export function StepCredentials({
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="new-password"
+              textContentType="newPassword"
               error={errors.password}
             />
             <TouchableOpacity
@@ -168,6 +185,7 @@ export function StepCredentials({
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
               autoComplete="new-password"
+              textContentType="newPassword"
               error={
                 bothFilled && !passwordsMatch
                   ? tv('passwordMismatch')
@@ -327,5 +345,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 20,
+  },
+  // Off-screen + zero-size — still focusable so iOS treats it as part
+  // of the form for Password AutoFill pairing.
+  hiddenUsername: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+    top: -1000,
+    left: -1000,
   },
 });

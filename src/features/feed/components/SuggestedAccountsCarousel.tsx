@@ -35,7 +35,6 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
       pathname: '/user/[id]',
       params: {
         id: String(user.id),
-        displayName: user.displayName,
         username: user.username,
         avatar: user.avatar ?? '',
       },
@@ -48,7 +47,10 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
         <TouchableOpacity
           onPress={handleProfilePress}
           activeOpacity={0.8}
-          style={styles.avatarWrapper}
+          style={[
+            styles.avatarWrapper,
+            user.role === 'creator' && styles.avatarWrapperCreator,
+          ]}
         >
           <Avatar uri={user.avatar} size="lg" />
         </TouchableOpacity>
@@ -67,8 +69,13 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
       </View>
 
       <View style={styles.nameRow}>
-        <Text style={styles.username} numberOfLines={1}>
-          {user.displayName}
+        <Text
+          style={styles.username}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.0}
+          allowFontScaling={false}
+        >
+          {user.username}
         </Text>
         {user.role === 'creator' && <CreatorBadge size="sm" />}
       </View>
@@ -138,8 +145,11 @@ const styles = StyleSheet.create({
   avatarWrapper: {
     borderWidth: 1.5,
     borderColor: '#2a2a2a',
-    borderRadius: 36,
-    padding: 2,
+    borderRadius: 32,
+  },
+  avatarWrapperCreator: {
+    borderWidth: 2,
+    borderColor: '#D4AF37',
   },
   followBadge: {
     position: 'absolute',

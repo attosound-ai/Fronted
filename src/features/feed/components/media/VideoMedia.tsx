@@ -1,11 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { VideoOff, VolumeX, Volume2 } from 'lucide-react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import type { FeedPost } from '@/types/post';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
 const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
 
@@ -19,6 +18,7 @@ interface VideoMediaProps {
 }
 
 export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
+  const { contentWidth } = useDeviceLayout();
   const [isMuted, setIsMuted] = useState(true);
   const [heightRatio, setHeightRatio] = useState(() => {
     if (post.mediaWidth && post.mediaHeight && post.mediaWidth > 0) {
@@ -27,10 +27,10 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
     return 1; // default 1:1 while loading
   });
 
-  const containerHeight = SCREEN_WIDTH * heightRatio;
+  const containerHeight = contentWidth * heightRatio;
 
   const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'original', 'video') ?? post.videoUrl)
+    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
     : null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
@@ -71,6 +71,25 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
     }
   }, [isVisible, player]);
 
+  // Auto-recover from error state: reload and retry playback
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error' && isVisible && videoUrl) {
+        // Replace source to force reload
+        setTimeout(() => {
+          try {
+            player.replace(videoUrl);
+            player.play();
+          } catch {
+            // ignore if player was disposed
+          }
+        }, 1000);
+      }
+    });
+    return () => sub.remove();
+  }, [player, isVisible, videoUrl]);
+
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
       player.muted = !prev;
@@ -80,14 +99,14 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
 
   if (!videoUrl) {
     return (
-      <View style={[styles.placeholder, { height: containerHeight }]}>
+      <View style={[styles.placeholder, { width: contentWidth, height: containerHeight }]}>
         <VideoOff size={48} color="#666" strokeWidth={2.25} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { height: containerHeight }]}>
+    <View style={[styles.container, { width: contentWidth, height: containerHeight }]}>
       <VideoView
         player={player}
         style={styles.video}
@@ -107,7 +126,6 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
 
 const styles = StyleSheet.create({
   container: {
-    width: SCREEN_WIDTH,
     backgroundColor: '#000',
     position: 'relative',
   },
@@ -116,7 +134,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   placeholder: {
-    width: SCREEN_WIDTH,
     backgroundColor: '#111',
     alignItems: 'center',
     justifyContent: 'center',

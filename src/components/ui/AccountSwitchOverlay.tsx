@@ -90,10 +90,10 @@ export function AccountSwitchOverlay() {
           <>
             <Avatar
               uri={targetUser.avatar}
-              fallbackText={targetUser.displayName}
+              fallbackText={targetUser.username}
               size="xl"
             />
-            <Text style={styles.name}>{targetUser.displayName}</Text>
+            <Text style={styles.name}>{targetUser.username}</Text>
           </>
         )}
       </Animated.View>

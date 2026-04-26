@@ -167,8 +167,7 @@ export function DeleteAccountBottomSheet({
                   <View key={acc.id} style={styles.linkedAccount}>
                     <Avatar uri={acc.avatar} size="sm" />
                     <View>
-                      <Text style={styles.linkedName}>{acc.displayName}</Text>
-                      <Text style={styles.linkedUsername}>@{acc.username}</Text>
+                      <Text style={styles.linkedName}>{acc.username}</Text>
                     </View>
                   </View>
                 ))}

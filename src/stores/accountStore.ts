@@ -30,6 +30,7 @@ interface AccountState {
 
 interface AccountActions {
   addAccount: (entry: AccountEntry) => Promise<void>;
+  setActive: (userId: number) => Promise<void>;
   switchToAccount: (userId: number) => Promise<void>;
   removeAccount: (userId: number) => Promise<void>;
   loadAccounts: () => Promise<void>;
@@ -63,6 +64,22 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
   },
 
   /**
+   * Mark an account as the active session. Keeps SecureStore and in-memory
+   * state in sync. Used by authStore after login/register so the bottom sheet
+   * reflects the currently authenticated user.
+   */
+  setActive: async (userId: number) => {
+    await setActiveAccountId(userId);
+    set((s) => ({
+      activeAccountId: userId,
+      previousAccountId:
+        s.activeAccountId && s.activeAccountId !== userId
+          ? s.activeAccountId
+          : s.previousAccountId,
+    }));
+  },
+
+  /**
    * Switch active session to the given userId.
    *
    * Optimistic, non-blocking design (Instagram-style):
@@ -79,29 +96,29 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     const prevUser = await authStorage.getUser();
     const prevActiveId = activeAccountId;
 
-    // Trigger flip animation
+    // Trigger flip animation optimistically using cached user info
     const { useAccountSwitchAnimationStore } =
       await import('./accountSwitchAnimationStore');
-    const target = accounts.find((a) => a.user.id === userId)?.user;
-    if (target) {
+    const cachedUser = accounts.find((a) => a.user.id === userId)?.user;
+    if (cachedUser) {
       useAccountSwitchAnimationStore
         .getState()
-        .startFlip({ displayName: target.displayName, avatar: target.avatar });
+        .startFlip({ username: cachedUser.username, avatar: cachedUser.avatar });
     }
 
     try {
-      let entry = accounts.find((a) => a.user.id === userId);
+      // Always get fresh tokens from the backend via the current session.
+      // Previously, cached tokens from the accounts array were used directly,
+      // but they become stale after access/refresh token expiry and caused
+      // session death when the interceptor tried to refresh expired tokens.
+      const { user, tokens } = await authService.switchAccount(userId);
+      const entry = { user, tokens };
+      await get().addAccount(entry);
 
-      // Cold case: entry not in memory — only blocking call
-      if (!entry) {
-        const { user, tokens } = await authService.switchAccount(userId);
-        entry = { user, tokens };
-        await get().addAccount(entry);
-        if (!target) {
-          useAccountSwitchAnimationStore
-            .getState()
-            .startFlip({ displayName: user.displayName, avatar: user.avatar });
-        }
+      if (!cachedUser) {
+        useAccountSwitchAnimationStore
+          .getState()
+          .startFlip({ username: user.username, avatar: user.avatar });
       }
 
       // ── Phase A: Synchronous swap (target: <50ms) ──
@@ -111,9 +128,9 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       clearRefreshQueue();
 
       await Promise.all([
-        authStorage.setToken(entry.tokens.accessToken),
-        authStorage.setRefreshToken(entry.tokens.refreshToken),
-        authStorage.setUser(entry.user),
+        authStorage.setToken(tokens.accessToken),
+        authStorage.setRefreshToken(tokens.refreshToken),
+        authStorage.setUser(user),
         setActiveAccountId(userId),
       ]);
 
@@ -130,9 +147,13 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       const { useChatStore } = await import('@/features/messages/stores/chatStore');
       useChatStore.getState().setTotalUnread(0);
 
-      // Sync authStore with cached user immediately
+      // Clear follow state from previous account
+      const { useFollowStore } = await import('./followStore');
+      useFollowStore.getState().clear();
+
+      // Sync authStore with fresh user
       const { useAuthStore } = await import('./authStore');
-      useAuthStore.getState().setUser(entry.user);
+      useAuthStore.getState().setUser(user);
 
       // Unblock requests — they will now use the new token
       resumeRequests();
@@ -141,15 +162,9 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       useAccountSwitchAnimationStore.getState().endFlip();
 
       // ── Phase B: Fire-and-forget background sync ──
-      const capturedEntry = entry;
+      // Tokens are fresh from switchAccount(), so these calls won't trigger
+      // 401 cascades that previously nuked the session.
       Promise.allSettled([
-        // Refresh user data
-        authService.getMe().then(async (freshUser) => {
-          useAuthStore.getState().setUser(freshUser);
-          await authStorage.setUser(freshUser);
-          capturedEntry.user = freshUser;
-          await get().addAccount(capturedEntry);
-        }),
         // Refresh subscription
         import('./subscriptionStore').then(({ useSubscriptionStore }) =>
           useSubscriptionStore.getState().fetchSubscription()
@@ -163,10 +178,13 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         Promise.all([
           import('@/features/messages/services/messageService'),
           import('@/features/messages/stores/chatStore'),
-        ]).then(async ([{ messageService }, { useChatStore }]) => {
+        ]).then(async ([{ messageService }, { useChatStore: chatStore }]) => {
           const convos = await messageService.getConversations();
-          const unread = convos.reduce((sum: number, c: { unreadCount: number }) => sum + c.unreadCount, 0);
-          useChatStore.getState().setTotalUnread(unread);
+          const unread = convos.reduce(
+            (sum: number, c: { unreadCount: number }) => sum + c.unreadCount,
+            0
+          );
+          chatStore.getState().setTotalUnread(unread);
         }),
       ]).catch(() => {
         // All errors are non-fatal — cached data is already displayed
@@ -285,7 +303,14 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     // Sync storage with cleaned list
     await setAccountIds(validEntries.map((e) => e.user.id));
 
-    const activeId = await getActiveAccountId();
+    let activeId = await getActiveAccountId();
+    // Reconcile with the authenticated session. The authStore user is the
+    // source of truth for "who is logged in right now"; a stale or mismatched
+    // activeAccountId in SecureStore must yield to it.
+    if (currentUser && activeId !== currentUser.id) {
+      activeId = currentUser.id;
+      await setActiveAccountId(activeId);
+    }
     set({ accounts: validEntries, activeAccountId: activeId });
   },
 

@@ -58,10 +58,14 @@ export const projectService = {
     await apiClient.delete(API_ENDPOINTS.PROJECTS.DELETE(id));
   },
 
-  async addSegment(projectId: string, segmentId: string): Promise<AudioSegment> {
+  async addSegment(
+    projectId: string,
+    segmentId: string,
+    laneIndex?: number
+  ): Promise<AudioSegment> {
     const { data } = await apiClient.post<ApiResponse<AudioSegment>>(
       API_ENDPOINTS.PROJECTS.ADD_SEGMENT(projectId),
-      { segmentId }
+      laneIndex !== undefined ? { segmentId, laneIndex } : { segmentId }
     );
     return data.data;
   },

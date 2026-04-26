@@ -36,7 +36,7 @@ import { ShareSheet } from './share/ShareSheet';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { Heart } from 'lucide-react-native';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
-import { DEMO_ADS } from '../constants/adPosts';
+import { useAds } from '../hooks/useAds';
 import { injectAds } from '../utils/injectAds';
 import { useFeedFilterStore } from '@/stores/feedFilterStore';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
@@ -77,7 +77,7 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'original', 'video') ?? files[0])
+        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
         : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
@@ -102,6 +102,7 @@ function toFeedPost(post: Post): FeedPost {
  * Open/Closed: Accepts ListHeaderComponent for extensibility.
  * Dependency Inversion: Uses hook abstraction (useFeed).
  */
+
 export function FeedList({ ListHeaderComponent }: FeedListProps) {
   const { t } = useTranslation('feed');
   const {
@@ -118,6 +119,7 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
 
   const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
+  const ads = useAds();
   const feedFilters = useFeedFilterStore((s) => s.filters);
   const followedUsers = useFollowStore((s) => s.followedUsers);
   const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
@@ -132,30 +134,6 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
       .filter((p) => p.isFollowingAuthor !== undefined)
       .map((p) => ({ userId: Number(p.author.id), isFollowing: p.isFollowingAuthor! }));
     if (entries.length > 0) hydrateFromApi(entries);
-
-    // Seed profile query cache from feed author data (Instagram pattern)
-    const seenIds = new Set<number>();
-    for (const post of posts) {
-      const authorId = Number(post.author.id);
-      if (seenIds.has(authorId)) continue;
-      seenIds.add(authorId);
-      // Only seed if not already cached with real data
-      if (!qc.getQueryData(QUERY_KEYS.USERS.PROFILE(authorId))) {
-        qc.setQueryData(QUERY_KEYS.USERS.PROFILE(authorId), {
-          id: authorId,
-          username: post.author.username,
-          displayName: post.author.displayName,
-          avatar: post.author.avatar,
-          role: post.author.role,
-          isFollowing: post.isFollowingAuthor ?? false,
-        });
-        // Mark as stale so it refetches when the profile screen mounts
-        qc.invalidateQueries({
-          queryKey: QUERY_KEYS.USERS.PROFILE(authorId),
-          refetchType: 'none',
-        });
-      }
-    }
   }, [posts, hydrateFromApi, qc]);
 
   useEffect(() => {
@@ -221,7 +199,7 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
       realPosts = realPosts.filter((p) => feedFilters.contentTypes.includes(p.type));
     }
 
-    return injectAds(realPosts, DEMO_ADS);
+    return injectAds(realPosts, ads);
   }, [posts, getIsFollowing, followedUsers, feedFilters]);
 
   const handleFollow = useCallback(

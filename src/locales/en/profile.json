@@ -133,7 +133,12 @@
     "relationshipFamily": "Family",
     "relationshipFriend": "Friend",
     "relationshipManager": "Manager",
-    "warningReVerification": "Changing creator info will require re-verification."
+    "warningReVerification": "Changing creator info will require re-verification.",
+    "avatarSheetTitle": "Profile Photo",
+    "avatarSheetEditCurrent": "Edit current photo",
+    "avatarSheetFromGallery": "Choose from gallery",
+    "avatarSheetFromCamera": "Take a photo",
+    "avatarSheetCancel": "Cancel"
   },
   "publicProfile": {
     "headerTitle": "Profile",

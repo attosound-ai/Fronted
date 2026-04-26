@@ -49,7 +49,7 @@ export function useEditProfile() {
     bio: user?.bio ?? '',
     avatarUri: user?.avatar ?? null,
     avatarChanged: false,
-    creatorName: user?.creatorName ?? '',
+    creatorName: user?.creatorName || user?.displayName || '',
     inmateNumber: user?.inmateNumber ?? '',
     relationship: user?.relationship ?? '',
     inmateState: user?.inmateState ?? '',

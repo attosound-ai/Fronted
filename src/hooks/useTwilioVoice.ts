@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, ActionSheetIOS } from 'react-native';
+import { setAudioModeAsync } from 'expo-audio';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
 import { telephonyService } from '@/lib/api/telephonyService';
@@ -37,12 +38,34 @@ function getVoice(): any {
   return voiceInstance;
 }
 
+/** Expose the active call object for audio session recovery. */
+export function getActiveCallObj(): any {
+  return activeCallObj;
+}
+
 // ── Helpers ──
 
 function bindCallEvents(call: any) {
   const { Call } = getTwilio();
   const { setCallState, endCall } = useCallStore.getState();
-  call.on(Call.Event.Connected, () => setCallState('connected'));
+
+  call.on(Call.Event.Connected, () => {
+    // Diagnostic: dump the audio session state and any other audio
+    // libraries that may be active at the moment Twilio thinks the
+    // call has connected. Helps identify which library (if any) is
+    // stomping on the AVAudioSession during a call.
+    console.log(
+      '[TwilioVoice] Call connected',
+      JSON.stringify({
+        time: new Date().toISOString(),
+      }),
+    );
+    setCallState('connected');
+    // Do NOT call setAudioModeAsync or ensureAudioRoute here — Twilio
+    // manages its own audio session during the call. Our interference
+    // was causing 30-60s audio delays.
+  });
+
   call.on(Call.Event.ConnectFailure, () => {
     activeCallObj = null;
     endCall();
@@ -50,9 +73,55 @@ function bindCallEvents(call: any) {
   call.on(Call.Event.Disconnected, () => {
     activeCallObj = null;
     endCall();
+    // Restore normal audio mode after call ends
+    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
   });
   call.on(Call.Event.Reconnecting, () => setCallState('reconnecting'));
   call.on(Call.Event.Reconnected, () => setCallState('connected'));
+}
+
+/**
+ * Re-select the current audio device to force iOS to activate the VoIP audio session.
+ * Called when a call first connects to ensure proper audio routing.
+ */
+export async function ensureAudioRoute() {
+  try {
+    const voice = voiceInstance;
+    if (!voice) return;
+    const { audioDevices, selectedDevice } = await voice.getAudioDevices();
+    if (selectedDevice) {
+      await selectedDevice.select();
+    } else if (audioDevices.length > 0) {
+      await audioDevices[0].select();
+    }
+  } catch {
+    // Best-effort — don't crash the call
+  }
+}
+
+/**
+ * Force Twilio to fully re-acquire the iOS audio session by doing a
+ * brief hold/unhold cycle on the active call. This is the only reliable
+ * way to restore VoIP audio after expo-audio steals the session.
+ *
+ * hold(true)  → Twilio releases the audio session entirely
+ * hold(false) → Twilio re-acquires it with PlayAndRecord category
+ */
+export async function reclaimAudioSession() {
+  // Safety net: re-apply PlayAndRecord + mixWithOthers and re-select device.
+  // With keepAudioSessionActive: true on players, this should rarely be needed.
+  try {
+    console.log('[TwilioVoice] reclaimAudioSession: re-locking audio mode...');
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      allowsRecording: true,
+      interruptionMode: 'mixWithOthers',
+    });
+    await ensureAudioRoute();
+    console.log('[TwilioVoice] reclaimAudioSession: done');
+  } catch (err) {
+    console.warn('[TwilioVoice] reclaimAudioSession failed:', err);
+  }
 }
 
 /** Try to retrieve the active Call from the Voice SDK (e.g. after CallKit accepted). */
@@ -160,15 +229,59 @@ export async function toggleSpeaker() {
   if (!voice) return;
   const { AudioDevice } = getTwilio();
   const { audioDevices, selectedDevice } = await voice.getAudioDevices();
-  const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
-  const target = audioDevices.find(
-    (d: any) => d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
-  );
-  if (target) {
-    await target.select();
-    useCallStore.getState().setSpeaker(!isSpeaker);
-    analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, { is_speaker: !isSpeaker });
+
+  if (Platform.OS !== 'ios' || audioDevices.length <= 2) {
+    // Android or only Speaker/Earpiece — simple toggle
+    const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
+    const target = audioDevices.find(
+      (d: any) => d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
+    );
+    if (target) {
+      await target.select();
+      useCallStore.getState().setSpeaker(!isSpeaker);
+      analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, { is_speaker: !isSpeaker });
+    }
+    return;
   }
+
+  // iOS with multiple devices — show native picker (AirPods, Bluetooth, etc.)
+  const deviceLabels: Record<number, string> = {
+    [AudioDevice.Type.Earpiece]: 'iPhone',
+    [AudioDevice.Type.Speaker]: 'Speaker',
+    [AudioDevice.Type.Bluetooth]: 'Bluetooth',
+  };
+
+  const devices = audioDevices.map((d: any) => ({
+    device: d,
+    label: d.name || deviceLabels[d.type] || `Audio Device`,
+    isSelected: d.uuid === selectedDevice?.uuid,
+  }));
+
+  const options = [
+    ...devices.map((d: any) => d.isSelected ? `${d.label} ✓` : d.label),
+    'Cancel',
+  ];
+
+  ActionSheetIOS.showActionSheetWithOptions(
+    {
+      options,
+      cancelButtonIndex: options.length - 1,
+      title: 'Audio Output',
+    },
+    async (buttonIndex: number) => {
+      if (buttonIndex === options.length - 1) return; // Cancel
+      const selected = devices[buttonIndex];
+      if (selected && !selected.isSelected) {
+        await selected.device.select();
+        const isSpeaker = selected.device.type === AudioDevice.Type.Speaker;
+        useCallStore.getState().setSpeaker(isSpeaker);
+        analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+          is_speaker: isSpeaker,
+          device_type: selected.label,
+        });
+      }
+    },
+  );
 }
 
 // ── Outgoing VoIP call ──
@@ -219,6 +332,19 @@ export function useTwilioVoice() {
   const setRegistered = useCallStore((s) => s.setRegistered);
   const setIncomingCall = useCallStore((s) => s.setIncomingCall);
   const endCall = useCallStore((s) => s.endCall);
+
+  // Only set the Playback audio mode when there's NO call.
+  // During a call, let Twilio manage its own PlayAndRecord session.
+  // Our setAudioModeAsync calls were interfering with Twilio's setup,
+  // causing 30-60s audio delays on connect.
+  const hasAnyCall = useCallStore((s) => s.activeCall !== null);
+
+  useEffect(() => {
+    if (!hasAnyCall) {
+      console.log('[TwilioVoice] Setting audio mode: Playback (no call)');
+      setAudioModeAsync({ playsInSilentMode: true });
+    }
+  }, [hasAnyCall]);
 
   const registerDevice = useCallback(async () => {
     if (!IS_IOS) return; // Twilio Voice not configured for Android yet

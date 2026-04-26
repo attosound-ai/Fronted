@@ -1,4 +1,12 @@
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  TouchableOpacity,
+  ActionSheetIOS,
+  Platform,
+  Alert,
+  StyleSheet,
+} from 'react-native';
+import { Ellipsis } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { LinkedText } from '../LinkedText';
 import { Avatar } from '@/components/ui/Avatar';
@@ -9,13 +17,53 @@ import type { Comment } from '../../hooks/useComments';
 interface CommentItemProps {
   comment: Comment;
   onReply?: (commentId: string, username: string) => void;
+  onEdit?: (commentId: string, currentText: string) => void;
+  onDelete?: (commentId: string) => void;
+  canModify?: boolean;
   isReply?: boolean;
 }
 
-export function CommentItem({ comment, onReply, isReply }: CommentItemProps) {
+export function CommentItem({
+  comment,
+  onReply,
+  onEdit,
+  onDelete,
+  canModify,
+  isReply,
+}: CommentItemProps) {
+  const showActions = () => {
+    const options = ['Edit', 'Delete', 'Cancel'];
+    const destructiveIndex = 1;
+    const cancelIndex = 2;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          destructiveButtonIndex: destructiveIndex,
+          cancelButtonIndex: cancelIndex,
+        },
+        (index) => {
+          if (index === 0) onEdit?.(comment.id, comment.comment);
+          if (index === 1) onDelete?.(comment.id);
+        }
+      );
+    } else {
+      Alert.alert('Comment', '', [
+        { text: 'Edit', onPress: () => onEdit?.(comment.id, comment.comment) },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(comment.id) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  };
+
   return (
     <View style={[styles.container, isReply && styles.replyContainer]}>
-      <Avatar uri={comment.author?.avatar ?? null} size="sm" />
+      <Avatar
+        uri={comment.author?.avatar ?? null}
+        size="sm"
+        creatorRing={comment.author?.role === 'creator'}
+      />
       <View style={styles.content}>
         <View style={styles.usernameRow}>
           <Text variant="body" style={styles.username}>
@@ -30,6 +78,11 @@ export function CommentItem({ comment, onReply, isReply }: CommentItemProps) {
           <Text variant="caption" style={styles.time}>
             {formatRelativeTime(comment.createdAt)}
           </Text>
+          {comment.isEdited && (
+            <Text variant="caption" style={styles.editedBadge}>
+              (edited)
+            </Text>
+          )}
           {!isReply && (
             <TouchableOpacity
               onPress={() => onReply?.(comment.id, comment.author?.username ?? '')}
@@ -40,12 +93,28 @@ export function CommentItem({ comment, onReply, isReply }: CommentItemProps) {
               </Text>
             </TouchableOpacity>
           )}
+          {canModify && (
+            <TouchableOpacity onPress={showActions} hitSlop={8} style={styles.moreBtn}>
+              <Ellipsis size={16} color="#666" strokeWidth={2.25} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {comment.replies && comment.replies.length > 0 && (
           <View style={styles.replies}>
             {comment.replies.map((reply) => (
-              <CommentItem key={reply.id} comment={reply} isReply />
+              <CommentItem
+                key={reply.id}
+                comment={reply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                canModify={
+                  reply.author?.id
+                    ? comment.author?.id === reply.author?.id && canModify
+                    : false
+                }
+                isReply
+              />
             ))}
           </View>
         )}
@@ -90,10 +159,19 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 12,
   },
+  editedBadge: {
+    color: '#555',
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
   replyBtn: {
     color: '#999',
     fontSize: 12,
     fontFamily: 'Archivo_600SemiBold',
+  },
+  moreBtn: {
+    marginLeft: 'auto',
+    padding: 2,
   },
   replies: {
     marginTop: 4,

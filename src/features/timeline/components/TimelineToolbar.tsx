@@ -9,6 +9,7 @@ import {
   Download,
   Upload,
   StopCircle,
+  Copy,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +18,7 @@ import { Text } from '@/components/ui/Text';
 interface TimelineToolbarProps {
   onSplit: () => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onExport: () => void;
@@ -92,6 +94,7 @@ function formatElapsed(seconds: number): string {
 export function TimelineToolbar({
   onSplit,
   onDelete,
+  onDuplicate,
   onUndo,
   onRedo,
   onExport,
@@ -143,6 +146,14 @@ export function TimelineToolbar({
           disabled={!hasSelection}
           color="#EF4444"
         />
+        {onDuplicate && (
+          <ToolButton
+            Icon={Copy}
+            label={t('timeline.toolDuplicate')}
+            onPress={onDuplicate}
+            disabled={!hasSelection}
+          />
+        )}
         {onVolumePress && (
           <ToolButton
             Icon={Volume2}
@@ -187,14 +198,12 @@ export function TimelineToolbar({
             style={[styles.publishButton, isPublishing && styles.buttonDisabled]}
           >
             {isPublishing ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator size="small" color="#000" />
             ) : (
               <Upload size={16} color="#000" strokeWidth={2.25} />
             )}
             <Text style={styles.publishLabel}>
-              {isPublishing
-                ? t('timeline.toolPublishing', 'Publicando...')
-                : t('timeline.toolPublish', 'Publicar')}
+              {isPublishing ? t('timeline.toolPublishing') : t('timeline.toolPublish')}
             </Text>
           </Pressable>
         )}
@@ -257,6 +266,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    gap: 8,
   },
   button: {
     alignItems: 'center',

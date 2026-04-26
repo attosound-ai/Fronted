@@ -5,17 +5,19 @@ import {
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Bookmark, ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { useAuthStore } from '@/stores/authStore';
 import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
 import { useBookmarks } from '@/features/feed/hooks/useBookmarks';
 import { useInteractions } from '@/features/feed/hooks/useInteractions';
+import { feedService } from '@/features/feed/services/feedService';
 import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet';
 import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
@@ -87,6 +89,27 @@ export default function BookmarksScreen() {
 
   const currentUserId = useAuthStore((s) => s.user?.id);
 
+  const handleDeletePost = useCallback(
+    (postId: string) => {
+      Alert.alert('Delete Post', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await feedService.deletePost(postId);
+              refresh();
+            } catch {
+              Alert.alert('Error', 'Failed to delete the post.');
+            }
+          },
+        },
+      ]);
+    },
+    [refresh]
+  );
+
   const handleProfilePress = useCallback((author: PostAuthor) => {
     if (author.id === currentUserId) {
       router.navigate('/(tabs)/profile');
@@ -113,6 +136,20 @@ export default function BookmarksScreen() {
         onRepost={() => toggleRepost(item.id)}
         onShare={() => setSharePost(item)}
         onBookmark={() => toggleBookmark(item.id)}
+        onEdit={
+          String(item.author.id) === String(currentUserId)
+            ? () =>
+                router.push({
+                  pathname: '/edit-post',
+                  params: { postId: item.id },
+                } as Href)
+            : undefined
+        }
+        onDelete={
+          String(item.author.id) === String(currentUserId)
+            ? () => handleDeletePost(item.id)
+            : undefined
+        }
         onProfilePress={handleProfilePress}
       />
     ),

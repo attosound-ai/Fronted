@@ -80,6 +80,9 @@ export function useFeed() {
       // Invalidate cache first so refetch always hits the server,
       // even if data is still within staleTime window.
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId) });
+      // Refresh creator logos + ads too
+      queryClient.invalidateQueries({ queryKey: ['creator-logos'] });
+      queryClient.invalidateQueries({ queryKey: ['feed-ads'] });
       // Keep profile posts grid in sync with the feed
       if (currentUserId) {
         queryClient.invalidateQueries({

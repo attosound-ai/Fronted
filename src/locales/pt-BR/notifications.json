@@ -26,6 +26,7 @@
     "share_many": "{{actor1}}, {{actor2}} e {{count}} outros compartilharam sua publicação",
     "message_one": "{{actor}} enviou uma mensagem",
     "message_many": "{{actor}} enviou {{count}} mensagens",
+    "new_post_one": "{{actor}} acabou de publicar",
     "welcome": "Bem-vindo ao ATTO SOUND!"
   },
   "empty": {

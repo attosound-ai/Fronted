@@ -4,7 +4,12 @@
     "decline": "Decline",
     "accept": "Accept"
   },
+  "outgoing": {
+    "label": "Calling...",
+    "cancel": "Cancel"
+  },
   "active": {
+    "loading": "Loading project…",
     "mute": "Mute",
     "unmute": "Unmute",
     "speaker": "Speaker",
@@ -33,6 +38,23 @@
   "banner": {
     "tapToRecord": "Tap to Record",
     "callInProgress": "Call in progress"
+  },
+  "simple": {
+    "delete": "Delete",
+    "upload": "Upload",
+    "uploadSuccess": "Recording uploaded successfully",
+    "uploadFailed": "Upload failed",
+    "uploadSheetTitle": "Choose what to do",
+    "uploadOptionTitle": "Post recording",
+    "uploadOptionSubtitle": "Continue to create post",
+    "exportOptionTitle": "Export to Files",
+    "exportOptionSubtitle": "Save audio to your device",
+    "exportDialogTitle": "Export audio",
+    "exportNotAvailableTitle": "Not available",
+    "exportNotAvailableMessage": "File export is not available on this device.",
+    "exportFailed": "Could not export audio: {{message}}",
+    "deleteConfirm": "Delete Recording?",
+    "deleteConfirmMessage": "This will permanently delete the recorded audio."
   },
   "projectPicker": {
     "selectProject": "Select Project",

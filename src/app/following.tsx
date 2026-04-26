@@ -62,7 +62,6 @@ export default function FollowingScreen() {
           pathname: '/user/[id]',
           params: {
             id: String(item.id),
-            displayName: item.displayName,
             username: item.username,
             avatar: item.avatar ?? '',
           },
@@ -71,8 +70,7 @@ export default function FollowingScreen() {
     >
       <Avatar uri={item.avatar} size="md" />
       <View style={styles.info}>
-        <Text style={styles.displayName}>{item.displayName}</Text>
-        <Text style={styles.username}>@{item.username}</Text>
+        <Text style={styles.username}>{item.username}</Text>
       </View>
       <ChevronRight size={18} color="#555" strokeWidth={2.25} />
     </TouchableOpacity>
@@ -149,16 +147,10 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
-  displayName: {
+  username: {
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 15,
-  },
-  username: {
-    color: '#666',
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 13,
-    marginTop: 2,
   },
   separator: {
     height: 1,

@@ -298,9 +298,6 @@ export function StepProfileSetup({
               usernameStatus === 'taken' ||
               usernameStatus === 'invalid') && (
               <View style={styles.suggestionsSection}>
-                <Text variant="small" style={styles.suggestionsLabel}>
-                  {t('profileSetup.suggestions')}
-                </Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}

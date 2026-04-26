@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import * as Sentry from '@sentry/react-native';
 import type { TokenPair, User } from '@/types';
 
 const TOKEN_KEY = 'auth_token';
@@ -12,6 +13,14 @@ const tokenKeyFor = (id: number) => `auth_token_${id}`;
 const refreshKeyFor = (id: number) => `refresh_token_${id}`;
 const userKeyFor = (id: number) => `user_data_${id}`;
 
+/** Log SecureStore read failures to Sentry instead of swallowing silently. */
+function reportKeychainError(key: string, error: unknown): void {
+  Sentry.captureException(error, {
+    tags: { subsystem: 'secure_store', key },
+    level: 'warning',
+  });
+}
+
 /**
  * AuthStorage - Almacenamiento seguro de datos de autenticación
  *
@@ -24,7 +33,8 @@ export const authStorage = {
   async getToken(): Promise<string | null> {
     try {
       return await SecureStore.getItemAsync(TOKEN_KEY);
-    } catch {
+    } catch (error) {
+      reportKeychainError(TOKEN_KEY, error);
       return null;
     }
   },
@@ -41,7 +51,8 @@ export const authStorage = {
   async getRefreshToken(): Promise<string | null> {
     try {
       return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    } catch {
+    } catch (error) {
+      reportKeychainError(REFRESH_TOKEN_KEY, error);
       return null;
     }
   },
@@ -59,7 +70,8 @@ export const authStorage = {
     try {
       const data = await SecureStore.getItemAsync(USER_KEY);
       return data ? JSON.parse(data) : null;
-    } catch {
+    } catch (error) {
+      reportKeychainError(USER_KEY, error);
       return null;
     }
   },

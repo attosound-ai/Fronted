@@ -1,7 +1,8 @@
 {
   "header": {
     "title": "Mensajes",
-    "newMessageAccessibility": "Nuevo mensaje"
+    "newMessageAccessibility": "Nuevo mensaje",
+    "settingsAccessibility": "Configuración de mensajes"
   },
   "empty": {
     "title": "Aún no hay mensajes",
@@ -22,6 +23,18 @@
     "emptyMessages": "Aún no hay mensajes. ¡Di hola!",
     "errorFailedToSend": "No se pudo enviar el mensaje"
   },
+  "chatHeader": {
+    "backAccessibilityLabel": "Volver",
+    "voiceCallAccessibilityLabel": "Llamada de voz"
+  },
+  "typing": {
+    "suffix": " está escribiendo",
+    "full": "{{name}} está escribiendo..."
+  },
+  "media": {
+    "audioUnavailable": "Audio no disponible",
+    "videoUnavailable": "Video no disponible"
+  },
   "newMessage": {
     "headerTitle": "Nuevo mensaje",
     "searchPlaceholder": "Buscar usuarios...",
@@ -30,5 +43,12 @@
     "creatingConversation": "Creando conversación...",
     "errorFailedToStart": "No se pudo iniciar la conversación",
     "messageUserAccessibility": "Mensaje a {{name}}"
+  },
+  "wallpaperPicker": {
+    "title": "Fondo del chat",
+    "subtitle": "Elige un fondo. El cambio se aplica a todos tus chats.",
+    "noneLabel": "Ninguno",
+    "loading": "Cargando fondos...",
+    "error": "No se pudieron cargar los fondos. Intenta de nuevo más tarde."
   }
 }

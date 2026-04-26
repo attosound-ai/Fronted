@@ -1,6 +1,8 @@
 import { memo, useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { GOLD } from '@/constants/gold';
 import { Text } from '@/components/ui/Text';
 import { useAuthStore } from '@/stores/authStore';
 import type { FeedPost, PostAuthor } from '@/types/post';
@@ -64,6 +66,7 @@ function FeedPostCardInner({
   const isOwnPost =
     currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const isReel = post.type === 'reel';
+  const isCreatorPost = post.author.role === 'creator';
   const isAudio = post.type === 'audio';
 
   const header = !isReel ? (
@@ -97,10 +100,43 @@ function FeedPostCardInner({
 
   return (
     <View style={styles.container}>
-      {isAudio ? (
-        <View style={styles.audioWrapper}>
-          {header}
-          {media}
+      {isCreatorPost ? (
+        <View style={styles.creatorPostShell}>
+          <LinearGradient
+            colors={[
+              GOLD.shadowDeep,
+              GOLD.base,
+              GOLD.highlight,
+              GOLD.base,
+              GOLD.shadowDeep,
+            ]}
+            locations={[0, 0.25, 0.5, 0.75, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.creatorTopBorder}
+          />
+          <View
+            style={[
+              styles.creatorPostWrapper,
+              isAudio ? styles.creatorAudioPostWrapper : null,
+            ]}
+          >
+            {header}
+            {media}
+          </View>
+          <LinearGradient
+            colors={[
+              GOLD.shadowDeep,
+              GOLD.base,
+              GOLD.highlight,
+              GOLD.base,
+              GOLD.shadowDeep,
+            ]}
+            locations={[0, 0.25, 0.5, 0.75, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.creatorBottomBorder}
+          />
         </View>
       ) : (
         <>
@@ -162,7 +198,19 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 10,
   },
-  audioWrapper: {
+  creatorPostShell: {
+    backgroundColor: '#000',
+  },
+  creatorPostWrapper: {
+    backgroundColor: '#000',
+  },
+  creatorAudioPostWrapper: {
     backgroundColor: '#1A1A1A',
+  },
+  creatorTopBorder: {
+    height: 1,
+  },
+  creatorBottomBorder: {
+    height: 1,
   },
 });

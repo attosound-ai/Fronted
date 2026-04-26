@@ -97,7 +97,7 @@ export default function EditPostScreen() {
         <View style={styles.composeRow}>
           <Avatar
             uri={user?.avatar}
-            fallbackText={user?.displayName}
+            fallbackText={user?.username}
             size="sm"
             style={styles.avatar}
           />

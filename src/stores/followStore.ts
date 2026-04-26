@@ -12,6 +12,8 @@ interface FollowStore {
   getIsFollowing: (userId: number, fallback: boolean) => boolean;
   /** Bulk-set from API data. Only sets users NOT already in the store (preserves optimistic updates). */
   hydrateFromApi: (entries: Array<{ userId: number; isFollowing: boolean }>) => void;
+  /** Clear all follow state (call on account switch). */
+  clear: () => void;
 }
 
 export const useFollowStore = create<FollowStore>((set, get) => ({
@@ -21,6 +23,7 @@ export const useFollowStore = create<FollowStore>((set, get) => ({
       followedUsers: { ...state.followedUsers, [userId]: isFollowing },
     })),
   getIsFollowing: (userId, fallback) => get().followedUsers[userId] ?? fallback,
+  clear: () => set({ followedUsers: {} }),
   hydrateFromApi: (entries) => {
     const current = get().followedUsers;
     // Only add entries for users not already in the store

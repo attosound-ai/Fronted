@@ -287,6 +287,11 @@ export type Entitlement =
 
 export type PlanId = 'connect_free' | 'record' | 'record_pro' | 'connect_pro';
 
+export interface PendingPlanChange {
+  targetPlan: PlanId;
+  appliesAt: string;
+}
+
 export interface UserSubscription {
   id: string;
   plan: PlanId;
@@ -294,7 +299,31 @@ export interface UserSubscription {
   startsAt: string;
   expiresAt: string;
   entitlements: Entitlement[];
+  pendingChange?: PendingPlanChange | null;
 }
+
+export type PlanChangeDirection = 'upgrade' | 'downgrade' | 'same';
+
+export interface PlanChangePreview {
+  direction: PlanChangeDirection;
+  currentPlan: PlanId;
+  targetPlan: PlanId;
+  amountDueCents: number;
+  appliesAt: string;
+  daysRemaining: number;
+}
+
+export type PlanChangeStartResult =
+  | {
+      kind: 'upgrade';
+      clientSecret: string;
+      paymentIntentId: string;
+      amountCents: number;
+      currency: string;
+      targetPlan: PlanId;
+    }
+  | { kind: 'upgrade_free'; appliesAt: string; targetPlan: PlanId }
+  | { kind: 'downgrade_scheduled'; appliesAt: string; targetPlan: PlanId };
 
 // API Response generica
 export interface ApiResponse<T> {

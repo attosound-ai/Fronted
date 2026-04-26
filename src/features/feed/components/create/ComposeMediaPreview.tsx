@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Image,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
 } from 'react-native';
-import * as VideoThumbnails from 'expo-video-thumbnails';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { XCircle, Plus, Music, PlayCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -59,7 +60,13 @@ export function ComposeMediaPreview({
   }
 
   if (attachmentType === 'video' || attachmentType === 'reel') {
-    return <VideoPreview media={media[0]} onRemove={() => onRemoveMedia(0)} />;
+    return (
+      <VideoPreview
+        media={media[0]}
+        onRemove={() => onRemoveMedia(0)}
+        variant={attachmentType}
+      />
+    );
   }
 
   if (attachmentType === 'audio') {
@@ -90,28 +97,53 @@ export function ComposeMediaPreview({
 function VideoPreview({
   media,
   onRemove,
+  variant,
 }: {
   media: PickedMedia;
   onRemove: () => void;
+  variant: 'video' | 'reel';
 }) {
-  const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const player = useVideoPlayer(media.uri, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+  const [isPlaying, setIsPlaying] = useState(false);
 
+  // Mirror the player's actual state so the overlay reflects reality
+  // even if play/pause comes from somewhere other than our tap handler
+  // (e.g. interruption, error, audio session preemption).
   useEffect(() => {
-    VideoThumbnails.getThumbnailAsync(media.uri, { time: 0 })
-      .then(({ uri }) => setThumbnail(uri))
-      .catch(() => {});
-  }, [media.uri]);
+    const sub = player.addListener('playingChange', ({ isPlaying: nowPlaying }) => {
+      setIsPlaying(nowPlaying);
+    });
+    return () => sub.remove();
+  }, [player]);
+
+  const togglePlay = useCallback(() => {
+    if (player.playing) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  }, [player]);
+
+  const isReel = variant === 'reel';
 
   return (
-    <View style={styles.videoContainer}>
-      {thumbnail ? (
-        <Image source={{ uri: thumbnail }} style={styles.videoThumb} />
-      ) : (
-        <View style={[styles.videoThumb, styles.videoPlaceholder]} />
-      )}
-      <View style={styles.playOverlay}>
-        <PlayCircle size={40} color="#FFFFFF" strokeWidth={2.25} />
-      </View>
+    <View style={[styles.videoContainer, isReel && styles.reelContainer]}>
+      <VideoView
+        player={player}
+        style={[styles.videoThumb, isReel && styles.reelThumb]}
+        contentFit={isReel ? 'contain' : 'cover'}
+        nativeControls={false}
+      />
+      <Pressable style={StyleSheet.absoluteFill} onPress={togglePlay}>
+        {!isPlaying && (
+          <View style={styles.playOverlay}>
+            <PlayCircle size={48} color="#FFFFFF" strokeWidth={2.25} />
+          </View>
+        )}
+      </Pressable>
       <TouchableOpacity
         style={styles.videoRemove}
         onPress={onRemove}
@@ -168,13 +200,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  reelContainer: {
+    alignSelf: 'center',
+    marginHorizontal: 0,
+    width: 200,
+    backgroundColor: '#000000',
+  },
   videoThumb: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: '#111111',
   },
-  videoPlaceholder: {
-    backgroundColor: '#1A1A1A',
+  reelThumb: {
+    aspectRatio: 9 / 16,
+    backgroundColor: '#000000',
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

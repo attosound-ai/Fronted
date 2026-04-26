@@ -1,6 +1,11 @@
 import { apiClient } from './client';
 import { API_ENDPOINTS } from './endpoints';
-import type { ApiResponse, UserSubscription } from '@/types';
+import type {
+  ApiResponse,
+  PlanChangePreview,
+  PlanChangeStartResult,
+  UserSubscription,
+} from '@/types';
 import type { CheckoutResponse, PlanId, SubscriptionPlan } from '@/types/registration';
 
 export interface BridgeNumberResult {
@@ -67,5 +72,33 @@ export const paymentService = {
       { targetPlan, email, ...(forUserId && { forUserId }) }
     );
     return response.data.data;
+  },
+
+  async previewPlanChange(targetPlan: PlanId): Promise<PlanChangePreview> {
+    const response = await apiClient.get<ApiResponse<PlanChangePreview>>(
+      API_ENDPOINTS.PAYMENTS.CHANGE_PLAN_PREVIEW,
+      { params: { target_plan: targetPlan } }
+    );
+    return response.data.data;
+  },
+
+  async startPlanChange(targetPlan: PlanId, email: string): Promise<PlanChangeStartResult> {
+    const response = await apiClient.post<ApiResponse<PlanChangeStartResult>>(
+      API_ENDPOINTS.PAYMENTS.CHANGE_PLAN,
+      { targetPlan, email }
+    );
+    return response.data.data;
+  },
+
+  async confirmPlanChange(targetPlan: PlanId, paymentIntentId: string): Promise<void> {
+    await apiClient.post(
+      API_ENDPOINTS.PAYMENTS.CHANGE_PLAN_CONFIRM,
+      { targetPlan, email: '' },
+      { params: { payment_intent_id: paymentIntentId } }
+    );
+  },
+
+  async cancelPendingChange(): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.PAYMENTS.PENDING_CHANGE);
   },
 };

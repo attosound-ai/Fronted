@@ -59,11 +59,14 @@ export const API_ENDPOINTS = {
     UPDATE: (postId: string) => `/posts/${postId}`,
     LIKE: (postId: string) => `/posts/${postId}/like`,
     COMMENTS: (postId: string) => `/posts/${postId}/comments`,
+    COMMENT: (postId: string, commentId: string) =>
+      `/posts/${postId}/comments/${commentId}`,
     BOOKMARK: (postId: string) => `/posts/${postId}/bookmark`,
     REPOST: (postId: string) => `/posts/${postId}/repost`,
     SHARE: (postId: string) => `/posts/${postId}/share`,
     INTERACTORS: (postId: string, type: string) =>
       `/posts/${postId}/interactions/${type}`,
+    ADS: '/posts/ads',
     BOOKMARKS_LIST: '/posts/bookmarks',
     USER_POSTS: (userId: number) => `/posts/user/${userId}`,
     DELETE: (postId: string) => `/content/${postId}`,
@@ -75,6 +78,7 @@ export const API_ENDPOINTS = {
     CHAT: (chatId: string) => `/messages/${chatId}`,
     MARK_READ: (chatId: string) => `/messages/${chatId}/read`,
     SEND: '/messages',
+    WALLPAPERS: '/content/chat-wallpapers',
   },
 
   NOTIFICATIONS: {
@@ -106,6 +110,10 @@ export const API_ENDPOINTS = {
     PLANS: '/payments/subscriptions/plans',
     ENTITLEMENTS: '/payments/subscriptions/me/entitlements',
     UPGRADE: '/payments/subscriptions/me/upgrade',
+    CHANGE_PLAN_PREVIEW: '/payments/subscriptions/me/change-plan/preview',
+    CHANGE_PLAN: '/payments/subscriptions/me/change-plan',
+    CHANGE_PLAN_CONFIRM: '/payments/subscriptions/me/change-plan/confirm',
+    PENDING_CHANGE: '/payments/subscriptions/me/pending-change',
   },
   CREATOR_LOGOS: {
     LIST: '/creator-logos',

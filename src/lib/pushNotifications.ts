@@ -21,9 +21,11 @@ Notifications.setNotificationHandler({
     // If push is for a different account, show the system alert
     const isOtherAccount = accountId && accountId !== currentUserId;
 
+    const showSystemUi = !!isOtherAccount;
     return {
-      shouldShowAlert: !!isOtherAccount,
-      shouldPlaySound: !!isOtherAccount,
+      shouldShowBanner: showSystemUi,
+      shouldShowList: showSystemUi,
+      shouldPlaySound: showSystemUi,
       shouldSetBadge: true,
     };
   },
@@ -39,7 +41,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
   if (existing !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+    });
     finalStatus = status;
   }
   if (finalStatus !== 'granted') return null;

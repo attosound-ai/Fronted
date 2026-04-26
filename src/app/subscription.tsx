@@ -9,17 +9,18 @@ import {
   UIManager,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useStripe } from '@stripe/stripe-react-native';
-import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Check, Clock, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
-import { useAccountStore } from '@/stores/accountStore';
 import { paymentService } from '@/lib/api/paymentService';
-import type { PlanId } from '@/types/registration';
+import type { PlanChangePreview, PlanId } from '@/types';
+import { PlanChangeBottomSheet } from '@/features/profile/components/PlanChangeBottomSheet';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -33,51 +34,43 @@ const PLAN_ORDER: Record<PlanId, number> = {
 };
 
 export default function SubscriptionScreen() {
-  const { t } = useTranslation('subscription');
+  const { t, i18n } = useTranslation('subscription');
 
   const PLANS: {
     id: PlanId;
     name: string;
     price: string;
-    priceAmount: number;
     features: string[];
   }[] = [
     {
       id: 'connect_free',
       name: t('plans.connect_free.name'),
       price: t('plans.connect_free.price'),
-      priceAmount: 0,
       features: t('plans.connect_free.features', { returnObjects: true }) as string[],
     },
     {
       id: 'record',
       name: t('plans.record.name'),
       price: t('plans.record.price'),
-      priceAmount: 99,
       features: t('plans.record.features', { returnObjects: true }) as string[],
     },
     {
       id: 'record_pro',
       name: t('plans.record_pro.name'),
       price: t('plans.record_pro.price'),
-      priceAmount: 139,
       features: t('plans.record_pro.features', { returnObjects: true }) as string[],
     },
   ];
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
+  const pendingChange = useSubscriptionStore((s) => s.subscription?.pendingChange ?? null);
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const user = useAuthStore((s) => s.user);
-  const accounts = useAccountStore((s) => s.accounts);
+  const isCreator = user?.role === 'creator' && !!user?.inmateNumber;
 
-  // If user is a representative, find the managed creator to pay on their behalf
-  const managedCreator =
-    user?.role === 'representative'
-      ? accounts.find((a) => a.user.id !== user.id && a.user.isManagedAccount)
-      : undefined;
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activePlan, setActivePlan] = useState<PlanId | null>(null);
+  const [sheetTarget, setSheetTarget] = useState<PlanId | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<PlanId | null>(null);
 
   const toggleExpand = (planId: PlanId) => {
@@ -85,51 +78,88 @@ export default function SubscriptionScreen() {
     setExpandedPlan((prev) => (prev === planId ? null : planId));
   };
 
-  const handleUpgrade = async (planId: PlanId) => {
-    if (!user?.email) return;
+  const labelFor = (id: PlanId) => PLANS.find((p) => p.id === id)?.name ?? id;
+
+  const handleConfirm = async (preview: PlanChangePreview) => {
+    if (!sheetTarget) return;
     setIsProcessing(true);
-    setActivePlan(planId);
-
     try {
-      const { clientSecret, paymentIntentId } = await paymentService.upgradeSubscription(
-        planId,
-        user.email,
-        managedCreator ? String(managedCreator.user.id) : undefined
-      );
+      const result = await paymentService.startPlanChange(sheetTarget, user?.email ?? '');
 
+      if (result.kind === 'downgrade_scheduled' || result.kind === 'upgrade_free') {
+        await fetchSubscription();
+        setSheetTarget(null);
+        Alert.alert(
+          t('successTitle'),
+          result.kind === 'downgrade_scheduled'
+            ? t('changeSheet.downgradeScheduled', {
+                defaultValue: "We'll switch you to {{plan}} on {{date}}.",
+                plan: labelFor(sheetTarget),
+                date: new Date(result.appliesAt).toLocaleDateString(i18n.language),
+              })
+            : t('successUpgrade')
+        );
+        return;
+      }
+
+      // result.kind === 'upgrade' → present Stripe sheet
       const { error: initError } = await initPaymentSheet({
-        paymentIntentClientSecret: clientSecret,
+        paymentIntentClientSecret: result.clientSecret,
         merchantDisplayName: t('merchantName'),
         style: 'alwaysDark',
         returnURL: 'atto://stripe-redirect',
       });
-
       if (initError) {
         Alert.alert(t('errorTitle'), initError.message);
         return;
       }
-
       const { error: presentError } = await presentPaymentSheet();
-
       if (presentError) {
         if (presentError.code !== 'Canceled') {
           Alert.alert(t('errorTitle'), presentError.message);
         }
         return;
       }
-
-      await paymentService.confirmPayment(paymentIntentId).catch(() => {});
+      await paymentService.confirmPlanChange(sheetTarget, result.paymentIntentId).catch(() => {});
       await fetchSubscription();
+      setSheetTarget(null);
       Alert.alert(t('successTitle'), t('successUpgrade'));
-    } catch {
-      Alert.alert(t('errorTitle'), t('errorUpgradeFailed'));
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        (err instanceof Error ? err.message : null) ??
+        t('errorUpgradeFailed');
+      Alert.alert(t('errorTitle'), message);
     } finally {
       setIsProcessing(false);
-      setActivePlan(null);
     }
   };
 
-  const handleCancel = () => {
+  const handleCancelPending = () => {
+    Alert.alert(
+      t('cancelPendingDialog.title', { defaultValue: 'Cancel scheduled change?' }),
+      t('cancelPendingDialog.message', {
+        defaultValue: "You'll keep your current plan and won't be switched.",
+      }),
+      [
+        { text: t('cancelPendingDialog.keepScheduled', { defaultValue: 'Keep' }), style: 'cancel' },
+        {
+          text: t('cancelPendingDialog.confirm', { defaultValue: 'Cancel scheduled' }),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await paymentService.cancelPendingChange();
+              await fetchSubscription();
+            } catch {
+              Alert.alert(t('errorTitle'), t('errorCancelFailed'));
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCancelSubscription = () => {
     Alert.alert(t('cancelDialog.title'), t('cancelDialog.message'), [
       { text: t('cancelDialog.keepPlan'), style: 'cancel' },
       {
@@ -139,7 +169,7 @@ export default function SubscriptionScreen() {
           try {
             await paymentService.cancelSubscription();
             await fetchSubscription();
-            Alert.alert(t('errorTitle'), t('successCancelled'));
+            Alert.alert(t('successTitle'), t('successCancelled'));
           } catch {
             Alert.alert(t('errorTitle'), t('errorCancelFailed'));
           }
@@ -148,17 +178,108 @@ export default function SubscriptionScreen() {
     ]);
   };
 
+  const renderPlanAction = (planId: PlanId, isCurrent: boolean) => {
+    if (isCurrent) {
+      return (
+        <View style={styles.currentBadge}>
+          <Text style={styles.currentBadgeText}>{t('currentPlanBadge')}</Text>
+        </View>
+      );
+    }
+    if (pendingChange?.targetPlan === planId) {
+      return (
+        <View style={styles.scheduledBadge}>
+          <Text style={styles.scheduledBadgeText}>
+            {t('scheduledBadge', { defaultValue: 'Scheduled' })}
+          </Text>
+        </View>
+      );
+    }
+    const isUpgrade = PLAN_ORDER[planId] > PLAN_ORDER[currentPlan];
+    return (
+      <Button
+        title={isUpgrade ? t('upgradeButton') : t('downgradeButton', { defaultValue: 'Downgrade' })}
+        onPress={() => setSheetTarget(planId)}
+        disabled={isProcessing || pendingChange != null}
+        size="sm"
+      />
+    );
+  };
+
+  if (!isCreator) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <X size={26} color="#FFFFFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('title', { defaultValue: 'Subscription' })}</Text>
+          <View style={{ width: 26 }} />
+        </View>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>
+            {t('creatorOnly.title', {
+              defaultValue: 'Subscriptions are for creators only',
+            })}
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            {t('creatorOnly.subtitle', {
+              defaultValue:
+                'Listening, browsing and messaging are free. Subscription plans are reserved for creator accounts (artists with a registered inmate number).',
+            })}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <X size={26} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{t('title', { defaultValue: 'Subscription' })}</Text>
+        <View style={{ width: 26 }} />
+      </View>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {pendingChange && (
+          <View style={styles.pendingBanner}>
+            <Clock size={16} color="#F59E0B" strokeWidth={2.25} />
+            <View style={styles.pendingTextWrap}>
+              <Text style={styles.pendingTitle}>
+                {t('pendingBanner.title', {
+                  defaultValue: 'Scheduled: switching to {{plan}}',
+                  plan: labelFor(pendingChange.targetPlan),
+                })}
+              </Text>
+              <Text style={styles.pendingDate}>
+                {t('pendingBanner.applies', {
+                  defaultValue: 'On {{date}}',
+                  date: new Date(pendingChange.appliesAt).toLocaleDateString(i18n.language),
+                })}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={handleCancelPending}>
+              <Text style={styles.pendingCancel}>
+                {t('pendingBanner.cancel', { defaultValue: 'Cancel' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {PLANS.map((plan) => {
           const isCurrent = plan.id === currentPlan;
-          const isUpgrade = PLAN_ORDER[plan.id] > PLAN_ORDER[currentPlan];
           const isExpanded = expandedPlan === plan.id;
-
           return (
             <View
               key={plan.id}
@@ -169,29 +290,14 @@ export default function SubscriptionScreen() {
                   <Text style={styles.planName}>{plan.name}</Text>
                   <Text style={styles.planPrice}>{plan.price}</Text>
                 </View>
-
-                {isCurrent && (
-                  <View style={styles.currentBadge}>
-                    <Text style={styles.currentBadgeText}>{t('currentPlanBadge')}</Text>
-                  </View>
-                )}
-
-                {isUpgrade && (
-                  <Button
-                    title={t('upgradeButton')}
-                    onPress={() => handleUpgrade(plan.id)}
-                    loading={isProcessing && activePlan === plan.id}
-                    disabled={isProcessing && activePlan !== plan.id}
-                    size="sm"
-                  />
-                )}
-
-                {isCurrent && plan.id !== 'connect_free' && (
-                  <TouchableOpacity onPress={handleCancel}>
-                    <Text style={styles.cancelText}>{t('cancelButton')}</Text>
-                  </TouchableOpacity>
-                )}
+                {renderPlanAction(plan.id, isCurrent)}
               </View>
+
+              {isCurrent && plan.id !== 'connect_free' && (
+                <TouchableOpacity onPress={handleCancelSubscription} style={styles.cancelRow}>
+                  <Text style={styles.cancelText}>{t('cancelButton')}</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 onPress={() => toggleExpand(plan.id)}
@@ -226,7 +332,16 @@ export default function SubscriptionScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
-    </View>
+
+      <PlanChangeBottomSheet
+        visible={sheetTarget !== null}
+        targetPlan={sheetTarget}
+        planLabel={sheetTarget ? labelFor(sheetTarget) : ''}
+        onClose={() => setSheetTarget(null)}
+        onConfirm={handleConfirm}
+        isProcessing={isProcessing}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -235,9 +350,86 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 17,
+    color: '#FFFFFF',
+  },
   content: {
     paddingHorizontal: 16,
     paddingTop: 8,
+  },
+  emptyState: {
+    flex: 1,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  emptyTitle: {
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 18,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#999',
+    textAlign: 'center',
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1F1505',
+    borderColor: '#92400E',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  pendingTextWrap: {
+    flex: 1,
+  },
+  pendingTitle: {
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 13,
+    color: '#FCD34D',
+  },
+  pendingDate: {
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 12,
+    color: '#D6BB6F',
+    marginTop: 2,
+  },
+  pendingCancel: {
+    fontFamily: 'Archivo_500Medium',
+    fontSize: 12,
+    color: '#FCD34D',
+    textDecorationLine: 'underline',
+  },
+  scheduledBadge: {
+    backgroundColor: '#1F1505',
+    borderColor: '#92400E',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  scheduledBadgeText: {
+    fontFamily: 'Archivo_500Medium',
+    fontSize: 12,
+    color: '#FCD34D',
   },
   planCard: {
     backgroundColor: '#111',
@@ -283,6 +475,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_500Medium',
     fontSize: 13,
     color: '#FFFFFF',
+  },
+  cancelRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   featuresToggle: {
     flexDirection: 'row',

@@ -1,6 +1,5 @@
 import { useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
-import { Voice, Call, CallInvite, AudioDevice } from '@twilio/voice-react-native-sdk';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
 import { telephonyService } from '@/lib/api/telephonyService';
@@ -8,24 +7,40 @@ import { useAuthStore } from '@/stores/authStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import * as Sentry from '@sentry/react-native';
 
+// Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
+// which is not yet configured for Android. Importing at module level crashes Android on launch.
+type TwilioTypes = typeof import('@twilio/voice-react-native-sdk');
+let _twilio: TwilioTypes | null = null;
+function getTwilio(): TwilioTypes {
+  if (!_twilio) {
+    _twilio = require('@twilio/voice-react-native-sdk');
+  }
+  return _twilio!;
+}
+
+const IS_IOS = Platform.OS === 'ios';
 const TOKEN_REFRESH_MS = 50 * 60 * 1000; // Refresh every 50 minutes
 
 // ── Singleton state (module-level) ──
-let voiceInstance: Voice | null = null;
+let voiceInstance: any = null;
 let pushKitReady = false;
-let activeCallObj: Call | null = null;
-let pendingInvite: CallInvite | null = null;
+let activeCallObj: any = null;
+let pendingInvite: any = null;
 let lastToken: string | null = null;
 let isRegistering = false;
 
-function getVoice(): Voice {
-  voiceInstance ??= new Voice();
+function getVoice(): any {
+  if (!voiceInstance) {
+    const { Voice } = getTwilio();
+    voiceInstance = new Voice();
+  }
   return voiceInstance;
 }
 
 // ── Helpers ──
 
-function bindCallEvents(call: Call) {
+function bindCallEvents(call: any) {
+  const { Call } = getTwilio();
   const { setCallState, endCall } = useCallStore.getState();
   call.on(Call.Event.Connected, () => setCallState('connected'));
   call.on(Call.Event.ConnectFailure, () => {
@@ -41,7 +56,7 @@ function bindCallEvents(call: Call) {
 }
 
 /** Try to retrieve the active Call from the Voice SDK (e.g. after CallKit accepted). */
-async function recoverCallFromSDK(): Promise<Call | null> {
+async function recoverCallFromSDK(): Promise<any | null> {
   try {
     const voice = getVoice();
     const calls = await voice.getCalls();
@@ -143,15 +158,57 @@ export async function toggleHoldCall() {
 export async function toggleSpeaker() {
   const voice = voiceInstance;
   if (!voice) return;
+  const { AudioDevice } = getTwilio();
   const { audioDevices, selectedDevice } = await voice.getAudioDevices();
   const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
   const target = audioDevices.find(
-    (d) => d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
+    (d: any) => d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
   );
   if (target) {
     await target.select();
     useCallStore.getState().setSpeaker(!isSpeaker);
     analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, { is_speaker: !isSpeaker });
+  }
+}
+
+// ── Outgoing VoIP call ──
+
+export async function makeVoIPCall(recipientUserId: string, recipientName?: string) {
+  const { setOutgoingCall, endCall } = useCallStore.getState();
+
+  if (activeCallObj) {
+    console.warn('[TwilioVoice] Already in a call');
+    return;
+  }
+
+  try {
+    const { token } = await telephonyService.getVoiceToken();
+    const voice = getVoice();
+
+    const call = await voice.connect(token, {
+      params: {
+        To: `user-${recipientUserId}`,
+        recipientType: 'client',
+      },
+    });
+
+    activeCallObj = call;
+
+    const callSid = call.getSid() || `outgoing-${Date.now()}`;
+    setOutgoingCall(callSid, recipientUserId, recipientName);
+    bindCallEvents(call);
+    router.push('/call');
+
+    analytics.capture(ANALYTICS_EVENTS.CALL.OUTGOING_INITIATED, {
+      recipient_user_id: recipientUserId,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[TwilioVoice] makeVoIPCall FAILED:', msg);
+    Sentry.captureException(error, {
+      tags: { feature: 'twilio-voice', step: 'outgoing-connect' },
+    });
+    endCall();
   }
 }
 
@@ -164,15 +221,10 @@ export function useTwilioVoice() {
   const endCall = useCallStore((s) => s.endCall);
 
   const registerDevice = useCallback(async () => {
+    if (!IS_IOS) return; // Twilio Voice not configured for Android yet
     if (isRegistering) return;
-    if (Platform.OS === 'ios' && !pushKitReady) {
-      return;
-    }
-    // Re-check auth at call time — the session may have been invalidated while
-    // waiting for PushKit init (3-second iOS delay) or between interval ticks.
-    if (!useAuthStore.getState().isAuthenticated) {
-      return;
-    }
+    if (!pushKitReady) return;
+    if (!useAuthStore.getState().isAuthenticated) return;
 
     isRegistering = true;
     try {
@@ -196,11 +248,14 @@ export function useTwilioVoice() {
   }, [setRegistered]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    // Skip Twilio Voice setup entirely on Android — Firebase (google-services.json)
+    // is not configured yet, and the native module crashes without it.
+    if (!isAuthenticated || !IS_IOS) return;
 
+    const { Voice, CallInvite } = getTwilio();
     const voice = getVoice();
 
-    const onCallInvite = (invite: CallInvite) => {
+    const onCallInvite = (invite: any) => {
       pendingInvite = invite;
 
       const callSid = invite.getCallSid();
@@ -213,7 +268,7 @@ export function useTwilioVoice() {
       });
 
       // CallKit accepted the call (user swiped iOS push notification)
-      invite.on(CallInvite.Event.Accepted, (call: Call) => {
+      invite.on(CallInvite.Event.Accepted, (call: any) => {
         callKitAccepted = true;
         activeCallObj = call;
         pendingInvite = null;
@@ -240,7 +295,7 @@ export function useTwilioVoice() {
 
     const setup = async () => {
       try {
-        if (Platform.OS === 'ios' && !pushKitReady) {
+        if (!pushKitReady) {
           await voice.initializePushRegistry();
           pushKitReady = true;
           await new Promise((r) => setTimeout(r, 3000));

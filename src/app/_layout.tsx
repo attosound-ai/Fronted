@@ -1,6 +1,17 @@
 import '@/lib/i18n';
 import '@/lib/pushNotifications'; // registers foreground notification handler
+import '@/lib/textScaling'; // caps Dynamic Type globally to protect layouts
 import { useEffect, useRef, type ReactNode } from 'react';
+
+// NOTE: We deliberately DO NOT import `react-native-audio-api` anywhere
+// in the app at module-load time. The library installs global
+// AVAudioSession observers in its iOS module's `install()` constructor
+// (called as a side effect of any import from the package), and those
+// observers fire on engine-configuration-change notifications which
+// hit during a Twilio call setup — breaking call audio in subtle ways
+// that even `AudioManager.disableSessionManagement()` couldn't fully
+// neutralize in testing. Until we find a Twilio-safe alternative, all
+// timeline playback uses `expo-audio` (no audible pan, but Twilio-safe).
 import { useMountEffect } from '@/hooks';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -10,18 +21,22 @@ import { PostHogProvider, PostHogErrorBoundary, usePostHog } from 'posthog-react
 import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SplashScreen from 'expo-splash-screen';
-import {
-  useFonts,
-  Archivo_400Regular,
-  Archivo_500Medium,
-  Archivo_600SemiBold,
-  Archivo_700Bold,
-} from '@expo-google-fonts/archivo';
+import { useFonts } from 'expo-font';
+
+// Patched Archivo TTFs with corrected hhea/OS-2 metrics so iOS does not
+// clip descenders (y, g, p, j). The original @expo-google-fonts/archivo
+// build has hhea.descender=-210 while glyphs extend to -410, causing
+// clipping in TextInputs and tight layouts. See assets/fonts/README.
+const Archivo_400Regular = require('../../assets/fonts/Archivo_400Regular.ttf');
+const Archivo_500Medium = require('../../assets/fonts/Archivo_500Medium.ttf');
+const Archivo_600SemiBold = require('../../assets/fonts/Archivo_600SemiBold.ttf');
+const Archivo_700Bold = require('../../assets/fonts/Archivo_700Bold.ttf');
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
+import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { BugReportFAB } from '@/components/BugReportFAB';
@@ -140,6 +155,7 @@ function ErrorFallback() {
 function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   useTwilioVoice();
+  useBadgeSync();
   const [fontsLoaded] = useFonts({
     Archivo_400Regular,
     Archivo_500Medium,
@@ -173,10 +189,6 @@ function RootLayout() {
 
     return unsubscribe;
   });
-
-  if (!fontsLoaded) {
-    return null;
-  }
 
   return (
     <PostHogProvider
@@ -212,176 +224,176 @@ function RootLayout() {
               <KeyboardProvider>
                 <SafeAreaProvider>
                   <StatusBar style="light" />
-                  <Stack
-                    screenOptions={{
-                      headerShown: true,
-                      headerBackTitle: '',
-                      headerStyle: { backgroundColor: '#000000' },
-                      headerTintColor: '#FFFFFF',
-                      headerTitleStyle: {
-                        fontFamily: 'Archivo_600SemiBold',
-                        fontSize: 17,
-                      },
-                      headerShadowVisible: false,
-                      headerBackTitleVisible: false,
-                      contentStyle: { backgroundColor: '#000000' },
-                      animation: 'slide_from_right',
-                      fullScreenGestureEnabled: false,
-                      animationDuration: 300,
-                    }}
-                  >
-                    <Stack.Screen
-                      name="index"
-                      options={{ headerShown: false, title: '', gestureEnabled: false }}
-                    />
-                    <Stack.Screen
-                      name="(auth)"
-                      options={{
-                        headerShown: false,
-                        title: '',
-                        animation: 'fade',
-                        gestureEnabled: false,
-                      }}
-                    />
-                    <Stack.Screen
-                      name="(tabs)"
-                      options={{
-                        headerShown: false,
-                        title: '',
-                        headerBackTitle: '',
-                        animation: 'fade',
-                        gestureEnabled: false,
-                        fullScreenGestureEnabled: false,
-                      }}
-                    />
-                    <Stack.Screen
-                      name="edit-creator-contact"
-                      options={{
-                        headerShown: false,
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="edit-profile"
-                      options={{
-                        headerShown: false,
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="call"
-                      options={{
-                        headerShown: false,
-                        presentation: 'fullScreenModal',
-                        animation: 'slide_from_bottom',
-                        gestureEnabled: false,
-                      }}
-                    />
-                    <Stack.Screen
-                      name="recording"
-                      options={{
-                        headerShown: false,
-                        presentation: 'fullScreenModal',
-                        animation: 'slide_from_bottom',
-                        gestureEnabled: false,
-                      }}
-                    />
-                    <Stack.Screen
-                      name="chat"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="new-message"
-                      options={{
-                        title: 'New Message',
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="project/[id]"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="user/[id]"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="subscription"
-                      options={{
-                        title: 'Subscription',
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="edit-post"
-                      options={{
-                        headerShown: false,
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="create-post"
-                      options={{
-                        headerShown: false,
-                        presentation: 'modal',
-                        animation: 'slide_from_bottom',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="post/[id]"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="bookmarks"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="following"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="notifications"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen
-                      name="projects"
-                      options={{
-                        headerShown: false,
-                        animation: 'slide_from_right',
-                      }}
-                    />
-                    <Stack.Screen name="+not-found" />
-                  </Stack>
-                  <InCallTopBar />
-                  <CallBanner />
-                  <BugReportFAB />
-                  <AccountSwitchOverlay />
+                  {!fontsLoaded ? null : (
+                    <>
+                      <InCallTopBar />
+                      <Stack
+                        screenOptions={{
+                          headerShown: true,
+                          headerBackTitle: '',
+                          headerStyle: { backgroundColor: '#000000' },
+                          headerTintColor: '#FFFFFF',
+                          headerTitleStyle: {
+                            fontFamily: 'Archivo_600SemiBold',
+                            fontSize: 17,
+                          },
+                          headerShadowVisible: false,
+                          headerBackTitleVisible: false,
+                          contentStyle: { backgroundColor: '#000000' },
+                          animation: 'slide_from_right',
+                          fullScreenGestureEnabled: false,
+                          animationDuration: 300,
+                        }}
+                      >
+                        <Stack.Screen
+                          name="index"
+                          options={{
+                            headerShown: false,
+                            title: '',
+                            gestureEnabled: false,
+                          }}
+                        />
+                        <Stack.Screen
+                          name="(auth)"
+                          options={{
+                            headerShown: false,
+                            title: '',
+                            animation: 'fade',
+                            gestureEnabled: false,
+                          }}
+                        />
+                        <Stack.Screen
+                          name="(tabs)"
+                          options={{
+                            headerShown: false,
+                            title: '',
+                            headerBackTitle: '',
+                            animation: 'fade',
+                            gestureEnabled: false,
+                            fullScreenGestureEnabled: false,
+                          }}
+                        />
+                        <Stack.Screen
+                          name="edit-creator-contact"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="edit-profile"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="call"
+                          options={{
+                            headerShown: false,
+                            presentation: 'fullScreenModal',
+                            animation: 'slide_from_bottom',
+                            gestureEnabled: false,
+                          }}
+                        />
+                        <Stack.Screen
+                          name="chat"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="new-message"
+                          options={{
+                            title: 'New Message',
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="project/[id]"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="user/[id]"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="subscription"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                            contentStyle: { backgroundColor: '#000000' },
+                          }}
+                        />
+                        <Stack.Screen
+                          name="edit-post"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="create-post"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="post/[id]"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="bookmarks"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="following"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="notifications"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="projects"
+                          options={{
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen name="+not-found" />
+                      </Stack>
+                      <CallBanner />
+                      <BugReportFAB />
+                      <AccountSwitchOverlay />
+                    </>
+                  )}
                 </SafeAreaProvider>
               </KeyboardProvider>
             </GestureHandlerRootView>

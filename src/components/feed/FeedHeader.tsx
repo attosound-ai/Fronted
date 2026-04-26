@@ -3,9 +3,11 @@ import {
   View,
   Image,
   TouchableOpacity,
+  Switch,
   StyleSheet,
   Pressable,
   Dimensions,
+  DeviceEventEmitter,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,10 +31,12 @@ import {
   Ellipsis,
   X,
   SlidersHorizontal,
+  Palette,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
+import { CounterBadge } from '@/components/ui/CounterBadge';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { CreateActionSheet } from './CreateActionSheet';
 import { FilterModal } from './FilterModal';
@@ -41,6 +45,8 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { useFeedFilterStore } from '@/stores/feedFilterStore';
 import { FullscreenImageViewer } from '@/components/ui/FullscreenImageViewer';
+import { BottomSheet } from '@/components/ui/BottomSheet';
+import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useCreatorLogos } from '@/features/feed/hooks/useCreatorLogos';
 import { useLogoVote } from '@/features/feed/hooks/useLogoVote';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -48,26 +54,53 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 const ATTO_LOGO_URI =
   'https://res.cloudinary.com/da9vymoah/image/upload/v1774905442/Property_1_Default_zqv4qr.png';
 
-const CREATOR_LOGO_URIS = [
-  'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/1_xnqztg.png',
-  'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/3_r97kll.png',
-  'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/4_zvaaqc.png',
-  'https://res.cloudinary.com/dxzcutnlp/image/upload/v1775340998/2_gl1k9h.png',
-];
-
 const HEADER_HEIGHT = 58;
 const SHEET_CONTENT_HEIGHT = 320;
 const SPRING_CONFIG = { damping: 22, stiffness: 180, mass: 0.8 };
+
+/** Epoch for day-based logo rotation (2026-01-01 UTC). */
+const LOGO_EPOCH = new Date('2026-01-01T00:00:00Z').getTime();
+const MS_PER_DAY = 86_400_000;
+
+function getTodayLogoIndex(count: number): number {
+  if (count === 0) return 0;
+  return Math.floor((Date.now() - LOGO_EPOCH) / MS_PER_DAY) % count;
+}
 
 export function FeedHeader() {
   const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
+  const { isTablet } = useDeviceLayout();
   const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
+  const hasAdvancedProduction = useSubscriptionStore((s) =>
+    s.hasEntitlement('advanced_production')
+  );
   const isCreatorWithPlan = user?.role === 'creator' && hasRecordUpload;
   const { logos: creatorLogos } = useCreatorLogos();
   const { mutate: castVote } = useLogoVote();
-  const creatorLogoUris = creatorLogos.map((l) => l.imageUrl);
+
+  // Day-based logo: rotates to next logo each calendar day
+  const [todayIndex, setTodayIndex] = useState(() =>
+    getTodayLogoIndex(creatorLogos.length)
+  );
+
+  useEffect(() => {
+    setTodayIndex(getTodayLogoIndex(creatorLogos.length));
+    // Schedule re-check at next midnight
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+    const timer = setTimeout(
+      () => setTodayIndex(getTodayLogoIndex(creatorLogos.length)),
+      msUntilMidnight + 500 // small buffer past midnight
+    );
+    return () => clearTimeout(timer);
+  }, [creatorLogos.length]);
+
+  const todayLogo = creatorLogos[todayIndex];
+  const todayLogoUri = todayLogo?.imageUrl;
 
   const [comingSoonFeature, setComingSoonFeature] = useState<
     'store' | 'info' | 'dating' | null
@@ -75,44 +108,14 @@ export function FeedHeader() {
   const notifUnread = useNotificationStore((s) => s.unreadCount);
   const isFilterActive = useFeedFilterStore((s) => s.isAnyFilterActive);
   const creatorsOnly = useFeedFilterStore((s) => s.filters.creatorsOnly);
+  const setFilter = useFeedFilterStore((s) => s.setFilter);
+  const contentTypeCount = useFeedFilterStore((s) => s.filters.contentTypes.length);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [logoFullscreen, setLogoFullscreen] = useState(false);
-  const [creatorLogoIndex, setCreatorLogoIndex] = useState(0);
-  const logoTranslateX = useSharedValue(0);
-  const logoOpacity = useSharedValue(1);
-
-  const advanceCreatorLogo = useCallback(() => {
-    setCreatorLogoIndex((i) => (i + 1) % creatorLogoUris.length);
-    // Slide in from right
-    logoTranslateX.value = 30;
-    logoTranslateX.value = withTiming(0, { duration: 300 });
-    logoOpacity.value = withTiming(1, { duration: 300 });
-  }, [logoTranslateX, logoOpacity]);
-
-  // Rotate creator logos every 4s with carousel animation
-  useEffect(() => {
-    if (!creatorsOnly) {
-      setCreatorLogoIndex(0);
-      logoTranslateX.value = 0;
-      logoOpacity.value = 1;
-      return;
-    }
-    const interval = setInterval(() => {
-      // Slide out left + fade
-      logoTranslateX.value = withTiming(-30, { duration: 250 });
-      logoOpacity.value = withTiming(0, { duration: 250 }, () => {
-        runOnJS(advanceCreatorLogo)();
-      });
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [creatorsOnly, logoTranslateX, logoOpacity, advanceCreatorLogo]);
-
-  const creatorLogoStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: logoTranslateX.value }],
-    opacity: logoOpacity.value,
-  }));
+  const [artGalleryOpen, setArtGalleryOpen] = useState(false);
+  const [artFullscreen, setArtFullscreen] = useState<string | null>(null);
 
   // Hidden: behind the header (top: 0 = tucked behind header bar).
   // Visible: slides down to just below the header.
@@ -141,6 +144,18 @@ export function FeedHeader() {
       translateY.value = withSpring(visibleY, SPRING_CONFIG);
     }
   }, [sheetOpen]);
+
+  // Listen for sidebar menu button press (iPad)
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('sidebarMenuPress', () => {
+      if (sheetOpen) {
+        closeSheet();
+      } else {
+        openSheet();
+      }
+    });
+    return () => sub.remove();
+  }, [sheetOpen, openSheet, closeSheet]);
 
   // Pan gesture — runs entirely on UI thread
   const panGesture = Gesture.Pan()
@@ -204,6 +219,32 @@ export function FeedHeader() {
           </Pressable>
           <GestureDetector gesture={panGesture}>
             <ReAnimated.View style={[styles.topSheet, sheetStyle]}>
+              <View style={styles.sheetItem}>
+                <CreatorBadge size="sm" />
+                <Text style={styles.sheetText}>{t('filters.creatorsOnly')}</Text>
+                <Switch
+                  value={creatorsOnly}
+                  onValueChange={(v) => setFilter('creatorsOnly', v)}
+                  trackColor={{ false: '#333', true: '#D4AF37' }}
+                  thumbColor="#FFF"
+                />
+                <TouchableOpacity
+                  style={styles.allFiltersButton}
+                  activeOpacity={0.7}
+                  onPress={() => handleAction(() => setFilterVisible(true))}
+                >
+                  <SlidersHorizontal size={18} color="#FFF" strokeWidth={2.25} />
+                  <Text style={styles.sheetText}>{t('header.menuAllFilters')}</Text>
+                  {contentTypeCount > 0 && (
+                    <CounterBadge
+                      count={contentTypeCount}
+                      color="#3B82F6"
+                      style={styles.filterCountBadge}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+              <View style={styles.sheetSeparator} />
               <TouchableOpacity
                 style={styles.sheetItem}
                 activeOpacity={0.7}
@@ -216,28 +257,12 @@ export function FeedHeader() {
               <TouchableOpacity
                 style={styles.sheetItem}
                 activeOpacity={0.7}
-                onPress={() => handleAction(() => setFilterVisible(true))}
-              >
-                <SlidersHorizontal size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuFilters')}</Text>
-                {isFilterActive && (
-                  <CreatorBadge size="sm" style={{ marginLeft: 'auto' }} />
-                )}
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
                 onPress={() => handleAction(() => router.navigate('/notifications'))}
               >
                 <Bell size={22} color="#FFF" strokeWidth={2.25} />
                 <Text style={styles.sheetText}>{t('header.menuNotifications')}</Text>
                 {notifUnread > 0 && (
-                  <View style={styles.bellBadge}>
-                    <Text style={styles.bellBadgeText}>
-                      {notifUnread > 99 ? '99+' : String(notifUnread)}
-                    </Text>
-                  </View>
+                  <CounterBadge count={notifUnread} style={styles.bellBadge} />
                 )}
               </TouchableOpacity>
               <View style={styles.sheetSeparator} />
@@ -267,6 +292,15 @@ export function FeedHeader() {
                 <Heart size={22} color="#FFF" strokeWidth={2.25} />
                 <Text style={styles.sheetText}>{t('header.menuDating')}</Text>
               </TouchableOpacity>
+              <View style={styles.sheetSeparator} />
+              <TouchableOpacity
+                style={styles.sheetItem}
+                activeOpacity={0.7}
+                onPress={() => handleAction(() => setArtGalleryOpen(true))}
+              >
+                <Palette size={22} color="#FFF" strokeWidth={2.25} />
+                <Text style={styles.sheetText}>ATTO ART</Text>
+              </TouchableOpacity>
               <View style={styles.sheetHandle} />
             </ReAnimated.View>
           </GestureDetector>
@@ -274,19 +308,27 @@ export function FeedHeader() {
       )}
 
       {/* Header bar — extends into status bar area to mask the sheet */}
-      <View style={[styles.header, { marginTop: -insets.top, paddingTop: insets.top }]}>
-        <View style={styles.sideSlot}>
-          <TouchableOpacity
-            onPress={() =>
-              isCreatorWithPlan
-                ? setActionSheetVisible(true)
-                : router.push('/create-post')
-            }
-            style={styles.iconButton}
-          >
-            <Plus size={30} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        </View>
+      <View
+        style={[
+          styles.header,
+          { marginTop: -insets.top, paddingTop: insets.top },
+          isTablet && styles.headerTablet,
+        ]}
+      >
+        {!isTablet && (
+          <View style={styles.sideSlot}>
+            <TouchableOpacity
+              onPress={() =>
+                isCreatorWithPlan
+                  ? setActionSheetVisible(true)
+                  : router.push('/create-post')
+              }
+              style={styles.iconButton}
+            >
+              <Plus size={30} color="#FFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity
           style={styles.logoContainer}
@@ -296,10 +338,10 @@ export function FeedHeader() {
             setLogoFullscreen(true);
           }}
         >
-          {creatorsOnly ? (
-            <ReAnimated.Image
-              source={{ uri: creatorLogoUris[creatorLogoIndex] }}
-              style={[styles.creatorLogo, creatorLogoStyle]}
+          {creatorsOnly && todayLogoUri ? (
+            <Image
+              source={{ uri: todayLogoUri }}
+              style={styles.logo}
               resizeMode="contain"
             />
           ) : (
@@ -309,31 +351,33 @@ export function FeedHeader() {
               resizeMode="contain"
             />
           )}
-          <Text style={styles.logoSubtext}>sound</Text>
+          <Text style={styles.logoSubtext} allowFontScaling={false}>
+            sound
+          </Text>
         </TouchableOpacity>
 
-        <View style={styles.sideSlot}>
-          <TouchableOpacity
-            onPress={sheetOpen ? closeSheet : openSheet}
-            style={styles.iconButton}
-          >
-            {sheetOpen ? (
-              <X size={24} color="#FFF" strokeWidth={2.25} />
-            ) : (
-              <>
-                <Ellipsis size={24} color="#FFF" strokeWidth={2.25} />
-                {notifUnread > 0 && !isFilterActive && (
-                  <View style={styles.ellipsisDot} />
-                )}
-                {isFilterActive && (
-                  <View style={styles.filterIndicator}>
-                    <CreatorBadge size="sm" />
-                  </View>
-                )}
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        {!isTablet && (
+          <View style={styles.sideSlot}>
+            <TouchableOpacity
+              onPress={sheetOpen ? closeSheet : openSheet}
+              style={styles.iconButton}
+            >
+              {sheetOpen ? (
+                <X size={24} color="#FFF" strokeWidth={2.25} />
+              ) : (
+                <>
+                  <Ellipsis size={24} color="#FFF" strokeWidth={2.25} />
+                  {notifUnread > 0 && <View style={styles.ellipsisDot} />}
+                  {isFilterActive && (
+                    <View style={styles.filterIndicator}>
+                      <CreatorBadge size="sm" />
+                    </View>
+                  )}
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <ComingSoonModal
@@ -341,10 +385,10 @@ export function FeedHeader() {
         onClose={() => setComingSoonFeature(null)}
         icon={
           comingSoonFeature === 'store'
-            ? 'bag-handle-outline'
+            ? ShoppingBag
             : comingSoonFeature === 'dating'
-              ? 'heart-outline'
-              : 'information-circle-outline'
+              ? Heart
+              : Info
         }
         title={
           comingSoonFeature === 'store'
@@ -364,23 +408,56 @@ export function FeedHeader() {
       <CreateActionSheet
         visible={actionSheetVisible}
         onClose={() => setActionSheetVisible(false)}
+        hasAdvancedProduction={hasAdvancedProduction}
       />
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
       <FullscreenImageViewer
-        uri={creatorsOnly ? creatorLogoUris : ATTO_LOGO_URI}
-        logos={creatorsOnly ? creatorLogos : undefined}
+        uri={creatorsOnly && todayLogoUri ? todayLogoUri : ATTO_LOGO_URI}
+        logo={creatorsOnly ? todayLogo : undefined}
         onVote={
           creatorsOnly
-            ? (logoId, vote) => {
-                const currentVote =
-                  creatorLogos.find((l) => l.id === logoId)?.userVote ?? null;
-                castVote({ logoId, vote, currentVote });
+            ? (logoId, rating) => {
+                const currentRating =
+                  creatorLogos.find((l) => l.id === logoId)?.userRating ?? null;
+                castVote({ logoId, rating, currentRating });
               }
             : undefined
         }
         visible={logoFullscreen}
         onClose={() => setLogoFullscreen(false)}
       />
+      <BottomSheet
+        visible={artGalleryOpen}
+        onClose={() => setArtGalleryOpen(false)}
+        title="ATTO ART"
+      >
+        <View style={styles.artGrid}>
+          {creatorLogos.map((logo) => (
+            <TouchableOpacity
+              key={logo.id}
+              activeOpacity={0.85}
+              style={styles.artCell}
+              onPress={() => {
+                setArtGalleryOpen(false);
+                setTimeout(() => setArtFullscreen(logo.imageUrl), 300);
+              }}
+            >
+              <Image
+                source={{ uri: logo.imageUrl }}
+                style={styles.artCellImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </BottomSheet>
+      {artFullscreen && (
+        <FullscreenImageViewer
+          uri={artFullscreen}
+          visible
+          onClose={() => setArtFullscreen(null)}
+        />
+      )}
     </>
   );
 }
@@ -394,6 +471,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#000',
     zIndex: 10,
+  },
+  headerTablet: {
+    justifyContent: 'center',
   },
   sideSlot: {
     flexDirection: 'row',
@@ -409,8 +489,8 @@ const styles = StyleSheet.create({
     height: 28,
   },
   creatorLogo: {
-    width: 130,
-    height: 36,
+    width: 100,
+    height: 28,
   },
   logoSubtext: {
     color: '#FFFFFF',
@@ -447,6 +527,24 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: 12,
   },
+  artGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  artCell: {
+    width: '32.6%',
+    aspectRatio: 1,
+    backgroundColor: '#111',
+    borderRadius: 4,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  artCellImage: {
+    width: '90%',
+    height: '90%',
+  },
   sheetItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -467,7 +565,7 @@ const styles = StyleSheet.create({
   ellipsisDot: {
     position: 'absolute',
     top: 4,
-    right: 4,
+    left: 4,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -480,17 +578,14 @@ const styles = StyleSheet.create({
   },
   bellBadge: {
     marginLeft: 'auto',
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  bellBadgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontFamily: 'Archivo_700Bold',
+  allFiltersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginLeft: 'auto',
+  },
+  filterCountBadge: {
+    marginLeft: 'auto',
   },
 });

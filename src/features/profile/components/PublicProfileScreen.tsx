@@ -34,6 +34,7 @@ import {
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { safeCount } from '@/lib/analytics';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
@@ -215,9 +216,23 @@ export function PublicProfileScreen({
   const bio = profile?.bio ?? null;
   const role = profile?.role ?? null;
   const countsLoaded = profile?.followersCount !== undefined;
-  const postsCount = profile?.postsCount ?? userPosts.length;
-  const followersCount = profile?.followersCount ?? 0;
-  const followingCount = profile?.followingCount ?? 0;
+  // Clamp at the display layer too — counts must NEVER show negative.
+  // safeCount captures any incident to PostHog so we can find the upstream cause.
+  const postsCount = Math.max(0, profile?.postsCount ?? userPosts.length);
+  const followersCount = profile?.followersCount === undefined
+    ? 0
+    : safeCount(profile.followersCount, {
+        field: 'followersCount',
+        source: 'PublicProfileScreen.render',
+        extra: { profile_id: numericId },
+      });
+  const followingCount = profile?.followingCount === undefined
+    ? 0
+    : safeCount(profile.followingCount, {
+        field: 'followingCount',
+        source: 'PublicProfileScreen.render',
+        extra: { profile_id: numericId },
+      });
   const isFollowing = profile?.isFollowing ?? false;
 
   return (

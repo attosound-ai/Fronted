@@ -6,7 +6,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { CounterBadge } from '@/components/ui/CounterBadge';
 import { COLORS, SPACING } from '@/constants/theme';
-import { formatRelativeTime } from '@/utils/formatters';
+import { formatChatListTimestamp } from '@/utils/formatters';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import type { ChatConversation } from '../types';
 
@@ -70,7 +70,7 @@ function ConversationItemInner({
           </View>
           {conversation.lastMessageAt && (
             <Text variant="small" style={styles.time} maxFontSizeMultiplier={1.0}>
-              {formatRelativeTime(conversation.lastMessageAt)}
+              {formatChatListTimestamp(conversation.lastMessageAt)}
             </Text>
           )}
         </View>

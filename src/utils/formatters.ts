@@ -34,6 +34,47 @@ export function formatRelativeTime(dateString: string): string {
 }
 
 /**
+ * Chat-list timestamp à la iMessage / WhatsApp:
+ *   - Today          → time (e.g. "3:45 PM")
+ *   - Yesterday      → "Yesterday" (locale-translated)
+ *   - 2-6 days ago   → weekday name (e.g. "Tuesday")
+ *   - 7+ days ago    → locale short date (e.g. "4/21/26")
+ *
+ * Used in conversation list rows. Different from `formatRelativeTime`,
+ * which is the social-feed style ("5m", "3h", "2d") that doesn't apply
+ * here — Apple's chat convention is what users expect for messaging.
+ */
+export function formatChatListTimestamp(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTarget = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const daysAgo = Math.floor(
+    (startOfToday.getTime() - startOfTarget.getTime()) / 86400000,
+  );
+
+  const locale = getLocale();
+
+  if (daysAgo <= 0) {
+    return date.toLocaleTimeString(locale, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  if (daysAgo === 1) {
+    return i18n.getFixedT(locale, 'common')('time.yesterday');
+  }
+  if (daysAgo < 7) {
+    return date.toLocaleDateString(locale, { weekday: 'long' });
+  }
+  return date.toLocaleDateString(locale);
+}
+
+/**
  * Formats a large number using locale-aware compact notation
  */
 export function formatCount(count: number | undefined | null): string {

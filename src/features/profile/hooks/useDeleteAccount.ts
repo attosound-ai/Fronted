@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { useAuthStore } from '@/stores/authStore';
 import { useAccountStore } from '@/stores/accountStore';
 import { queryClient } from '@/lib/queryClient';
+import { analytics } from '@/lib/analytics';
 
 interface DeleteAccountParams {
   otpCode: string;
@@ -36,10 +37,22 @@ export function useDeleteAccount() {
       });
     },
     onSuccess: async () => {
+      analytics.capture('account_deleted', {});
       queryClient.clear();
       await clearAll();
       await logout();
       router.replace('/(auth)/welcome');
+    },
+    onError: (err: unknown) => {
+      const apiMessage = (err as {
+        response?: { data?: { error?: string }; status?: number };
+      })?.response?.data?.error;
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      analytics.capture('account_delete_failed', {
+        api_error: apiMessage ?? null,
+        status_code: status ?? null,
+        client_error: err instanceof Error ? err.message : null,
+      });
     },
   });
 

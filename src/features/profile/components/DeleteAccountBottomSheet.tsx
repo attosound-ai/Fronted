@@ -263,9 +263,17 @@ export function DeleteAccountBottomSheet({
                 })}
               </Text>
               <Text style={styles.deletingText}>
-                {t('deleteAccount.deleteFailedBody', {
-                  defaultValue: 'We could not delete your account. Please try again later.',
-                })}
+                {(() => {
+                  const apiMessage = (deleteError as {
+                    response?: { data?: { error?: string } };
+                  })?.response?.data?.error;
+                  if (apiMessage) return apiMessage;
+                  if (deleteError instanceof Error) return deleteError.message;
+                  return t('deleteAccount.deleteFailedBody', {
+                    defaultValue:
+                      'We could not delete your account. Please try again later.',
+                  });
+                })()}
               </Text>
               <TouchableOpacity onPress={handleClose} style={styles.continueButton}>
                 <Text style={styles.continueButtonText}>

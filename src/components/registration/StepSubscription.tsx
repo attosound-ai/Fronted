@@ -13,20 +13,14 @@ import {
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useStripe } from '@stripe/stripe-react-native';
-import {
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  Check,
-  AlertCircle,
-  Share2,
-} from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Check, AlertCircle, Share2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import type { PlanId } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { paymentService } from '@/lib/api/paymentService';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { getErrorMessage } from '@/utils/formatters';
 import { haptic } from '@/lib/haptics/hapticService';
 
@@ -285,7 +279,9 @@ function AvatarCard() {
             ) : (
               <>
                 <Share2 size={16} color="#000000" strokeWidth={2.25} />
-                <Text style={avatarStyles.sharePdfText}>{t('subscription.sharePdf')}</Text>
+                <Text style={avatarStyles.sharePdfText}>
+                  {t('subscription.sharePdf')}
+                </Text>
               </>
             )}
           </TouchableOpacity>
@@ -386,6 +382,17 @@ export const StepSubscription: React.FC<
         // Stripe payment succeeded but server confirmation failed.
       }
 
+      // Force-refresh the subscription store NOW so the home/profile
+      // screens render the new plan immediately. Without this the user
+      // sees "Connect (Free)" until some other event (AppState=active,
+      // account-switch, manual pull-to-refresh) eventually triggers a
+      // refetch — confusing and wrong for someone who just paid.
+      try {
+        await useSubscriptionStore.getState().fetchSubscription();
+      } catch {
+        // Non-fatal — initialize() / account-switch will catch up later.
+      }
+
       await onNext();
     } catch (error: unknown) {
       setPaymentError(getErrorMessage(error, t('common:errors.paymentFailed')));
@@ -412,24 +419,6 @@ export const StepSubscription: React.FC<
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"
       >
-        <View style={styles.headerRow}>
-          {onBack ? (
-            <TouchableOpacity
-              onPress={onBack}
-              style={styles.backButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.backButton} />
-          )}
-          <Text variant="h1" style={styles.title}>
-            {t('subscription.title')}
-          </Text>
-          <View style={styles.backButton} />
-        </View>
-
         <Text style={styles.subtitle}>{t('subscription.subtitle')}</Text>
 
         {PLANS.map((plan) => {

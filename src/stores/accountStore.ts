@@ -158,17 +158,31 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       // Unblock requests — they will now use the new token
       resumeRequests();
 
-      // End animation NOW — user sees the new account immediately
+      // Clear the previous account's subscription cache BEFORE fetching the
+      // new one. Otherwise the brief window between swap and fetch shows the
+      // stale subscription (e.g. user just paid for the managed creator,
+      // switched to it, but momentarily saw "Connect (Free)" from the
+      // representative's store).
+      const { useSubscriptionStore } = await import('./subscriptionStore');
+      useSubscriptionStore.getState().clear();
+
+      // Refresh the subscription BEFORE ending the animation. This trades
+      // ~200-400ms of switch latency for correctness — users never see a
+      // stale plan after switching. Other state (websocket, unread badge)
+      // can still be fire-and-forget below.
+      try {
+        await useSubscriptionStore.getState().fetchSubscription();
+      } catch {
+        // Non-fatal; the empty/cleared store will resolve to defaults.
+      }
+
+      // End animation NOW — user sees the new account with the right plan
       useAccountSwitchAnimationStore.getState().endFlip();
 
       // ── Phase B: Fire-and-forget background sync ──
       // Tokens are fresh from switchAccount(), so these calls won't trigger
       // 401 cascades that previously nuked the session.
       Promise.allSettled([
-        // Refresh subscription
-        import('./subscriptionStore').then(({ useSubscriptionStore }) =>
-          useSubscriptionStore.getState().fetchSubscription()
-        ),
         // Reconnect WebSocket (non-blocking)
         import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
           phoenixSocket.disconnect();

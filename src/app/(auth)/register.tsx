@@ -16,6 +16,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { mediaService } from '@/lib/media/mediaService';
 import { showToast } from '@/components/ui/Toast';
 import { ProgressBar } from '@/components/ui';
+import { Text } from '@/components/ui/Text';
 import type { Role } from '@/types';
 import type { RegistrationWizardState, RegistrationAction } from '@/types/registration';
 
@@ -90,8 +91,30 @@ function wizardReducer(
   }
 }
 
+// Title shown in the top bar inline with the back arrow, per step number.
+// Steps that have no single-title header (e.g. multi-mode screens) map to
+// null and the top bar renders only the arrow + (optional) progress bar.
+const STEP_TITLE_KEYS: Record<number, string | null> = {
+  1: 'registration:basicInfo.title',
+  2: 'registration:name.title',
+  3: 'registration:dateOfBirth.title',
+  4: 'registration:credentials.title',
+  5: 'registration:otp.title',
+  6: null, // StepProfileSetup — no static title (rep-question variant)
+  7: 'registration:creatorInmate.title',
+  8: 'registration:howItWorks.title',
+  9: 'registration:consentForm.title',
+  10: 'registration:creatorAccountSetup.title',
+  11: 'registration:creatorAccountSetup.passwordTitle',
+  12: 'registration:creatorAccountSetup.profileTitle',
+  13: 'registration:creatorTypes.title',
+  14: 'registration:creatorGenres.title',
+  15: 'registration:subscription.title',
+  16: 'registration:bridgeNumber.title',
+};
+
 export default function RegisterScreen() {
-  const { t, i18n } = useTranslation('common');
+  const { t, i18n } = useTranslation(['common', 'registration']);
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isCreatorMode = mode === 'creator';
@@ -553,26 +576,43 @@ export default function RegisterScreen() {
     }
   };
 
-  const canGoBack = currentStep > 1;
+  // The back arrow is always present so the user can leave the flow at
+  // any step. On step 1 there's nowhere to go back within the wizard, so
+  // we exit to the previous route (typically login).
+  const handleBackPress = () => {
+    if (currentStep > 1) {
+      goBack();
+    } else {
+      router.back();
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        {canGoBack ? (
-          <TouchableOpacity
-            onPress={goBack}
-            style={styles.backButton}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.backPlaceholder} />
-        )}
-        {isRepFlow && (
+        <TouchableOpacity
+          onPress={handleBackPress}
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        {isRepFlow ? (
           <View style={styles.progressBarWrapper}>
             <ProgressBar steps={REP_TOTAL} currentStep={repStep} />
           </View>
+        ) : (
+          STEP_TITLE_KEYS[currentStep] && (
+            <Text
+              variant="h2"
+              style={styles.topBarTitle}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.1}
+            >
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {t(STEP_TITLE_KEYS[currentStep] as any)}
+            </Text>
+          )
         )}
       </View>
       {renderStep()}
@@ -605,5 +645,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     marginRight: 48,
+  },
+  topBarTitle: {
+    flex: 1,
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 });

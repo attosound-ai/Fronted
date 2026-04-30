@@ -63,9 +63,6 @@ export function StepCreatorGenres({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="always"
     >
-      <Text variant="h2" style={styles.title}>
-        {t('creatorGenres.title')}
-      </Text>
       <Text variant="body" style={styles.subtitle}>
         {t('creatorGenres.subtitle')}
       </Text>
@@ -99,10 +96,7 @@ export function StepCreatorGenres({
                   >
                     <Text
                       variant="body"
-                      style={[
-                        styles.chipText,
-                        selected && styles.chipTextSelected,
-                      ]}
+                      style={[styles.chipText, selected && styles.chipTextSelected]}
                     >
                       {t(genre.labelKey)}
                     </Text>

@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
@@ -22,22 +21,6 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="always"
     >
-      {/* Header */}
-      <View style={styles.header}>
-        {onBack && (
-          <TouchableOpacity
-            onPress={onBack}
-            style={styles.backButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        )}
-        <Text variant="h1" style={styles.title} numberOfLines={2}>
-          {t('howItWorks.title')}
-        </Text>
-      </View>
-
       {/* Main content */}
       <Text style={styles.paragraph}>{t('howItWorks.paragraph')}</Text>
 

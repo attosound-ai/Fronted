@@ -1,10 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+import { View, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { AlertCircle, CheckCircle, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -40,8 +35,14 @@ export function StepCreatorBasicInfo({
   const checkEmail = useCallback((email: string) => {
     if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
     const cleaned = email.trim().toLowerCase();
-    if (!cleaned) { setEmailStatus('idle'); return; }
-    if (!isValidEmail(cleaned)) { setEmailStatus('invalid'); return; }
+    if (!cleaned) {
+      setEmailStatus('idle');
+      return;
+    }
+    if (!isValidEmail(cleaned)) {
+      setEmailStatus('invalid');
+      return;
+    }
     if (cleaned === lastCheckedEmailRef.current) return;
     setEmailStatus('checking');
     emailDebounceRef.current = setTimeout(async () => {
@@ -54,7 +55,10 @@ export function StepCreatorBasicInfo({
   // Debounced phone availability check
   const checkPhone = useCallback((countryCode: string, phone: string) => {
     if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current);
-    if (!phone.trim()) { setPhoneStatus('idle'); return; }
+    if (!phone.trim()) {
+      setPhoneStatus('idle');
+      return;
+    }
     const fullPhone = `${countryCode}${phone.trim()}`;
     if (fullPhone === lastCheckedPhoneRef.current) return;
     setPhoneStatus('checking');
@@ -71,20 +75,28 @@ export function StepCreatorBasicInfo({
 
   useEffect(() => {
     checkEmail(state.creatorEmail);
-    return () => { if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current); };
+    return () => {
+      if (emailDebounceRef.current) clearTimeout(emailDebounceRef.current);
+    };
   }, [state.creatorEmail, checkEmail]);
 
   useEffect(() => {
     checkPhone(state.creatorPhoneCountryCode, state.creatorPhoneNumber);
-    return () => { if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current); };
+    return () => {
+      if (phoneDebounceRef.current) clearTimeout(phoneDebounceRef.current);
+    };
   }, [state.creatorPhoneCountryCode, state.creatorPhoneNumber, checkPhone]);
 
   const emailOk = state.creatorEmail.trim() === '' || emailStatus === 'available';
   const phoneOk = state.creatorPhoneNumber.trim() === '' || phoneStatus === 'available';
-  const canContinue = emailOk && phoneOk && emailStatus !== 'checking' && phoneStatus !== 'checking';
+  const canContinue =
+    emailOk && phoneOk && emailStatus !== 'checking' && phoneStatus !== 'checking';
 
   const handleContinue = () => {
-    if (!canContinue) { haptic('error'); return; }
+    if (!canContinue) {
+      haptic('error');
+      return;
+    }
     haptic('light');
     onNext();
   };
@@ -92,18 +104,52 @@ export function StepCreatorBasicInfo({
   const renderEmailStatus = () => {
     switch (emailStatus) {
       case 'checking':
-        return <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailChecking')}</Text></View>;
+        return (
+          <View style={styles.statusRow}>
+            <ActivityIndicator size="small" color="#888888" />
+            <Text variant="small" style={styles.statusMuted}>
+              {t('creatorAccountSetup.emailChecking')}
+            </Text>
+          </View>
+        );
       case 'available':
-        return <View style={styles.statusRow}><CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} /><Text variant="small" style={styles.statusWhite}>{t('creatorAccountSetup.emailAvailable')}</Text></View>;
+        return (
+          <View style={styles.statusRow}>
+            <CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} />
+            <Text variant="small" style={styles.statusWhite}>
+              {t('creatorAccountSetup.emailAvailable')}
+            </Text>
+          </View>
+        );
       case 'taken':
-        return <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailTaken')}</Text></View>;
+        return (
+          <View style={styles.statusRow}>
+            <XCircle size={16} color="#888888" strokeWidth={2.25} />
+            <Text variant="small" style={styles.statusMuted}>
+              {t('creatorAccountSetup.emailTaken')}
+            </Text>
+          </View>
+        );
       case 'invalid':
-        return <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailInvalid')}</Text></View>;
-      default: return null;
+        return (
+          <View style={styles.statusRow}>
+            <XCircle size={16} color="#888888" strokeWidth={2.25} />
+            <Text variant="small" style={styles.statusMuted}>
+              {t('creatorAccountSetup.emailInvalid')}
+            </Text>
+          </View>
+        );
+      default:
+        return null;
     }
   };
 
-  const emailBorder = emailStatus === 'available' ? '#FFFFFF' : emailStatus === 'taken' || emailStatus === 'invalid' ? '#888888' : '#222222';
+  const emailBorder =
+    emailStatus === 'available'
+      ? '#FFFFFF'
+      : emailStatus === 'taken' || emailStatus === 'invalid'
+        ? '#888888'
+        : '#222222';
 
   return (
     <KeyboardAwareScrollView
@@ -114,36 +160,46 @@ export function StepCreatorBasicInfo({
       bottomOffset={16}
       showsVerticalScrollIndicator={false}
     >
-      <Text variant="h2" style={styles.title}>{t('creatorAccountSetup.title')}</Text>
-      <Text variant="body" style={styles.subtitle}>{t('creatorAccountSetup.subtitle')}</Text>
+      <Text variant="body" style={styles.subtitle}>
+        {t('creatorAccountSetup.subtitle')}
+      </Text>
 
       {apiError && (
         <View style={styles.errorBanner}>
           <AlertCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
-          <Text variant="small" style={styles.errorBannerText}>{apiError}</Text>
+          <Text variant="small" style={styles.errorBannerText}>
+            {apiError}
+          </Text>
         </View>
       )}
 
       <View style={styles.formArea}>
         {/* Creator Name (read-only) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.nameLabel')}</Text>
+          <Text variant="small" style={styles.label}>
+            {t('creatorAccountSetup.nameLabel')}
+          </Text>
           <View style={[styles.inputWrapper, styles.readOnlyInput]}>
             <TextInput
               value={state.creatorName}
               editable={false}
               style={[styles.textInput, styles.readOnlyText]}
+              maxFontSizeMultiplier={1.0}
             />
           </View>
         </View>
 
         {/* Email (optional) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.emailLabel')}</Text>
+          <Text variant="small" style={styles.label}>
+            {t('creatorAccountSetup.emailLabel')}
+          </Text>
           <View style={[styles.inputWrapper, { borderColor: emailBorder }]}>
             <TextInput
               value={state.creatorEmail}
-              onChangeText={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorEmail', value: v.trim() })}
+              onChangeText={(v) =>
+                dispatch({ type: 'UPDATE_FIELD', field: 'creatorEmail', value: v.trim() })
+              }
               placeholder={t('creatorAccountSetup.emailPlaceholder')}
               placeholderTextColor="#666666"
               style={styles.textInput}
@@ -152,31 +208,63 @@ export function StepCreatorBasicInfo({
               autoComplete="email"
               textContentType="emailAddress"
               keyboardType="email-address"
+              maxFontSizeMultiplier={1.0}
             />
-            {emailStatus === 'available' && <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />}
-            {(emailStatus === 'taken' || emailStatus === 'invalid') && <XCircle size={20} color="#888888" strokeWidth={2.25} />}
-            {emailStatus === 'checking' && <ActivityIndicator size="small" color="#888888" />}
+            {emailStatus === 'available' && (
+              <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
+            )}
+            {(emailStatus === 'taken' || emailStatus === 'invalid') && (
+              <XCircle size={20} color="#888888" strokeWidth={2.25} />
+            )}
+            {emailStatus === 'checking' && (
+              <ActivityIndicator size="small" color="#888888" />
+            )}
           </View>
           {renderEmailStatus()}
         </View>
 
         {/* Phone (optional) */}
         <View>
-          <Text variant="small" style={styles.label}>{t('creatorAccountSetup.phoneLabel')}</Text>
+          <Text variant="small" style={styles.label}>
+            {t('creatorAccountSetup.phoneLabel')}
+          </Text>
           <PhoneInput
             countryCode={state.creatorPhoneCountryCode}
             phoneNumber={state.creatorPhoneNumber}
-            onCountryCodeChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorPhoneCountryCode', value: v })}
-            onPhoneNumberChange={(v) => dispatch({ type: 'UPDATE_FIELD', field: 'creatorPhoneNumber', value: v })}
+            onCountryCodeChange={(v) =>
+              dispatch({
+                type: 'UPDATE_FIELD',
+                field: 'creatorPhoneCountryCode',
+                value: v,
+              })
+            }
+            onPhoneNumberChange={(v) =>
+              dispatch({ type: 'UPDATE_FIELD', field: 'creatorPhoneNumber', value: v })
+            }
           />
           {phoneStatus === 'checking' && (
-            <View style={styles.statusRow}><ActivityIndicator size="small" color="#888888" /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.emailChecking')}</Text></View>
+            <View style={styles.statusRow}>
+              <ActivityIndicator size="small" color="#888888" />
+              <Text variant="small" style={styles.statusMuted}>
+                {t('creatorAccountSetup.emailChecking')}
+              </Text>
+            </View>
           )}
           {phoneStatus === 'taken' && (
-            <View style={styles.statusRow}><XCircle size={16} color="#888888" strokeWidth={2.25} /><Text variant="small" style={styles.statusMuted}>{t('creatorAccountSetup.phoneTaken')}</Text></View>
+            <View style={styles.statusRow}>
+              <XCircle size={16} color="#888888" strokeWidth={2.25} />
+              <Text variant="small" style={styles.statusMuted}>
+                {t('creatorAccountSetup.phoneTaken')}
+              </Text>
+            </View>
           )}
           {phoneStatus === 'available' && (
-            <View style={styles.statusRow}><CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} /><Text variant="small" style={styles.statusWhite}>{t('creatorAccountSetup.emailAvailable')}</Text></View>
+            <View style={styles.statusRow}>
+              <CheckCircle size={16} color="#FFFFFF" strokeWidth={2.25} />
+              <Text variant="small" style={styles.statusWhite}>
+                {t('creatorAccountSetup.emailAvailable')}
+              </Text>
+            </View>
           )}
         </View>
 
@@ -196,14 +284,45 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   title: { color: '#FFFFFF', textAlign: 'center', marginTop: 24, marginBottom: 4 },
   subtitle: { color: '#888888', textAlign: 'center', marginBottom: 24 },
-  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginHorizontal: 24, marginBottom: 12 },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 24,
+    marginBottom: 12,
+  },
   errorBannerText: { color: '#FFFFFF', flex: 1 },
   formArea: { paddingHorizontal: 24, gap: 20 },
   label: { color: '#888888', marginBottom: 6 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111111', borderRadius: 8, borderWidth: 1, borderColor: '#222222', paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111111',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#222222',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 8,
+  },
   readOnlyInput: { backgroundColor: '#0A0A0A', borderColor: '#1A1A1A' },
   readOnlyText: { color: '#888888' },
-  textInput: { color: '#FFFFFF', fontSize: 16, fontFamily: 'Archivo_400Regular', padding: 0, flex: 1 },
+  textInput: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Archivo_400Regular',
+    padding: 0,
+    flex: 1,
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   statusMuted: { color: '#888888' },
   statusWhite: { color: '#FFFFFF' },

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { ChevronLeft, AlertCircle } from 'lucide-react-native';
+import { AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { StepProps } from '@/types/registration';
 import type { InmateLookupResponse } from '@/types';
@@ -103,22 +103,6 @@ export function StepCreatorInmate({
         keyboardDismissMode="on-drag"
         bottomOffset={16}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          {onBack && (
-            <TouchableOpacity
-              onPress={onBack}
-              style={styles.backButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <ChevronLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-            </TouchableOpacity>
-          )}
-          <Text variant="h1" style={styles.title}>
-            {t('creatorInmate.title')}
-          </Text>
-        </View>
-
         <Text variant="body" style={styles.subtitle}>
           {t('creatorInmate.subtitle')}
         </Text>

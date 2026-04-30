@@ -94,9 +94,6 @@ export function StepCreatorTypes({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="always"
     >
-      <Text variant="h2" style={styles.title}>
-        {t('creatorTypes.title')}
-      </Text>
       <Text variant="body" style={styles.subtitle}>
         {t('creatorTypes.subtitle')}
       </Text>

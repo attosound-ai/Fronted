@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { View, StyleSheet, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { ArrowLeft, AlertCircle } from 'lucide-react-native';
+import { AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button } from '@/components/ui';
@@ -53,22 +53,8 @@ export function StepName({
         keyboardDismissMode="on-drag"
         bottomOffset={16}
       >
-        {/* Header */}
+        {/* Subtitle (title is rendered by parent topBar) */}
         <View style={styles.header}>
-          <View style={styles.headerRow}>
-            {onBack && (
-              <TouchableOpacity
-                onPress={onBack}
-                style={styles.backButton}
-                activeOpacity={0.7}
-              >
-                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-              </TouchableOpacity>
-            )}
-            <Text variant="h2" style={styles.title}>
-              {t('name.title')}
-            </Text>
-          </View>
           <Text variant="body" style={styles.subtitle}>
             {t('name.subtitle')}
           </Text>
@@ -100,6 +86,7 @@ export function StepName({
               returnKeyType="done"
               onSubmitEditing={handleNext}
               style={[styles.nameInput, error ? styles.nameInputError : null]}
+              maxFontSizeMultiplier={1.0}
             />
             {error ? (
               <Text variant="small" style={styles.inputError}>
@@ -190,6 +177,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
     borderWidth: 1,
     borderColor: '#222222',
+    // Pin lineHeight: iOS computes intrinsic input height from the OS
+    // fontScale BEFORE applying maxFontSizeMultiplier — so without these
+    // the box grows tall under Larger Text even though the text is capped.
+    lineHeight: 20,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   nameInputError: {
     borderColor: '#EF4444',

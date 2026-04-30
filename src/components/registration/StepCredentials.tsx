@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Linking, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { ArrowLeft, AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
+import { AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, Input, Checkbox } from '@/components/ui';
@@ -72,24 +72,6 @@ export function StepCredentials({
         keyboardDismissMode="on-drag"
         bottomOffset={16}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerRow}>
-            {onBack && (
-              <TouchableOpacity
-                onPress={onBack}
-                style={styles.backButton}
-                activeOpacity={0.7}
-              >
-                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-              </TouchableOpacity>
-            )}
-            <Text variant="h2" style={styles.title}>
-              {t('credentials.title')}
-            </Text>
-          </View>
-        </View>
-
         {/* API Error Banner */}
         {apiError && (
           <View style={styles.errorBanner}>

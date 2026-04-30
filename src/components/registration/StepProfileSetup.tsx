@@ -69,9 +69,7 @@ export function StepProfileSetup({
     const baseNoSep = normalized.replaceAll(/\s+/g, '');
     const rand = Math.floor(Math.random() * 100);
     const rand2 = Math.floor(Math.random() * 1000);
-    return [
-      ...new Set([base, baseUnderscore, `${baseNoSep}${rand}`, `${base}${rand2}`]),
-    ]
+    return [...new Set([base, baseUnderscore, `${baseNoSep}${rand}`, `${base}${rand2}`])]
       .filter((s) => isValidUsername(s))
       .slice(0, 4);
   }, [state.name]);
@@ -268,7 +266,9 @@ export function StepProfileSetup({
         {/* Username (@handle) */}
         <View>
           <View style={[styles.usernameWrapper, { borderColor: usernameBorderColor }]}>
-            <Text style={styles.atPrefix}>@</Text>
+            <Text style={styles.atPrefix} maxFontSizeMultiplier={1.0}>
+              @
+            </Text>
             <TextInput
               value={state.username}
               onChangeText={handleUsernameChange}
@@ -278,6 +278,7 @@ export function StepProfileSetup({
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
+              maxFontSizeMultiplier={1.0}
             />
             {usernameStatus === 'available' && (
               <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
@@ -318,7 +319,6 @@ export function StepProfileSetup({
                 </ScrollView>
               </View>
             )}
-
         </View>
 
         {/* Done button */}
@@ -362,7 +362,12 @@ export function StepProfileSetup({
       </BottomSheet>
 
       {/* Representative Question Bottom Sheet */}
-      <BottomSheet visible={!!showRepQuestion} onClose={() => { onRepChoice?.('listener'); }}>
+      <BottomSheet
+        visible={!!showRepQuestion}
+        onClose={() => {
+          onRepChoice?.('listener');
+        }}
+      >
         <View style={styles.repContent}>
           <Text variant="h2" style={styles.repTitle}>
             {t('profileSetup.repQuestion')}
@@ -397,9 +402,7 @@ export function StepProfileSetup({
               disabled={isLoading}
               style={styles.creatorLink}
             >
-              <Text style={styles.creatorLinkText}>
-                {t('profileSetup.iAmCreator')}
-              </Text>
+              <Text style={styles.creatorLinkText}>{t('profileSetup.iAmCreator')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -520,6 +523,7 @@ const styles = StyleSheet.create({
     color: '#888888',
     fontSize: 16,
     fontFamily: 'Archivo_500Medium',
+    lineHeight: 22,
   },
   usernameInput: {
     flex: 1,
@@ -527,6 +531,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Archivo_400Regular',
     padding: 0,
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   statusRow: {
     flexDirection: 'row',

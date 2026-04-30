@@ -9,8 +9,15 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import { KeyboardAwareScrollView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
-import ReAnimated, { useAnimatedStyle, interpolate, Extrapolation } from 'react-native-reanimated';
+import {
+  KeyboardAwareScrollView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import ReAnimated, {
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 import { AlertCircle, Camera, Images, CheckCircle, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -44,7 +51,7 @@ export function StepCreatorProfile({
       kbHeight.value,
       [0, -250],
       [baseAvatarSize, shrunkSize],
-      Extrapolation.CLAMP,
+      Extrapolation.CLAMP
     );
     return {
       width: size,
@@ -179,9 +186,6 @@ export function StepCreatorProfile({
       bottomOffset={80}
       showsVerticalScrollIndicator={false}
     >
-      <Text variant="h2" style={styles.title}>
-        {t('creatorAccountSetup.profileTitle')}
-      </Text>
       <Text variant="body" style={styles.subtitle}>
         {t('creatorAccountSetup.profileSubtitle')}
       </Text>
@@ -205,10 +209,18 @@ export function StepCreatorProfile({
           {state.creatorAvatarUri ? (
             <Image
               source={{ uri: state.creatorAvatarUri }}
-              style={[styles.avatarCircle, { width: '100%', height: '100%', borderRadius: avatarSize }]}
+              style={[
+                styles.avatarCircle,
+                { width: '100%', height: '100%', borderRadius: avatarSize },
+              ]}
             />
           ) : (
-            <View style={[styles.avatarPlaceholder, { width: '100%', height: '100%', borderRadius: avatarSize }]}>
+            <View
+              style={[
+                styles.avatarPlaceholder,
+                { width: '100%', height: '100%', borderRadius: avatarSize },
+              ]}
+            >
               <Camera size={56} color="#666666" strokeWidth={2.25} />
             </View>
           )}
@@ -222,7 +234,9 @@ export function StepCreatorProfile({
         {/* Username */}
         <View>
           <View style={[styles.usernameWrapper, { borderColor: borderFor }]}>
-            <Text style={styles.atPrefix}>@</Text>
+            <Text style={styles.atPrefix} maxFontSizeMultiplier={1.0}>
+              @
+            </Text>
             <TextInput
               value={state.creatorUsername}
               onChangeText={handleUsernameChange}
@@ -232,6 +246,7 @@ export function StepCreatorProfile({
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
+              maxFontSizeMultiplier={1.0}
             />
             {usernameStatus === 'available' && (
               <CheckCircle size={20} color="#FFFFFF" strokeWidth={2.25} />
@@ -372,7 +387,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   errorBannerText: { color: '#FFFFFF', flex: 1 },
-  avatarSection: { alignItems: 'center', alignSelf: 'center', paddingTop: 12, paddingBottom: 8 },
+  avatarSection: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
   avatarTouchable: { position: 'relative', width: '100%', aspectRatio: 1 },
   avatarCircle: {
     width: 260,
@@ -435,13 +455,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 4,
   },
-  atPrefix: { color: '#888888', fontSize: 16, fontFamily: 'Archivo_500Medium' },
+  atPrefix: {
+    color: '#888888',
+    fontSize: 16,
+    fontFamily: 'Archivo_500Medium',
+    lineHeight: 22,
+  },
   usernameInput: {
     flex: 1,
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Archivo_400Regular',
     padding: 0,
+    lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
   statusMuted: { color: '#888888' },

@@ -31,7 +31,9 @@ export default function CallScreen() {
     if (activeCall?.state === 'connected') {
       const canRecord = useSubscriptionStore.getState().hasEntitlement('record_upload');
       if (canRecord) {
-        const hasPro = useSubscriptionStore.getState().hasEntitlement('advanced_production');
+        const hasPro = useSubscriptionStore
+          .getState()
+          .hasEntitlement('advanced_production');
         if (!hasPro) {
           // record plan: dismiss call modal, then navigate to recording inside tabs
           if (router.canDismiss()) router.dismiss();

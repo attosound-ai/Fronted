@@ -140,11 +140,8 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"
       >
-        {/* Header */}
+        {/* Subtitle (title is rendered by parent topBar) */}
         <View style={styles.header}>
-          <Text variant="h1" style={styles.title}>
-            {t('bridgeNumber.title')}
-          </Text>
           <Text style={styles.subtitle}>{t('bridgeNumber.subtitle')}</Text>
         </View>
 
@@ -273,7 +270,10 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
                 ? t('bridgeNumber.assigningButton')
                 : t('common:buttons.continue')
             }
-            onPress={() => { haptic('light'); onNext(); }}
+            onPress={() => {
+              haptic('light');
+              onNext();
+            }}
             disabled={isLoading || provisioning}
             loading={isLoading || provisioning}
           />

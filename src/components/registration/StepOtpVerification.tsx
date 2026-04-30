@@ -201,10 +201,6 @@ export function StepOtpVerification({
         bottomOffset={16}
         showsVerticalScrollIndicator={false}
       >
-        <Text variant="h2" style={styles.title}>
-          {t('otp.title')}
-        </Text>
-
         {/* Tappable masked identifier with edit hint */}
         <TouchableOpacity
           style={styles.destinationsRow}

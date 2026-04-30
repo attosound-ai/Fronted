@@ -43,12 +43,7 @@ export function useMessageActions(conversationId: string) {
   const editMessage = useCallback(
     async (messageId: string, newContent: string) => {
       if (!userId) return;
-      const uid = String(userId);
 
-      // Snapshot for rollback
-      const snapshot = queryClient.getQueryData(QUERY_KEYS.MESSAGES.CHAT(conversationId));
-
-      // Optimistic update
       updateMessage(messageId, (m) => ({
         ...m,
         content: newContent,
@@ -62,8 +57,10 @@ export function useMessageActions(conversationId: string) {
         try {
           await messageService.editMessage(conversationId, messageId, newContent);
         } catch {
-          // Rollback
-          queryClient.setQueryData(QUERY_KEYS.MESSAGES.CHAT(conversationId), snapshot);
+          // Refetch from server — authoritative truth, survives any optimistic drift.
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
+          });
         }
       }
     },
@@ -74,9 +71,6 @@ export function useMessageActions(conversationId: string) {
     async (messageId: string) => {
       if (!userId) return;
 
-      const snapshot = queryClient.getQueryData(QUERY_KEYS.MESSAGES.CHAT(conversationId));
-
-      // Optimistic: mark as deleted
       updateMessage(messageId, (m) => ({
         ...m,
         isDeleted: true,
@@ -89,7 +83,9 @@ export function useMessageActions(conversationId: string) {
         try {
           await messageService.deleteMessage(conversationId, messageId);
         } catch {
-          queryClient.setQueryData(QUERY_KEYS.MESSAGES.CHAT(conversationId), snapshot);
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
+          });
         }
       }
     },

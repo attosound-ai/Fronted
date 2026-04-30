@@ -336,9 +336,13 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
         viewabilityConfig={viewabilityConfig.current}
         onViewableItemsChanged={onViewableItemsChanged.current}
         removeClippedSubviews
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        initialNumToRender={5}
+        // Each video card holds an expo-video player + buffer. windowSize=7
+        // kept ~7 players resident at once and pushed RAM past 1.5 GB on
+        // long scrolls. windowSize=3 means the visible card + one above +
+        // one below — enough for smooth scroll with bounded memory.
+        maxToRenderPerBatch={3}
+        windowSize={3}
+        initialNumToRender={3}
         updateCellsBatchingPeriod={100}
         ItemSeparatorComponent={ItemSeparator}
       />

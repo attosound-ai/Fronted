@@ -21,10 +21,7 @@ import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet
 import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
 import { useInteractions } from '@/features/feed/hooks/useInteractions';
 import { useFollowFeed } from '@/features/feed/hooks/useFollowFeed';
-import {
-  usePostFeed,
-  type PostFeedSource,
-} from '@/features/feed/hooks/usePostFeed';
+import { usePostFeed, type PostFeedSource } from '@/features/feed/hooks/usePostFeed';
 import { feedService } from '@/features/feed/services/feedService';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -115,21 +112,14 @@ export default function PostDetailScreen() {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
 
-  const {
-    posts,
-    isLoading,
-    isFetchingMore,
-    hasMore,
-    loadMore,
-    refresh,
-    isRefreshing,
-  } = usePostFeed({
-    initialPostId: id,
-    source,
-    sourceUserId,
-    sourceQuery,
-    sourceContentType,
-  });
+  const { posts, isLoading, isFetchingMore, hasMore, loadMore, refresh, isRefreshing } =
+    usePostFeed({
+      initialPostId: id,
+      source,
+      sourceUserId,
+      sourceQuery,
+      sourceContentType,
+    });
 
   const feedPosts = useMemo<FeedPost[]>(
     () =>
@@ -153,7 +143,9 @@ export default function PostDetailScreen() {
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       const next = new Set(
-        viewableItems.map((v) => (v.item as FeedPost | null)?.id).filter(Boolean) as string[]
+        viewableItems
+          .map((v) => (v.item as FeedPost | null)?.id)
+          .filter(Boolean) as string[]
       );
       visibleIdsRef.current = next;
       setTimeout(() => setVisibleIds(next), 0);
@@ -266,10 +258,7 @@ export default function PostDetailScreen() {
     );
   }, [isFetchingMore]);
 
-  const ItemSeparator = useCallback(
-    () => <View style={styles.separator} />,
-    []
-  );
+  const ItemSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
@@ -313,9 +302,10 @@ export default function PostDetailScreen() {
             />
           }
           // Virtualization tuning — mirrors FeedList for consistency.
+          // windowSize=3 keeps RAM bounded for video-heavy feeds.
           removeClippedSubviews
-          maxToRenderPerBatch={5}
-          windowSize={7}
+          maxToRenderPerBatch={3}
+          windowSize={3}
           initialNumToRender={3}
           updateCellsBatchingPeriod={100}
           scrollEventThrottle={16}

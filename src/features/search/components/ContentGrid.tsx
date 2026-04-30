@@ -1,11 +1,4 @@
-import {
-  FlatList,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Music, Film, FileText, Play } from 'lucide-react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
@@ -66,7 +59,11 @@ function GridCell({
   };
 
   return (
-    <TouchableOpacity style={[styles.cell, { width: cellSize, height: cellSize }]} onPress={handlePress} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={[styles.cell, { width: cellSize, height: cellSize }]}
+      onPress={handlePress}
+      activeOpacity={0.85}
+    >
       {thumbnail ? (
         <Image source={{ uri: thumbnail }} style={styles.cellImage} resizeMode="cover" />
       ) : isText && textPreview ? (
@@ -120,6 +117,10 @@ export function ContentGrid({
       ListFooterComponent={ListFooterComponent}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
+      removeClippedSubviews
+      maxToRenderPerBatch={9}
+      windowSize={5}
+      initialNumToRender={9}
     />
   );
 }

@@ -27,6 +27,12 @@ export function useReelsFeed() {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
     enabled: isAuthenticated,
     staleTime: 30_000,
+    // Bounded page retention: TanStack Query keeps every fetched page in
+    // memory until gcTime expires. Without maxPages, scrolling 200 reels
+    // pinned ~200 reel objects + their cloudinary URLs in cache. 5 pages
+    // (~100 items) is plenty for a smooth back-scroll without the leak.
+    maxPages: 5,
+    gcTime: 5 * 60_000,
   });
 
   const posts = data?.pages.flatMap((page) => page.data) ?? [];

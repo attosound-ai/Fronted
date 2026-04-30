@@ -41,18 +41,21 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
     });
   };
 
+  const isCreator = user.role === 'creator';
+
   return (
     <View style={styles.bubble}>
       <View style={styles.avatarContainer}>
         <TouchableOpacity
           onPress={handleProfilePress}
           activeOpacity={0.8}
-          style={[
-            styles.avatarWrapper,
-            user.role === 'creator' && styles.avatarWrapperCreator,
-          ]}
+          // Non-creators keep the subtle dark outline; creators get the
+          // metallic GoldRing rendered by <Avatar creatorRing> so the
+          // shade matches the CreatorBadge star and the post bottom
+          // border (all driven by GOLD_FILL_STOPS in constants/gold.ts).
+          style={!isCreator ? styles.avatarWrapper : undefined}
         >
-          <Avatar uri={user.avatar} size="lg" />
+          <Avatar uri={user.avatar} size="lg" creatorRing={isCreator} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -146,10 +149,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#2a2a2a',
     borderRadius: 32,
-  },
-  avatarWrapperCreator: {
-    borderWidth: 2,
-    borderColor: '#D4AF37',
   },
   followBadge: {
     position: 'absolute',

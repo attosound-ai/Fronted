@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     borderRadius: 6,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     marginRight: 8,
     alignSelf: 'center',
     alignItems: 'center',
@@ -257,8 +257,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontFamily: 'Archivo_700Bold',
     fontSize: 13,
-    lineHeight: 16,
+    // Slightly larger than fontSize so the patched Archivo descender
+    // (project_archivo_font_patch — descender -420) has room and the
+    // glyph sits at the optical centre of the pill instead of riding
+    // high. Stays tight enough that the button height barely grows
+    // (~2pt) and accessibility caps still apply via maxFontSizeMultiplier.
+    lineHeight: 18,
     includeFontPadding: false,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   spacer: {
     flex: 1,

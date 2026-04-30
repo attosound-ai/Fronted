@@ -110,19 +110,24 @@ export function PostActions({
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity onPress={onShowSupport} activeOpacity={0.7}>
-        <View style={styles.heartContainer}>
-          <Heart size={36} color="#FFF" strokeWidth={2.25} />
-          <View style={styles.dollarStroke} />
-          <Text
-            style={styles.heartS}
-            maxFontSizeMultiplier={1.0}
-            allowFontScaling={false}
-          >
-            S
-          </Text>
-        </View>
-      </TouchableOpacity>
+      {/* Donate button is only meaningful on creator posts — listeners
+          and representatives don't accept tips, so the button is hidden
+          for them. */}
+      {post.author.role === 'creator' && (
+        <TouchableOpacity onPress={onShowSupport} activeOpacity={0.7}>
+          <View style={styles.heartContainer}>
+            <Heart size={36} color="#FFF" strokeWidth={2.25} />
+            <View style={styles.dollarStroke} />
+            <Text
+              style={styles.heartS}
+              maxFontSizeMultiplier={1.0}
+              allowFontScaling={false}
+            >
+              S
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

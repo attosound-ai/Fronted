@@ -15,11 +15,7 @@
  */
 
 import { useMemo, useCallback, useEffect } from 'react';
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { apiClient } from '@/lib/api/client';
@@ -138,6 +134,8 @@ export function usePostFeed({
     initialPageParam: undefined,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled: source === 'profile' && !!sourceUserId,
+    maxPages: 5,
+    gcTime: 5 * 60_000,
   });
 
   // ── source: bookmarks ───────────────────────────────────────────────────
@@ -170,6 +168,10 @@ export function usePostFeed({
     initialPageParam: undefined,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled: source === 'feed',
+    // See note in useReelsFeed.ts — bound page retention to keep RAM in
+    // check on long scrolls.
+    maxPages: 5,
+    gcTime: 5 * 60_000,
   });
 
   // ── source: search ──────────────────────────────────────────────────────

@@ -184,7 +184,9 @@ export function OtpInput({
                 index === value.length ? styles.cellActive : null,
               ]}
             >
-              <Text style={styles.cellText}>{digits[index]}</Text>
+              <Text style={styles.cellText} maxFontSizeMultiplier={1.0}>
+                {digits[index]}
+              </Text>
             </View>
           ))}
         </Animated.View>
@@ -255,6 +257,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
     textAlign: 'center',
+    // Archivo TTFs in this project ship with a patched descender (-420)
+    // so the natural glyph box at fontSize 20 exceeds 20pt. Without an
+    // explicit lineHeight large enough to fit the full descender, the
+    // bottom of digits gets clipped inside the fixed-height cell.
+    lineHeight: 30,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   error: {
     color: '#FFFFFF',

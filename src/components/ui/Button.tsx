@@ -65,6 +65,8 @@ export function Button({
             styles[`${variant}Text` as keyof typeof styles] as TextStyle,
             styles[`${size}Text` as keyof typeof styles] as TextStyle,
           ]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
         >
           {title}
         </Text>

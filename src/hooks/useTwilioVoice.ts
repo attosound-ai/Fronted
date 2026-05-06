@@ -484,6 +484,17 @@ export function useTwilioVoice() {
           pushKitReady = true;
           await new Promise((r) => setTimeout(r, 3000));
         }
+
+        // Tell the native CallKit (iOS) / notification (Android) layer
+        // to render the `DisplayName` custom parameter Twilio sends in
+        // the push payload. The backend always emits this parameter
+        // (`@username` for app-to-app, the caller's E.164 for PSTN), so
+        // the template never falls through to the literal placeholder.
+        // Persisted in NSUserDefaults so it survives app restarts; we
+        // re-set it on every mount idempotently to recover from any
+        // out-of-band reset.
+        await voice.setIncomingCallContactHandleTemplate('${DisplayName}');
+
         await registerDevice();
       } catch (err) {
         console.error('[TwilioVoice] Setup FAILED:', err);

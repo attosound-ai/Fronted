@@ -5,16 +5,26 @@ import { useTranslation } from 'react-i18next';
 
 interface IncomingCallScreenProps {
   fromNumber: string;
+  callerUsername?: string;
   onAccept: () => void;
   onReject: () => void;
 }
 
+function formatCallerLabel(fromNumber: string, callerUsername?: string): string {
+  if (callerUsername) return `@${callerUsername}`;
+  // Hide the raw `client:user-{id}` Twilio identity until the username resolves.
+  if (/^client:user-\d+$/.test(fromNumber)) return '';
+  return fromNumber;
+}
+
 export function IncomingCallScreen({
   fromNumber,
+  callerUsername,
   onAccept,
   onReject,
 }: IncomingCallScreenProps) {
   const { t } = useTranslation('calls');
+  const displayLabel = formatCallerLabel(fromNumber, callerUsername);
   return (
     <View style={styles.container}>
       <View style={styles.callerInfo}>
@@ -22,7 +32,7 @@ export function IncomingCallScreen({
           <User size={48} color="#666" strokeWidth={2.25} />
         </View>
         <Text style={styles.callerLabel}>{t('incoming.label')}</Text>
-        <Text style={styles.callerNumber}>{fromNumber}</Text>
+        <Text style={styles.callerNumber}>{displayLabel}</Text>
       </View>
 
       <View style={styles.actions}>

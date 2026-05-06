@@ -56,6 +56,7 @@ export type ActiveCallState =
 export interface ActiveCall {
   callSid: string;
   fromNumber: string;
+  callerUsername?: string;
   direction: 'inbound' | 'outbound';
   recipientId?: string;
   recipientName?: string;

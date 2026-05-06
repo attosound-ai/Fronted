@@ -5,6 +5,8 @@ import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
 import { telephonyService } from '@/lib/api/telephonyService';
 import { useAuthStore } from '@/stores/authStore';
+import { apiClient } from '@/lib/api/client';
+import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import * as Sentry from '@sentry/react-native';
 
@@ -45,6 +47,58 @@ export function getActiveCallObj(): any {
 
 // ── Helpers ──
 
+/**
+ * Twilio Voice SDK passes the caller's identity as `client:user-{id}` for
+ * app-to-app calls. Extract the numeric userId so we can resolve the
+ * username via the user-service. Returns null otherwise (e.g., PSTN E.164).
+ */
+function parseTwilioClientIdentity(identity: string): number | null {
+  const match = identity.match(/^client:user-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+/** Match a raw E.164 phone number (e.g., `+16812932367`). */
+function isE164(value: string): boolean {
+  return /^\+\d{8,15}$/.test(value);
+}
+
+/**
+ * Resolve the userId behind a phone number that's an active bridge in
+ * `phone_number_assignments`. Returns null if no assignment exists.
+ */
+async function lookupUserIdByPhoneNumber(phoneNumber: string): Promise<number | null> {
+  try {
+    const { data } = await apiClient.get(API_ENDPOINTS.TELEPHONY.NUMBER_LOOKUP, {
+      params: { phoneNumber },
+    });
+    const uid = data?.data?.userId;
+    if (uid == null) return null;
+    const numeric = Number(uid);
+    return Number.isFinite(numeric) ? numeric : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveCallerUsername(identity: string): Promise<void> {
+  let userId = parseTwilioClientIdentity(identity);
+
+  // Bridge-number caller: reverse-lookup the number → owning user.
+  if (userId == null && isE164(identity)) {
+    userId = await lookupUserIdByPhoneNumber(identity);
+  }
+
+  if (userId == null) return;
+
+  try {
+    const { data } = await apiClient.get(API_ENDPOINTS.USERS.PROFILE(userId));
+    const username = data?.data?.username;
+    if (username) useCallStore.getState().setCallerUsername(username);
+  } catch {
+    // Best-effort: if lookup fails, screen falls back to the raw identity.
+  }
+}
+
 function bindCallEvents(call: any) {
   const { Call } = getTwilio();
   const { setCallState, endCall } = useCallStore.getState();
@@ -58,7 +112,7 @@ function bindCallEvents(call: any) {
       '[TwilioVoice] Call connected',
       JSON.stringify({
         time: new Date().toISOString(),
-      }),
+      })
     );
     setCallState('connected');
     // Do NOT call setAudioModeAsync or ensureAudioRoute here — Twilio
@@ -234,12 +288,15 @@ export async function toggleSpeaker() {
     // Android or only Speaker/Earpiece — simple toggle
     const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
     const target = audioDevices.find(
-      (d: any) => d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
+      (d: any) =>
+        d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
     );
     if (target) {
       await target.select();
       useCallStore.getState().setSpeaker(!isSpeaker);
-      analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, { is_speaker: !isSpeaker });
+      analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+        is_speaker: !isSpeaker,
+      });
     }
     return;
   }
@@ -258,7 +315,7 @@ export async function toggleSpeaker() {
   }));
 
   const options = [
-    ...devices.map((d: any) => d.isSelected ? `${d.label} ✓` : d.label),
+    ...devices.map((d: any) => (d.isSelected ? `${d.label} ✓` : d.label)),
     'Cancel',
   ];
 
@@ -280,7 +337,7 @@ export async function toggleSpeaker() {
           device_type: selected.label,
         });
       }
-    },
+    }
   );
 }
 
@@ -404,6 +461,7 @@ export function useTwilioVoice() {
       });
 
       setIncomingCall(callSid, from);
+      void resolveCallerUsername(from);
       analytics.capture(ANALYTICS_EVENTS.CALL.INCOMING_RECEIVED, { from_number: from });
 
       // Delay navigation slightly so CallKit's Accepted event can fire first.

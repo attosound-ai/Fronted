@@ -11,6 +11,7 @@ interface CallStoreState {
 interface CallStoreActions {
   setRegistered: (registered: boolean, error?: string | null) => void;
   setIncomingCall: (callSid: string, fromNumber: string) => void;
+  setCallerUsername: (username: string) => void;
   setOutgoingCall: (callSid: string, recipientId: string, recipientName?: string) => void;
   setCallState: (state: ActiveCallState) => void;
   setMuted: (muted: boolean) => void;
@@ -45,6 +46,12 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
         activeStreamSid: null,
         connectedAt: null,
       },
+    }),
+
+  setCallerUsername: (username) =>
+    set((prev) => {
+      if (!prev.activeCall) return prev;
+      return { activeCall: { ...prev.activeCall, callerUsername: username } };
     }),
 
   setOutgoingCall: (callSid, recipientId, recipientName) =>

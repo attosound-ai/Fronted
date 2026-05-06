@@ -67,6 +67,7 @@ export default function CallScreen() {
     return (
       <IncomingCallScreen
         fromNumber={activeCall.fromNumber}
+        callerUsername={activeCall.callerUsername}
         onAccept={acceptIncomingCall}
         onReject={rejectIncomingCall}
       />

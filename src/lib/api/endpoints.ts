@@ -127,6 +127,7 @@ export const API_ENDPOINTS = {
     STREAM_START: (callSid: string) => `/telephony/calls/${callSid}/stream/start`,
     STREAM_STOP: (callSid: string) => `/telephony/calls/${callSid}/stream/stop`,
     SEGMENTS: (callSid: string) => `/telephony/calls/${callSid}/segments`,
+    NUMBER_LOOKUP: '/telephony/numbers/lookup',
   },
   PROJECTS: {
     LIST: '/telephony/projects',

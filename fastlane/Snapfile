@@ -1,0 +1,34 @@
+devices([
+  "iPhone 17 Pro Max",
+  "iPhone 17 Pro",
+  "iPhone 17",
+  "iPad Pro 13-inch (M4)",
+  "iPad Pro 11-inch (M4)"
+])
+
+languages([
+  "en-US",
+  "es-ES",
+  "pt-BR"
+])
+
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+
+scheme("ATTOUITests")
+workspace("./ios/ATTO.xcworkspace")
+
+launch_arguments(["-FASTLANE_SNAPSHOT YES -AppleLanguages (en) -AppleLocale en_US"])
+
+stop_after_first_error(false)
+concurrent_simulators(true)
+
+skip_open_summary(true)
+override_status_bar(true)
+override_status_bar_arguments("--time 9:41 --dataNetwork wifi --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100")
+
+reinstall_app(true)
+erase_simulator(false)
+headless(true)
+
+number_of_retries(2)

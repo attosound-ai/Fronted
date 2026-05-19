@@ -41,6 +41,7 @@ import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { BugReportFAB } from '@/components/BugReportFAB';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
+import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
 Sentry.init({
@@ -225,7 +226,7 @@ function RootLayout() {
                 <SafeAreaProvider>
                   <StatusBar style="light" />
                   {!fontsLoaded ? null : (
-                    <>
+                    <UpdateRequiredGate>
                       <InCallTopBar />
                       <Stack
                         screenOptions={{
@@ -392,7 +393,7 @@ function RootLayout() {
                       <CallBanner />
                       <BugReportFAB />
                       <AccountSwitchOverlay />
-                    </>
+                    </UpdateRequiredGate>
                   )}
                 </SafeAreaProvider>
               </KeyboardProvider>

@@ -38,7 +38,6 @@ class AnalyticsService {
         phone: phone ?? null,
         avatar: user.avatar ?? null,
         role: user.role,
-        registration_status: user.registrationStatus,
         profile_verified: user.profileVerified,
         followers_count: user.followersCount,
         following_count: user.followingCount,
@@ -58,7 +57,6 @@ class AnalyticsService {
     // Super properties — attached to every future event automatically.
     this.posthog?.register({
       user_role: user.role,
-      registration_status: user.registrationStatus,
       profile_verified: user.profileVerified,
       app_version: Application.nativeApplicationVersion,
     });

@@ -50,6 +50,11 @@ export const QUERY_KEYS = {
   MESSAGES: {
     CONVERSATIONS: () => ['messages', 'conversations'] as const,
     CHAT: (chatId: string) => ['messages', 'chat', chatId] as const,
+    // Resolves (get-or-create, idempotent server-side) the conversation for a
+    // 1:1 chat keyed by the other participant's id. Stable for the session, so
+    // re-entering a profile's chat is a cache hit instead of a second POST.
+    CONVERSATION_BY_PARTICIPANT: (participantId: string) =>
+      ['messages', 'conversation', 'by-participant', participantId] as const,
     WALLPAPERS: ['messages', 'wallpapers'] as const,
   },
 

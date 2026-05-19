@@ -21,7 +21,10 @@
     "inputAccessibilityLabel": "Message input",
     "sendAccessibilityLabel": "Send message",
     "emptyMessages": "No messages yet. Say hello!",
-    "errorFailedToSend": "Failed to send message"
+    "errorFailedToSend": "Failed to send message",
+    "startingConversation": "Starting conversation...",
+    "errorFailedToStart": "Couldn't open this conversation",
+    "retry": "Try again"
   },
   "chatHeader": {
     "backAccessibilityLabel": "Go back",

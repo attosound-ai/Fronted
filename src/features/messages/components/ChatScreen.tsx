@@ -163,6 +163,12 @@ const typingStyles = StyleSheet.create({
 });
 
 interface ChatScreenProps {
+  /**
+   * Always a resolved, non-empty conversation id. Callers must NOT render
+   * `ChatScreen` directly with raw navigation params — the `/chat` route
+   * resolves (idempotent get-or-create) via `useConversationId` first. Passing
+   * an empty string here disables every data hook (the "black screen" bug).
+   */
   conversationId: string;
   participantName: string;
   participantId?: string;

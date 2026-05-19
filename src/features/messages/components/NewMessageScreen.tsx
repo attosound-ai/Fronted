@@ -14,43 +14,25 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING } from '@/constants/theme';
 import { useUserSearch } from '../hooks/useUserSearch';
-import { messageService } from '../services/messageService';
 import type { User } from '@/types';
 
 export function NewMessageScreen() {
   const { t } = useTranslation('messages');
   const [query, setQuery] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { results, isLoading } = useUserSearch(query);
 
-  const handleSelectUser = useCallback(
-    async (user: User) => {
-      if (isCreating) return;
-      setIsCreating(true);
-      setError(null);
-      try {
-        const conversationId = await messageService.createConversation({
-          participantId: String(user.id),
-          participantName: user.username,
-        });
-        router.replace({
-          pathname: '/chat',
-          params: {
-            conversationId,
-            participantName: user.username,
-            participantId: String(user.id),
-          },
-        });
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : t('newMessage.errorFailedToStart');
-        setError(message);
-        setIsCreating(false);
-      }
-    },
-    [isCreating]
-  );
+  // The conversation is resolved (idempotent get-or-create) by the chat route
+  // via `useConversationId` — we only navigate with the participant. `replace`
+  // so Back skips the search list and returns to the previous screen.
+  const handleSelectUser = useCallback((user: User) => {
+    router.replace({
+      pathname: '/chat',
+      params: {
+        participantId: String(user.id),
+        participantName: user.username,
+      },
+    });
+  }, []);
 
   const renderUser = useCallback(
     ({ item }: { item: User }) => (
@@ -71,13 +53,18 @@ export function NewMessageScreen() {
         </View>
       </TouchableOpacity>
     ),
-    [handleSelectUser]
+    [handleSelectUser, t]
   );
 
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
-        <Search size={18} color={COLORS.gray[500]} strokeWidth={2.25} style={styles.searchIcon} />
+        <Search
+          size={18}
+          color={COLORS.gray[500]}
+          strokeWidth={2.25}
+          style={styles.searchIcon}
+        />
         <TextInput
           style={styles.searchInput}
           placeholder={t('newMessage.searchPlaceholder')}
@@ -93,19 +80,6 @@ export function NewMessageScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={COLORS.white} />
         </View>
-      )}
-      {isCreating && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={COLORS.primary} />
-          <Text variant="caption" style={styles.creatingText}>
-            {t('newMessage.creatingConversation')}
-          </Text>
-        </View>
-      )}
-      {error && (
-        <Text variant="caption" style={styles.errorText}>
-          {error}
-        </Text>
       )}
       <FlatList
         data={results}
@@ -149,14 +123,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: SPACING.md,
     gap: SPACING.sm,
-  },
-  creatingText: {
-    color: COLORS.gray[500],
-  },
-  errorText: {
-    color: '#EF4444',
-    textAlign: 'center',
-    padding: SPACING.md,
   },
   userRow: {
     flexDirection: 'row',

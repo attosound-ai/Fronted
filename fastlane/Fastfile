@@ -1,0 +1,102 @@
+default_platform(:ios)
+
+API_KEY_PATH = ENV["ASC_API_KEY_PATH"] || "./fastlane/AuthKey.p8"
+API_KEY_ID = ENV["ASC_API_KEY_ID"]
+API_ISSUER_ID = ENV["ASC_API_ISSUER_ID"]
+
+def app_store_api_key
+  app_store_connect_api_key(
+    key_id: API_KEY_ID,
+    issuer_id: API_ISSUER_ID,
+    key_filepath: API_KEY_PATH,
+    duration: 1200,
+    in_house: false
+  )
+end
+
+platform :ios do
+  desc "Verify ASC API authentication by querying latest build number"
+  lane :verify_auth do
+    build_num = latest_testflight_build_number(
+      api_key: app_store_api_key,
+      app_identifier: "com.atto.sound"
+    )
+    UI.success("Auth OK — latest TestFlight build: #{build_num}")
+  end
+
+  desc "Capture screenshots on simulators for all configured devices and locales"
+  lane :screenshots do
+    capture_ios_screenshots
+  end
+
+  desc "Upload metadata, icon, and screenshots to App Store Connect (no binary)"
+  lane :metadata do
+    deliver(
+      api_key: app_store_api_key,
+      skip_binary_upload: true,
+      skip_metadata: false,
+      skip_screenshots: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,
+      automatic_release: false,
+      run_precheck_before_submit: false
+    )
+  end
+
+  desc "Upload metadata only (no screenshots, no binary)"
+  lane :metadata_only do
+    deliver(
+      api_key: app_store_api_key,
+      skip_binary_upload: true,
+      skip_metadata: false,
+      skip_screenshots: true,
+      app_icon: "./fastlane/metadata/app_icon.png",
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,
+      automatic_release: false,
+      run_precheck_before_submit: false,
+      app_review_information: {
+        first_name: "David",
+        last_name: "Espejo",
+        phone_number: "+1 838 259 2852",
+        email_address: "attosound1@gmail.com",
+        demo_user: "apple-review@attosound.com",
+        demo_password: "AttoReview2026!",
+        notes: "Sign in with the demo credentials above. The OTP code is sent via email; access to the demo inbox is provided to the review team on request."
+      }
+    )
+  end
+
+  desc "Upload screenshots only (no metadata, no binary)"
+  lane :screenshots_upload do
+    deliver(
+      api_key: app_store_api_key,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,
+      automatic_release: false,
+      run_precheck_before_submit: false
+    )
+  end
+
+  desc "Capture screenshots, then upload everything (metadata + screenshots + icon)"
+  lane :full_release_prep do
+    capture_ios_screenshots
+    deliver(
+      api_key: app_store_api_key,
+      skip_binary_upload: true,
+      skip_metadata: false,
+      skip_screenshots: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submit_for_review: false,
+      automatic_release: false,
+      run_precheck_before_submit: false
+    )
+  end
+end

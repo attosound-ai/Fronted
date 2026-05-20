@@ -42,12 +42,8 @@ export function ProfileAccountSection({ user }: ProfileAccountSectionProps) {
       <ProfileInfoRow
         icon={<ShieldCheck size={18} color="#888888" strokeWidth={2.25} />}
         label={t('account.statusLabel')}
-        value={
-          user.registrationStatus === 'completed'
-            ? t('account.statusActive')
-            : t('account.statusPending')
-        }
-        valueColor={user.registrationStatus === 'completed' ? '#10B981' : '#F59E0B'}
+        value={t('account.statusActive')}
+        valueColor="#10B981"
         showDivider={!showCreateCreator}
       />
       {showCreateCreator && (

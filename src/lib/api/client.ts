@@ -146,12 +146,21 @@ const PUBLIC_ROUTES = [
   '/otp/',
   '/auth/login',
   '/auth/register',
-  '/auth/pre-register',
   '/auth/check-phone',
   '/auth/refresh',
   '/auth/forgot-password',
   '/auth/reset-password',
+  // Signup entrypoints — session ID + OTP code are the credentials, no token yet.
+  '/signup/sessions',
 ];
+
+// Signup routes that require the signup_pending scoped token. Everything else
+// under /signup/sessions/me/* lives here; the bare /signup/sessions and
+// /signup/sessions/:id/verify-otp are public.
+function isSignupAuthedRoute(url: string | undefined): boolean {
+  if (!url) return false;
+  return url.startsWith('/signup/sessions/me');
+}
 
 // ── Account switch guard ──
 // When true, requests are queued until the token swap completes.
@@ -184,7 +193,15 @@ apiClient.interceptors.request.use(
     // Wait if account switch is in progress
     await waitUntilResumed();
 
-    const token = await authStorage.getToken();
+    // Signup-scoped routes get the signup_pending token from signupStore.
+    // Everything else gets the full-scope user token from SecureStore.
+    let token: string | null = null;
+    if (isSignupAuthedRoute(config.url)) {
+      const { getSignupToken } = await import('@/stores/signupStore');
+      token = getSignupToken();
+    } else {
+      token = await authStorage.getToken();
+    }
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -234,6 +251,29 @@ export function clearRefreshQueue(): void {
   failedQueue = [];
 }
 
+// Signal raised when the backend returns 426 Upgrade Required (i.e. this
+// client build talked to a server that no longer supports the old endpoint).
+// Top-level UI subscribes to this to swap the whole tree for an "update
+// required" screen.
+let _outdatedListeners: Array<() => void> = [];
+let _isOutdated = false;
+export function isClientOutdated(): boolean {
+  return _isOutdated;
+}
+export function onClientOutdated(cb: () => void): () => void {
+  _outdatedListeners.push(cb);
+  return () => {
+    _outdatedListeners = _outdatedListeners.filter((l) => l !== cb);
+  };
+}
+function markClientOutdated(): void {
+  if (_isOutdated) return;
+  _isOutdated = true;
+  _outdatedListeners.forEach((cb) => {
+    try { cb(); } catch { /* swallow */ }
+  });
+}
+
 apiClient.interceptors.response.use(
   (response) => {
     // Track every successful request with full context (sensitive fields redacted)
@@ -257,6 +297,23 @@ apiClient.interceptors.response.use(
     analytics.capture(ANALYTICS_EVENTS.NETWORK.API_REQUEST, props);
     analytics.capture(ANALYTICS_EVENTS.ERROR.API_ERROR, props);
 
+    // 426 Upgrade Required: the backend dropped this endpoint. Swap UI to
+    // "update required" screen. Don't retry; nothing helps until install.
+    if (error.response?.status === 426) {
+      markClientOutdated();
+      return Promise.reject(error);
+    }
+
+    // 403 with `insufficient_scope`: a signup_pending token tried to reach a
+    // route it shouldn't. There is no refresh that helps — only completing
+    // the signup. Surface as-is so the caller can show the right message.
+    if (error.response?.status === 403) {
+      const body = error.response?.data as { error?: string } | undefined;
+      if (typeof body?.error === 'string' && body.error.startsWith('insufficient_scope')) {
+        return Promise.reject(error);
+      }
+    }
+
     // Only handle 401, only once per request
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
@@ -264,6 +321,16 @@ apiClient.interceptors.response.use(
 
     // Don't try to refresh during account switch
     if (_paused) {
+      return Promise.reject(error);
+    }
+
+    // Signup_pending tokens don't have a refresh flow — they're issued once
+    // by /signup/sessions/:id/verify-otp with a 24h TTL. A 401 here means the
+    // session expired server-side; clear the signup store and let the caller
+    // re-enter the wizard.
+    if (originalRequest.url && originalRequest.url.startsWith('/signup/sessions/me')) {
+      const { useSignupStore } = await import('@/stores/signupStore');
+      useSignupStore.getState().clear();
       return Promise.reject(error);
     }
 

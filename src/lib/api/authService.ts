@@ -5,8 +5,6 @@ import { API_CONFIG } from '@/constants/config';
 import type {
   ApiResponse,
   AuthResponse,
-  CompleteRegistrationDTO,
-  CompleteRegistrationResponse,
   Disable2FADTO,
   Enable2FADTO,
   ForgotPasswordDTO,
@@ -14,7 +12,6 @@ import type {
   Login2FADTO,
   Login2FAResponse,
   LoginDTO,
-  PreRegisterDTO,
   RegisterDTO,
   ResetPasswordDTO,
   TokenPair,
@@ -71,24 +68,6 @@ export const authService = {
 
   async getMe(): Promise<User> {
     const response = await apiClient.get<ApiResponse<User>>(API_ENDPOINTS.AUTH.ME);
-    return response.data.data;
-  },
-
-  async preRegister(data: PreRegisterDTO): Promise<AuthResponse> {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
-      API_ENDPOINTS.AUTH.PRE_REGISTER,
-      data
-    );
-    return response.data.data;
-  },
-
-  async completeRegistration(
-    data: CompleteRegistrationDTO
-  ): Promise<CompleteRegistrationResponse> {
-    const response = await apiClient.post<ApiResponse<CompleteRegistrationResponse>>(
-      API_ENDPOINTS.AUTH.COMPLETE_REGISTRATION,
-      data
-    );
     return response.data.data;
   },
 

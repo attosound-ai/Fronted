@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { paymentService } from '@/lib/api/paymentService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { PlanChangePreview, PlanId } from '@/types';
 import { PlanChangeBottomSheet } from '@/features/profile/components/PlanChangeBottomSheet';
 
@@ -64,7 +65,9 @@ export default function SubscriptionScreen() {
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
-  const pendingChange = useSubscriptionStore((s) => s.subscription?.pendingChange ?? null);
+  const pendingChange = useSubscriptionStore(
+    (s) => s.subscription?.pendingChange ?? null
+  );
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const user = useAuthStore((s) => s.user);
   const isCreator = user?.role === 'creator' && !!user?.inmateNumber;
@@ -83,10 +86,22 @@ export default function SubscriptionScreen() {
   const handleConfirm = async (preview: PlanChangePreview) => {
     if (!sheetTarget) return;
     setIsProcessing(true);
+    const isUpgrade = PLAN_ORDER[sheetTarget] > PLAN_ORDER[currentPlan];
+    analytics.capture(ANALYTICS_EVENTS.PAYMENT.CHECKOUT_INITIATED, {
+      from_plan: currentPlan,
+      target_plan: sheetTarget,
+      direction: isUpgrade ? 'upgrade' : 'downgrade',
+    });
     try {
       const result = await paymentService.startPlanChange(sheetTarget, user?.email ?? '');
 
       if (result.kind === 'downgrade_scheduled' || result.kind === 'upgrade_free') {
+        analytics.capture(ANALYTICS_EVENTS.PAYMENT.PAYMENT_COMPLETED, {
+          from_plan: currentPlan,
+          target_plan: sheetTarget,
+          kind: result.kind,
+          requires_stripe: false,
+        });
         await fetchSubscription();
         setSheetTarget(null);
         Alert.alert(
@@ -110,17 +125,40 @@ export default function SubscriptionScreen() {
         returnURL: 'atto://stripe-redirect',
       });
       if (initError) {
+        analytics.capture(ANALYTICS_EVENTS.PAYMENT.PAYMENT_FAILED, {
+          from_plan: currentPlan,
+          target_plan: sheetTarget,
+          stage: 'init_payment_sheet',
+          code: initError.code ?? null,
+          message: initError.message ?? null,
+        });
         Alert.alert(t('errorTitle'), initError.message);
         return;
       }
       const { error: presentError } = await presentPaymentSheet();
       if (presentError) {
+        analytics.capture(ANALYTICS_EVENTS.PAYMENT.PAYMENT_FAILED, {
+          from_plan: currentPlan,
+          target_plan: sheetTarget,
+          stage: 'present_payment_sheet',
+          code: presentError.code ?? null,
+          cancelled: presentError.code === 'Canceled',
+          message: presentError.message ?? null,
+        });
         if (presentError.code !== 'Canceled') {
           Alert.alert(t('errorTitle'), presentError.message);
         }
         return;
       }
-      await paymentService.confirmPlanChange(sheetTarget, result.paymentIntentId).catch(() => {});
+      await paymentService
+        .confirmPlanChange(sheetTarget, result.paymentIntentId)
+        .catch(() => {});
+      analytics.capture(ANALYTICS_EVENTS.PAYMENT.PAYMENT_COMPLETED, {
+        from_plan: currentPlan,
+        target_plan: sheetTarget,
+        kind: 'upgrade',
+        requires_stripe: true,
+      });
       await fetchSubscription();
       setSheetTarget(null);
       Alert.alert(t('successTitle'), t('successUpgrade'));
@@ -129,6 +167,12 @@ export default function SubscriptionScreen() {
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         (err instanceof Error ? err.message : null) ??
         t('errorUpgradeFailed');
+      analytics.capture(ANALYTICS_EVENTS.PAYMENT.PAYMENT_FAILED, {
+        from_plan: currentPlan,
+        target_plan: sheetTarget,
+        stage: 'unknown',
+        message,
+      });
       Alert.alert(t('errorTitle'), message);
     } finally {
       setIsProcessing(false);
@@ -142,13 +186,21 @@ export default function SubscriptionScreen() {
         defaultValue: "You'll keep your current plan and won't be switched.",
       }),
       [
-        { text: t('cancelPendingDialog.keepScheduled', { defaultValue: 'Keep' }), style: 'cancel' },
+        {
+          text: t('cancelPendingDialog.keepScheduled', { defaultValue: 'Keep' }),
+          style: 'cancel',
+        },
         {
           text: t('cancelPendingDialog.confirm', { defaultValue: 'Cancel scheduled' }),
           style: 'destructive',
           onPress: async () => {
             try {
               await paymentService.cancelPendingChange();
+              analytics.capture(ANALYTICS_EVENTS.PAYMENT.SUBSCRIPTION_CANCELLED, {
+                cancellation_type: 'pending_change',
+                from_plan: currentPlan,
+                pending_target: pendingChange?.targetPlan ?? null,
+              });
               await fetchSubscription();
             } catch {
               Alert.alert(t('errorTitle'), t('errorCancelFailed'));
@@ -168,6 +220,10 @@ export default function SubscriptionScreen() {
         onPress: async () => {
           try {
             await paymentService.cancelSubscription();
+            analytics.capture(ANALYTICS_EVENTS.PAYMENT.SUBSCRIPTION_CANCELLED, {
+              cancellation_type: 'subscription',
+              from_plan: currentPlan,
+            });
             await fetchSubscription();
             Alert.alert(t('successTitle'), t('successCancelled'));
           } catch {
@@ -198,7 +254,11 @@ export default function SubscriptionScreen() {
     const isUpgrade = PLAN_ORDER[planId] > PLAN_ORDER[currentPlan];
     return (
       <Button
-        title={isUpgrade ? t('upgradeButton') : t('downgradeButton', { defaultValue: 'Downgrade' })}
+        title={
+          isUpgrade
+            ? t('upgradeButton')
+            : t('downgradeButton', { defaultValue: 'Downgrade' })
+        }
         onPress={() => setSheetTarget(planId)}
         disabled={isProcessing || pendingChange != null}
         size="sm"
@@ -216,7 +276,9 @@ export default function SubscriptionScreen() {
           >
             <X size={26} color="#FFFFFF" strokeWidth={2.25} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('title', { defaultValue: 'Subscription' })}</Text>
+          <Text style={styles.headerTitle}>
+            {t('title', { defaultValue: 'Subscription' })}
+          </Text>
           <View style={{ width: 26 }} />
         </View>
         <View style={styles.emptyState}>
@@ -245,7 +307,9 @@ export default function SubscriptionScreen() {
         >
           <X size={26} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('title', { defaultValue: 'Subscription' })}</Text>
+        <Text style={styles.headerTitle}>
+          {t('title', { defaultValue: 'Subscription' })}
+        </Text>
         <View style={{ width: 26 }} />
       </View>
       <ScrollView
@@ -265,7 +329,9 @@ export default function SubscriptionScreen() {
               <Text style={styles.pendingDate}>
                 {t('pendingBanner.applies', {
                   defaultValue: 'On {{date}}',
-                  date: new Date(pendingChange.appliesAt).toLocaleDateString(i18n.language),
+                  date: new Date(pendingChange.appliesAt).toLocaleDateString(
+                    i18n.language
+                  ),
                 })}
               </Text>
             </View>
@@ -294,7 +360,10 @@ export default function SubscriptionScreen() {
               </View>
 
               {isCurrent && plan.id !== 'connect_free' && (
-                <TouchableOpacity onPress={handleCancelSubscription} style={styles.cancelRow}>
+                <TouchableOpacity
+                  onPress={handleCancelSubscription}
+                  style={styles.cancelRow}
+                >
                   <Text style={styles.cancelText}>{t('cancelButton')}</Text>
                 </TouchableOpacity>
               )}

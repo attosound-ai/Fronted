@@ -189,6 +189,16 @@ export const ANALYTICS_EVENTS = {
     BRIDGE_NUMBER_ASSIGNED: 'payment_bridge_number_assigned',
   },
 
+  // ── Runtime / ambient ──────────────────────────
+  // Tick fires every 30 s while the app is active (paused during calls —
+  // CALL.TELEMETRY_TICK covers that window at 10 s) with the same flat
+  // device snapshot as the call telemetry: memory, battery, network, JS lag,
+  // listener counts. Always-on equivalent of CALL.TELEMETRY_TICK so the next
+  // crash anywhere in the app (not just on a call) has runtime context.
+  RUNTIME: {
+    TELEMETRY_TICK: 'runtime_telemetry_tick',
+  },
+
   // ── Network ────────────────────────────────────
   NETWORK: {
     API_REQUEST: 'api_request',

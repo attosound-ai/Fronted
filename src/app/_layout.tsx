@@ -36,6 +36,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
+import { startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
@@ -124,6 +125,12 @@ function AnalyticsInitializer() {
         defaultHandler(error, isFatal);
       });
     }
+
+    // Ambient runtime telemetry — 30 s tick of memory / battery / network /
+    // JS lag / listener counts so we always have a recent snapshot when a
+    // crash hits anywhere in the app, not just during a call.
+    // Idempotent; auto-pauses during calls and while backgrounded.
+    startAmbientTelemetry();
   }, [posthog]);
   return null;
 }

@@ -1,7 +1,13 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Check, Smartphone } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
+
+// Static require of the primary app icon — bundled in the binary at build
+// time so the Default tile shows the actual icon the user has on their
+// home screen right now, not a generic placeholder.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const DEFAULT_ICON_SOURCE = require('../../../../assets/icon.png');
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { showToast } from '@/components/ui/Toast';
@@ -150,9 +156,11 @@ function DefaultTile({ label, isSelected, isBusy, onPress }: DefaultTileProps) {
       disabled={isBusy}
       style={[styles.tile, isBusy && styles.tileBusy]}
     >
-      <View style={[styles.tilePreview, styles.defaultTilePreview]}>
-        <Smartphone size={28} color="#888" strokeWidth={1.75} />
-      </View>
+      <Image
+        source={DEFAULT_ICON_SOURCE}
+        style={styles.tilePreview}
+        resizeMode="cover"
+      />
       <Text style={styles.tileLabel} numberOfLines={1}>
         {label}
       </Text>

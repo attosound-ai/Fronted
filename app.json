@@ -106,25 +106,11 @@
       [
         "@howincodes/expo-dynamic-app-icon",
         {
-          "noir": {
-            "ios": "./assets/icons/noir.png",
+          "metal": {
+            "ios": "./assets/icons/metal.png",
             "android": {
-              "foregroundImage": "./assets/icons/noir.png",
+              "foregroundImage": "./assets/icons/metal.png",
               "backgroundColor": "#000000"
-            }
-          },
-          "blueprint": {
-            "ios": "./assets/icons/blueprint.png",
-            "android": {
-              "foregroundImage": "./assets/icons/blueprint.png",
-              "backgroundColor": "#0F2878"
-            }
-          },
-          "mono": {
-            "ios": "./assets/icons/mono.png",
-            "android": {
-              "foregroundImage": "./assets/icons/mono.png",
-              "backgroundColor": "#F5F5F5"
             }
           }
         }

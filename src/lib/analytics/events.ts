@@ -97,6 +97,13 @@ export const ANALYTICS_EVENTS = {
     TWILIO_REGISTERED: 'call_twilio_registered',
     TWILIO_REGISTRATION_FAILED: 'call_twilio_registration_failed',
     OUTGOING_INITIATED: 'call_outgoing_initiated',
+    // Telemetry — deep diagnostics for WatchdogTermination repros (REACT-NATIVE-8).
+    // TELEMETRY_TICK fires every 10 s while a call is active with a full
+    // device snapshot (memory, battery, network, JS lag, listener counts).
+    // TELEMETRY_MARKER fires on transition points (pre/post speaker toggle,
+    // pre-disconnect, etc.) so post-mortem queries can pinpoint the leak.
+    TELEMETRY_TICK: 'call_telemetry_tick',
+    TELEMETRY_MARKER: 'call_telemetry_marker',
   },
 
   // ── Messages ───────────────────────────────────

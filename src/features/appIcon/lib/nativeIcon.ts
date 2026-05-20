@@ -39,14 +39,32 @@ function loadModule(): DynamicAppIconModule | null {
  * Switch the home-screen icon to the given slot, or `null` to revert to
  * the primary icon. Resolves to `true` on success (the system dialog will
  * have been shown to the user on iOS), `false` otherwise.
+ *
+ * The most common cause of `false` here is a stale prebuild: the slot is
+ * advertised by the backend catalogue + declared in `app.json`, but the
+ * Info.plist on device doesn't have the matching `CFBundleAlternateIcons`
+ * entry because `expo run:ios` reused a cached `ios/` directory. Fix:
+ * `npx expo prebuild --clean && pnpm expo run:ios --device`. In dev we
+ * log the underlying error so this kind of mismatch is obvious in the
+ * Metro console instead of just rolling the picker back to Default.
  */
 export async function setNativeAppIcon(slot: AppIconSlot): Promise<boolean> {
   const mod = loadModule();
-  if (!mod) return false;
+  if (!mod) {
+    if (__DEV__) console.warn('[appIcon] native module not available');
+    return false;
+  }
   try {
     const result = await mod.setAppIcon(slot);
     return result !== false;
-  } catch {
+  } catch (err) {
+    if (__DEV__) {
+      console.warn(
+        '[appIcon] setAppIcon failed for slot %s:',
+        slot ?? '<default>',
+        err
+      );
+    }
     return false;
   }
 }

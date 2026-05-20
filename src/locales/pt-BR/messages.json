@@ -20,7 +20,10 @@
     "inputAccessibilityLabel": "Campo de mensagem",
     "sendAccessibilityLabel": "Enviar mensagem",
     "emptyMessages": "Nenhuma mensagem ainda. Diga olá!",
-    "errorFailedToSend": "Falha ao enviar a mensagem"
+    "errorFailedToSend": "Falha ao enviar a mensagem",
+    "startingConversation": "Iniciando conversa...",
+    "errorFailedToStart": "Não foi possível abrir esta conversa",
+    "retry": "Tentar novamente"
   },
   "newMessage": {
     "headerTitle": "Nova Mensagem",

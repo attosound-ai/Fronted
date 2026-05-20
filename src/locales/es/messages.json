@@ -21,7 +21,10 @@
     "inputAccessibilityLabel": "Campo de mensaje",
     "sendAccessibilityLabel": "Enviar mensaje",
     "emptyMessages": "Aún no hay mensajes. ¡Di hola!",
-    "errorFailedToSend": "No se pudo enviar el mensaje"
+    "errorFailedToSend": "No se pudo enviar el mensaje",
+    "startingConversation": "Iniciando conversación...",
+    "errorFailedToStart": "No se pudo abrir esta conversación",
+    "retry": "Reintentar"
   },
   "chatHeader": {
     "backAccessibilityLabel": "Volver",

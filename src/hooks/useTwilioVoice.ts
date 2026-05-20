@@ -9,6 +9,12 @@ import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import * as Sentry from '@sentry/react-native';
+import {
+  startCallTelemetry,
+  endCallTelemetry,
+  emitTelemetryMarker,
+  telemetryCounters,
+} from '@/lib/telemetry';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
 // which is not yet configured for Android. Importing at module level crashes Android on launch.
@@ -28,9 +34,15 @@ const TOKEN_REFRESH_MS = 50 * 60 * 1000; // Refresh every 50 minutes
 let voiceInstance: any = null;
 let pushKitReady = false;
 let activeCallObj: any = null;
+let activeCallTeardown: (() => void) | null = null;
 let pendingInvite: any = null;
 let lastToken: string | null = null;
 let isRegistering = false;
+// Reentrancy guard for the audio-route picker — repeated speaker toggles
+// during a call were one of the WatchdogTermination triggers seen in
+// REACT-NATIVE-8 (sessions that crashed had `call_speaker_toggled` as
+// their last event). Only one toggle may be in-flight at a time.
+let isSpeakerToggling = false;
 
 function getVoice(): any {
   if (!voiceInstance) {
@@ -99,39 +111,102 @@ async function resolveCallerUsername(identity: string): Promise<void> {
   }
 }
 
-function bindCallEvents(call: any) {
+/**
+ * Wire the Twilio Call event listeners and return an explicit teardown that
+ * calls `.off()` for every registered listener. Without this, every Call
+ * object accumulates 5 listeners that hold closures over the call store —
+ * the secondary suspect for the WatchdogTermination cluster (REACT-NATIVE-8).
+ * Teardown is also stored at module level so terminate paths
+ * (hangUpCall, etc.) can force-detach if the SDK skips `Disconnected`.
+ */
+function bindCallEvents(call: any): () => void {
   const { Call } = getTwilio();
   const { setCallState, endCall } = useCallStore.getState();
 
-  call.on(Call.Event.Connected, () => {
-    // Diagnostic: dump the audio session state and any other audio
-    // libraries that may be active at the moment Twilio thinks the
-    // call has connected. Helps identify which library (if any) is
-    // stomping on the AVAudioSession during a call.
+  let removed = false;
+
+  const onConnected = () => {
     console.log(
       '[TwilioVoice] Call connected',
-      JSON.stringify({
-        time: new Date().toISOString(),
-      })
+      JSON.stringify({ time: new Date().toISOString() })
     );
     setCallState('connected');
-    // Do NOT call setAudioModeAsync or ensureAudioRoute here — Twilio
-    // manages its own audio session during the call. Our interference
-    // was causing 30-60s audio delays.
-  });
+    // Telemetry begins capturing tick snapshots at this point — pre-connect
+    // states are already covered by startCallTelemetry() at invite/outgoing.
+    void startCallTelemetry('call_connected');
+    // Do NOT touch the audio session here — Twilio owns it during the call.
+  };
 
-  call.on(Call.Event.ConnectFailure, () => {
+  const onConnectFailure = () => {
     activeCallObj = null;
+    void endCallTelemetry('call_connect_failure');
     endCall();
-  });
-  call.on(Call.Event.Disconnected, () => {
+    teardown();
+  };
+
+  const onDisconnected = () => {
     activeCallObj = null;
+    void endCallTelemetry('call_disconnected');
     endCall();
-    // Restore normal audio mode after call ends
+    // Restore normal audio mode after the call ends
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
-  });
-  call.on(Call.Event.Reconnecting, () => setCallState('reconnecting'));
-  call.on(Call.Event.Reconnected, () => setCallState('connected'));
+    teardown();
+  };
+
+  const onReconnecting = () => setCallState('reconnecting');
+  const onReconnected = () => setCallState('connected');
+
+  const teardown = () => {
+    if (removed) return;
+    removed = true;
+    try {
+      call.off(Call.Event.Connected, onConnected);
+    } catch {
+      /* SDK may already have unbound */
+    }
+    try {
+      call.off(Call.Event.ConnectFailure, onConnectFailure);
+    } catch {
+      /* noop */
+    }
+    try {
+      call.off(Call.Event.Disconnected, onDisconnected);
+    } catch {
+      /* noop */
+    }
+    try {
+      call.off(Call.Event.Reconnecting, onReconnecting);
+    } catch {
+      /* noop */
+    }
+    try {
+      call.off(Call.Event.Reconnected, onReconnected);
+    } catch {
+      /* noop */
+    }
+    telemetryCounters.dec('twilioListeners', 5);
+    if (activeCallTeardown === teardown) activeCallTeardown = null;
+  };
+
+  call.on(Call.Event.Connected, onConnected);
+  call.on(Call.Event.ConnectFailure, onConnectFailure);
+  call.on(Call.Event.Disconnected, onDisconnected);
+  call.on(Call.Event.Reconnecting, onReconnecting);
+  call.on(Call.Event.Reconnected, onReconnected);
+  telemetryCounters.inc('twilioListeners', 5);
+
+  // If a previous teardown was somehow still pending (stale call object),
+  // run it now so we don't stack listeners across reconnect-then-rebind.
+  if (activeCallTeardown) {
+    try {
+      activeCallTeardown();
+    } catch {
+      /* noop */
+    }
+  }
+  activeCallTeardown = teardown;
+
+  return teardown;
 }
 
 /**
@@ -247,8 +322,13 @@ export async function acceptIncomingCall() {
 
 export function rejectIncomingCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.REJECTED);
+  void endCallTelemetry('rejected');
   if (pendingInvite) {
-    pendingInvite.reject();
+    try {
+      pendingInvite.reject();
+    } catch {
+      /* SDK already torn down */
+    }
     pendingInvite = null;
   }
   useCallStore.getState().endCall();
@@ -256,8 +336,24 @@ export function rejectIncomingCall() {
 
 export function hangUpCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ENDED);
+  void endCallTelemetry('hangup');
+  // Force-detach any lingering listeners; the SDK's Disconnected event
+  // *usually* runs the teardown, but we never want a stale Call object
+  // holding closures across a reconnect failure.
+  if (activeCallTeardown) {
+    try {
+      activeCallTeardown();
+    } catch {
+      /* noop */
+    }
+    activeCallTeardown = null;
+  }
   if (activeCallObj) {
-    activeCallObj.disconnect();
+    try {
+      activeCallObj.disconnect();
+    } catch {
+      /* noop */
+    }
     activeCallObj = null;
   }
   useCallStore.getState().endCall();
@@ -279,66 +375,111 @@ export async function toggleHoldCall() {
 }
 
 export async function toggleSpeaker() {
-  const voice = voiceInstance;
-  if (!voice) return;
-  const { AudioDevice } = getTwilio();
-  const { audioDevices, selectedDevice } = await voice.getAudioDevices();
+  // Reentrancy guard: repeated audio-route changes during a call were the
+  // last action recorded before WatchdogTermination on 2/7 PostHog
+  // sessions. Each select() can reallocate AVAudioSession buffers; stacking
+  // them concurrently is the worst case.
+  if (isSpeakerToggling) return;
+  isSpeakerToggling = true;
 
-  if (Platform.OS !== 'ios' || audioDevices.length <= 2) {
-    // Android or only Speaker/Earpiece — simple toggle
-    const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
-    const target = audioDevices.find(
-      (d: any) =>
-        d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
-    );
-    if (target) {
-      await target.select();
-      useCallStore.getState().setSpeaker(!isSpeaker);
-      analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
-        is_speaker: !isSpeaker,
-      });
-    }
+  await emitTelemetryMarker('pre_speaker_toggle');
+
+  const finish = (extra?: Record<string, unknown>) => {
+    isSpeakerToggling = false;
+    void emitTelemetryMarker('post_speaker_toggle', extra);
+  };
+
+  const voice = voiceInstance;
+  if (!voice) {
+    finish({ outcome: 'no_voice' });
     return;
   }
 
-  // iOS with multiple devices — show native picker (AirPods, Bluetooth, etc.)
-  const deviceLabels: Record<number, string> = {
-    [AudioDevice.Type.Earpiece]: 'iPhone',
-    [AudioDevice.Type.Speaker]: 'Speaker',
-    [AudioDevice.Type.Bluetooth]: 'Bluetooth',
-  };
+  try {
+    const { AudioDevice } = getTwilio();
+    const { audioDevices, selectedDevice } = await voice.getAudioDevices();
 
-  const devices = audioDevices.map((d: any) => ({
-    device: d,
-    label: d.name || deviceLabels[d.type] || `Audio Device`,
-    isSelected: d.uuid === selectedDevice?.uuid,
-  }));
-
-  const options = [
-    ...devices.map((d: any) => (d.isSelected ? `${d.label} ✓` : d.label)),
-    'Cancel',
-  ];
-
-  ActionSheetIOS.showActionSheetWithOptions(
-    {
-      options,
-      cancelButtonIndex: options.length - 1,
-      title: 'Audio Output',
-    },
-    async (buttonIndex: number) => {
-      if (buttonIndex === options.length - 1) return; // Cancel
-      const selected = devices[buttonIndex];
-      if (selected && !selected.isSelected) {
-        await selected.device.select();
-        const isSpeaker = selected.device.type === AudioDevice.Type.Speaker;
-        useCallStore.getState().setSpeaker(isSpeaker);
+    if (Platform.OS !== 'ios' || audioDevices.length <= 2) {
+      // Android or only Speaker/Earpiece — simple toggle
+      const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
+      const target = audioDevices.find(
+        (d: any) =>
+          d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
+      );
+      if (target) {
+        await target.select();
+        useCallStore.getState().setSpeaker(!isSpeaker);
         analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
-          is_speaker: isSpeaker,
-          device_type: selected.label,
+          is_speaker: !isSpeaker,
         });
+        finish({ outcome: 'toggled', is_speaker: !isSpeaker });
+      } else {
+        finish({ outcome: 'no_target' });
       }
+      return;
     }
-  );
+
+    // iOS with multiple devices — show native picker (AirPods, Bluetooth, etc.)
+    const deviceLabels: Record<number, string> = {
+      [AudioDevice.Type.Earpiece]: 'iPhone',
+      [AudioDevice.Type.Speaker]: 'Speaker',
+      [AudioDevice.Type.Bluetooth]: 'Bluetooth',
+    };
+
+    const devices = audioDevices.map((d: any) => ({
+      device: d,
+      label: d.name || deviceLabels[d.type] || `Audio Device`,
+      isSelected: d.uuid === selectedDevice?.uuid,
+    }));
+
+    const options = [
+      ...devices.map((d: any) => (d.isSelected ? `${d.label} ✓` : d.label)),
+      'Cancel',
+    ];
+
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex: options.length - 1,
+        title: 'Audio Output',
+      },
+      async (buttonIndex: number) => {
+        if (buttonIndex === options.length - 1) {
+          finish({ outcome: 'picker_cancelled' });
+          return;
+        }
+        const selected = devices[buttonIndex];
+        if (!selected || selected.isSelected) {
+          finish({ outcome: 'no_change' });
+          return;
+        }
+        try {
+          await selected.device.select();
+          const isSpeaker = selected.device.type === AudioDevice.Type.Speaker;
+          useCallStore.getState().setSpeaker(isSpeaker);
+          analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+            is_speaker: isSpeaker,
+            device_type: selected.label,
+          });
+          finish({
+            outcome: 'picker_selected',
+            is_speaker: isSpeaker,
+            device_type: selected.label,
+          });
+        } catch (err) {
+          finish({
+            outcome: 'picker_error',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    );
+  } catch (err) {
+    finish({
+      outcome: 'error',
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 // ── Outgoing VoIP call ──
@@ -350,6 +491,12 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
     console.warn('[TwilioVoice] Already in a call');
     return;
   }
+
+  // Start telemetry as soon as we commit to placing a call; the pre-connect
+  // token fetch + voice.connect window has already produced 2/7 of the
+  // crashes (outgoing_initiated → silence). We want snapshots for that
+  // window too.
+  await startCallTelemetry('outgoing_initiated');
 
   try {
     const { token } = await telephonyService.getVoiceToken();
@@ -385,6 +532,7 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
     Sentry.captureException(error, {
       tags: { feature: 'twilio-voice', step: 'outgoing-connect' },
     });
+    void endCallTelemetry('outgoing_connect_failed');
     endCall();
   }
 }
@@ -452,20 +600,61 @@ export function useTwilioVoice() {
       const from = invite.getFrom() || 'Unknown';
       let callKitAccepted = false;
 
-      invite.on(CallInvite.Event.Cancelled, () => {
-        pendingInvite = null;
-        endCall();
-      });
+      // ── PRIMARY watchdog-leak fix (REACT-NATIVE-8) ──
+      // Previously these two listeners were registered with anonymous
+      // arrow functions and never removed. Every incoming call (accepted,
+      // rejected, missed, cancelled) accumulated 2 listeners + their
+      // closures over `endCall`/`setCallState`/`activeCallObj`, retaining
+      // the entire invite object forever. Over a session with several
+      // rings, this pushes the process above iOS's per-app RAM cap and
+      // the watchdog kills the app.
+      //
+      // Now: named handlers, mutual `detach()` in both terminal events,
+      // and an explicit counter so the leak is detectable in telemetry.
+      let inviteHandlersAttached = false;
+      const detachInviteHandlers = () => {
+        if (!inviteHandlersAttached) return;
+        inviteHandlersAttached = false;
+        try {
+          invite.off(CallInvite.Event.Cancelled, onCancelled);
+        } catch {
+          /* SDK may already have unbound */
+        }
+        try {
+          invite.off(CallInvite.Event.Accepted, onAccepted);
+        } catch {
+          /* noop */
+        }
+        telemetryCounters.dec('twilioListeners', 2);
+      };
 
-      // CallKit accepted the call (user swiped iOS push notification)
-      invite.on(CallInvite.Event.Accepted, (call: any) => {
+      const onCancelled = () => {
+        pendingInvite = null;
+        void endCallTelemetry('invite_cancelled');
+        endCall();
+        detachInviteHandlers();
+      };
+
+      const onAccepted = (call: any) => {
         callKitAccepted = true;
         activeCallObj = call;
         pendingInvite = null;
         useCallStore.getState().setCallState('connected');
         bindCallEvents(call);
         analytics.capture(ANALYTICS_EVENTS.CALL.ACCEPTED, { source: 'callkit' });
-      });
+        // bindCallEvents will own telemetry from Connected/Disconnected;
+        // drop the invite-level listeners now that the call has progressed.
+        detachInviteHandlers();
+      };
+
+      invite.on(CallInvite.Event.Cancelled, onCancelled);
+      invite.on(CallInvite.Event.Accepted, onAccepted);
+      inviteHandlersAttached = true;
+      telemetryCounters.inc('twilioListeners', 2);
+
+      // Telemetry starts at the earliest signal of a call. Snapshots from
+      // before-accept are critical for the WatchdogTermination repros.
+      void startCallTelemetry('invite_received');
 
       setIncomingCall(callSid, from);
       void resolveCallerUsername(from);

@@ -117,6 +117,35 @@ class AnalyticsService {
     }
   }
 
+  // ── Session replay (runtime control) ─────────────
+
+  /**
+   * Pause mobile session replay. The screenshot pipeline allocates a full
+   * CGContext per snapshot — on a Pro Max device that is ~14 MB / second
+   * sustained during a call. Pausing for the duration of the call is the
+   * single biggest controllable RAM saving for the WatchdogTermination we
+   * see in Sentry (REACT-NATIVE-8).
+   *
+   * Idempotent. Falls through silently on platforms / SDK versions where
+   * the runtime API is unavailable.
+   */
+  pauseSessionReplay() {
+    type ReplayCapable = {
+      stopSessionRecording?: () => void;
+    };
+    const ph = this.posthog as unknown as ReplayCapable | null;
+    ph?.stopSessionRecording?.();
+  }
+
+  /** Resume mobile session replay. Counterpart to {@link pauseSessionReplay}. */
+  resumeSessionReplay() {
+    type ReplayCapable = {
+      startSessionRecording?: () => void;
+    };
+    const ph = this.posthog as unknown as ReplayCapable | null;
+    ph?.startSessionRecording?.();
+  }
+
   // ── Privacy / consent ──────────────────────────
 
   /** Opt the user out of all analytics tracking. */

@@ -99,7 +99,8 @@
   },
   "settings": {
     "sectionTitle": "Configurações",
-    "languageLabel": "Idioma"
+    "languageLabel": "Idioma",
+    "appIconLabel": "Ícone do app"
   },
   "actions": {
     "logout": "Sair"
@@ -151,5 +152,13 @@
     "roleBadgeVerified": "Verificado",
     "followButton": "Seguir",
     "followingButton": "Seguindo"
+  },
+  "appIcon": {
+    "title": "Ícone do app",
+    "subtitle": "Escolha como o ícone do ATTO aparece na tela inicial. O iOS pedirá confirmação.",
+    "defaultLabel": "Padrão",
+    "loading": "Carregando ícones…",
+    "error": "Não foi possível carregar os ícones. Tente novamente mais tarde.",
+    "errorChange": "Não foi possível alterar o ícone. Tente novamente."
   }
 }

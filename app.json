@@ -34,14 +34,7 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "CFBundleLocalizations": [
-          "en",
-          "es",
-          "pt-BR",
-          "en",
-          "es",
-          "pt-BR"
-        ]
+        "CFBundleLocalizations": ["en", "es", "pt-BR", "en", "es", "pt-BR"]
       }
     },
     "android": {
@@ -94,11 +87,7 @@
       [
         "expo-localization",
         {
-          "supportedLocales": [
-            "en",
-            "es",
-            "pt-BR"
-          ]
+          "supportedLocales": ["en", "es", "pt-BR"]
         }
       ],
       [
@@ -113,7 +102,33 @@
       "@react-native-community/datetimepicker",
       "expo-notifications",
       "@sentry/react-native",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "@howincodes/expo-dynamic-app-icon",
+        {
+          "noir": {
+            "ios": "./assets/icons/noir.png",
+            "android": {
+              "foregroundImage": "./assets/icons/noir.png",
+              "backgroundColor": "#000000"
+            }
+          },
+          "blueprint": {
+            "ios": "./assets/icons/blueprint.png",
+            "android": {
+              "foregroundImage": "./assets/icons/blueprint.png",
+              "backgroundColor": "#0F2878"
+            }
+          },
+          "mono": {
+            "ios": "./assets/icons/mono.png",
+            "android": {
+              "foregroundImage": "./assets/icons/mono.png",
+              "backgroundColor": "#F5F5F5"
+            }
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

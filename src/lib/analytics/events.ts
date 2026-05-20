@@ -178,6 +178,9 @@ export const ANALYTICS_EVENTS = {
     VERIFICATION_OTP_SENT: 'profile_verification_otp_sent',
     VERIFICATION_COMPLETED: 'profile_verification_completed',
     CREATOR_CONTACT_EDITED: 'profile_artist_contact_edited',
+    APP_ICON_PICKER_OPENED: 'profile_app_icon_picker_opened',
+    APP_ICON_CHANGED: 'profile_app_icon_changed',
+    APP_ICON_CHANGE_FAILED: 'profile_app_icon_change_failed',
   },
 
   // ── Payments ───────────────────────────────────

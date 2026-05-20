@@ -87,6 +87,11 @@ export const API_ENDPOINTS = {
     WALLPAPERS: '/content/chat-wallpapers',
   },
 
+  APP_ICONS: {
+    CATALOG: '/content/app-icons',
+    MY: '/users/me/app-icon',
+  },
+
   NOTIFICATIONS: {
     LIST: '/notifications',
     MARK_READ: (id: string) => `/notifications/${id}/read`,

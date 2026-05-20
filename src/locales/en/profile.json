@@ -99,7 +99,8 @@
   },
   "settings": {
     "sectionTitle": "Settings",
-    "languageLabel": "Language"
+    "languageLabel": "Language",
+    "appIconLabel": "App icon"
   },
   "actions": {
     "logout": "Log Out"
@@ -151,5 +152,13 @@
     "roleBadgeVerified": "Verified",
     "followButton": "Follow",
     "followingButton": "Following"
+  },
+  "appIcon": {
+    "title": "App icon",
+    "subtitle": "Choose how your ATTO icon looks on your home screen. iOS will ask to confirm the change.",
+    "defaultLabel": "Default",
+    "loading": "Loading icons…",
+    "error": "Couldn't load icons. Please try again later.",
+    "errorChange": "Couldn't change the icon. Please try again."
   }
 }

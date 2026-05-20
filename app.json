@@ -112,6 +112,13 @@
               "foregroundImage": "./assets/icons/metal.png",
               "backgroundColor": "#000000"
             }
+          },
+          "aurora": {
+            "ios": "./assets/icons/aurora.png",
+            "android": {
+              "foregroundImage": "./assets/icons/aurora.png",
+              "backgroundColor": "#1A1024"
+            }
           }
         }
       ]

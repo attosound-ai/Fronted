@@ -10,8 +10,6 @@ export const API_ENDPOINTS = {
     LOGIN: '/auth/login',
     LOGIN_OTP: '/auth/login/otp',
     REGISTER: '/auth/register',
-    PRE_REGISTER: '/auth/pre-register',
-    COMPLETE_REGISTRATION: '/auth/complete-registration',
     LOGOUT: '/auth/logout',
     REFRESH: '/auth/refresh',
     FORGOT_PASSWORD: '/auth/forgot-password',
@@ -25,6 +23,14 @@ export const API_ENDPOINTS = {
     CONFIRM_2FA: '/auth/2fa/confirm',
     DISABLE_2FA: '/auth/2fa/disable',
     SWITCH_ACCOUNT: '/auth/switch-account',
+  },
+
+  SIGNUP: {
+    START: '/signup/sessions',
+    VERIFY_OTP: (sessionId: string) => `/signup/sessions/${sessionId}/verify-otp`,
+    ME: '/signup/sessions/me',
+    COMPLETE: '/signup/sessions/me/complete',
+    ABANDON: '/signup/sessions/me',
   },
 
   OTP: {

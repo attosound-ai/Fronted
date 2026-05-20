@@ -43,7 +43,6 @@ export interface User {
   profileVerified: boolean;
   twoFactorEnabled: boolean;
   twoFactorMethod: 'sms' | 'email' | '';
-  registrationStatus: 'pending' | 'completed';
   representativeId?: number;
   isManagedAccount?: boolean;
   followersCount: number;
@@ -87,37 +86,114 @@ export interface RegisterDTO {
   };
 }
 
-// Pre-register DTO (after OTP, before Step 3)
-export interface PreRegisterDTO {
-  email?: string;
-  password: string;
-  displayName: string;
-  username: string;
-  phoneCountryCode?: string;
-  phoneNumber?: string;
-  dateOfBirth?: string;
+// ── Signup-sessions API DTOs ────────────────────────────────────────────────
+
+export type SignupNextStep =
+  | 'otp'
+  | 'name'
+  | 'dob'
+  | 'password'
+  | 'profile'
+  | 'role'
+  | 'creator_info'
+  | 'how_it_works'
+  | 'consent'
+  | 'subscription'
+  | 'bridge_number'
+  | 'complete';
+
+export type SignupStatus = 'started' | 'verified' | 'completed' | 'abandoned';
+
+// Mirrors the backend's publicDraft (passwords are never returned).
+export interface SignupDraftView {
+  displayName?: string | null;
+  username?: string | null;
+  dateOfBirth?: string | null;
+  hasPassword: boolean;
+  phoneCountryCode?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+  role?: Role | null;
+  avatar?: string | null;
+  inmateNumber?: string | null;
+  creatorName?: string | null;
+  inmateState?: string | null;
+  relationship?: string | null;
+  consentToRecording?: boolean | null;
+  selectedPlan?: string | null;
+  bridgeNumber?: string | null;
+  creatorEmail?: string | null;
+  hasCreatorPassword: boolean;
+  creatorUsername?: string | null;
+  creatorDisplayName?: string | null;
+  creatorPhoneCountryCode?: string | null;
+  creatorPhoneNumber?: string | null;
+  creatorAvatar?: string | null;
+  creatorTypes?: string[];
+  creatorGenres?: string[];
 }
 
-// Complete registration DTO (Step 4 for listener, Step 8-9 for representative)
-export interface CompleteRegistrationDTO {
-  role: Role;
+// Patch shape sent to PATCH /signup/sessions/me. Passwords go in as
+// `password` / `creatorPassword` (plain) and the server hashes them.
+export interface SignupDraftPatch {
+  displayName?: string;
+  username?: string;
+  dateOfBirth?: string;
+  password?: string;
+  phoneCountryCode?: string;
+  phoneNumber?: string;
+  email?: string;
+  role?: Role;
+  avatar?: string;
   inmateNumber?: string;
-  representativeFields?: {
-    creatorName: string;
-    inmateState: string;
-    relationship: string;
-    consentToRecording: boolean;
-  };
-  managedCreatorFields?: {
-    email: string;
-    password: string;
-    username: string;
-    displayName: string;
-    phoneCountryCode?: string;
-    phoneNumber?: string;
-    avatar?: string;
-    creatorTypes?: string[];
-    creatorGenres?: string[];
+  creatorName?: string;
+  inmateState?: string;
+  relationship?: string;
+  consentToRecording?: boolean;
+  selectedPlan?: string;
+  bridgeNumber?: string;
+  creatorEmail?: string;
+  creatorPassword?: string;
+  creatorUsername?: string;
+  creatorDisplayName?: string;
+  creatorPhoneCountryCode?: string;
+  creatorPhoneNumber?: string;
+  creatorAvatar?: string;
+  creatorTypes?: string[];
+  creatorGenres?: string[];
+}
+
+export interface SignupSessionView {
+  id: string;
+  identifier: string;
+  identifierType: 'email' | 'phone';
+  identifierVerified: boolean;
+  status: SignupStatus;
+  draft: SignupDraftView;
+  completedSteps: string[];
+  nextStep: SignupNextStep;
+  expiresAt: string;
+}
+
+export interface SignupStartResult {
+  sessionId: string;
+  otpSent: boolean;
+}
+
+export interface SignupVerifyOtpResult {
+  sessionId: string;
+  token: string;
+  expiresIn: number;
+  nextStep: SignupNextStep;
+  session: SignupSessionView;
+}
+
+export interface SignupCompleteResult {
+  user: User;
+  tokens: TokenPair;
+  linkedAccount?: {
+    user: User;
+    tokens: TokenPair;
   };
 }
 
@@ -173,13 +249,6 @@ export interface TokenPair {
 export interface AuthResponse {
   user: User;
   tokens: TokenPair;
-}
-
-// Extended response from complete-registration when role = representative
-export interface CompleteRegistrationResponse {
-  user: User;
-  tokens: TokenPair;
-  linkedAccount?: { user: User; tokens: TokenPair };
 }
 
 // 2FA Types

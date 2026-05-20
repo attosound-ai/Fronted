@@ -5,10 +5,10 @@ import { useAuthStore } from '@/stores/authStore';
 export default function AuthLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
-  const user = useAuthStore((s) => s.user);
   const segments = useSegments();
   const params = useLocalSearchParams<{ mode?: string }>();
-  // Track if user started registration — once in register, don't auto-redirect
+  // Once the wizard is mounted, the wizard owns the redirect to /(tabs) so
+  // we don't kick the user out mid-subscription step.
   const wasInRegister = useRef(false);
 
   useEffect(() => {
@@ -18,18 +18,13 @@ export default function AuthLayout() {
   }, [segments]);
 
   useEffect(() => {
-    // Don't redirect during registration — the register screen
-    // manages its own navigation to /(tabs) after subscription/bridge steps
     if (wasInRegister.current) return;
-
-    // Don't redirect when adding a second account — user is authenticated
-    // but intentionally on the login screen to sign into another account
+    // Adding a second account from login — don't bounce the user.
     if (params.mode === 'add' || params.mode === 'creator') return;
-
-    if (!isLoading && isAuthenticated && user?.registrationStatus !== 'pending') {
+    if (!isLoading && isAuthenticated) {
       router.replace('/(tabs)');
     }
-  }, [isLoading, isAuthenticated, user?.registrationStatus, params.mode]);
+  }, [isLoading, isAuthenticated, params.mode]);
 
   return (
     <Stack

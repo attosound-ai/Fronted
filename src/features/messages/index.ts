@@ -1,6 +1,11 @@
 export { ConversationList, ChatScreen, NewMessageScreen } from './components';
 export { useConversations } from './hooks/useConversations';
 export { useChat } from './hooks/useChat';
+export { useConversationId } from './hooks/useConversationId';
+export type {
+  UseConversationIdArgs,
+  UseConversationIdResult,
+} from './hooks/useConversationId';
 export { useParticipantAvatar } from './hooks/useParticipantAvatar';
 export { useUserSearch } from './hooks/useUserSearch';
 export { messageService } from './services/messageService';

@@ -105,6 +105,7 @@ export const ANALYTICS_EVENTS = {
     CONVERSATIONS_VIEWED: 'messages_conversations_viewed',
     CONVERSATION_OPENED: 'messages_conversation_opened',
     NEW_CONVERSATION_STARTED: 'messages_new_conversation_started',
+    CONVERSATION_RESOLVE_FAILED: 'messages_conversation_resolve_failed',
     USER_SEARCHED: 'messages_user_searched',
     // Sending
     MESSAGE_SENT: 'messages_message_sent',

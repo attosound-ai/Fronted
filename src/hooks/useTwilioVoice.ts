@@ -355,7 +355,14 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
     const { token } = await telephonyService.getVoiceToken();
     const voice = getVoice();
 
+    // contactHandle is what iOS Phone app shows in Recents for OUTGOING
+    // calls (the SDK falls back to the literal "Default Contact" string
+    // when omitted). Prefer the recipient's username, fall back to the
+    // numeric identity so we never end up with "Default Contact" again.
+    const contactHandle = recipientName ? `@${recipientName}` : `user-${recipientUserId}`;
+
     const call = await voice.connect(token, {
+      contactHandle,
       params: {
         To: `user-${recipientUserId}`,
         recipientType: 'client',

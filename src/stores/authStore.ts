@@ -11,8 +11,6 @@ import type {
   User,
   LoginDTO,
   RegisterDTO,
-  PreRegisterDTO,
-  CompleteRegistrationDTO,
   UpdateProfileDTO,
   TokenPair,
   TwoFactorMethod,
@@ -39,8 +37,11 @@ interface AuthActions {
   initialize: () => Promise<void>;
   login: (credentials: LoginDTO) => Promise<void>;
   register: (data: RegisterDTO) => Promise<void>;
-  preRegister: (data: PreRegisterDTO) => Promise<void>;
-  completeRegistration: (data: CompleteRegistrationDTO) => Promise<number | null>;
+  adoptCompletedSignup: (
+    user: User,
+    tokens: TokenPair,
+    linkedAccount?: { user: User; tokens: TokenPair },
+  ) => Promise<void>;
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<TokenPair | null>;
@@ -219,58 +220,34 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     }
   },
 
-  preRegister: async (data: PreRegisterDTO) => {
+  /**
+   * Adopt a completed signup as an authenticated session.
+   *
+   * Called by the wizard at the very end, after /signup/sessions/me/complete
+   * returns full-scope user tokens. This:
+   *   1. Persists the new tokens in SecureStore (replacing any signup-scoped
+   *      token that may have been in axios state).
+   *   2. Registers the account with accountStore for the linked-account UI.
+   *   3. Flips the store to authenticated so the router redirects to the
+   *      main tabs.
+   *
+   * The signupStore is cleared by the caller after this resolves, so MMKV
+   * no longer holds the now-redundant signup_pending token.
+   */
+  adoptCompletedSignup: async (
+    user: User,
+    tokens: TokenPair,
+    linkedAccount?: { user: User; tokens: TokenPair },
+  ) => {
+    set({ isAuthenticating: true, error: null });
     try {
-      set({ isAuthenticating: true, error: null });
-
-      const { user, tokens } = await authService.preRegister(data);
-
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
       await registerActiveSession(user, tokens);
 
-      set({
-        user,
-        tokens,
-        isAuthenticated: true,
-        isAuthenticating: false,
-      });
+      set({ user, tokens, isAuthenticated: true, isAuthenticating: false });
 
-      analytics.identify(user);
-      Sentry.setUser({
-        id: String(user.id),
-        email: user.email,
-        name: user.username,
-        username: user.username,
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Pre-registration failed';
-      set({ isAuthenticating: false, error: message });
-      throw error;
-    }
-  },
-
-  completeRegistration: async (data: CompleteRegistrationDTO) => {
-    try {
-      set({ isAuthenticating: true, error: null });
-
-      const result = await authService.completeRegistration(data);
-      const { user, tokens, linkedAccount } = result;
-
-      await authStorage.setToken(tokens.accessToken);
-      await authStorage.setRefreshToken(tokens.refreshToken);
-      await authStorage.setUser(user);
-      await registerActiveSession(user, tokens);
-
-      set({
-        user,
-        tokens,
-        isAuthenticated: true,
-        isAuthenticating: false,
-      });
-
-      // Persist the managed creator alongside the representative account
       if (linkedAccount) {
         await useAccountStore
           .getState()
@@ -285,11 +262,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.COMPLETED, { role: user.role });
-
-      return linkedAccount?.user?.id ?? null;
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : 'Failed to complete registration';
+        error instanceof Error ? error.message : 'Failed to finalize signup';
       set({ isAuthenticating: false, error: message });
       throw error;
     }

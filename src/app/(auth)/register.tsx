@@ -377,7 +377,7 @@ export default function RegisterScreen() {
       // Username conflict shows the specific message; others fall back.
       const msg = getErrorMessage(error, t('errors.profileUpdateFailed'));
       if (msg.toLowerCase().includes('username')) {
-        setApiError(t('errors.usernameTaken'));
+        setApiError(t('errors.usernameTaken', { defaultValue: 'Username already taken' }));
       } else {
         setApiError(msg);
       }

@@ -1,5 +1,11 @@
 export { telemetryCounters, type CounterKey } from './counters';
-export { startJsLagMonitor, stopJsLagMonitor, getJsLagStats } from './jsLag';
+export {
+  acquireJsLagMonitor,
+  releaseJsLagMonitor,
+  startJsLagMonitor,
+  stopJsLagMonitor,
+  getJsLagStats,
+} from './jsLag';
 export { getDeviceSnapshot, type DeviceSnapshot } from './deviceSnapshot';
 export {
   startCallTelemetry,
@@ -7,3 +13,8 @@ export {
   emitTelemetryMarker,
   isCallTelemetryActive,
 } from './callTelemetry';
+export {
+  startAmbientTelemetry,
+  stopAmbientTelemetry,
+  isAmbientTelemetryActive,
+} from './ambientTelemetry';

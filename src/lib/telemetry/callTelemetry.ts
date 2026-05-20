@@ -22,7 +22,7 @@ import * as Sentry from '@sentry/react-native';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { telemetryCounters } from './counters';
-import { startJsLagMonitor, stopJsLagMonitor } from './jsLag';
+import { acquireJsLagMonitor, releaseJsLagMonitor } from './jsLag';
 import { getDeviceSnapshot, type DeviceSnapshot } from './deviceSnapshot';
 
 const TICK_MS = 10_000;
@@ -82,7 +82,7 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
   isActive = true;
   callStartedAt = Date.now();
   telemetryCounters.inc('activeCalls');
-  startJsLagMonitor();
+  acquireJsLagMonitor();
 
   // Defer the heavy work; let the call accept finish first.
   setTimeout(() => {
@@ -143,7 +143,7 @@ export async function endCallTelemetry(reason: string = 'call_ended'): Promise<v
     appStateSub.remove();
     appStateSub = null;
   }
-  stopJsLagMonitor();
+  releaseJsLagMonitor();
   telemetryCounters.dec('activeCalls');
 
   if (didPauseReplay) {

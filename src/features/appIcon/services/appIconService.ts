@@ -25,8 +25,13 @@ export const appIconService = {
    * catalogue: cached client-side via React Query, refreshed on app focus.
    */
   async list(): Promise<AppIcon[]> {
+    // Explicit 8 s timeout — the catalog endpoint occasionally times out
+    // during Railway cold-starts. React Query's `retry: 1` will reissue
+    // once on failure (~16 s worst case), still better than hanging the
+    // bottom sheet indefinitely on a stale "Loading icons…" state.
     const response = await apiClient.get<ApiEnvelope<BackendAppIcon[]>>(
-      API_ENDPOINTS.APP_ICONS.CATALOG
+      API_ENDPOINTS.APP_ICONS.CATALOG,
+      { timeout: 8000 }
     );
     const items = response.data.data ?? [];
     return items.map(mapAppIcon);

@@ -62,4 +62,10 @@ export const QUERY_KEYS = {
   PAYMENTS: {
     BRIDGE_NUMBER: ['payments', 'bridge-number'] as const,
   },
+
+  // App icon catalog (dynamic, served from content-service)
+  APP_ICONS: {
+    CATALOG: ['app-icons', 'catalog'] as const,
+    MY: ['app-icons', 'mine'] as const,
+  },
 } as const;

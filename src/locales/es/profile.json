@@ -99,7 +99,8 @@
   },
   "settings": {
     "sectionTitle": "Ajustes",
-    "languageLabel": "Idioma"
+    "languageLabel": "Idioma",
+    "appIconLabel": "Icono del app"
   },
   "actions": {
     "logout": "Cerrar sesión"
@@ -151,5 +152,14 @@
     "roleBadgeVerified": "Verificado",
     "followButton": "Seguir",
     "followingButton": "Siguiendo"
+  },
+  "appIcon": {
+    "title": "Icono del app",
+    "subtitle": "Elige cómo se ve el icono de ATTO en tu pantalla de inicio. iOS te pedirá confirmar el cambio.",
+    "defaultLabel": "Predeterminado",
+    "loading": "Cargando iconos…",
+    "error": "No se pudieron cargar los iconos. Intenta de nuevo más tarde.",
+    "errorChange": "No se pudo cambiar el icono. Intenta de nuevo.",
+    "errorChangeReboot": "iOS está bloqueando el cambio de icono. Reinicia tu iPhone e intenta de nuevo."
   }
 }

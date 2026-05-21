@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Globe, Eye } from 'lucide-react-native';
+import { Globe, Eye, Smartphone, ChevronRight } from 'lucide-react-native';
 import { ProfileSection } from './ProfileSection';
 import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useLanguage } from '@/hooks/useLanguage';
-import { analytics } from '@/lib/analytics';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { AppIconPickerSheet, useAppIconStore } from '@/features/appIcon';
 
 const DISPLAY_CODE: Record<string, string> = {
   en: 'English',
@@ -18,7 +19,9 @@ export function ProfileSettingsSection() {
   const { t } = useTranslation(['profile', 'common']);
   const { currentLanguage, changeLanguage, languages } = useLanguage();
   const [langSheetVisible, setLangSheetVisible] = useState(false);
+  const [iconSheetVisible, setIconSheetVisible] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(!analytics.hasOptedOut());
+  const selectedIconSlot = useAppIconStore((s) => s.selectedSlot);
 
   const handleAnalyticsToggle = (value: boolean) => {
     setAnalyticsEnabled(value);
@@ -47,6 +50,28 @@ export function ProfileSettingsSection() {
         </Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.row}
+        activeOpacity={0.7}
+        onPress={() => {
+          analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_PICKER_OPENED);
+          setIconSheetVisible(true);
+        }}
+      >
+        <View style={styles.left}>
+          <Smartphone size={18} color="#888888" strokeWidth={2.25} />
+          <Text variant="body" style={styles.label}>
+            {t('settings.appIconLabel', { defaultValue: 'App icon' })}
+          </Text>
+        </View>
+        <View style={styles.right}>
+          <Text variant="body" style={styles.value}>
+            {selectedIconSlot ?? t('appIcon.defaultLabel', { defaultValue: 'Default' })}
+          </Text>
+          <ChevronRight size={16} color="#666" strokeWidth={2.25} />
+        </View>
+      </TouchableOpacity>
+
       <View style={styles.row}>
         <View style={styles.left}>
           <Eye size={18} color="#888888" strokeWidth={2.25} />
@@ -61,6 +86,11 @@ export function ProfileSettingsSection() {
           thumbColor="#FFFFFF"
         />
       </View>
+
+      <AppIconPickerSheet
+        visible={iconSheetVisible}
+        onClose={() => setIconSheetVisible(false)}
+      />
 
       <BottomSheet
         visible={langSheetVisible}
@@ -101,6 +131,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  right: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   label: {
     color: '#888888',

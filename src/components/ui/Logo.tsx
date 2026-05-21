@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import Svg, { ClipPath, Circle, G, Line } from 'react-native-svg';
+import Svg, { Circle, ClipPath, G, Line } from 'react-native-svg';
 import ReAnimated, {
   useSharedValue,
   useAnimatedProps,
@@ -39,15 +39,16 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
   useEffect(() => {
     if (!animated) return;
 
+    // Two-beat heartbeat pulse: strong-soft-rest. Total cycle = 1200 ms.
     scaleY.value = withRepeat(
       withSequence(
         withTiming(1.07, { duration: 150, easing: Easing.inOut(Easing.ease) }),
         withTiming(1, { duration: 90, easing: Easing.inOut(Easing.ease) }),
         withTiming(1.042, { duration: 108, easing: Easing.inOut(Easing.ease) }),
         withTiming(1, { duration: 108, easing: Easing.inOut(Easing.ease) }),
-        withDelay(744, withTiming(1, { duration: 0 })),
+        withDelay(744, withTiming(1, { duration: 0 }))
       ),
-      -1,
+      -1
     );
   }, [animated, scaleY]);
 
@@ -57,10 +58,10 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
 
   return (
     <Svg width={size} height={size} viewBox="-115 -115 230 230">
-      <ClipPath id="logo-circle">
+      <ClipPath id="logo-circle-flat">
         <Circle cx={0} cy={0} r={CIRCLE_R} />
       </ClipPath>
-      <G clipPath="url(#logo-circle)">
+      <G clipPath="url(#logo-circle-flat)">
         {FADERS.map((f, i) => (
           <Line
             key={`s${i}`}
@@ -73,7 +74,6 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
             opacity={1}
           />
         ))}
-        {/* Extreme faders — static (no pulse) */}
         {[FADERS[0], FADERS[FADERS.length - 1]].map((f, i) => (
           <Line
             key={`cs${i}`}
@@ -86,7 +86,6 @@ export function Logo({ size = 56, animated = false }: LogoProps) {
             strokeLinecap="round"
           />
         ))}
-        {/* Inner faders — animated with pulse */}
         <AnimatedG animatedProps={animated ? animatedProps : undefined}>
           {FADERS.slice(1, -1).map((f, i) => (
             <Line

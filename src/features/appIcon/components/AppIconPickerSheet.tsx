@@ -16,7 +16,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAppIcons } from '../hooks/useAppIcons';
 import { useAppIconStore } from '../stores/appIconStore';
 import { appIconService } from '../services/appIconService';
-import { setNativeAppIcon } from '../lib/nativeIcon';
+import { setNativeAppIconWithReason } from '../lib/nativeIcon';
 import type { AppIcon, AppIconSlot } from '../types';
 
 interface AppIconPickerSheetProps {
@@ -61,24 +61,39 @@ export function AppIconPickerSheet({ visible, onClose }: AppIconPickerSheetProps
       const previous = selectedSlot;
       setSelectedSlot(slot);
 
-      let nativeOk = false;
-      try {
-        nativeOk = await setNativeAppIcon(slot);
-      } catch {
-        nativeOk = false;
-      }
+      const outcome = await setNativeAppIconWithReason(slot);
 
-      if (!nativeOk) {
+      if (!outcome.ok) {
         // Revert the picker, leave the toast, and bail out before hitting
         // the server. We never want the server preference to diverge from
         // what the OS is actually showing.
         setSelectedSlot(previous);
         setBusySlot(null);
+        // Full native diagnostic payload goes to PostHog so we can root-cause
+        // OS-level rejections (NSError domain/code, pre/post alternate icon
+        // state, asset catalog vs Info.plist registration) without needing a
+        // device-side debugger. Picker is fail-closed; data is opt-in via
+        // existing analytics consent.
         analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGE_FAILED, {
           slot_name: slot,
           stage: 'native_set',
+          reason: outcome.reason,
+          ...(outcome.diag ?? {}),
         });
-        showToast(t('appIcon.errorChange', { defaultValue: "Couldn't change icon" }));
+        // iOS LSIconAlertManager regressions (iOS 18+/26, Apple Forum thread
+        // 812125): the only known recovery is a device reboot. We treat three
+        // flavors as "the OS rejected the swap" — EAGAIN, silent rollback
+        // (SpringBoard accepts then reverts during commit), and the legacy
+        // `native_error` bucket (the unpatched plugin only said "false").
+        const isOsRejection =
+          outcome.reason === 'eagain' ||
+          outcome.reason === 'silent_rollback' ||
+          outcome.reason === 'native_error';
+        const toastKey = isOsRejection ? 'appIcon.errorChangeReboot' : 'appIcon.errorChange';
+        const fallback = isOsRejection
+          ? "iOS is blocking the icon change. Try restarting your iPhone."
+          : "Couldn't change icon";
+        showToast(t(toastKey, { defaultValue: fallback }));
         return;
       }
 

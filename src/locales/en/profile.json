@@ -159,6 +159,7 @@
     "defaultLabel": "Default",
     "loading": "Loading icons…",
     "error": "Couldn't load icons. Please try again later.",
-    "errorChange": "Couldn't change the icon. Please try again."
+    "errorChange": "Couldn't change the icon. Please try again.",
+    "errorChangeReboot": "iOS is blocking the icon change. Please restart your iPhone and try again."
   }
 }

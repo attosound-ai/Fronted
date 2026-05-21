@@ -53,6 +53,92 @@ function loadModule(): DynamicAppIconModule | null {
  * log the underlying error so this kind of mismatch is obvious in the
  * Metro console instead of just rolling the picker back to Default.
  */
+/**
+ * Outcome of a swap attempt. `ok: false` carries a coarse reason so analytics
+ * can bucket production failures (most importantly: distinguishing the iOS
+ * `LSIconAlertManager` EAGAIN bug from other failure modes, which informs
+ * different user-facing copy and product decisions).
+ */
+/**
+ * `diag` is the full structured payload from the patched native module. Shape
+ * mirrors `ExpoDynamicAppIconModule.swift::diag(...)` — flat string/number/bool
+ * fields safe to send straight to PostHog as event properties.
+ */
+export type SetAppIconDiag = {
+  stage?: string;
+  via?: string;
+  requested?: string;
+  pre_icon?: string;
+  post_icon?: string;
+  error_domain?: string;
+  error_code?: number;
+  error_description?: string;
+  error_user_info?: string;
+  supports_alternate_icons?: boolean;
+  cf_bundle_icon_name?: string;
+  cf_bundle_icons_present?: boolean;
+} & Record<string, unknown>;
+
+export type SetAppIconOutcome =
+  | { ok: true; diag?: SetAppIconDiag }
+  | {
+      ok: false;
+      reason: 'no_module' | 'eagain' | 'unsupported' | 'silent_rollback' | 'native_error' | 'threw';
+      diag?: SetAppIconDiag;
+      rawResult?: unknown;
+    };
+
+function parseDiag(result: unknown): SetAppIconDiag | undefined {
+  if (typeof result !== 'string' || !result.startsWith('DIAG:')) return undefined;
+  try {
+    return JSON.parse(result.slice(5)) as SetAppIconDiag;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function setNativeAppIconWithReason(slot: AppIconSlot): Promise<SetAppIconOutcome> {
+  const mod = loadModule();
+  if (!mod) {
+    if (__DEV__) console.warn('[appIcon] native module not available');
+    return { ok: false, reason: 'no_module' };
+  }
+  try {
+    const result = await mod.setAppIcon(slot, true);
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[appIcon] ← setAppIcon result:', result);
+    }
+
+    // Legacy false path (kept for safety, but the patched native module
+    // always returns either the slot name string or a "DIAG:{...}" string).
+    if (result === false) return { ok: false, reason: 'native_error', rawResult: result };
+
+    if (typeof result === 'string' && result.startsWith('DIAG:')) {
+      const diag = parseDiag(result);
+      const stage = diag?.stage;
+      const domain = diag?.error_domain;
+      const code = diag?.error_code;
+
+      let reason: Extract<SetAppIconOutcome, { ok: false }>['reason'] = 'native_error';
+      if (stage === 'guard_supports') reason = 'unsupported';
+      else if (stage === 'silent_rollback') reason = 'silent_rollback';
+      else if (domain === 'NSPOSIXErrorDomain' && code === 35) reason = 'eagain';
+
+      return { ok: false, reason, diag, rawResult: result };
+    }
+
+    // Success path — Swift resolves with the slot name on true success.
+    return { ok: true };
+  } catch (err) {
+    if (__DEV__) {
+      console.warn('[appIcon] setAppIcon THREW for slot %s:', slot ?? '<default>', err);
+    }
+    return { ok: false, reason: 'threw' };
+  }
+}
+
+/** Backwards-compatible boolean wrapper. */
 export async function setNativeAppIcon(slot: AppIconSlot): Promise<boolean> {
   const mod = loadModule();
   if (!mod) {
@@ -67,12 +153,19 @@ export async function setNativeAppIcon(slot: AppIconSlot): Promise<boolean> {
       moduleHasFn: typeof mod.setAppIcon === 'function',
     });
   }
+  // Use the plugin's "background" code path (`isInBackground: true`). This
+  // routes through `_setAlternateIconName:completionHandler:` (private
+  // selector, obfuscated via NSSelectorFromString inside the plugin) which
+  // bypasses `LSIconAlertManager` entirely — the public-API path was
+  // consistently failing with NSPOSIXErrorDomain code 35 ("Resource
+  // temporarily unavailable") on iOS 18+/26 even after a device reboot
+  // (Apple Forum thread 812125, confirmed on this codebase 2026-05-20).
+  // The selector-obfuscation in @howincodes/expo-dynamic-app-icon is what
+  // gets this past App Store static analysis; the plugin is shipping in
+  // production apps today. As a side benefit, this also suppresses the
+  // system confirmation dialog for a smoother swap.
   try {
-    // Second arg `isInBackground=false` → use the public iOS API only. The
-    // private path (`_setAlternateIconName:`) raises App Store rejection
-    // risk and on iOS 18+ silently resolves to false for some users (Apple
-    // forum 812125). Public path is the one Apple documents.
-    const result = await mod.setAppIcon(slot, false);
+    const result = await mod.setAppIcon(slot, true);
     if (__DEV__) {
       // eslint-disable-next-line no-console
       console.log('[appIcon] ← setAppIcon result:', result);

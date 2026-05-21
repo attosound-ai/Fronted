@@ -159,6 +159,7 @@
     "defaultLabel": "Predeterminado",
     "loading": "Cargando iconos…",
     "error": "No se pudieron cargar los iconos. Intenta de nuevo más tarde.",
-    "errorChange": "No se pudo cambiar el icono. Intenta de nuevo."
+    "errorChange": "No se pudo cambiar el icono. Intenta de nuevo.",
+    "errorChangeReboot": "iOS está bloqueando el cambio de icono. Reinicia tu iPhone e intenta de nuevo."
   }
 }

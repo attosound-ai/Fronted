@@ -23,24 +23,22 @@ class PhoenixSocketManager {
   }
 
   /** Connect to the Phoenix WebSocket server. Resolves once the socket is open.
-   *  @param forUserId — explicit user ID to authenticate with (used during account switch)
+   *
+   *  Auth: chat-service's UserSocket verifies an HS256 JWT and derives the
+   *  user_id from the verified `sub` claim — it does NOT read a user id from
+   *  the params. So we must pass the access token (JWT), never the user id.
+   *  (A previous version sent the user id as `token`, which chat-service
+   *  rejected as `:invalid_token`, killing realtime delivery entirely.)
    */
-  async connect(forUserId?: string): Promise<void> {
+  async connect(): Promise<void> {
     if (this.socket?.isConnected()) return;
 
     const token = await authStorage.getToken();
     if (!token) return;
 
-    let userId = forUserId;
-    if (!userId) {
-      const { useAuthStore } = await import('@/stores/authStore');
-      const user = useAuthStore.getState().user;
-      userId = user ? String(user.id) : undefined;
-    }
-
     return new Promise<void>((resolve) => {
       this.socket = new Socket(this.getSocketUrl(), {
-        params: { token: userId || token },
+        params: { token },
         reconnectAfterMs: (tries: number) => Math.min(1000 * 2 ** tries, 30_000),
         heartbeatIntervalMs: 30_000,
       });

@@ -13,7 +13,7 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.logoSection}>
-        <Logo size={290} animated />
+        <Logo size={290} animated metallic />
       </View>
 
       <View style={styles.buttons}>

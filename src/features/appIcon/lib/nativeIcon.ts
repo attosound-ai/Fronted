@@ -59,15 +59,28 @@ export async function setNativeAppIcon(slot: AppIconSlot): Promise<boolean> {
     if (__DEV__) console.warn('[appIcon] native module not available');
     return false;
   }
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log('[appIcon] → setAppIcon', {
+      slot: slot ?? '<default>',
+      isInBackground: false,
+      moduleHasFn: typeof mod.setAppIcon === 'function',
+    });
+  }
   try {
     // Second arg `isInBackground=false` → use the public iOS API only. The
-    // plugin's two-arg signature is REQUIRED — passing one arg makes the
-    // native module reject the call (silent failure, picker rolls back).
+    // private path (`_setAlternateIconName:`) raises App Store rejection
+    // risk and on iOS 18+ silently resolves to false for some users (Apple
+    // forum 812125). Public path is the one Apple documents.
     const result = await mod.setAppIcon(slot, false);
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[appIcon] ← setAppIcon result:', result);
+    }
     return result !== false;
   } catch (err) {
     if (__DEV__) {
-      console.warn('[appIcon] setAppIcon failed for slot %s:', slot ?? '<default>', err);
+      console.warn('[appIcon] setAppIcon THREW for slot %s:', slot ?? '<default>', err);
     }
     return false;
   }

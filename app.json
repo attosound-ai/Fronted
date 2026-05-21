@@ -119,6 +119,13 @@
               "foregroundImage": "./assets/icons/aurora.png",
               "backgroundColor": "#1A1024"
             }
+          },
+          "studio": {
+            "ios": "./assets/icons/studio.png",
+            "android": {
+              "foregroundImage": "./assets/icons/studio.png",
+              "backgroundColor": "#000000"
+            }
           }
         }
       ]

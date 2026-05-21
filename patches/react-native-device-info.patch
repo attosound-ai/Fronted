@@ -1,0 +1,53 @@
+diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
+index 948c561f03fc7da53f6e843867574b642d04d0ea..9154ebe2fac7876b623b358df9f3ac0bc5044aa8 100644
+--- a/ios/RNDeviceInfo/RNDeviceInfo.m
++++ b/ios/RNDeviceInfo/RNDeviceInfo.m
+@@ -10,6 +10,7 @@
+ #include <arpa/inet.h>
+ #import <mach/mach.h>
+ #import <mach-o/arch.h>
++#import <os/proc.h>
+ #import <CoreLocation/CoreLocation.h>
+ #import <React/RCTUtils.h>
+ #import "RNDeviceInfo.h"
+@@ -964,6 +965,40 @@ - (unsigned long) getUsedMemory {
+     return @(self.getUsedMemory);
+ }
+ 
++// Returns the number of bytes still available to the process before iOS
++// will jetsam it for going over its memory limit. Critical for OOM
++// diagnostics on iOS — without this, `getUsedMemory` is unitless (we know
++// what the process is using, but not how much headroom it has). iOS 13+.
++// Returns NSNull on older iOS or if the call fails.
++RCT_EXPORT_METHOD(getProcAvailableMemory:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    if (@available(iOS 13.0, *)) {
++        size_t avail = os_proc_available_memory();
++        if (avail > 0) {
++            resolve(@(avail));
++            return;
++        }
++    }
++    resolve([NSNull null]);
++}
++
++// Returns the current thermal pressure level from iOS. When the device is
++// throttling CPU due to heat, ongoing calls/audio recordings tend to drop;
++// having this in telemetry lets us correlate thermal events with crashes.
++// Maps NSProcessInfoThermalState to lower-case strings matching the
++// Android/RN convention.
++RCT_EXPORT_METHOD(getThermalState:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    NSProcessInfoThermalState state = [NSProcessInfo processInfo].thermalState;
++    NSString *name = nil;
++    switch (state) {
++        case NSProcessInfoThermalStateNominal:  name = @"nominal"; break;
++        case NSProcessInfoThermalStateFair:     name = @"fair"; break;
++        case NSProcessInfoThermalStateSerious:  name = @"serious"; break;
++        case NSProcessInfoThermalStateCritical: name = @"critical"; break;
++        default:                                name = @"unknown"; break;
++    }
++    resolve(name);
++}
++
+ RCT_EXPORT_METHOD(getUserAgent:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+ #if TARGET_OS_TV
+     reject(@"not_available_error", @"not available on tvOS", nil);

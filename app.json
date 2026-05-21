@@ -126,6 +126,13 @@
               "foregroundImage": "./assets/icons/studio.png",
               "backgroundColor": "#000000"
             }
+          },
+          "chrome": {
+            "ios": "./assets/icons/chrome.png",
+            "android": {
+              "foregroundImage": "./assets/icons/chrome.png",
+              "backgroundColor": "#000000"
+            }
           }
         }
       ]

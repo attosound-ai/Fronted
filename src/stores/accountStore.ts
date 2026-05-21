@@ -186,7 +186,9 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         // Reconnect WebSocket (non-blocking)
         import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
           phoenixSocket.disconnect();
-          phoenixSocket.connect(String(userId));
+          // Tokens are already swapped to the new account at this point, so
+          // connect() picks up the right JWT (auth derives the user from it).
+          phoenixSocket.connect();
         }),
         // Refresh unread message badge for new account
         Promise.all([

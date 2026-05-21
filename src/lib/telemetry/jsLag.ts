@@ -83,3 +83,27 @@ export function getJsLagStats(): {
     avgLagMs: ticks > 0 ? Math.round(lagSum / ticks) : 0,
   };
 }
+
+/**
+ * Same as {@link getJsLagStats} but resets the rolling aggregates
+ * (`peakLagMs`, `lagSum`, `ticks`) afterwards so the next read covers
+ * a fresh window. `lastLagMs` is point-in-time and is left alone.
+ *
+ * Telemetry tickers (ambient @ 30 s, call @ 10 s) should call this so the
+ * reported peak reflects the last interval, not session-since-start.
+ */
+export function consumeJsLagStats(): {
+  lastLagMs: number;
+  peakLagMs: number;
+  avgLagMs: number;
+} {
+  const out = {
+    lastLagMs: lagMs,
+    peakLagMs,
+    avgLagMs: ticks > 0 ? Math.round(lagSum / ticks) : 0,
+  };
+  peakLagMs = 0;
+  lagSum = 0;
+  ticks = 0;
+  return out;
+}

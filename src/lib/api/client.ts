@@ -195,10 +195,22 @@ apiClient.interceptors.request.use(
 
     // Signup-scoped routes get the signup_pending token from signupStore.
     // Everything else gets the full-scope user token from SecureStore.
+    //
+    // `/media/sign` is a special case: it is callable both *during* signup
+    // (for the avatar in the ProfileSetup wizard step) and *after* login
+    // (for any media context). Prefer the user token; fall back to the
+    // signup_pending token if there's no logged-in user yet. The backend
+    // accepts signup_pending only for `context: "avatar"`.
     let token: string | null = null;
     if (isSignupAuthedRoute(config.url)) {
       const { getSignupToken } = await import('@/stores/signupStore');
       token = getSignupToken();
+    } else if (config.url?.startsWith('/media/sign')) {
+      token = await authStorage.getToken();
+      if (!token) {
+        const { getSignupToken } = await import('@/stores/signupStore');
+        token = getSignupToken();
+      }
     } else {
       token = await authStorage.getToken();
     }

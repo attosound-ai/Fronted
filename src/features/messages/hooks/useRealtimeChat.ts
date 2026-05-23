@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { phoenixSocket } from '@/lib/api/phoenixSocket';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import type { BackendMessage, BackendReaction, Reaction } from '../types';
 import type { ChatMessage, ChatMessagesPage } from '../types';
@@ -123,7 +124,18 @@ export function useRealtimeChat(conversationId: string) {
         const { user_id, is_typing } = payload as { user_id: string; is_typing: boolean };
         setTyping(conversationId, user_id, is_typing);
       },
-      onMessagesRead: () => {
+      onMessagesRead: (payload) => {
+        // chat-service broadcasts `messages_read` to every subscriber on the
+        // channel (the REST path can't broadcast_from!, so it can't exclude
+        // the reader). Filter out our own read events here — flipping our
+        // OWN sent messages to isRead just because *we* read incoming ones
+        // would falsely show "delivered" status when the other side hasn't
+        // actually seen them yet.
+        const readerId = (payload as { user_id?: string })?.user_id;
+        const myId = useAuthStore.getState().user?.id;
+        if (readerId && myId != null && String(readerId) === String(myId)) {
+          return;
+        }
         queryClient.setQueryData(
           QUERY_KEYS.MESSAGES.CHAT(conversationId),
           (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {

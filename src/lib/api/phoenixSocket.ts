@@ -6,6 +6,63 @@ import { authStorage } from '@/lib/auth/storage';
 type MessageHandler = (payload: Record<string, unknown>) => void;
 
 /**
+ * Decode the `exp` (Unix seconds) claim from an HS256 JWT without verifying
+ * the signature — the signature is irrelevant for "is this token close to
+ * expiring?" and saves a native crypto roundtrip. Returns null for any
+ * malformed input.
+ */
+function decodeJwtExp(token: string): number | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    // base64url → base64 → atob
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(
+      typeof atob !== 'undefined'
+        ? atob(padded)
+        : Buffer.from(padded, 'base64').toString('utf8')
+    );
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the access token to use for a (re)connect, refreshing it via the
+ * existing auth store if it's expired or within the early-refresh window.
+ *
+ * Why this lives in the socket layer: the HTTP axios interceptor refreshes
+ * on 401, but Phoenix Sockets never go through axios. Without this,
+ * long-lived clients reconnect with a stale access token and chat-service
+ * rejects every attempt with `:invalid_token` — exactly the symptom that
+ * killed realtime messaging in production.
+ */
+async function ensureFreshToken(): Promise<string | null> {
+  const token = await authStorage.getToken();
+  if (!token) return null;
+
+  const exp = decodeJwtExp(token);
+  if (exp === null) return token; // unparseable — let the server decide
+
+  // Refresh if the token is already expired or expires in < 60 s.
+  const nowSec = Date.now() / 1000;
+  const EARLY_REFRESH_SEC = 60;
+  if (exp - nowSec > EARLY_REFRESH_SEC) return token;
+
+  try {
+    const { useAuthStore } = await import('@/stores/authStore');
+    const newTokens = await useAuthStore.getState().refreshTokens();
+    if (newTokens?.accessToken) return newTokens.accessToken;
+  } catch {
+    // refresh failed — fall through with the (likely-expired) token; the
+    // server will reject and the upper layer can decide to log the user out.
+  }
+  return token;
+}
+
+/**
  * Singleton manager for the Phoenix WebSocket connection.
  * Handles connect/disconnect, channel join/leave, and auto-reconnect.
  */
@@ -13,6 +70,7 @@ class PhoenixSocketManager {
   private socket: Socket | null = null;
   private readonly channels = new Map<string, Channel>();
   private userChannel: Channel | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   onConnectionChange?: (connected: boolean) => void;
 
   /** Build the WebSocket URL from the REST API base URL. */
@@ -33,7 +91,7 @@ class PhoenixSocketManager {
   async connect(): Promise<void> {
     if (this.socket?.isConnected()) return;
 
-    const token = await authStorage.getToken();
+    const token = await ensureFreshToken();
     if (!token) return;
 
     return new Promise<void>((resolve) => {
@@ -56,15 +114,60 @@ class PhoenixSocketManager {
         this.onConnectionChange?.(false);
       });
 
+      // Auth-style errors (`:invalid_token` from chat-service) come through
+      // here. Refresh the token + force a clean reconnect so the next
+      // attempt uses a valid JWT — otherwise phoenix would back-off-retry
+      // with the stale token forever. Non-auth socket errors fall through
+      // to phoenix's built-in reconnect logic.
+      this.socket.onError((err: unknown) => {
+        const msg = typeof err === 'string' ? err : (err as { message?: string })?.message;
+        if (msg && /invalid_token|unauthor/i.test(msg)) {
+          void this.refreshAndReconnect();
+        }
+      });
+
       this.socket.connect();
+      this.scheduleProactiveRefresh(token);
 
       // Fallback: resolve after 3s so the app isn't blocked if the server is slow
       setTimeout(resolve, 3_000);
     });
   }
 
+  /**
+   * Schedule a force-reconnect ~60 s before the current token's `exp` so
+   * the socket always rides on a fresh JWT. The reconnect itself goes
+   * through `connect()` which calls `ensureFreshToken()`.
+   */
+  private scheduleProactiveRefresh(token: string): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    const exp = decodeJwtExp(token);
+    if (exp === null) return;
+    const msUntilRefresh = Math.max(
+      0,
+      exp * 1000 - Date.now() - 60_000 // refresh 60s before expiry
+    );
+    this.refreshTimer = setTimeout(() => {
+      void this.refreshAndReconnect();
+    }, msUntilRefresh);
+  }
+
+  /**
+   * Tear down the current socket and reconnect — `connect()` will refresh
+   * the access token first. Channels rejoin automatically via `onOpen`.
+   */
+  private async refreshAndReconnect(): Promise<void> {
+    this.socket?.disconnect();
+    this.socket = null;
+    await this.connect();
+  }
+
   /** Disconnect and clean up all channels. */
   disconnect(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
     this.leaveUserChannel();
     this.channels.forEach((ch) => ch.leave());
     this.channels.clear();

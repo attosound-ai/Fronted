@@ -48,10 +48,18 @@ export const signupService = {
   async verifyOtp(
     sessionId: string,
     code: string,
+    draft?: SignupDraftPatch,
   ): Promise<SignupVerifyOtpResult> {
+    // Pass the draft (name/dob/password) atomically with the OTP code so a
+    // lost response after verification doesn't leave the server verified but
+    // without the user's data. Backend applies the draft BEFORE the OTP
+    // roundtrip, so it persists even if the code is rejected on retry. See
+    // user-service signup_service.go::VerifyOTP for the idempotency contract.
+    const body =
+      draft && Object.keys(draft).length > 0 ? { code, draft } : { code };
     const res = await apiClient.post<ApiResponse<SignupVerifyOtpResult>>(
       API_ENDPOINTS.SIGNUP.VERIFY_OTP(sessionId),
-      { code },
+      body,
     );
     return res.data.data;
   },

@@ -5,6 +5,19 @@ import type { TokenPair, User } from '@/types';
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_KEY = 'user_data';
+/**
+ * Raw plaintext password stashed during the in-progress signup wizard so
+ * it survives app kill / cold start in the window between the password
+ * step and successful complete. Cleared on `signupComplete` success.
+ *
+ * Security: stored in iOS Keychain / Android Keystore (encrypted at rest
+ * with hardware-backed keys), the same protection bracket as the JWT
+ * tokens. The alternative — re-prompting for password on every cold
+ * resume of the wizard — was rejected as a poor UX cliff after a Network
+ * Error during OTP verify, which is the exact failure mode this guards
+ * against.
+ */
+const SIGNUP_PASSWORD_KEY = 'signup_pending_password';
 
 // Per-account keys (suffixed by userId)
 const ACTIVE_ACCOUNT_KEY = 'active_account_id';
@@ -82,6 +95,25 @@ export const authStorage = {
 
   async removeUser(): Promise<void> {
     await SecureStore.deleteItemAsync(USER_KEY);
+  },
+
+  // ── In-progress signup password (encrypted, cleared on complete) ──
+
+  async getSignupPassword(): Promise<string | null> {
+    try {
+      return await SecureStore.getItemAsync(SIGNUP_PASSWORD_KEY);
+    } catch (error) {
+      reportKeychainError(SIGNUP_PASSWORD_KEY, error);
+      return null;
+    }
+  },
+
+  async setSignupPassword(password: string): Promise<void> {
+    await SecureStore.setItemAsync(SIGNUP_PASSWORD_KEY, password);
+  },
+
+  async removeSignupPassword(): Promise<void> {
+    await SecureStore.deleteItemAsync(SIGNUP_PASSWORD_KEY);
   },
 
   // Limpiar todo

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { FeedPost } from '@/types/post';
 
 interface AdData {
@@ -21,9 +22,11 @@ function adToFeedPost(ad: AdData): FeedPost {
       id: 0,
       username: ad.brandName.toLowerCase().replace(/\s+/g, ''),
       displayName: ad.brandName,
-      avatar: ad.brandAvatar
-        ? `https://res.cloudinary.com/dxzcutnlp/image/upload/c_lpad,w_200,h_200,b_rgb:000000,bo_30px_solid_rgb:000000,f_png/${ad.brandAvatar}`
-        : null,
+      // brandAvatar is a Cloudinary public_id (the admin at atto-web posts
+      // it that way to keep the transform applicable). Routing through
+      // cloudinaryUrl keeps the cloud name in EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME
+      // so web + mobile always agree on which Cloudinary account to hit.
+      avatar: cloudinaryUrl(ad.brandAvatar, 'brand_ad_avatar'),
       isFollowing: false,
     },
     videoUrl: ad.videoUrl,

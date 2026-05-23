@@ -9,6 +9,7 @@ import { TouchableOpacity } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useSignupStore } from '@/stores/signupStore';
+import { authStorage } from '@/lib/auth/storage';
 import { useCountryByIP } from '@/hooks/useCountryByIP';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -206,6 +207,18 @@ export default function RegisterScreen() {
       dispatch({ type: 'UPDATE_FIELDS', fields });
     }
 
+    // Recover the in-progress plaintext password from SecureStore. The
+    // server's draft only exposes `hasPassword: boolean` (the hash never
+    // round-trips to the client), so without this rehydration the wizard
+    // would resume with state.password === '' after a cold start, and
+    // verify-otp would send a draft with no password — leading to the
+    // "missing required fields" Complete failure that this fix addresses.
+    if (!storedDraft?.hasPassword) {
+      void authStorage.getSignupPassword().then((pw) => {
+        if (pw) dispatch({ type: 'UPDATE_FIELD', field: 'password', value: pw });
+      });
+    }
+
     // Re-sync with the server in the background — what we persisted in MMKV
     // might be stale (e.g. user completed step 6 on another device).
     signupRefresh().catch(() => { /* errors already surfaced via store.error */ });
@@ -280,6 +293,9 @@ export default function RegisterScreen() {
     const result = await signupComplete();
     await adoptCompletedSignup(result.user, result.tokens, result.linkedAccount);
     signupClear();
+    // Wipe the wizard-only password cache from SecureStore now that the
+    // signup is durably promoted. Best-effort: failures here aren't fatal.
+    void authStorage.removeSignupPassword().catch(() => {});
     if (result.linkedAccount?.user?.id) {
       setCreatorUserId(result.linkedAccount.user.id);
     }
@@ -301,6 +317,17 @@ export default function RegisterScreen() {
         identifierType,
         locale: i18n.language,
       });
+      // Persist the raw password so it survives an app cold-restart
+      // BEFORE signup completes. The server's draft response only
+      // includes `hasPassword: boolean` (never the plaintext), so without
+      // this the wizard would resume with state.password === '' and
+      // verify-otp would ship an empty draft.password — landing us back
+      // at Complete failing with "missing required fields". SecureStore
+      // is hardware-backed (Keychain on iOS), and the value is wiped in
+      // promoteToUser on successful completion.
+      if (state.password) {
+        void authStorage.setSignupPassword(state.password).catch(() => {});
+      }
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.STARTED);
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.OTP_SENT);
       goNext();

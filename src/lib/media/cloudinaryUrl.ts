@@ -18,6 +18,11 @@ const PRESETS: Record<string, string> = {
 
   // Brand logos — fit inside square, no crop, black background
   brand_avatar: 'c_pad,w_100,h_100,b_rgb:000000,f_png',
+  // Ad avatar in the feed: larger pad + 30px black border to read as a
+  // tile against the dark video background. Mirrors the transform that
+  // useAds.ts used inline before being centralised here.
+  brand_ad_avatar:
+    'c_lpad,w_200,h_200,b_rgb:000000,bo_30px_solid_rgb:000000,f_png',
 
   // Content images — responsive widths
   thumb: 'c_limit,w_300,f_auto,q_auto',

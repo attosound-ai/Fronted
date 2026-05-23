@@ -311,13 +311,30 @@ export default function RegisterScreen() {
     }
   };
 
-  // ── Step 5 → Verify OTP, then flush accumulated name/dob/password ────────
+  // ── Step 5 → Verify OTP with name/dob/password embedded ──────────────────
+  //
+  // Why bundle the draft into the verify-otp call (instead of a separate
+  // patch *after* verification, as we used to):
+  //
+  // The OTP verify is destructive on the server (the code is single-use).
+  // If the request succeeded server-side but the response was lost mid-flight
+  // (network blip, app backgrounded, etc.), the previous flow left the server
+  // verified with NO name/password — and the client couldn't safely retry the
+  // verify (the code was burned) nor patch (no signup_pending token saved
+  // locally). The user ended up stuck at the Complete step with "missing
+  // required fields" and had to delete the account.
+  //
+  // New contract: pass the draft alongside the code. Backend applies the
+  // draft BEFORE the OTP roundtrip, so on retry (with a fresh resend code)
+  // the data is already on the server. Combined with the backend's
+  // idempotent re-verify (`session.status == verified` → re-issue token,
+  // skip OTP), the wizard is now recoverable end-to-end.
   const handleOtpNext = async () => {
     setIsLoading(true);
     setApiError(null);
     try {
-      // If the session is already verified (user went back to OTP and forward
-      // again), just advance — re-verifying would burn an OTP attempt.
+      // If we already hold a signup_pending token, the session is verified —
+      // just advance. Server has the data; nothing else to do here.
       const existingToken = useSignupStore.getState().token;
       if (existingToken) {
         dispatch({ type: 'UPDATE_FIELD', field: 'otpVerified', value: true });
@@ -325,19 +342,14 @@ export default function RegisterScreen() {
         return;
       }
 
-      await signupVerifyOtp(state.otpCode);
+      const draft: SignupDraftPatch = {};
+      if (state.name) draft.displayName = state.name;
+      if (state.dateOfBirth) draft.dateOfBirth = state.dateOfBirth;
+      if (state.password) draft.password = state.password;
+
+      await signupVerifyOtp(state.otpCode, draft);
       dispatch({ type: 'UPDATE_FIELD', field: 'otpVerified', value: true });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.OTP_VERIFIED);
-
-      // Flush the locally-collected name/dob/password to the server now that
-      // we have a signup_pending token.
-      const patch: SignupDraftPatch = {};
-      if (state.name) patch.displayName = state.name;
-      if (state.dateOfBirth) patch.dateOfBirth = state.dateOfBirth;
-      if (state.password) patch.password = state.password;
-      if (Object.keys(patch).length > 0) {
-        await signupPatch(patch);
-      }
 
       goNext();
     } catch (error: unknown) {

@@ -1,0 +1,176 @@
+diff --git a/ios/ExpoDynamicAppIconModule.swift b/ios/ExpoDynamicAppIconModule.swift
+index 63a87f2958199da5bae2a5c356048c5d0545bba8..c2212a036b19992277aa5763fbcd16f20b5ce27e 100644
+--- a/ios/ExpoDynamicAppIconModule.swift
++++ b/ios/ExpoDynamicAppIconModule.swift
+@@ -5,19 +5,16 @@ public class ExpoDynamicAppIconModule: Module {
+         Name("ExpoDynamicAppIcon")
+ 
+         AsyncFunction("setAppIcon") { (name: String?, isInBackground: Bool, promise: Promise) in
+-            self.setAppIcon(name, isInBackground) { success in
+-                // [I6] Ensure promise resolution happens on main thread
++            self.setAppIcon(name, isInBackground) { result in
+                 DispatchQueue.main.async {
+-                    if success {
+-                        promise.resolve(name ?? "DEFAULT")
+-                    } else {
+-                        promise.resolve(false)
+-                    }
++                    // Returns either the slot name on success, or a structured
++                    // "DIAG:<json>" string on failure so JS/PostHog can bucket
++                    // the actual NSError instead of just seeing `false`.
++                    promise.resolve(result)
+                 }
+             }
+         }
+ 
+-        // [C3] Use AsyncFunction to safely access UIApplication on the main thread
+         AsyncFunction("getAppIcon") { (promise: Promise) in
+             DispatchQueue.main.async {
+                 let iconName = UIApplication.shared.alternateIconName
+@@ -27,11 +24,38 @@ public class ExpoDynamicAppIconModule: Module {
+         }
+     }
+ 
+-    private func setAppIcon(_ iconName: String?, _ isInBackground: Bool = true, completion: @escaping (Bool) -> Void) {
+-        // Check supportsAlternateIcons on main thread
++    // Encode diagnostic info as a single JSON string. Wrapped in a "DIAG:"
++    // prefix so the JS layer can distinguish it from the on-success slot name.
++    private func diag(_ payload: [String: Any]) -> String {
++        if let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
++           let json = String(data: data, encoding: .utf8) {
++            return "DIAG:\(json)"
++        }
++        return "DIAG:{\"encode_error\":true}"
++    }
++
++    private func setAppIcon(_ iconName: String?, _ isInBackground: Bool = true, completion: @escaping (Any) -> Void) {
+         DispatchQueue.main.async {
+-            guard UIApplication.shared.supportsAlternateIcons else {
+-                completion(false)
++            let app = UIApplication.shared
++            let supports = app.supportsAlternateIcons
++            let preIcon = app.alternateIconName ?? "<nil>"
++            let bundleId = Bundle.main.bundleIdentifier ?? "<nil>"
++            let altDeclared = (Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any]).map { _ in true } ?? false
++            let bundleIconName = Bundle.main.object(forInfoDictionaryKey: "CFBundleIconName") as? String ?? "<nil>"
++
++            // Always log to device console — useful when attached to Xcode/
++            // Console.app even on Release builds.
++            print("[ATTO ICON] setAppIcon name=\(iconName ?? "<nil>") isInBackground=\(isInBackground) supports=\(supports) preIcon=\(preIcon) bundleId=\(bundleId) CFBundleIcons=\(altDeclared) CFBundleIconName=\(bundleIconName)")
++
++            guard supports else {
++                completion(self.diag([
++                    "stage": "guard_supports",
++                    "supports_alternate_icons": false,
++                    "pre_icon": preIcon,
++                    "bundle_id": bundleId,
++                    "cf_bundle_icon_name": bundleIconName,
++                    "cf_bundle_icons_present": altDeclared,
++                ]))
+                 return
+             }
+ 
+@@ -40,44 +64,79 @@ public class ExpoDynamicAppIconModule: Module {
+                 iconNameToUse = "AppIcon-\(iconName)"
+             }
+ 
++            let handleResult: (NSError?, String) -> Void = { error, viaPath in
++                // Re-check the active alternate after a 1s delay so we can
++                // detect the iOS 26 "SpringBoard accepts then rolls back"
++                // pattern even when the immediate completion has no error.
++                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
++                    let postIcon = UIApplication.shared.alternateIconName ?? "<nil>"
++                    print("[ATTO ICON] postIcon=\(postIcon) (after 1s) error=\(error?.localizedDescription ?? "<nil>") via=\(viaPath)")
++
++                    if let error = error {
++                        completion(self.diag([
++                            "stage": "completion_error",
++                            "via": viaPath,
++                            "requested": iconNameToUse ?? "<nil-default>",
++                            "pre_icon": preIcon,
++                            "post_icon": postIcon,
++                            "error_domain": error.domain,
++                            "error_code": error.code,
++                            "error_description": error.localizedDescription,
++                            "error_user_info": String(describing: error.userInfo),
++                            "supports_alternate_icons": supports,
++                            "cf_bundle_icon_name": bundleIconName,
++                            "cf_bundle_icons_present": altDeclared,
++                        ]))
++                        return
++                    }
++
++                    // No error from completion handler. Check if the post-state
++                    // actually matches what we requested — if not, SpringBoard
++                    // silently rolled back.
++                    let expected = iconNameToUse ?? "<nil>"
++                    let actualMatches = (iconNameToUse == nil && UIApplication.shared.alternateIconName == nil) ||
++                                        (iconNameToUse != nil && UIApplication.shared.alternateIconName == iconNameToUse)
++
++                    if actualMatches {
++                        // True success — resolve with the slot name (legacy API
++                        // contract) so existing callers keep working.
++                        completion(iconName ?? "DEFAULT")
++                    } else {
++                        completion(self.diag([
++                            "stage": "silent_rollback",
++                            "via": viaPath,
++                            "requested": expected,
++                            "pre_icon": preIcon,
++                            "post_icon": postIcon,
++                            "supports_alternate_icons": supports,
++                            "cf_bundle_icon_name": bundleIconName,
++                            "cf_bundle_icons_present": altDeclared,
++                        ]))
++                    }
++                }
++            }
++
+             if isInBackground {
+                 typealias SetAlternateIconName = @convention(c) (NSObject, Selector, NSString?, @escaping (NSError?) -> ()) -> ()
+ 
+                 let selectorString = "_setAlternateIconName:completionHandler:"
+                 let selector = NSSelectorFromString(selectorString)
+ 
+-                if let methodIMP = UIApplication.shared.method(for: selector) {
++                if let methodIMP = app.method(for: selector) {
+                     let method = unsafeBitCast(methodIMP, to: SetAlternateIconName.self)
+-                    method(UIApplication.shared, selector, iconNameToUse as NSString?) { error in
+-                        // [I6] Private API completion may fire on arbitrary thread — dispatch to main
++                    method(app, selector, iconNameToUse as NSString?) { error in
+                         DispatchQueue.main.async {
+-                            if let error = error {
+-                                print("Failed to set app icon (background): \(error.localizedDescription)")
+-                                completion(false)
+-                            } else {
+-                                completion(true)
+-                            }
++                            handleResult(error, "private_api")
+                         }
+                     }
+                 } else {
+-                    // Fallback to public API if private API not available
+-                    UIApplication.shared.setAlternateIconName(iconNameToUse) { error in
+-                        if let error = error {
+-                            print("Failed to set app icon (fallback): \(error.localizedDescription)")
+-                            completion(false)
+-                        } else {
+-                            completion(true)
+-                        }
++                    app.setAlternateIconName(iconNameToUse) { error in
++                        handleResult(error as NSError?, "public_fallback")
+                     }
+                 }
+             } else {
+-                UIApplication.shared.setAlternateIconName(iconNameToUse) { error in
+-                    if let error = error {
+-                        print("Failed to set app icon: \(error.localizedDescription)")
+-                        completion(false)
+-                    } else {
+-                        completion(true)
+-                    }
++                app.setAlternateIconName(iconNameToUse) { error in
++                    handleResult(error as NSError?, "public_api")
+                 }
+             }
+         }

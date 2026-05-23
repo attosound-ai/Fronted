@@ -56,8 +56,13 @@ interface SignupState {
 interface SignupActions {
   /** Start a new session (or re-use an active one server-side). */
   start: (params: StartSignupParams) => Promise<void>;
-  /** Verify OTP for the current session; receives signup_pending token. */
-  verifyOtp: (code: string) => Promise<void>;
+  /**
+   * Verify OTP for the current session; receives signup_pending token.
+   * Optional `draft` is merged into the server-side session BEFORE the OTP
+   * roundtrip — used to flush name/dob/password atomically so a lost
+   * response doesn't leave the server verified without the user's data.
+   */
+  verifyOtp: (code: string, draft?: SignupDraftPatch) => Promise<void>;
   /** Sync the server-side session into the local store. Idempotent. */
   refresh: () => Promise<void>;
   /** Save a partial draft. Server merges and returns updated view. */
@@ -125,12 +130,12 @@ export const useSignupStore = create<SignupState & SignupActions>()(
         }
       },
 
-      verifyOtp: async (code) => {
+      verifyOtp: async (code, draft) => {
         const { sessionId } = get();
         if (!sessionId) throw new Error('No active signup session');
         set({ isLoading: true, error: null });
         try {
-          const result = await signupService.verifyOtp(sessionId, code);
+          const result = await signupService.verifyOtp(sessionId, code, draft);
           const exp = Date.now() + result.expiresIn * 1000;
           set({
             token: result.token,

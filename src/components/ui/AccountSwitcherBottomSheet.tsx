@@ -7,6 +7,7 @@ import { Avatar } from './Avatar';
 import { Text } from './Text';
 import { useAccountStore } from '@/stores/accountStore';
 import { useAuthStore } from '@/stores/authStore';
+import { showToast } from './Toast';
 import type { AccountEntry } from '@/stores/accountStore';
 
 interface AccountSwitcherBottomSheetProps {
@@ -43,6 +44,14 @@ export function AccountSwitcherBottomSheet({
     onClose();
     try {
       await switchToAccount(entry.user.id);
+    } catch (err: unknown) {
+      // Preflight in switchToAccount rejects switches during an active
+      // call to avoid tearing down CallKit / Twilio mid-conversation.
+      if ((err as { code?: string })?.code === 'CANNOT_SWITCH_DURING_ACTIVE_CALL') {
+        showToast('End the current call before switching accounts');
+        return;
+      }
+      throw err;
     } finally {
       setSwitching(null);
     }

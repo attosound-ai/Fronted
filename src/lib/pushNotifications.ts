@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { API_CONFIG } from '@/constants/config';
 
 // Must be called at module level — tells the OS how to handle
 // notifications when the app is in the foreground.
@@ -72,6 +73,42 @@ export async function sendTokenToBackend(token: string): Promise<void> {
     deviceId,
     platform,
   });
+}
+
+/**
+ * Register the device's push token for a specific linked account, using
+ * that account's access token directly instead of the axios interceptor
+ * (which always uses the active session's JWT).
+ *
+ * Without this, only the active account at registration time gets a
+ * `push_tokens` row — linked accounts (e.g., managed creator under a
+ * representative) stay silent until the user explicitly switches to them.
+ *
+ * Backend `UpsertPushToken` is idempotent on `(user_id, token)` so calling
+ * this repeatedly with the same args is safe.
+ */
+export async function sendTokenToBackendForAccount(
+  expoToken: string,
+  accessToken: string
+): Promise<void> {
+  const deviceId = Constants.deviceName || 'unknown';
+  const platform = Platform.OS;
+  const base = API_CONFIG.BASE_URL.replace(/\/$/, '');
+  const url = `${base}${API_ENDPOINTS.USERS.PUSH_TOKEN}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ token: expoToken, deviceId, platform }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`push token registration failed: HTTP ${res.status}`);
+  }
 }
 
 /** Remove the push token for the current user only (not other accounts). */

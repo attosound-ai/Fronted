@@ -96,6 +96,11 @@ export const ANALYTICS_EVENTS = {
     CAPTURE_STOPPED: 'call_capture_stopped',
     TWILIO_REGISTERED: 'call_twilio_registered',
     TWILIO_REGISTRATION_FAILED: 'call_twilio_registration_failed',
+    TWILIO_UNREGISTERED: 'call_twilio_unregistered',
+    INVITE_AUTO_SWITCH_STARTED: 'call_invite_auto_switch_started',
+    INVITE_AUTO_SWITCH_SUCCEEDED: 'call_invite_auto_switch_succeeded',
+    INVITE_AUTO_SWITCH_FAILED: 'call_invite_auto_switch_failed',
+    INVITE_TARGET_NOT_LINKED: 'call_invite_target_not_linked',
     OUTGOING_INITIATED: 'call_outgoing_initiated',
     // Telemetry — deep diagnostics for WatchdogTermination repros (REACT-NATIVE-8).
     // TELEMETRY_TICK fires every 10 s while a call is active with a full

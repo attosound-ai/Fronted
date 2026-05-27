@@ -3,6 +3,7 @@ import { Platform, ActionSheetIOS } from 'react-native';
 import { setAudioModeAsync } from 'expo-audio';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
+import { useAccountStore } from '@/stores/accountStore';
 import { telephonyService } from '@/lib/api/telephonyService';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api/client';
@@ -37,7 +38,20 @@ let activeCallObj: any = null;
 let activeCallTeardown: (() => void) | null = null;
 let pendingInvite: any = null;
 let lastToken: string | null = null;
-let isRegistering = false;
+// Which account ID the currently-registered Twilio identity belongs to.
+// Used by the multi-account switch flow: when activeAccountId changes we
+// must unregister the old identity and register the new one — otherwise
+// incoming calls keep routing to the previous account's Voice SDK client.
+let activeIdentityAccountId: number | null = null;
+// Monotonic generation counter for register/unregister attempts. Any
+// attempt that detects its gen has been superseded (e.g., the user
+// switched accounts again before its register fully completed) aborts
+// or undoes itself, preventing stale identities from sticking around.
+// Replaces the legacy `isRegistering` boolean: with the gen counter,
+// concurrent attempts are no longer blocked outright — they are
+// invalidated, which is the only correct behavior when a switch
+// happens mid-register.
+let currentRegistrationGen = 0;
 // Reentrancy guard for the audio-route picker — repeated speaker toggles
 // during a call were one of the WatchdogTermination triggers seen in
 // REACT-NATIVE-8 (sessions that crashed had `call_speaker_toggled` as
@@ -50,6 +64,32 @@ function getVoice(): any {
     voiceInstance = new Voice();
   }
   return voiceInstance;
+}
+
+/**
+ * Unregister the currently-registered Twilio identity, if any. Idempotent
+ * and safe to call when nothing is registered. Errors are swallowed and
+ * reported to Sentry: registering a new identity on the same APNS device
+ * token supersedes the old binding server-side anyway, so a failed
+ * unregister never strands the device — it only loses an analytics signal.
+ */
+async function unregisterCurrent(): Promise<void> {
+  if (!lastToken) return;
+  const tok = lastToken;
+  const prevAccountId = activeIdentityAccountId;
+  lastToken = null;
+  activeIdentityAccountId = null;
+  try {
+    await getVoice().unregister(tok);
+    analytics.capture(ANALYTICS_EVENTS.CALL.TWILIO_UNREGISTERED, {
+      account_id: prevAccountId,
+    });
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { feature: 'twilio-voice', step: 'unregister' },
+      extra: { account_id: prevAccountId },
+    });
+  }
 }
 
 /** Expose the active call object for audio session recovery. */
@@ -541,6 +581,12 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
 
 export function useTwilioVoice() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  // Selector — NOT an imperative subscribe(). Driving the registration
+  // effect off the active account ID lets React serialize the rerun
+  // AFTER accountStore.switchToAccount finishes Phase A (resumeRequests
+  // included). subscribe() would fire mid-Phase-A and the token fetch
+  // would hang in the paused queue.
+  const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const setRegistered = useCallStore((s) => s.setRegistered);
   const setIncomingCall = useCallStore((s) => s.setIncomingCall);
   const endCall = useCallStore((s) => s.endCall);
@@ -558,42 +604,168 @@ export function useTwilioVoice() {
     }
   }, [hasAnyCall]);
 
-  const registerDevice = useCallback(async () => {
-    if (!IS_IOS) return; // Twilio Voice not configured for Android yet
-    if (isRegistering) return;
-    if (!pushKitReady) return;
-    if (!useAuthStore.getState().isAuthenticated) return;
+  const registerDevice = useCallback(
+    async (forAccountId: number | null) => {
+      if (!IS_IOS) return; // Twilio Voice not configured for Android yet
+      if (!pushKitReady) return;
+      if (!useAuthStore.getState().isAuthenticated) return;
+      if (forAccountId == null) return;
 
-    isRegistering = true;
-    try {
-      const { token } = await telephonyService.getVoiceToken();
+      // Claim a generation slot. Anything older than this is now stale —
+      // in-flight retries from a previous call will see their captured `gen`
+      // != currentRegistrationGen and short-circuit.
+      const gen = ++currentRegistrationGen;
 
-      const voice = getVoice();
-      await voice.register(token);
-      lastToken = token;
-      setRegistered(true);
-    } catch (error: unknown) {
+      // Backoff schedule: 1s → 3s → 10s. Total 4 attempts before giving up.
+      // Without retry, a single transient network blip during a switch
+      // bricks Voice for the rest of the session.
+      const RETRY_DELAYS_MS = [1000, 3000, 10000];
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        if (gen !== currentRegistrationGen) return;
+        try {
+          const { token } = await telephonyService.getVoiceToken();
+          if (gen !== currentRegistrationGen) return;
+          const voice = getVoice();
+          await voice.register(token);
+          if (gen !== currentRegistrationGen) {
+            // Raced — a newer switch happened while we were registering.
+            // Undo our binding so the newer attempt's identity wins clean.
+            try {
+              await voice.unregister(token);
+            } catch {
+              /* noop — server-side rebinding will fix it */
+            }
+            return;
+          }
+          lastToken = token;
+          activeIdentityAccountId = forAccountId;
+          setRegistered(true);
+          analytics.capture(ANALYTICS_EVENTS.CALL.TWILIO_REGISTERED, {
+            account_id: forAccountId,
+            attempt: attempt + 1,
+          });
+          return;
+        } catch (error: unknown) {
+          lastError = error;
+          if (gen !== currentRegistrationGen) return;
+          if (attempt < RETRY_DELAYS_MS.length) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+          }
+        }
+      }
+
+      // All attempts exhausted. The SDK is now unregistered for this
+      // account — the next switch, login, or 50-minute token refresh
+      // will retry from scratch.
+      if (gen !== currentRegistrationGen) return;
       const message =
-        error instanceof Error ? error.message : 'Voice registration failed';
-      console.error('[TwilioVoice] Registration FAILED:', message);
-      Sentry.captureException(error, {
+        lastError instanceof Error ? lastError.message : 'Voice registration failed';
+      console.error('[TwilioVoice] Registration FAILED after retries:', message);
+      Sentry.captureException(lastError, {
         tags: { feature: 'twilio-voice', step: 'register' },
+        extra: {
+          account_id: forAccountId,
+          total_attempts: RETRY_DELAYS_MS.length + 1,
+        },
+      });
+      analytics.capture(ANALYTICS_EVENTS.CALL.TWILIO_REGISTRATION_FAILED, {
+        account_id: forAccountId,
+        error_message: message,
+        total_attempts: RETRY_DELAYS_MS.length + 1,
       });
       setRegistered(false, message);
-    } finally {
-      isRegistering = false;
-    }
-  }, [setRegistered]);
+    },
+    [setRegistered]
+  );
 
   useEffect(() => {
     // Skip Twilio Voice setup entirely on Android — Firebase (google-services.json)
     // is not configured yet, and the native module crashes without it.
     if (!isAuthenticated || !IS_IOS) return;
+    // Wait for the account store to hydrate before registering — without an
+    // accountId we can't tag identity ownership, and the effect will rerun
+    // automatically once activeAccountId is set.
+    if (activeAccountId == null) return;
 
     const { Voice, CallInvite } = getTwilio();
     const voice = getVoice();
 
-    const onCallInvite = (invite: any) => {
+    const onCallInvite = async (invite: any) => {
+      // ── Auto-switch to the target account if needed (multi-account fan-out)
+      // The telephony-service webhook emits `<Parameter name="TargetUserId">`
+      // alongside each `<Client>` to tell us which logical account this call
+      // is for. With multi-account fan-out, the call may be delivered to the
+      // currently-registered Voice SDK identity even though it's intended
+      // for a different linked account on this device — in that case we
+      // silently switch BEFORE showing CallKit / setIncomingCall so all
+      // post-accept context (queries, screens, audio attribution) belongs to
+      // the right account.
+      //
+      // Wrapped in a try block: any crash here must not break the rest of
+      // the invite flow — we'd rather ring on the wrong account than miss
+      // the call entirely.
+      try {
+        const params =
+          typeof invite.getCustomParameters === 'function'
+            ? (invite.getCustomParameters() as Record<string, string>)
+            : ({} as Record<string, string>);
+        const targetUserId = Number(params?.TargetUserId);
+
+        if (Number.isFinite(targetUserId) && targetUserId > 0) {
+          const accountState = useAccountStore.getState();
+          const callState = useCallStore.getState();
+          const isLinked = accountState.accounts.some(
+            (a) => Number(a.user.id) === targetUserId
+          );
+
+          if (!isLinked) {
+            // Defense: backend claims this device should handle a target
+            // it's not linked to. Don't switch — ring on current account.
+            analytics.capture(ANALYTICS_EVENTS.CALL.INVITE_TARGET_NOT_LINKED, {
+              target_user_id: targetUserId,
+            });
+          } else if (
+            accountState.activeAccountId !== targetUserId &&
+            callState.activeCall == null
+          ) {
+            // Linked + not active + no other call in progress → auto-switch.
+            analytics.capture(ANALYTICS_EVENTS.CALL.INVITE_AUTO_SWITCH_STARTED, {
+              from_account_id: accountState.activeAccountId,
+              to_account_id: targetUserId,
+            });
+            try {
+              await accountState.switchToAccountForIncomingCall(targetUserId);
+              analytics.capture(ANALYTICS_EVENTS.CALL.INVITE_AUTO_SWITCH_SUCCEEDED, {
+                account_id: targetUserId,
+              });
+            } catch (switchErr) {
+              // Switch failed (network down, token rejected, target not
+              // linked). DisplayName from TwiML still resolves correctly,
+              // so the call rings on the current account with the right
+              // caller info — degraded but not dropped.
+              analytics.capture(ANALYTICS_EVENTS.CALL.INVITE_AUTO_SWITCH_FAILED, {
+                from_account_id: accountState.activeAccountId,
+                to_account_id: targetUserId,
+                error_message:
+                  switchErr instanceof Error ? switchErr.message : String(switchErr),
+              });
+              Sentry.captureException(switchErr, {
+                tags: { feature: 'twilio-voice', step: 'auto-switch' },
+                extra: { target_user_id: targetUserId },
+              });
+            }
+          }
+        }
+      } catch (paramErr) {
+        // Custom-parameter parsing failed — log and proceed. Falls back to
+        // the legacy single-account flow (works for users with no linkage).
+        Sentry.captureException(paramErr, {
+          tags: { feature: 'twilio-voice', step: 'auto-switch-defense' },
+        });
+      }
+
       pendingInvite = invite;
 
       const callSid = invite.getCallSid();
@@ -691,7 +863,18 @@ export function useTwilioVoice() {
         // out-of-band reset.
         await voice.setIncomingCallContactHandleTemplate('${DisplayName}');
 
-        await registerDevice();
+        // If we were previously registered under a different account,
+        // unregister that identity before binding the new one. Without
+        // this, Twilio keeps routing incoming calls to whichever identity
+        // was registered first — the multi-account switch bug (Bug #2).
+        if (
+          activeIdentityAccountId != null &&
+          activeIdentityAccountId !== activeAccountId
+        ) {
+          await unregisterCurrent();
+        }
+
+        await registerDevice(activeAccountId);
       } catch (err) {
         console.error('[TwilioVoice] Setup FAILED:', err);
         Sentry.captureException(err, {
@@ -701,11 +884,21 @@ export function useTwilioVoice() {
     };
     setup();
 
-    const refreshInterval = setInterval(registerDevice, TOKEN_REFRESH_MS);
+    // Closure captures the current activeAccountId. On switch, the effect
+    // reruns and a new interval is installed — the old one is cleared in
+    // the cleanup below before this new one schedules.
+    const refreshInterval = setInterval(() => {
+      void registerDevice(activeAccountId);
+    }, TOKEN_REFRESH_MS);
 
     return () => {
+      // Invalidate any in-flight register attempt — its captured `gen`
+      // will no longer match `currentRegistrationGen` and it'll bail.
+      currentRegistrationGen++;
       clearInterval(refreshInterval);
       voice.off(Voice.Event.CallInvite, onCallInvite);
+      // Fire-and-forget; do not block React unmount on a network round-trip.
+      void unregisterCurrent();
     };
-  }, [isAuthenticated, registerDevice, setIncomingCall, endCall]);
+  }, [isAuthenticated, activeAccountId, registerDevice, setIncomingCall, endCall]);
 }

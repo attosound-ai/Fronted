@@ -59,12 +59,14 @@ export interface LoginDTO {
 }
 
 export interface ForgotPasswordDTO {
-  email: string;
+  /** Username (preferred for managed creators) or email. */
+  identifier: string;
   locale?: string;
 }
 
 export interface ResetPasswordDTO {
-  email: string;
+  /** Same identifier used in the forgot-password request. */
+  identifier: string;
   otp: string;
   password: string;
 }

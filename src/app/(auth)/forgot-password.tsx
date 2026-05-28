@@ -11,20 +11,35 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { authService } from '@/lib/api/authService';
-import { isValidEmail, isStrongPassword } from '@/utils/validators';
+import { isStrongPassword } from '@/utils/validators';
 
 type Step = 'email' | 'otp' | 'password';
+
+// `identifier` here is intentionally lax: it accepts either an email
+// (everyone else) or a username (managed creators whose only contact
+// channel is their linked representative). The backend resolves which
+// is which and routes the OTP accordingly. Local validation only checks
+// "did the user type something plausible" so we don't block creators
+// at the form layer.
+function looksLikeEmail(value: string): boolean {
+  return value.includes('@');
+}
+
+function normalizeIdentifier(value: string): string {
+  const trimmed = value.trim();
+  return looksLikeEmail(trimmed) ? trimmed.toLowerCase() : trimmed;
+}
 
 export default function ForgotPasswordScreen() {
   const { t, i18n } = useTranslation('auth');
   const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [emailError, setEmailError] = useState('');
+  const [identifierError, setIdentifierError] = useState('');
   const [otpError, setOtpError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
@@ -32,27 +47,28 @@ export default function ForgotPasswordScreen() {
   const [apiError, setApiError] = useState('');
 
   const handleSendOtp = useCallback(async () => {
-    setEmailError('');
+    setIdentifierError('');
     setApiError('');
 
-    if (!isValidEmail(email.trim())) {
-      setEmailError(t('forgotPassword.emailError'));
+    const value = identifier.trim();
+    if (value.length < 3) {
+      setIdentifierError(t('forgotPassword.identifierError'));
       return;
     }
 
     try {
       setIsLoading(true);
       await authService.forgotPassword({
-        email: email.trim().toLowerCase(),
+        identifier: normalizeIdentifier(value),
         locale: i18n.language,
       });
     } catch {
-      // Always advance to prevent email enumeration
+      // Always advance to prevent account enumeration
     } finally {
       setIsLoading(false);
       setStep('otp');
     }
-  }, [email, i18n.language]);
+  }, [identifier, i18n.language, t]);
 
   const handleVerifyOtp = useCallback(() => {
     setOtpError('');
@@ -85,7 +101,7 @@ export default function ForgotPasswordScreen() {
     try {
       setIsLoading(true);
       await authService.resetPassword({
-        email: email.trim().toLowerCase(),
+        identifier: normalizeIdentifier(identifier),
         otp,
         password,
       });
@@ -97,7 +113,7 @@ export default function ForgotPasswordScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [email, otp, password, confirmPassword]);
+  }, [identifier, otp, password, confirmPassword, t]);
 
   const handleBack = useCallback(() => {
     if (step === 'email') {
@@ -146,10 +162,7 @@ export default function ForgotPasswordScreen() {
           bottomOffset={16}
           showsVerticalScrollIndicator={false}
         >
-          {renderHeader(
-            t('forgotPassword.title'),
-            t('forgotPassword.subtitle')
-          )}
+          {renderHeader(t('forgotPassword.title'), t('forgotPassword.subtitle'))}
 
           {apiError ? (
             <Text variant="small" style={styles.apiError}>
@@ -158,17 +171,17 @@ export default function ForgotPasswordScreen() {
           ) : null}
 
           <Input
-            label={t('forgotPassword.emailLabel')}
-            value={email}
+            label={t('forgotPassword.identifierLabel')}
+            value={identifier}
             onChangeText={(v: string) => {
-              setEmail(v);
-              setEmailError('');
+              setIdentifier(v);
+              setIdentifierError('');
             }}
-            keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
-            textContentType="emailAddress"
-            error={emailError}
+            autoCorrect={false}
+            autoComplete="username"
+            textContentType="username"
+            error={identifierError}
           />
 
           <Button
@@ -193,10 +206,7 @@ export default function ForgotPasswordScreen() {
           bottomOffset={16}
           showsVerticalScrollIndicator={false}
         >
-          {renderHeader(
-            t('forgotPassword.enterCode'),
-            t('forgotPassword.codeSubtitle')
-          )}
+          {renderHeader(t('forgotPassword.enterCode'), t('forgotPassword.codeSubtitle'))}
 
           {renderError()}
 
@@ -245,7 +255,7 @@ export default function ForgotPasswordScreen() {
           unrelated emails from Contacts.
         */}
         <TextInput
-          value={email}
+          value={identifier}
           editable={false}
           autoComplete="username"
           textContentType="username"

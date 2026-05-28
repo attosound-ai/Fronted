@@ -294,7 +294,42 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       // No Phase B (websocket reconnect, unread refresh): not on the
       // critical path for receiving the call; the relevant screens
       // trigger their own data fetches when navigated to post-call.
-      const { user, tokens } = await authService.switchAccount(userId);
+      //
+      // Retry on Network Error specifically: when iOS resumes the app
+      // from a suspended-background PushKit invite, the JS thread runs
+      // *before* the network stack has finished warming up. The first
+      // POST to /auth/switch-account fails synchronously with
+      // "Network Error" inside ~100 ms. A short backoff lets the radio
+      // come back, then the switch succeeds. CallKit is already
+      // ringing/connected on the OS side during this delay, so the
+      // extra latency is not user-visible — the upside is that the call
+      // lands in the correct account context (subscription, recording,
+      // post-call screens). Observed in production cold-launch flows
+      // where rep was the last active session but the call routed to
+      // the linked creator.
+      const COLD_LAUNCH_RETRY_DELAYS_MS = [300, 800];
+      let switchedTokens: { user: User; tokens: TokenPair } | null = null;
+      let lastSwitchErr: unknown = null;
+      for (let attempt = 0; attempt <= COLD_LAUNCH_RETRY_DELAYS_MS.length; attempt++) {
+        try {
+          switchedTokens = await authService.switchAccount(userId);
+          break;
+        } catch (err: unknown) {
+          lastSwitchErr = err;
+          const message = err instanceof Error ? err.message : String(err);
+          const isNetworkError =
+            message.includes('Network Error') ||
+            message.includes('Network request failed');
+          if (!isNetworkError || attempt >= COLD_LAUNCH_RETRY_DELAYS_MS.length) {
+            throw err;
+          }
+          await new Promise((r) => setTimeout(r, COLD_LAUNCH_RETRY_DELAYS_MS[attempt]));
+        }
+      }
+      if (!switchedTokens) {
+        throw lastSwitchErr ?? new Error('switchAccount failed');
+      }
+      const { user, tokens } = switchedTokens;
       await get().addAccount({ user, tokens });
       await applyAccountSwitchCore(userId, user, tokens, activeAccountId);
 

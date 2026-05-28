@@ -291,14 +291,24 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       // No animation: CallKit's native ring UI is already presenting; an
       // overlapping flip would be jarring and possibly invisible anyway.
       //
-      // No Phase B (websocket reconnect, unread refresh) and no
-      // subscription fetch: these add ~200-400 ms and are not on the
-      // critical path for receiving the call. The call screen triggers
-      // its own data fetches, and Phase B side effects will happen
-      // naturally the next time the user navigates.
+      // No Phase B (websocket reconnect, unread refresh): not on the
+      // critical path for receiving the call; the relevant screens
+      // trigger their own data fetches when navigated to post-call.
       const { user, tokens } = await authService.switchAccount(userId);
       await get().addAccount({ user, tokens });
       await applyAccountSwitchCore(userId, user, tokens, activeAccountId);
+
+      // Subscription cache belongs to the previous account. Clear it
+      // synchronously so subscription-gated UI (recording screen, bridge
+      // settings, etc.) never shows the previous account's plan after
+      // the auto-switch — early observed bug where a representative's
+      // Connect Free state persisted into the creator's session and
+      // blocked recording even though the backend had `plan=record`.
+      // Fetch is fire-and-forget: by the time the user clears CallKit
+      // and lands on the home screen, the correct plan is cached.
+      const { useSubscriptionStore } = await import('./subscriptionStore');
+      useSubscriptionStore.getState().clear();
+      void useSubscriptionStore.getState().fetchSubscription();
     },
 
     removeAccount: async (userId: number) => {

@@ -443,8 +443,19 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       // Reconcile with the authenticated session. The authStore user is the
       // source of truth for "who is logged in right now"; a stale or mismatched
       // activeAccountId in SecureStore must yield to it.
-      if (currentUser && activeId !== currentUser.id) {
-        activeId = currentUser.id;
+      //
+      // CRITICAL: re-read the user here instead of using the `currentUser`
+      // captured at the top of this function. `loadAccounts` runs
+      // concurrently with `authStore.initialize()` during cold-launch, and
+      // a `switchToAccountForIncomingCall` triggered by a PushKit invite
+      // can update `authStore.user` and `setActiveAccountId` (SecureStore)
+      // in between the original `currentUser` read and this reconciliation.
+      // Using the stale value reverted the just-completed auto-switch and
+      // left the Voice SDK + active session in inconsistent states (Bug
+      // #12: brief unregister-of-new + register-of-old after cold-launch).
+      const latestUser = useAuthStore.getState().user;
+      if (latestUser && activeId !== latestUser.id) {
+        activeId = latestUser.id;
         await setActiveAccountId(activeId);
       }
       set({ accounts: validEntries, activeAccountId: activeId });

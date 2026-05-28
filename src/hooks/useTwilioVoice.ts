@@ -770,7 +770,6 @@ export function useTwilioVoice() {
 
       const callSid = invite.getCallSid();
       const from = invite.getFrom() || 'Unknown';
-      let callKitAccepted = false;
 
       // ── PRIMARY watchdog-leak fix (REACT-NATIVE-8) ──
       // Previously these two listeners were registered with anonymous
@@ -808,7 +807,6 @@ export function useTwilioVoice() {
       };
 
       const onAccepted = (call: any) => {
-        callKitAccepted = true;
         activeCallObj = call;
         pendingInvite = null;
         useCallStore.getState().setCallState('connected');
@@ -832,12 +830,25 @@ export function useTwilioVoice() {
       void resolveCallerUsername(from);
       analytics.capture(ANALYTICS_EVENTS.CALL.INCOMING_RECEIVED, { from_number: from });
 
-      // Delay navigation slightly so CallKit's Accepted event can fire first.
-      // When the user answered from a push notification (app closed), CallKit
-      // already accepted the call — the Accepted event fires within a few ms.
-      // In that case we skip the /call modal entirely.
+      // Delay navigation slightly so the call state (ringing / connected)
+      // has settled before /call mounts.
+      //
+      // We MUST navigate to /call regardless of whether CallKit already
+      // accepted (cold-launch scenario): /call owns the state-driven
+      // routing — `state==='ringing'` renders IncomingCallScreen, while
+      // `state==='connected'` dismisses to the recording flow (record
+      // plan) or back to tabs (free / pro) via CallBanner.
+      //
+      // Previous version skipped this push when `callKitAccepted===true`,
+      // which left cold-launches stranded: the user accepted from the
+      // native CallKit UI, the app cold-started, but no in-app screen
+      // was ever pushed → black screen, no way to interact. The user
+      // could only end the call via the OS-level control. (Bug #9.)
+      //
+      // Guard with `activeCall != null` so a rapid Cancelled before the
+      // 150 ms timer fires doesn't push an empty /call modal.
       setTimeout(() => {
-        if (!callKitAccepted) {
+        if (useCallStore.getState().activeCall != null) {
           router.push('/call');
         }
       }, 150);

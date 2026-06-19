@@ -1,14 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  View,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { Mic, MicOff, Volume1, Volume2, Phone } from 'lucide-react-native';
+import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
@@ -18,7 +13,9 @@ import { useProjectDetail } from '@/features/projects/hooks/useProjectDetail';
 import { useCallStore } from '@/stores/callStore';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import { openKeypad } from './DtmfKeypadHost';
 import type { ExportResult } from '@/types/project';
+import { COLORS } from '@/constants/theme';
 
 interface ActiveCallScreenProps {
   onBack: () => void;
@@ -155,6 +152,16 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={styles.callBtn}
+              onPress={openKeypad}
+              activeOpacity={0.7}
+            >
+              <Grid3x3 size={16} color="#FFF" strokeWidth={2.25} />
+              <Text variant="caption" style={styles.callBtnLabel}>
+                {t('active.keypad')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.hangUpBtn}
               onPress={hangUpCall}
               activeOpacity={0.8}
@@ -176,7 +183,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,

@@ -6,6 +6,9 @@ interface CallStoreState {
   activeProjectId: string | null;
   isRegistered: boolean;
   registrationError: string | null;
+  // DTMF keypad overlay visibility. Lives at store level (not on ActiveCall)
+  // so a single global host can render the sheet for every call surface.
+  keypadVisible: boolean;
 }
 
 interface CallStoreActions {
@@ -20,6 +23,8 @@ interface CallStoreActions {
   startCapture: (streamSid: string) => void;
   stopCapture: () => void;
   setActiveProjectId: (id: string | null) => void;
+  showKeypad: () => void;
+  hideKeypad: () => void;
   endCall: () => void;
 }
 
@@ -28,6 +33,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   activeProjectId: null,
   isRegistered: false,
   registrationError: null,
+  keypadVisible: false,
 
   setRegistered: (registered, error = null) =>
     set({ isRegistered: registered, registrationError: error }),
@@ -131,5 +137,8 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
 
   setActiveProjectId: (id) => set({ activeProjectId: id }),
 
-  endCall: () => set({ activeCall: null, activeProjectId: null }),
+  showKeypad: () => set({ keypadVisible: true }),
+  hideKeypad: () => set({ keypadVisible: false }),
+
+  endCall: () => set({ activeCall: null, activeProjectId: null, keypadVisible: false }),
 }));

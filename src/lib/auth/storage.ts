@@ -26,12 +26,73 @@ const tokenKeyFor = (id: number) => `auth_token_${id}`;
 const refreshKeyFor = (id: number) => `refresh_token_${id}`;
 const userKeyFor = (id: number) => `user_data_${id}`;
 
+// Sentinel written once the one-time accessibility migration has completed
+// (see migrateKeychainAccessibility). Stored under the same policy so it is
+// itself readable while locked.
+const KEYCHAIN_MIGRATION_KEY = 'keychain_policy_v1';
+
+/**
+ * Keychain accessibility policy for ALL auth material.
+ *
+ * `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`:
+ *  - **Background-readable**: once the user has unlocked the device a
+ *    single time since boot, the item can be read even while the screen is
+ *    locked. This is REQUIRED for VoIP: an incoming call wakes the app in
+ *    the background with the screen locked, and the Twilio Voice SDK must
+ *    read the auth token to fetch a voice token and connect. The iOS
+ *    default (`WHEN_UNLOCKED`) throws `errSecInteractionNotAllowed`
+ *    ("User interaction is not allowed") in that state — the root cause of
+ *    silently-dropped incoming calls and the FrontBoard `0xBAADCA11`
+ *    watchdog kills (app launched by VoIP push but unable to set up the
+ *    call before iOS's deadline).
+ *  - **`THIS_DEVICE_ONLY`**: credentials never migrate to a new device via
+ *    an iCloud / encrypted backup restore — correct hygiene for bearer
+ *    tokens (a restored device must re-authenticate).
+ *
+ * Centralised here as the single source of truth: every write goes through
+ * `secureSet`, so a newly-added key can never silently regress to the
+ * lock-only default.
+ */
+const KEYCHAIN_POLICY: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+};
+
 /** Log SecureStore read failures to Sentry instead of swallowing silently. */
 function reportKeychainError(key: string, error: unknown): void {
   Sentry.captureException(error, {
     tags: { subsystem: 'secure_store', key },
     level: 'warning',
   });
+}
+
+// ── Low-level secure storage primitives (single choke point) ──
+//
+// Every credential read/write/delete funnels through these three helpers so
+// the keychain policy and the error reporting are applied uniformly and can
+// never be forgotten at a call site (DRY + SRP).
+
+/** Write a value under the project-wide keychain accessibility policy. */
+async function secureSet(key: string, value: string): Promise<void> {
+  await SecureStore.setItemAsync(key, value, KEYCHAIN_POLICY);
+}
+
+/** Read a value, reporting (but not throwing on) keychain failures. */
+async function secureGet(key: string): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch (error) {
+    reportKeychainError(key, error);
+    return null;
+  }
+}
+
+/** Delete a value. Best-effort; never throws. */
+async function secureDelete(key: string): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(key);
+  } catch (error) {
+    reportKeychainError(key, error);
+  }
 }
 
 /**
@@ -44,45 +105,36 @@ function reportKeychainError(key: string, error: unknown): void {
 export const authStorage = {
   // Token de acceso
   async getToken(): Promise<string | null> {
-    try {
-      return await SecureStore.getItemAsync(TOKEN_KEY);
-    } catch (error) {
-      reportKeychainError(TOKEN_KEY, error);
-      return null;
-    }
+    return secureGet(TOKEN_KEY);
   },
 
   async setToken(token: string): Promise<void> {
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await secureSet(TOKEN_KEY, token);
   },
 
   async removeToken(): Promise<void> {
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await secureDelete(TOKEN_KEY);
   },
 
   // Refresh token
   async getRefreshToken(): Promise<string | null> {
-    try {
-      return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-    } catch (error) {
-      reportKeychainError(REFRESH_TOKEN_KEY, error);
-      return null;
-    }
+    return secureGet(REFRESH_TOKEN_KEY);
   },
 
   async setRefreshToken(token: string): Promise<void> {
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
+    await secureSet(REFRESH_TOKEN_KEY, token);
   },
 
   async removeRefreshToken(): Promise<void> {
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    await secureDelete(REFRESH_TOKEN_KEY);
   },
 
   // User data (JSON serializado)
   async getUser<T>(): Promise<T | null> {
+    const data = await secureGet(USER_KEY);
+    if (!data) return null;
     try {
-      const data = await SecureStore.getItemAsync(USER_KEY);
-      return data ? JSON.parse(data) : null;
+      return JSON.parse(data) as T;
     } catch (error) {
       reportKeychainError(USER_KEY, error);
       return null;
@@ -90,30 +142,25 @@ export const authStorage = {
   },
 
   async setUser<T>(user: T): Promise<void> {
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+    await secureSet(USER_KEY, JSON.stringify(user));
   },
 
   async removeUser(): Promise<void> {
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await secureDelete(USER_KEY);
   },
 
   // ── In-progress signup password (encrypted, cleared on complete) ──
 
   async getSignupPassword(): Promise<string | null> {
-    try {
-      return await SecureStore.getItemAsync(SIGNUP_PASSWORD_KEY);
-    } catch (error) {
-      reportKeychainError(SIGNUP_PASSWORD_KEY, error);
-      return null;
-    }
+    return secureGet(SIGNUP_PASSWORD_KEY);
   },
 
   async setSignupPassword(password: string): Promise<void> {
-    await SecureStore.setItemAsync(SIGNUP_PASSWORD_KEY, password);
+    await secureSet(SIGNUP_PASSWORD_KEY, password);
   },
 
   async removeSignupPassword(): Promise<void> {
-    await SecureStore.deleteItemAsync(SIGNUP_PASSWORD_KEY);
+    await secureDelete(SIGNUP_PASSWORD_KEY);
   },
 
   // Limpiar todo
@@ -125,71 +172,126 @@ export const authStorage = {
 // ── Per-account storage helpers ──
 
 export async function getAccountIds(): Promise<number[]> {
+  const raw = await secureGet(LINKED_ACCOUNT_IDS_KEY);
+  if (!raw) return [];
   try {
-    const raw = await SecureStore.getItemAsync(LINKED_ACCOUNT_IDS_KEY);
-    return raw ? (JSON.parse(raw) as number[]) : [];
+    return JSON.parse(raw) as number[];
   } catch {
     return [];
   }
 }
 
 export async function setAccountIds(ids: number[]): Promise<void> {
-  await SecureStore.setItemAsync(LINKED_ACCOUNT_IDS_KEY, JSON.stringify(ids));
+  await secureSet(LINKED_ACCOUNT_IDS_KEY, JSON.stringify(ids));
 }
 
 export async function getActiveAccountId(): Promise<number | null> {
-  try {
-    const raw = await SecureStore.getItemAsync(ACTIVE_ACCOUNT_KEY);
-    return raw ? Number(raw) : null;
-  } catch {
-    return null;
-  }
+  const raw = await secureGet(ACTIVE_ACCOUNT_KEY);
+  return raw ? Number(raw) : null;
 }
 
 export async function setActiveAccountId(id: number): Promise<void> {
-  await SecureStore.setItemAsync(ACTIVE_ACCOUNT_KEY, String(id));
+  await secureSet(ACTIVE_ACCOUNT_KEY, String(id));
 }
 
 export async function getAccountTokens(id: number): Promise<TokenPair | null> {
-  try {
-    const raw = await SecureStore.getItemAsync(tokenKeyFor(id));
-    const refresh = await SecureStore.getItemAsync(refreshKeyFor(id));
-    if (!raw || !refresh) return null;
-    return { accessToken: raw, refreshToken: refresh, expiresIn: 0 };
-  } catch {
-    return null;
-  }
+  const raw = await secureGet(tokenKeyFor(id));
+  const refresh = await secureGet(refreshKeyFor(id));
+  if (!raw || !refresh) return null;
+  return { accessToken: raw, refreshToken: refresh, expiresIn: 0 };
 }
 
 export async function setAccountTokens(id: number, tokens: TokenPair): Promise<void> {
-  await SecureStore.setItemAsync(tokenKeyFor(id), tokens.accessToken);
-  await SecureStore.setItemAsync(refreshKeyFor(id), tokens.refreshToken);
+  await secureSet(tokenKeyFor(id), tokens.accessToken);
+  await secureSet(refreshKeyFor(id), tokens.refreshToken);
 }
 
 export async function getAccountUser(id: number): Promise<User | null> {
+  const raw = await secureGet(userKeyFor(id));
+  if (!raw) return null;
   try {
-    const raw = await SecureStore.getItemAsync(userKeyFor(id));
-    return raw ? (JSON.parse(raw) as User) : null;
+    return JSON.parse(raw) as User;
   } catch {
     return null;
   }
 }
 
 export async function setAccountUser(id: number, user: User): Promise<void> {
-  await SecureStore.setItemAsync(userKeyFor(id), JSON.stringify(user));
+  await secureSet(userKeyFor(id), JSON.stringify(user));
 }
 
 export async function clearAccount(id: number): Promise<void> {
   await Promise.all([
-    SecureStore.deleteItemAsync(tokenKeyFor(id)),
-    SecureStore.deleteItemAsync(refreshKeyFor(id)),
-    SecureStore.deleteItemAsync(userKeyFor(id)),
+    secureDelete(tokenKeyFor(id)),
+    secureDelete(refreshKeyFor(id)),
+    secureDelete(userKeyFor(id)),
   ]);
 }
 
 export async function clearAllAccountData(): Promise<void> {
   const ids = await getAccountIds();
   await Promise.all(ids.map(clearAccount));
-  await SecureStore.deleteItemAsync(LINKED_ACCOUNT_IDS_KEY);
-  await SecureStore.deleteItemAsync(ACTIVE_ACCOUNT_KEY);
+  await secureDelete(LINKED_ACCOUNT_IDS_KEY);
+  await secureDelete(ACTIVE_ACCOUNT_KEY);
+}
+
+// ── One-time keychain accessibility migration ──
+
+/**
+ * Re-write every existing credential under the current `KEYCHAIN_POLICY`.
+ *
+ * Why this is required (and not just changing the write option):
+ * `expo-secure-store`'s native `set` issues `SecItemAdd`, and for an
+ * already-existing key falls back to `SecItemUpdate` with ONLY the value —
+ * it never updates `kSecAttrAccessible`. So items first written under the
+ * old default (`WHEN_UNLOCKED`) keep that accessibility forever, even after
+ * we start passing the new option. The only way to change it is to delete
+ * the item and add it fresh, which is exactly what this does.
+ *
+ * Safety / robustness:
+ *  - Runs in the foreground (called from session bootstrap), where the old
+ *    `WHEN_UNLOCKED` items are still readable.
+ *  - Idempotent: a sentinel is written last; once present the work is
+ *    skipped. If interrupted mid-run the sentinel is never set, so the next
+ *    launch simply re-runs the whole (cheap, idempotent) pass.
+ *  - Per-key try/catch: a single failed key degrades to "re-login on next
+ *    use" (authStore already treats a missing token as logged-out) rather
+ *    than aborting the migration for the others.
+ *  - Never throws: callers can `void migrateKeychainAccessibility()` or
+ *    await it without guarding.
+ */
+export async function migrateKeychainAccessibility(): Promise<void> {
+  try {
+    const alreadyMigrated = await secureGet(KEYCHAIN_MIGRATION_KEY);
+    if (alreadyMigrated === 'done') return;
+
+    const ids = await getAccountIds();
+    const keys = [
+      TOKEN_KEY,
+      REFRESH_TOKEN_KEY,
+      USER_KEY,
+      SIGNUP_PASSWORD_KEY,
+      LINKED_ACCOUNT_IDS_KEY,
+      ACTIVE_ACCOUNT_KEY,
+      ...ids.flatMap((id) => [tokenKeyFor(id), refreshKeyFor(id), userKeyFor(id)]),
+    ];
+
+    for (const key of keys) {
+      try {
+        const value = await SecureStore.getItemAsync(key);
+        if (value == null) continue; // nothing stored under this key
+        // delete + re-add so SecItemAdd applies the new kSecAttrAccessible
+        await SecureStore.deleteItemAsync(key);
+        await SecureStore.setItemAsync(key, value, KEYCHAIN_POLICY);
+      } catch (error) {
+        // Leave this key as-is; worst case is a re-login for that account.
+        reportKeychainError(key, error);
+      }
+    }
+
+    await secureSet(KEYCHAIN_MIGRATION_KEY, 'done');
+  } catch (error) {
+    // Migration is best-effort hardening — never block app startup on it.
+    reportKeychainError(KEYCHAIN_MIGRATION_KEY, error);
+  }
 }

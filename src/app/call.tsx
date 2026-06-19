@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
+import * as Sentry from '@sentry/react-native';
 import { useCallStore } from '@/stores/callStore';
-import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   acceptIncomingCall,
   rejectIncomingCall,
@@ -10,82 +11,94 @@ import {
 } from '@/hooks/useTwilioVoice';
 import { IncomingCallScreen } from '@/components/call/IncomingCallScreen';
 import { OutgoingCallScreen } from '@/components/call/OutgoingCallScreen';
+import { COLORS } from '@/constants/theme';
 
-function dismiss() {
+/**
+ * Hand off from the /call fullScreenModal back to the tabs once the call is no
+ * longer in an interactive ringing state.
+ *
+ * We deliberately land on the tabs (NOT push the recorder) because:
+ *  - The global `CallBanner` already owns the connected-call UI on the tabs and
+ *    lets record-plan users jump into the recorder with one tap. Routing there
+ *    is the same proven path free/pro users take.
+ *  - The previous `dismiss()` + delayed `push('/(tabs)/recording')` raced the
+ *    modal's slide-out animation: the push landed while /call was still
+ *    dismissing, stranding the user on a black screen (Bug #2, reproduced).
+ *
+ * In-app calls have a modal stack → `dismiss()` pops /call back to the tabs.
+ * A cold-launch / background answer via CallKit booted straight into /call with
+ * no modal to pop → `replace('/(tabs)')`.
+ */
+function handOff() {
   if (router.canDismiss()) {
     router.dismiss();
   } else {
-    router.replace('/');
+    router.replace('/(tabs)');
   }
 }
 
 export default function CallScreen() {
   const activeCall = useCallStore((s) => s.activeCall);
+  const state = activeCall?.state;
 
-  // When call connects: non-pro users go straight to recording,
-  // pro users dismiss to tabs (where CallBanner lets them pick a project).
+  const showingBlackFallback = state !== 'ringing' && state !== 'ringing-outgoing';
+
+  // Hand off whenever we're not on an interactive ringing screen (connected,
+  // connecting, reconnecting, or the call cleared).
   useEffect(() => {
-    if (activeCall?.state === 'ringing' || activeCall?.state === 'ringing-outgoing')
-      return;
+    if (state === 'ringing' || state === 'ringing-outgoing') return;
 
-    if (activeCall?.state === 'connected') {
-      const canRecord = useSubscriptionStore.getState().hasEntitlement('record_upload');
-      if (canRecord) {
-        const hasPro = useSubscriptionStore
-          .getState()
-          .hasEntitlement('advanced_production');
-        if (!hasPro) {
-          // record plan: dismiss call modal, then navigate to recording inside tabs
-          if (router.canDismiss()) router.dismiss();
-          setTimeout(() => router.push('/(tabs)/recording'), 100);
-          return;
-        }
-      }
-      // connect_free: no recording, just dismiss to tabs
-      // record_pro: dismiss to tabs, CallBanner lets them pick a project
-    }
+    analytics.capture(ANALYTICS_EVENTS.CALL.SCREEN_CONNECTED_NAV, {
+      state: state ?? 'null',
+      target: '/(tabs)',
+      can_dismiss: router.canDismiss(),
+    });
 
-    const id = setInterval(() => {
-      if (router.canDismiss()) {
-        clearInterval(id);
-        router.dismiss();
-      }
-    }, 100);
+    handOff();
+  }, [state]);
 
-    const safety = setTimeout(() => {
-      clearInterval(id);
-      if (!router.canDismiss()) router.replace('/');
-    }, 2000);
+  // If the hand-off above somehow failed and we're STILL mounted on the black
+  // fallback a couple seconds later, the user is stranded — record it. On a
+  // successful hand-off this component unmounts and the timer is cleared, so
+  // this only fires for genuine dead-ends.
+  useEffect(() => {
+    if (!showingBlackFallback) return;
+    const t = setTimeout(() => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.SCREEN_BLACK_FALLBACK, {
+        state: state ?? 'null',
+      });
+      Sentry.captureMessage('Call screen stranded on black fallback', {
+        level: 'warning',
+        tags: { feature: 'twilio-voice', step: 'call-screen-handoff' },
+      });
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [showingBlackFallback, state]);
 
-    return () => {
-      clearInterval(id);
-      clearTimeout(safety);
-    };
-  }, [activeCall]);
-
-  if (activeCall?.state === 'ringing') {
+  if (state === 'ringing') {
     return (
       <IncomingCallScreen
-        fromNumber={activeCall.fromNumber}
-        callerUsername={activeCall.callerUsername}
+        fromNumber={activeCall!.fromNumber}
+        callerUsername={activeCall!.callerUsername}
         onAccept={acceptIncomingCall}
         onReject={rejectIncomingCall}
       />
     );
   }
 
-  if (activeCall?.state === 'ringing-outgoing') {
+  if (state === 'ringing-outgoing') {
     return (
       <OutgoingCallScreen
-        recipientName={activeCall.recipientName || activeCall.recipientId || 'Unknown'}
+        recipientName={activeCall!.recipientName || activeCall!.recipientId || 'Unknown'}
         onCancel={hangUpCall}
       />
     );
   }
 
-  // Tappable black screen so user can escape if dismiss fails
+  // Tappable escape hatch while the hand-off runs (and a last resort if it ever
+  // fails — tapping forces us back to the tabs).
   return (
-    <Pressable style={styles.container} onPress={dismiss}>
+    <Pressable style={styles.container} onPress={handOff}>
       <View />
     </Pressable>
   );
@@ -94,6 +107,6 @@ export default function CallScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
 });

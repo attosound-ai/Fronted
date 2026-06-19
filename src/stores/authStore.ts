@@ -3,7 +3,7 @@ import { AxiosError } from 'axios';
 import * as Sentry from '@sentry/react-native';
 import i18n from '@/lib/i18n';
 import { authService } from '@/lib/api/authService';
-import { authStorage } from '@/lib/auth/storage';
+import { authStorage, migrateKeychainAccessibility } from '@/lib/auth/storage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { getErrorMessage } from '@/utils/formatters';
 import { useSubscriptionStore } from './subscriptionStore';
@@ -40,7 +40,7 @@ interface AuthActions {
   adoptCompletedSignup: (
     user: User,
     tokens: TokenPair,
-    linkedAccount?: { user: User; tokens: TokenPair },
+    linkedAccount?: { user: User; tokens: TokenPair }
   ) => Promise<void>;
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
@@ -83,6 +83,12 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   initialize: async () => {
     try {
       set({ isLoading: true, error: null });
+
+      // One-time hardening: re-write any credentials still stored under the
+      // legacy lock-only keychain policy so they become background-readable
+      // for incoming VoIP calls. Runs here (foreground) where the old items
+      // are still readable; idempotent and self-skipping thereafter.
+      await migrateKeychainAccessibility();
 
       const accessToken = await authStorage.getToken();
       const refreshToken = await authStorage.getRefreshToken();
@@ -237,7 +243,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   adoptCompletedSignup: async (
     user: User,
     tokens: TokenPair,
-    linkedAccount?: { user: User; tokens: TokenPair },
+    linkedAccount?: { user: User; tokens: TokenPair }
   ) => {
     set({ isAuthenticating: true, error: null });
     try {

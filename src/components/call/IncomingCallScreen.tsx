@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { User, Phone } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { COLORS } from '@/constants/theme';
 
 interface IncomingCallScreenProps {
   fromNumber: string;
@@ -59,7 +60,7 @@ export function IncomingCallScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     justifyContent: 'space-between',
     paddingVertical: 80,
     paddingHorizontal: 32,

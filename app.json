@@ -70,6 +70,7 @@
       "typedRoutes": true
     },
     "plugins": [
+      "./plugins/withTwilioVoipPushRegistry",
       "expo-router",
       "expo-secure-store",
       "expo-font",
@@ -117,6 +118,20 @@
             "ios": "./assets/icons/chrome.png",
             "android": {
               "foregroundImage": "./assets/icons/chrome.png",
+              "backgroundColor": "#000000"
+            }
+          },
+          "gold": {
+            "ios": "./assets/icons/gold.png",
+            "android": {
+              "foregroundImage": "./assets/icons/gold.png",
+              "backgroundColor": "#000000"
+            }
+          },
+          "diamond": {
+            "ios": "./assets/icons/diamond.png",
+            "android": {
+              "foregroundImage": "./assets/icons/diamond.png",
               "backgroundColor": "#000000"
             }
           }

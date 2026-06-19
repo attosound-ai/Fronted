@@ -13,6 +13,8 @@
     "mute": "Mute",
     "unmute": "Unmute",
     "speaker": "Speaker",
+    "keypad": "Keypad",
+    "keypadTitle": "Keypad",
     "end": "End",
     "hold": "Hold",
     "resume": "Resume",

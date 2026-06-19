@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
-import { Platform, ActionSheetIOS } from 'react-native';
-import { setAudioModeAsync } from 'expo-audio';
+import { Platform, ActionSheetIOS, AppState } from 'react-native';
+import { setAudioModeAsync, AudioModule } from 'expo-audio';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
 import { useAccountStore } from '@/stores/accountStore';
@@ -57,6 +57,10 @@ let currentRegistrationGen = 0;
 // REACT-NATIVE-8 (sessions that crashed had `call_speaker_toggled` as
 // their last event). Only one toggle may be in-flight at a time.
 let isSpeakerToggling = false;
+// Reentrancy guard for DTMF. Mirrors `isSpeakerToggling`: only one
+// sendDigits() may be in flight at a time so a double-tap on the keypad
+// cannot stack native calls on the same Call object.
+let isSendingDigits = false;
 
 function getVoice(): any {
   if (!voiceInstance) {
@@ -414,6 +418,60 @@ export async function toggleHoldCall() {
   useCallStore.getState().setOnHold(!isOnHold);
 }
 
+/**
+ * Send DTMF touch-tones on the active call (e.g. press "1" to accept a
+ * Securus/prison-carrier inmate call after its IVR prompt).
+ *
+ * This is the ONLY place that touches the Twilio Call object for DTMF —
+ * every UI surface depends on this function, never on `activeCallObj`.
+ * Hardened so it never throws to the UI: it returns whether the digits
+ * were actually sent.
+ *
+ * @param digits A string of DTMF characters (`0-9`, `*`, `#`, or `w` for a
+ *   500ms pause). `sendDigits('01')` sends `0` then `1`.
+ * @returns `true` only when the SDK confirms the tones were sent.
+ */
+export async function sendCallDigits(digits: string): Promise<boolean> {
+  if (!activeCallObj) return false;
+
+  // Tones are only meaningful on a connected media path. Pre-connect and
+  // `reconnecting` sends are dropped (Securus also ignores the keypad until
+  // its prompt finishes, so there is nothing to gain from sending early).
+  const state = useCallStore.getState().activeCall?.state;
+  if (state !== 'connected') return false;
+
+  // Validate against the SDK's accepted character set before crossing the
+  // native bridge. A malformed value can only come from a programming error.
+  if (!/^[0-9*#w]+$/.test(digits)) {
+    Sentry.captureException(new Error(`Invalid DTMF digits: ${digits}`), {
+      tags: { feature: 'twilio-voice', step: 'send-digits-invalid' },
+    });
+    return false;
+  }
+
+  if (isSendingDigits) return false;
+  isSendingDigits = true;
+  try {
+    await activeCallObj.sendDigits(digits);
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, { digits });
+    return true;
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { feature: 'twilio-voice', step: 'send-digits' },
+      extra: { digits },
+    });
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SEND_FAILED, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  } finally {
+    isSendingDigits = false;
+  }
+}
+
+/** Convenience wrapper for sending a single keypad digit. */
+export const sendCallDigit = (digit: string): Promise<boolean> => sendCallDigits(digit);
+
 export async function toggleSpeaker() {
   // Reentrancy guard: repeated audio-route changes during a call were the
   // last action recorded before WatchdogTermination on 2/7 PostHog
@@ -519,6 +577,30 @@ export async function toggleSpeaker() {
       outcome: 'error',
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+// Snapshot the microphone grant at the moment a call connects. A call can
+// connect through CallKit with NO mic access (iOS only prompts lazily) — the
+// caller then can't hear the user. This lets us measure how often that happens
+// and alert on it. Fire-and-forget; telemetry must never break the call.
+async function captureCallMicPermission(phase: string) {
+  try {
+    const p = await AudioModule.getRecordingPermissionsAsync();
+    analytics.capture(ANALYTICS_EVENTS.CALL.MIC_PERMISSION_STATUS, {
+      phase,
+      status: p.status,
+      granted: p.granted,
+      can_ask_again: p.canAskAgain,
+    });
+    if (!p.granted) {
+      Sentry.captureMessage('Call connected without microphone permission', {
+        level: 'warning',
+        tags: { feature: 'twilio-voice', step: phase },
+      });
+    }
+  } catch {
+    /* non-fatal telemetry */
   }
 }
 
@@ -693,6 +775,15 @@ export function useTwilioVoice() {
     const voice = getVoice();
 
     const onCallInvite = async (invite: any) => {
+      // Stamp the raw arrival FIRST — before any auto-switch round-trip — so we
+      // know exactly when (and whether) the invite reached JS. On a cold launch
+      // from a killed app this either lands far later than the native push
+      // marker or never fires at all; that delta is the "rang late" signal.
+      analytics.capture(ANALYTICS_EVENTS.CALL.INCOMING_RAW, {
+        app_state: AppState.currentState,
+        active_account_id: activeAccountId,
+      });
+
       // ── Auto-switch to the target account if needed (multi-account fan-out)
       // The telephony-service webhook emits `<Parameter name="TargetUserId">`
       // alongside each `<Client>` to tell us which logical account this call
@@ -812,6 +903,7 @@ export function useTwilioVoice() {
         useCallStore.getState().setCallState('connected');
         bindCallEvents(call);
         analytics.capture(ANALYTICS_EVENTS.CALL.ACCEPTED, { source: 'callkit' });
+        void captureCallMicPermission('callkit_accepted');
         // bindCallEvents will own telemetry from Connected/Disconnected;
         // drop the invite-level listeners now that the call has progressed.
         detachInviteHandlers();
@@ -859,7 +951,16 @@ export function useTwilioVoice() {
     const setup = async () => {
       try {
         if (!pushKitReady) {
-          await voice.initializePushRegistry();
+          // The PushKit registry is created NATIVELY at app launch by the
+          // `withTwilioVoipPushRegistry` config plugin (AppDelegate). That is
+          // what lets a cold launch from a terminated state report the call to
+          // CallKit before iOS's watchdog deadline (the FrontBoard 0xBAADCA11
+          // kill). We must NOT call `voice.initializePushRegistry()` here as
+          // well — that would stand up a SECOND PKPushRegistry and double-handle
+          // every incoming VoIP push. The native registry already feeds the
+          // device-token and incoming-push events into the SDK module, which
+          // this hook observes; we only need to mark the SDK as ready and let
+          // the device token settle before the first registration attempt.
           pushKitReady = true;
           await new Promise((r) => setTimeout(r, 3000));
         }

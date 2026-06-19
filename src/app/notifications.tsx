@@ -22,6 +22,7 @@ import type {
   GroupedNotification,
   NotificationSection,
 } from '@/features/notifications/types';
+import { COLORS } from '@/constants/theme';
 
 export default function NotificationsScreen() {
   const { t } = useTranslation('notifications');
@@ -154,7 +155,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

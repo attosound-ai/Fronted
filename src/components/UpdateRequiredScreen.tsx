@@ -3,6 +3,7 @@ import { Linking, Platform, StyleSheet, TouchableOpacity, View } from 'react-nat
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { isClientOutdated, onClientOutdated } from '@/lib/api/client';
+import { COLORS } from '@/constants/theme';
 
 // App Store / Play Store links. Replace with the actual IDs once published;
 // the defaults open the store search as a soft fallback.
@@ -66,7 +67,7 @@ function UpdateRequiredScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,

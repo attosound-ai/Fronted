@@ -27,6 +27,7 @@ import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { Post } from '@/types';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
+import { COLORS } from '@/constants/theme';
 
 // ── Post → FeedPost conversion ───────────────────────────────────────────────
 
@@ -341,7 +342,7 @@ export default function PostDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

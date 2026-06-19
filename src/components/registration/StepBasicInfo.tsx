@@ -9,6 +9,7 @@ import { StepProps } from '@/types/registration';
 import { isValidEmail, isValidPhoneNumber } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 import { apiClient } from '@/lib/api/client';
+import { COLORS } from '@/constants/theme';
 
 /**
  * StepBasicInfo - Step 1 of registration wizard
@@ -206,7 +207,7 @@ export function StepBasicInfo({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

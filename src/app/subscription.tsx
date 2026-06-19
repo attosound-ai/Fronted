@@ -22,6 +22,7 @@ import { paymentService } from '@/lib/api/paymentService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { PlanChangePreview, PlanId } from '@/types';
 import { PlanChangeBottomSheet } from '@/features/profile/components/PlanChangeBottomSheet';
+import { COLORS } from '@/constants/theme';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -417,7 +418,7 @@ export default function SubscriptionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

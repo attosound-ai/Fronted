@@ -29,6 +29,7 @@ import { useBookmarks } from '@/features/feed/hooks/useBookmarks';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post } from '@/types';
 import type { FeedResponse } from '@/features/feed/types';
+import { COLORS } from '@/constants/theme';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -334,7 +335,7 @@ export const ProfileContentTabs = forwardRef<
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
 
   // Tab bar

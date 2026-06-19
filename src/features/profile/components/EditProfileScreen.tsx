@@ -31,6 +31,7 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { useEditProfile } from '../hooks/useEditProfile';
 import { EditProfileHeader } from './EditProfileHeader';
 import { AvatarPickerSheet } from './AvatarPickerSheet';
+import { COLORS } from '@/constants/theme';
 
 export function EditProfileScreen() {
   const { t } = useTranslation('profile');
@@ -358,7 +359,7 @@ export function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

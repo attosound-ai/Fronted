@@ -18,6 +18,7 @@ import {
   useChatWallpaperStore,
 } from '@/stores/chatWallpaperStore';
 import type { ChatWallpaper } from '../types';
+import { COLORS } from '@/constants/theme';
 
 interface WallpaperPickerSheetProps {
   visible: boolean;
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     width: TILE_SIZE,
     height: TILE_SIZE,
     borderRadius: 16,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,

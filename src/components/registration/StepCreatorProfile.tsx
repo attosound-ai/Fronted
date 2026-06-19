@@ -28,6 +28,7 @@ import { useImagePicker } from '@/hooks/useImagePicker';
 import { isNotEmpty, isValidUsername } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 import { authService } from '@/lib/api/authService';
+import { COLORS } from '@/constants/theme';
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -369,7 +370,7 @@ export function StepCreatorProfile({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
+  container: { flex: 1, backgroundColor: COLORS.background.primary },
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   title: { color: '#FFFFFF', textAlign: 'center', marginTop: 24, marginBottom: 4 },
   subtitle: { color: '#888888', textAlign: 'center', marginBottom: 16 },

@@ -52,6 +52,7 @@ import { formatCount } from '@/utils/formatters';
 import { ReelsSkeleton } from '@/components/ui/Skeleton';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post'; // PostType used in toFeedPost helper
 import type { Post } from '@/types';
+import { COLORS } from '@/constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -638,14 +639,14 @@ export function ReelsFeed() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
 
   // ── Reel item ──
   reelContainer: {
     width: SCREEN_WIDTH,
     height: REEL_HEIGHT,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     overflow: 'hidden',
   },
   noVideoPlaceholder: {
@@ -802,7 +803,7 @@ const styles = StyleSheet.create({
   // ── Loading / empty states ──
   centered: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
@@ -822,6 +823,6 @@ const styles = StyleSheet.create({
     height: REEL_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
 });

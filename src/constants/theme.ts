@@ -4,6 +4,19 @@
  * Sistema de diseño centralizado
  */
 
+/**
+ * 🎨 FONDO PRINCIPAL DE LA APP — ÚNICO LUGAR PARA CAMBIARLO
+ * ---------------------------------------------------------
+ * Negro mate (estilo pantalla de Welcome). Este es el color de fondo de
+ * TODAS las pantallas. Cambia SOLO este valor y todos los fondos negros de
+ * la app se actualizan a la vez (incluido el splash nativo, que lo lee desde
+ * aquí en `app.config.js`).
+ *
+ * Ejemplos: '#100e10' (welcome, negro mate con tinte magenta) · '#000000'
+ * (negro puro) · '#0A0A0A' (negro carbón).
+ */
+export const APP_BACKGROUND = '#100e10';
+
 export const COLORS = {
   // Primarios
   primary: '#3B82F6',
@@ -35,9 +48,9 @@ export const COLORS = {
 
   // Backgrounds (dark mode)
   background: {
-    primary: '#000000',
-    secondary: '#111111',
-    tertiary: '#1A1A1A',
+    primary: APP_BACKGROUND, // fondo base de la app (negro mate, ver APP_BACKGROUND)
+    secondary: '#111111', // superficies elevadas (inputs, cards)
+    tertiary: '#1A1A1A', // superficies aún más elevadas
   },
 
   // Borders

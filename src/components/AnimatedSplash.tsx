@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import WebView from 'react-native-webview';
 import { SPLASH_HTML } from './splashHtml';
+import { COLORS } from '@/constants/theme';
 
 interface Props {
   onAnimationComplete: () => void;
@@ -30,7 +31,7 @@ export default function AnimatedSplash({ onAnimationComplete }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   webview: {
     flex: 1,

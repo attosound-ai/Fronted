@@ -22,6 +22,7 @@ import { CommentsSheet } from '@/features/feed/components/comments/CommentsSheet
 import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import type { Post } from '@/types';
+import { COLORS } from '@/constants/theme';
 
 // ---------------------------------------------------------------------------
 // Post → FeedPost helpers (mirrors FeedList.tsx)
@@ -244,7 +245,7 @@ export default function BookmarksScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

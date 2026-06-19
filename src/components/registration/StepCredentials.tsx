@@ -8,6 +8,7 @@ import { Text, Button, Input, Checkbox } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 /**
  * StepCredentials - Step 2 of registration wizard
@@ -233,7 +234,7 @@ export function StepCredentials({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

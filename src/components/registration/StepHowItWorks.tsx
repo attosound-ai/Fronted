@@ -5,6 +5,7 @@ import { StepProps } from '@/types/registration';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 /**
  * Step 5: How Creator Representation Works
@@ -50,7 +51,7 @@ export const StepHowItWorks: React.FC<StepProps> = ({ onNext, onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollContent: {
     paddingHorizontal: 24,

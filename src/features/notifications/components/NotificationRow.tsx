@@ -8,6 +8,7 @@ import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { Logo } from '@/components/ui/Logo';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { GroupedNotification, NotificationType } from '../types';
+import { COLORS } from '@/constants/theme';
 
 interface Props {
   group: GroupedNotification;
@@ -169,7 +170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   unreadBg: {
     backgroundColor: '#0A0A0A',

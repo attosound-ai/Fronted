@@ -23,6 +23,7 @@ import { EditorLoadingModal } from '@/features/timeline/components/EditorLoading
 import { useCreatePostStore } from '@/stores/createPostStore';
 import type { AudioSegment } from '@/types/call';
 import type { ExportResult } from '@/types/project';
+import { COLORS } from '@/constants/theme';
 
 interface ProjectDetailScreenProps {
   projectId: string;
@@ -252,7 +253,7 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   loadingContainer: {
     flex: 1,

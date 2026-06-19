@@ -11,6 +11,7 @@ import { EmptyProjectsState } from './EmptyProjectsState';
 import { CreateProjectSheet } from './CreateProjectSheet';
 import { useProjects, useCreateProject } from '../hooks/useProjects';
 import type { Project } from '@/types/project';
+import { COLORS } from '@/constants/theme';
 
 export function ProjectListScreen() {
   const { t } = useTranslation('projects');
@@ -101,7 +102,7 @@ export function ProjectListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

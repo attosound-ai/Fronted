@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { formatCount } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
+import { COLORS } from '@/constants/theme';
 
 interface AdCardProps {
   post: FeedPost;
@@ -215,13 +216,13 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     marginBottom: 16,
   },
 
   // Video
   videoContainer: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     position: 'relative',
   },
   video: {

@@ -17,6 +17,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/authStore';
 import { feedService } from '@/features/feed/services/feedService';
 import { useEditPost } from '@/features/feed/hooks/useEditPost';
+import { COLORS } from '@/constants/theme';
 
 const MAX_CHARS = 2200;
 
@@ -128,7 +129,7 @@ export default function EditPostScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   centered: {
     flex: 1,

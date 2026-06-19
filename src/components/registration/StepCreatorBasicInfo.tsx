@@ -10,6 +10,7 @@ import { StepProps } from '@/types/registration';
 import { isValidEmail } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 import { authService } from '@/lib/api/authService';
+import { COLORS } from '@/constants/theme';
 
 type AvailabilityStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
@@ -280,7 +281,7 @@ export function StepCreatorBasicInfo({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
+  container: { flex: 1, backgroundColor: COLORS.background.primary },
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   title: { color: '#FFFFFF', textAlign: 'center', marginTop: 24, marginBottom: 4 },
   subtitle: { color: '#888888', textAlign: 'center', marginBottom: 24 },

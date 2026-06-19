@@ -5,6 +5,7 @@ import { VideoOff, VolumeX, Volume2 } from 'lucide-react-native';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import type { FeedPost } from '@/types/post';
+import { COLORS } from '@/constants/theme';
 const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
 const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
 
@@ -126,7 +127,7 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     position: 'relative',
   },
   video: {

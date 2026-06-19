@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { authService } from '@/lib/api/authService';
 import { isStrongPassword } from '@/utils/validators';
+import { COLORS } from '@/constants/theme';
 
 type Step = 'email' | 'otp' | 'password';
 
@@ -334,7 +335,7 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   content: {
     flexGrow: 1,

@@ -41,6 +41,7 @@ import {
 } from '@/components/registration';
 import { getGenresForSelectedTypes } from '@/constants/creatorData';
 import { getErrorMessage } from '@/utils/formatters';
+import { COLORS } from '@/constants/theme';
 
 const initialWizardState: RegistrationWizardState = {
   identifierMode: 'email',
@@ -726,7 +727,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   topBar: {
     flexDirection: 'row',

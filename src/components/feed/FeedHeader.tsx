@@ -50,6 +50,7 @@ import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useCreatorLogos } from '@/features/feed/hooks/useCreatorLogos';
 import { useLogoVote } from '@/features/feed/hooks/useLogoVote';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { COLORS } from '@/constants/theme';
 
 const ATTO_LOGO_URI =
   'https://res.cloudinary.com/da9vymoah/image/upload/v1774905442/Property_1_Default_zqv4qr.png';
@@ -469,7 +470,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     zIndex: 10,
   },
   headerTablet: {
@@ -504,7 +505,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     zIndex: 5,
   },
   topSheet: {

@@ -18,6 +18,7 @@ import { useUserSearch } from '@/features/search/hooks/useUserSearch';
 import { useContentSearch } from '@/features/search/hooks/useContentSearch';
 import { useExploreGrid } from '@/features/search/hooks/useExploreGrid';
 import { GridSkeleton, UserListSkeleton } from '@/components/ui/Skeleton';
+import { COLORS } from '@/constants/theme';
 
 type SearchTab = 'people' | 'content';
 
@@ -190,7 +191,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   searchRow: {
     paddingHorizontal: 16,

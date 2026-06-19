@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 /**
  * StepName - Collects the user's full name during registration
@@ -113,7 +114,7 @@ export function StepName({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GOLD } from '@/constants/gold';
+import { COLORS } from '@/constants/theme';
 
 interface GoldRingProps {
   /** Outer diameter of the ring + child content, in px. */
@@ -81,7 +82,7 @@ export function GoldRing({
           bottom: thickness,
           borderRadius: innerRadius,
           overflow: 'hidden',
-          backgroundColor: '#000',
+          backgroundColor: COLORS.background.primary,
         }}
       >
         {children}

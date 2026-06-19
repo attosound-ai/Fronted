@@ -65,8 +65,11 @@
     "repQuestion": "Will you represent a creator on ATTO SOUND?",
     "repDescription": "You are creating this account on behalf of a creator and have their permission to manage and publish their content.",
     "yesRepresent": "Yes, I represent a creator",
-    "iAmCreator": "I am a creator",
-    "noForMe": "No, this account is for me"
+    "noForMe": "No, this account is for me",
+    "inmateGateQuestion": "Do you have an inmate number?",
+    "inmateGateYes": "Yes",
+    "inmateGateNo": "No",
+    "inmateGateBack": "Back"
   },
   "creatorInmate": {
     "title": "Verify your identity",

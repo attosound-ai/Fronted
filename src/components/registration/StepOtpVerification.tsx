@@ -12,6 +12,7 @@ import { useCountdown } from '@/hooks/useCountdown';
 import { haptic } from '@/lib/haptics/hapticService';
 import { isValidEmail } from '@/utils/validators';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { COLORS } from '@/constants/theme';
 
 const COOLDOWN_SECONDS = 60;
 
@@ -309,7 +310,7 @@ function maskPhone(countryCode: string, number: string): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   content: {
     flexGrow: 1,

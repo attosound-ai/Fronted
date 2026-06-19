@@ -8,6 +8,7 @@ import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 /**
  * StepCreatorPassword - Step 9: Password + confirm for the creator account
@@ -200,7 +201,7 @@ export function StepCreatorPassword({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
+  container: { flex: 1, backgroundColor: COLORS.background.primary },
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   title: { color: '#FFFFFF', textAlign: 'center', marginTop: 24, marginBottom: 4 },
   subtitle: { color: '#888888', textAlign: 'center', marginBottom: 24 },

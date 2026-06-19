@@ -2,6 +2,7 @@ import { View, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { TimeSection } from '../types';
+import { COLORS } from '@/constants/theme';
 
 interface Props {
   section: TimeSection;
@@ -22,7 +23,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 8,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   text: {
     color: '#888',

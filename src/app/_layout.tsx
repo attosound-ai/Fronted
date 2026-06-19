@@ -21,6 +21,7 @@ import { PostHogProvider, PostHogErrorBoundary, usePostHog } from 'posthog-react
 import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SplashScreen from 'expo-splash-screen';
+import { AppState } from 'react-native';
 import { useFonts } from 'expo-font';
 
 // Patched Archivo TTFs with corrected hhea/OS-2 metrics so iOS does not
@@ -36,10 +37,12 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
+import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
+import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
 import { BugReportFAB } from '@/components/BugReportFAB';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
@@ -106,6 +109,7 @@ SplashScreen.preventAutoHideAsync();
 // QueryClient is extracted to a shared module so stores can import it
 // for cache invalidation (e.g., on account switch).
 import { queryClient, queryPersister } from '@/lib/queryClient';
+import { COLORS } from '@/constants/theme';
 
 /** Bridges the PostHog instance into the analytics singleton + global error handler. */
 function AnalyticsInitializer() {
@@ -163,6 +167,7 @@ function ErrorFallback() {
 function RootLayout() {
   const initialize = useAuthStore((s) => s.initialize);
   useTwilioVoice();
+  useMicrophonePermission();
   useBadgeSync();
   const [fontsLoaded] = useFonts({
     Archivo_400Regular,
@@ -179,6 +184,23 @@ function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  // Re-hide the splash every time the app becomes active. A VoIP push can
+  // cold-launch the app directly into the BACKGROUND (iOS terminates a merely
+  // backgrounded app under memory pressure, then relaunches it to handle the
+  // call). The React tree mounts and the call connects, but `hideAsync()` above
+  // runs while suspended and never actually removes the native splash — so the
+  // user foregrounds into a black splash covering the already-rendered app
+  // (Bug #2: "black screen after answering"). Re-hiding on 'active' reveals it.
+  // Idempotent and cheap.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        SplashScreen.hideAsync().catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // Invalidate project cache when a call ends (covers all end scenarios)
   useMountEffect(() => {
@@ -235,11 +257,12 @@ function RootLayout() {
                   {!fontsLoaded ? null : (
                     <UpdateRequiredGate>
                       <InCallTopBar />
+                      <DtmfKeypadHost />
                       <Stack
                         screenOptions={{
                           headerShown: true,
                           headerBackTitle: '',
-                          headerStyle: { backgroundColor: '#000000' },
+                          headerStyle: { backgroundColor: COLORS.background.primary },
                           headerTintColor: '#FFFFFF',
                           headerTitleStyle: {
                             fontFamily: 'Archivo_600SemiBold',
@@ -247,7 +270,7 @@ function RootLayout() {
                           },
                           headerShadowVisible: false,
                           headerBackTitleVisible: false,
-                          contentStyle: { backgroundColor: '#000000' },
+                          contentStyle: { backgroundColor: COLORS.background.primary },
                           animation: 'slide_from_right',
                           fullScreenGestureEnabled: false,
                           animationDuration: 300,
@@ -341,7 +364,7 @@ function RootLayout() {
                             headerShown: false,
                             presentation: 'modal',
                             animation: 'slide_from_bottom',
-                            contentStyle: { backgroundColor: '#000000' },
+                            contentStyle: { backgroundColor: COLORS.background.primary },
                           }}
                         />
                         <Stack.Screen

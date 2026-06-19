@@ -39,6 +39,7 @@ import { ProfileSettingsSection } from '@/features/profile/components/ProfileSet
 import { DeleteAccountBottomSheet } from '@/features/profile/components/DeleteAccountBottomSheet';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
+import { COLORS } from '@/constants/theme';
 
 export default function ProfileScreen() {
   const authUser = useAuthStore((s) => s.user);
@@ -194,7 +195,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     paddingHorizontal: 16,

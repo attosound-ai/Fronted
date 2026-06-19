@@ -24,6 +24,7 @@ import Animated, {
 import { Text } from '@/components/ui/Text';
 import { imageCropService, CropRegion } from '@/lib/media/imageCropService';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const CIRCLE_PADDING = 40;
 const OVERLAY_COLOR = 'rgba(0,0,0,0.72)';
@@ -341,8 +342,8 @@ export function ImageCropModal({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000' },
-  safeArea: { flex: 1, backgroundColor: '#000000', alignItems: 'center' },
+  root: { flex: 1, backgroundColor: COLORS.background.primary },
+  safeArea: { flex: 1, backgroundColor: COLORS.background.primary, alignItems: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -10,6 +10,7 @@ import Animated, {
 import { useAccountSwitchAnimationStore } from '@/stores/accountSwitchAnimationStore';
 import { Avatar } from './Avatar';
 import { Text } from './Text';
+import { COLORS } from '@/constants/theme';
 
 export function AccountSwitchOverlay() {
   const phase = useAccountSwitchAnimationStore((s) => s.phase);
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

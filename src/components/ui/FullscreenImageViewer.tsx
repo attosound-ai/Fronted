@@ -25,6 +25,7 @@ import { Text } from '@/components/ui/Text';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { LogoVotersSheet } from './LogoVotersSheet';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const SPRING_CONFIG = { damping: 20, stiffness: 200 };
 const DISMISS_THRESHOLD = 150;
@@ -343,7 +344,7 @@ export function FullscreenImageViewer({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },

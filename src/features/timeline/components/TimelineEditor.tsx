@@ -38,6 +38,7 @@ import { projectService } from '@/lib/api/projectService';
 import type { LaneMeta } from '../types';
 import type { TimelineClip, LaneMetadata, ExportResult } from '@/types/project';
 import type { AudioSegment } from '@/types/call';
+import { COLORS } from '@/constants/theme';
 
 interface TimelineEditorProps {
   projectId: string;
@@ -902,7 +903,7 @@ export function TimelineEditor({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

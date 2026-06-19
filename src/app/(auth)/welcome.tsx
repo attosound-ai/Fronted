@@ -2,75 +2,32 @@ import { Image, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { Button } from '@/components/ui/Button';
+import { COLORS } from '@/constants/theme';
 import { haptic } from '@/lib/haptics/hapticService';
 
 /**
  * Welcome screen.
  *
- * Visual port of attosound.com's hero (atto-web/src/components/sections/hero.tsx):
- *   - Base background #100e10 (near-black with a faint magenta cast).
- *   - Spotlight: radial gradient from above, simulating a stage key light
- *     beaming down onto the logo.
- *   - Vignette: radial gradient anchored at 42% from the top (where the
- *     logo sits), darkening the edges to give the matte surface depth.
- *   - Logo: 3D pre-rendered PNG of the equalizer badge (assets/logo-3d.png).
+ * Visual port of attosound.com's hero (atto-web/src/components/sections/hero.tsx).
+ * The web hero is a UNIFORM matte black `#100e10` with NO lighting effect —
+ * no spotlight, no vignette — so the background blends edge to edge with no
+ * visible "bar" near the top. We mirror that exactly here: a single flat
+ * `COLORS.background.primary` fill (= APP_BACKGROUND = #100e10), same as the
+ * rest of the app and the website's <body>.
  *
- * expo-linear-gradient does not do radial, so the two backdrop layers are
- * SVG <RadialGradient> + <Rect> stacked under the content via
- * StyleSheet.absoluteFillObject. react-native-svg is already a dep.
+ * (Previous versions stacked two SVG <RadialGradient> layers to fake stage
+ * lighting; the web dropped that — see atto-web hero `feat/hero-matte-no-lighting`
+ * — so we dropped it too to keep app and site identical.)
  *
- * Sign-in / Create-account buttons keep the previous behaviour (haptic +
- * router.push); only the visual treatment changed.
+ * Logo: 3D pre-rendered PNG of the equalizer badge (assets/logo-3d.png).
  */
 export default function WelcomeScreen() {
   const { t } = useTranslation('auth');
 
   return (
     <View style={styles.container}>
-      {/* Backdrop: solid base + two radial gradients absolutely positioned
-          underneath the content. */}
-      <Svg
-        style={StyleSheet.absoluteFillObject}
-        width="100%"
-        height="100%"
-        pointerEvents="none"
-      >
-        <Defs>
-          {/* Spotlight — born above the viewport, dies around 60% radius */}
-          <RadialGradient
-            id="spotlight"
-            cx="50%"
-            cy="-10%"
-            rx="90%"
-            ry="70%"
-            fx="50%"
-            fy="-10%"
-          >
-            <Stop offset="0%" stopColor="#ffffff" stopOpacity={0.18} />
-            <Stop offset="35%" stopColor="#ffffff" stopOpacity={0.06} />
-            <Stop offset="60%" stopColor="#ffffff" stopOpacity={0} />
-          </RadialGradient>
-          {/* Vignette — transparent until 60%, then falls to 40% black */}
-          <RadialGradient
-            id="vignette"
-            cx="50%"
-            cy="42%"
-            rx="120%"
-            ry="120%"
-            fx="50%"
-            fy="42%"
-          >
-            <Stop offset="60%" stopColor="#000000" stopOpacity={0} />
-            <Stop offset="100%" stopColor="#000000" stopOpacity={0.4} />
-          </RadialGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill="url(#spotlight)" />
-        <Rect width="100%" height="100%" fill="url(#vignette)" />
-      </Svg>
-
       <SafeAreaView style={styles.safe}>
         <View style={styles.logoSection}>
           {/* logo-3d.png is the same asset shipped with atto-web's hero.
@@ -109,8 +66,10 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    // Negro mate plano e idéntico a la web (body bg-[#100e10]). Ver
+    // APP_BACKGROUND en theme.ts — un solo color, sin gradientes ni luces.
     flex: 1,
-    backgroundColor: '#100e10',
+    backgroundColor: COLORS.background.primary,
   },
   safe: {
     flex: 1,

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { PostType } from '@/types/post';
 import type { PickedMedia } from '../../types';
+import { COLORS } from '@/constants/theme';
 
 interface ComposeMediaPreviewProps {
   attachmentType: PostType;
@@ -204,7 +205,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginHorizontal: 0,
     width: 200,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   videoThumb: {
     width: '100%',
@@ -213,7 +214,7 @@ const styles = StyleSheet.create({
   },
   reelThumb: {
     aspectRatio: 9 / 16,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

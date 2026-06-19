@@ -84,6 +84,13 @@ export const ANALYTICS_EVENTS = {
 
   // ── Calls ──────────────────────────────────────
   CALL: {
+    // Fires at the very TOP of onCallInvite, before any auto-switch work, so
+    // it timestamps the exact moment the VoIP invite reached JS. Compared
+    // against the native push-arrival marker (UserDefaults `atto_last_voip_push_at`)
+    // and the backend dial time, this is what reveals a cold-launch "rang
+    // late / never rang" — the invite either arrives much later than the push
+    // or never fires at all (app killed before the RN bridge booted).
+    INCOMING_RAW: 'call_incoming_raw',
     INCOMING_RECEIVED: 'call_incoming_received',
     ACCEPTED: 'call_accepted',
     REJECTED: 'call_rejected',
@@ -109,6 +116,23 @@ export const ANALYTICS_EVENTS = {
     // pre-disconnect, etc.) so post-mortem queries can pinpoint the leak.
     TELEMETRY_TICK: 'call_telemetry_tick',
     TELEMETRY_MARKER: 'call_telemetry_marker',
+    // DTMF keypad — lets the user send touch-tones during a call (e.g. press
+    // "1" to accept a Securus/prison-carrier inmate call after the IVR prompt).
+    DTMF_SENT: 'call_dtmf_sent',
+    DTMF_SEND_FAILED: 'call_dtmf_send_failed',
+    KEYPAD_OPENED: 'call_keypad_opened',
+    // Microphone permission. An incoming VoIP call answered from the lock
+    // screen can connect with NO mic access (iOS only prompts lazily) — the
+    // caller then can't hear the user. We now request at login; these events
+    // let us measure grant state at login AND at the moment a call connects.
+    MIC_PERMISSION_STATUS: 'call_mic_permission_status',
+    MIC_PERMISSION_REQUESTED: 'call_mic_permission_requested',
+    // /call screen hand-off. SCREEN_CONNECTED_NAV records the route + whether a
+    // modal stack existed (cold-launch CallKit answers have none). BLACK_FALLBACK
+    // fires only if the screen is still showing the black escape-hatch after the
+    // hand-off should have happened — i.e. the user is stranded (Bug #2).
+    SCREEN_CONNECTED_NAV: 'call_screen_connected_nav',
+    SCREEN_BLACK_FALLBACK: 'call_screen_black_fallback',
   },
 
   // ── Messages ───────────────────────────────────

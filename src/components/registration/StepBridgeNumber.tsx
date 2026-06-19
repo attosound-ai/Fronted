@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { paymentService } from '@/lib/api/paymentService';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 40; // ~2 minutes
@@ -288,7 +289,7 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 type Step = 'identifier' | 'password' | '2fa';
 
@@ -334,7 +335,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

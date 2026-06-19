@@ -15,6 +15,7 @@ import { authService } from '@/lib/api/authService';
 import { isNotEmpty, isValidInmateNumber } from '@/utils/validators';
 import { getErrorMessage } from '@/utils/formatters';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const AVAILABLE_STATES: SelectOption[] = [{ label: 'Connecticut', value: 'CT' }];
 
@@ -307,7 +308,7 @@ export const StepConsentForm: React.FC<StepProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, MicOff, Volume1, Volume2, Phone } from 'lucide-react-native';
+import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import { openKeypad } from './DtmfKeypadHost';
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -29,7 +30,8 @@ export function InCallTopBar() {
     activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
 
   // Hide on the dedicated call screen (it has its own controls)
-  const isOnCallScreen = pathname === '/call' || pathname === '/recording' || pathname === '/(tabs)/recording';
+  const isOnCallScreen =
+    pathname === '/call' || pathname === '/recording' || pathname === '/(tabs)/recording';
 
   // Elapsed timer
   useEffect(() => {
@@ -81,6 +83,10 @@ export function InCallTopBar() {
             ) : (
               <Volume1 size={18} color="#FFF" strokeWidth={2.25} />
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.btn} onPress={openKeypad}>
+            <Grid3x3 size={18} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.hangUpBtn} onPress={hangUpCall}>

@@ -11,6 +11,7 @@ import { PostMedia } from './media/PostMedia';
 import { PostActions } from './PostActions';
 import { PostEngagement } from './PostEngagement';
 import { InteractorsBottomSheet, type InteractionType } from './InteractorsBottomSheet';
+import { COLORS } from '@/constants/theme';
 
 interface FeedPostCardProps {
   post: FeedPost;
@@ -189,7 +190,7 @@ export const FeedPostCard = memo(FeedPostCardInner, (prev, next) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   suggestedLabel: {
     color: '#888',
@@ -199,10 +200,10 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   creatorPostShell: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   creatorPostWrapper: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   creatorAudioPostWrapper: {
     backgroundColor: '#1A1A1A',

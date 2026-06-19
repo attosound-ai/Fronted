@@ -14,6 +14,7 @@ import { authService } from '@/lib/api/authService';
 import { isValidInmateNumber } from '@/utils/validators';
 import { getErrorMessage } from '@/utils/formatters';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const AVAILABLE_STATES: SelectOption[] = [{ label: 'Connecticut', value: 'CT' }];
 
@@ -217,13 +218,15 @@ export function StepCreatorInmate({
 
             <View style={styles.modalButtons}>
               <Button
-                title={t('consentForm.confirmPerson')}
+                title={t('common:buttons.yes')}
                 onPress={handleConfirmInmate}
+                style={styles.modalButton}
               />
               <Button
-                title={t('consentForm.notThisPerson')}
+                title={t('common:buttons.no')}
                 onPress={handleRejectInmate}
                 variant="outline"
+                style={styles.modalButton}
               />
             </View>
           </View>
@@ -236,7 +239,7 @@ export function StepCreatorInmate({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,
@@ -334,7 +337,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modalButtons: {
+    flexDirection: 'row',
     gap: 12,
     paddingBottom: 8,
+  },
+  modalButton: {
+    flex: 1,
   },
 });

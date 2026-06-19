@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { User, Phone } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { COLORS } from '@/constants/theme';
 
 interface OutgoingCallScreenProps {
   recipientName: string;
@@ -37,7 +38,7 @@ export function OutgoingCallScreen({ recipientName, onCancel }: OutgoingCallScre
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     justifyContent: 'space-between',
     paddingVertical: 80,
     paddingHorizontal: 32,

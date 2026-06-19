@@ -2,6 +2,7 @@ import { View, Pressable, StyleSheet, type ViewStyle, type StyleProp } from 'rea
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CounterBadge } from '@/components/ui/CounterBadge';
+import { COLORS } from '@/constants/theme';
 
 export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -70,7 +71,7 @@ export function BottomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#222222',
   },

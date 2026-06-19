@@ -1,10 +1,33 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { View, Alert, TouchableOpacity, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import {
+  View,
+  Alert,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Mic, MicOff, Volume1, Volume2, Phone, CloudUpload, FolderUp } from 'lucide-react-native';
-import { useAudioRecorder, useAudioRecorderState, RecordingPresets, AudioModule, setAudioModeAsync } from 'expo-audio';
+import {
+  ArrowLeft,
+  Mic,
+  MicOff,
+  Volume1,
+  Volume2,
+  Phone,
+  Grid3x3,
+  CloudUpload,
+  FolderUp,
+} from 'lucide-react-native';
+import {
+  useAudioRecorder,
+  useAudioRecorderState,
+  RecordingPresets,
+  AudioModule,
+  setAudioModeAsync,
+} from 'expo-audio';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Text } from '@/components/ui/Text';
@@ -21,6 +44,7 @@ import { useCallStore } from '@/stores/callStore';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { useSimpleRecordingPlayback } from '@/hooks/useSimpleRecordingPlayback';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import { openKeypad } from './DtmfKeypadHost';
 import { telephonyService } from '@/lib/api/telephonyService';
 import { projectService } from '@/lib/api/projectService';
 import { router } from 'expo-router';
@@ -37,7 +61,11 @@ function getAudioExportMeta(format?: string, uri?: string) {
   const fromUri = (uri || '').split('?')[0].toLowerCase();
 
   if (normalized === 'wav' || fromUri.endsWith('.wav')) {
-    return { extension: 'wav', mimeType: 'audio/wav', uti: 'com.microsoft.waveform-audio' };
+    return {
+      extension: 'wav',
+      mimeType: 'audio/wav',
+      uti: 'com.microsoft.waveform-audio',
+    };
   }
   if (normalized === 'mp3' || fromUri.endsWith('.mp3')) {
     return { extension: 'mp3', mimeType: 'audio/mpeg', uti: 'public.mp3' };
@@ -73,7 +101,9 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadSheetVisible, setUploadSheetVisible] = useState(false);
   const [uploadSheetCanClose, setUploadSheetCanClose] = useState(false);
-  const uploadSheetCloseUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadSheetCloseUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [localSegments, setLocalSegments] = useState<
     (AudioSegment & { downloadUrl?: string })[]
   >([]);
@@ -107,10 +137,12 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     return Math.pow((db + 60) / 60, 2);
   }, [recorderState.metering]);
 
-
   // Playback
-  const { isPlaying, toggle: togglePlayback, stop: stopPlayback } =
-    useSimpleRecordingPlayback(localSegments);
+  const {
+    isPlaying,
+    toggle: togglePlayback,
+    stop: stopPlayback,
+  } = useSimpleRecordingPlayback(localSegments);
 
   // Recording timer
   useEffect(() => {
@@ -130,9 +162,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     // plus start the local recorder JUST for metering (real-time wave).
     if (activeCall) {
       try {
-        const { streamSid } = await telephonyService.startCapture(
-          activeCall.callSid,
-        );
+        const { streamSid } = await telephonyService.startCapture(activeCall.callSid);
         startCapture(streamSid);
         setRecordingElapsed(0);
         setIsRecording(true);
@@ -163,7 +193,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
       if (!permission.granted) {
         Alert.alert(
           t('active.recordingFailed'),
-          'Microphone permission is required to record.',
+          'Microphone permission is required to record.'
         );
         return;
       }
@@ -246,7 +276,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
       try {
         await telephonyService.stopCapture(
           activeCall.callSid,
-          activeCall.activeStreamSid,
+          activeCall.activeStreamSid
         );
       } catch {
         // Stream may have already ended
@@ -262,9 +292,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     for (let i = 0; i < maxRetries; i++) {
       await new Promise((r) => setTimeout(r, retryDelayMs));
       try {
-        const allSegments = await telephonyService.getSegments(
-          activeCall.callSid,
-        );
+        const allSegments = await telephonyService.getSegments(activeCall.callSid);
         if (allSegments.length > baselineCount) {
           const newSegment = allSegments[allSegments.length - 1];
 
@@ -293,7 +321,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
           const msg = error instanceof Error ? error.message : String(error);
           Alert.alert(
             t('active.recordingFailed'),
-            t('active.couldNotLoadRecording', { message: msg }),
+            t('active.couldNotLoadRecording', { message: msg })
           );
           return;
         }
@@ -302,43 +330,45 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
 
     // All retries exhausted
     setIsProcessing(false);
-    Alert.alert(
-      t('active.recordingNotFound'),
-      t('active.recordingNotFoundMessage'),
-    );
-  }, [activeCall, activeProjectId, stopCapture, queryClient, t, localRecorder, recordingElapsed, localSegments.length]);
+    Alert.alert(t('active.recordingNotFound'), t('active.recordingNotFoundMessage'));
+  }, [
+    activeCall,
+    activeProjectId,
+    stopCapture,
+    queryClient,
+    t,
+    localRecorder,
+    recordingElapsed,
+    localSegments.length,
+  ]);
 
   // ── Delete ──
   const handleDelete = useCallback(() => {
     if (localSegments.length === 0) return;
     stopPlayback();
-    Alert.alert(
-      t('simple.deleteConfirm'),
-      t('simple.deleteConfirmMessage'),
-      [
-        { text: t('common:buttons.cancel'), style: 'cancel' },
-        {
-          text: t('simple.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            if (activeProjectId) {
-              for (const seg of localSegments) {
-                try {
-                  await projectService.removeSegment(activeProjectId, seg.id);
-                } catch {
-                  // Best effort
-                }
+    Alert.alert(t('simple.deleteConfirm'), t('simple.deleteConfirmMessage'), [
+      { text: t('common:buttons.cancel'), style: 'cancel' },
+      {
+        text: t('simple.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          if (activeProjectId) {
+            for (const seg of localSegments) {
+              try {
+                await projectService.removeSegment(activeProjectId, seg.id);
+              } catch {
+                // Best effort
               }
-              queryClient.invalidateQueries({
-                queryKey: ['project', activeProjectId],
-              });
             }
-            setLocalSegments([]);
-            setRecordingElapsed(0);
-          },
+            queryClient.invalidateQueries({
+              queryKey: ['project', activeProjectId],
+            });
+          }
+          setLocalSegments([]);
+          setRecordingElapsed(0);
         },
-      ],
-    );
+      },
+    ]);
   }, [localSegments, activeProjectId, stopPlayback, queryClient, t]);
 
   // ── Publish: navigate to create-post with the recorded audio ──
@@ -389,7 +419,10 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     try {
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert(t('simple.exportNotAvailableTitle'), t('simple.exportNotAvailableMessage'));
+        Alert.alert(
+          t('simple.exportNotAvailableTitle'),
+          t('simple.exportNotAvailableMessage')
+        );
         return;
       }
 
@@ -414,7 +447,10 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.log('[SimpleRecording] handleExportToFiles:error', message);
-      Alert.alert(t('simple.exportNotAvailableTitle'), t('simple.exportFailed', { message }));
+      Alert.alert(
+        t('simple.exportNotAvailableTitle'),
+        t('simple.exportFailed', { message })
+      );
       showToast(t('simple.exportFailed', { message }));
     }
   }, [localSegments, resolveShareableUri, t]);
@@ -502,13 +538,20 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
             </View>
 
             <View style={styles.callBarLogoCenter} pointerEvents="none">
-              <Image source={{ uri: ATTO_LOGO_URI }} style={styles.attoLogo} resizeMode="contain" />
+              <Image
+                source={{ uri: ATTO_LOGO_URI }}
+                style={styles.attoLogo}
+                resizeMode="contain"
+              />
               <Text style={styles.attoSubtext}>sound</Text>
             </View>
 
             <View style={styles.callBarControls}>
               <TouchableOpacity
-                style={[styles.callBarBtn, activeCall?.isMuted && styles.callBarBtnActive]}
+                style={[
+                  styles.callBarBtn,
+                  activeCall?.isMuted && styles.callBarBtnActive,
+                ]}
                 onPress={toggleMuteCall}
               >
                 {activeCall?.isMuted ? (
@@ -519,7 +562,10 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.callBarBtn, activeCall?.isSpeaker && styles.callBarBtnActive]}
+                style={[
+                  styles.callBarBtn,
+                  activeCall?.isSpeaker && styles.callBarBtnActive,
+                ]}
                 onPress={toggleSpeaker}
               >
                 {activeCall?.isSpeaker ? (
@@ -527,6 +573,10 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
                 ) : (
                   <Volume1 size={18} color="#FFF" strokeWidth={2.25} />
                 )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.callBarBtn} onPress={openKeypad}>
+                <Grid3x3 size={18} color="#FFF" strokeWidth={2.25} />
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.callBarHangUp} onPress={hangUpCall}>
@@ -551,7 +601,11 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
             <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
           <View style={styles.topNavLogoCenter} pointerEvents="none">
-            <Image source={{ uri: ATTO_LOGO_URI }} style={styles.attoLogo} resizeMode="contain" />
+            <Image
+              source={{ uri: ATTO_LOGO_URI }}
+              style={styles.attoLogo}
+              resizeMode="contain"
+            />
             <Text style={styles.attoSubtext}>sound</Text>
           </View>
         </View>
@@ -574,9 +628,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
           {isRecording ? (
             <RecBadge isRecording={isRecording} elapsed={recordingElapsed} />
           ) : isProcessing ? (
-            <Text style={styles.processingText}>
-              {t('active.processingRecording')}
-            </Text>
+            <Text style={styles.processingText}>{t('active.processingRecording')}</Text>
           ) : null}
         </View>
 
@@ -625,8 +677,12 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
               <CloudUpload size={18} color="#FFF" strokeWidth={2.25} />
             </View>
             <View style={styles.uploadSheetOptionTextWrap}>
-              <Text style={styles.uploadSheetOptionTitle}>{t('simple.uploadOptionTitle')}</Text>
-              <Text style={styles.uploadSheetOptionSubtitle}>{t('simple.uploadOptionSubtitle')}</Text>
+              <Text style={styles.uploadSheetOptionTitle}>
+                {t('simple.uploadOptionTitle')}
+              </Text>
+              <Text style={styles.uploadSheetOptionSubtitle}>
+                {t('simple.uploadOptionSubtitle')}
+              </Text>
             </View>
           </TouchableOpacity>
 
@@ -639,8 +695,12 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
               <FolderUp size={18} color="#FFF" strokeWidth={2.25} />
             </View>
             <View style={styles.uploadSheetOptionTextWrap}>
-              <Text style={styles.uploadSheetOptionTitle}>{t('simple.exportOptionTitle')}</Text>
-              <Text style={styles.uploadSheetOptionSubtitle}>{t('simple.exportOptionSubtitle')}</Text>
+              <Text style={styles.uploadSheetOptionTitle}>
+                {t('simple.exportOptionTitle')}
+              </Text>
+              <Text style={styles.uploadSheetOptionSubtitle}>
+                {t('simple.exportOptionSubtitle')}
+              </Text>
             </View>
           </TouchableOpacity>
         </View>

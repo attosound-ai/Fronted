@@ -16,6 +16,7 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { UserListSkeleton } from '@/components/ui/Skeleton';
+import { COLORS } from '@/constants/theme';
 
 interface FollowingUser {
   id: number;
@@ -120,7 +121,7 @@ export default function FollowingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

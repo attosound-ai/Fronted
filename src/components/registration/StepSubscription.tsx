@@ -23,6 +23,7 @@ import { paymentService } from '@/lib/api/paymentService';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { getErrorMessage } from '@/utils/formatters';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -538,7 +539,7 @@ export const StepSubscription: React.FC<
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollView: {
     flex: 1,

@@ -7,6 +7,7 @@ import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { useSuggestedAccounts } from '../hooks/useSuggestedAccounts';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import type { User } from '@/types';
+import { COLORS } from '@/constants/theme';
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ export function SuggestedAccountsCarousel() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     paddingTop: 10,
   },
   list: {

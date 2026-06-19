@@ -7,6 +7,7 @@ import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { getGenresForSelectedTypes } from '@/constants/creatorData';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 /**
  * StepCreatorGenres - Step 12: Multi-select genre chips, grouped by category.
@@ -123,7 +124,7 @@ export function StepCreatorGenres({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollContent: {
     flexGrow: 1,

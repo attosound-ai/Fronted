@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useSignupStore } from '@/stores/signupStore';
+import { COLORS } from '@/constants/theme';
 
 export default function Index() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -39,6 +40,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
 });

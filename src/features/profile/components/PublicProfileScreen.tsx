@@ -49,6 +49,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { FeedPost, PostType } from '@/types/post';
 import type { Post } from '@/types';
 import type { FeedResponse } from '@/features/feed/types';
+import { COLORS } from '@/constants/theme';
 
 function resolvePostType(post: Post): PostType {
   if (post.contentType) return post.contentType as PostType;
@@ -651,7 +652,7 @@ const skeletonStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

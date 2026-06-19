@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/Select';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 import { Toast } from '@/components/ui/Toast';
 import { useEditCreatorContact } from '../hooks/useEditCreatorContact';
+import { COLORS } from '@/constants/theme';
 
 // RELATIONSHIP_OPTIONS is defined inside the component so labels can be translated
 
@@ -128,7 +129,7 @@ export function EditCreatorContactScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

@@ -28,6 +28,7 @@ import { useMediaPickers } from '@/features/feed/hooks/useMediaPickers';
 import { haptic } from '@/lib/haptics/hapticService';
 import type { PostType } from '@/types/post';
 import type { PickedMedia } from '@/features/feed/types';
+import { COLORS } from '@/constants/theme';
 
 const MAX_CHARS = 2200;
 
@@ -544,7 +545,7 @@ export default function CreatePostScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   header: {
     flexDirection: 'row',

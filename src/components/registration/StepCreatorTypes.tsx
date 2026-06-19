@@ -28,6 +28,7 @@ import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { CREATOR_TYPES, getValidGenreIds } from '@/constants/creatorData';
 import { haptic } from '@/lib/haptics/hapticService';
+import { COLORS } from '@/constants/theme';
 
 const CREATOR_TYPE_ICON_MAP: Record<string, LucideIcon> = {
   mic: Mic,
@@ -161,7 +162,7 @@ export function StepCreatorTypes({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollContent: {
     flexGrow: 1,

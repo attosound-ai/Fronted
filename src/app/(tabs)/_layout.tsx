@@ -16,6 +16,7 @@ import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
 import { useUnreadCount } from '@/features/notifications/hooks/useUnreadCount';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { messageService } from '@/features/messages/services/messageService';
+import { COLORS } from '@/constants/theme';
 
 export default function TabsLayout() {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
@@ -154,7 +155,7 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#222222',
   },

@@ -8,6 +8,7 @@ import { SidebarTabItem } from './SidebarTabItem';
 import { AccountSwitcherBottomSheet } from '@/components/ui/AccountSwitcherBottomSheet';
 import { useProfileTabGestures } from '@/hooks/useProfileTabGestures';
 import { useNotificationStore } from '@/stores/notificationStore';
+import { COLORS } from '@/constants/theme';
 
 const SIDEBAR_WIDTH = 72;
 
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SIDEBAR_WIDTH,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: '#222222',
     zIndex: 10,

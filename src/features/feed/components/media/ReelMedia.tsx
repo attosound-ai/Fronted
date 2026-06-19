@@ -20,6 +20,7 @@ import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import type { FeedPost, PostAuthor } from '@/types/post';
+import { COLORS } from '@/constants/theme';
 
 interface ReelMediaProps {
   post: FeedPost;
@@ -234,7 +235,7 @@ export function ReelMedia({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
     position: 'relative',
   },
   video: {

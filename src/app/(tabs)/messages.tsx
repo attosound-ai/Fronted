@@ -6,6 +6,7 @@ import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { ConversationList, ChatScreen } from '@/features/messages';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 import { Text } from '@/components/ui/Text';
+import { COLORS } from '@/constants/theme';
 
 const CHAT_SIDEBAR_WIDTH = 350;
 
@@ -81,7 +82,7 @@ const styles = StyleSheet.create({
   splitContainer: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background.primary,
   },
   sidebar: {
     width: CHAT_SIDEBAR_WIDTH,

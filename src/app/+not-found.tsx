@@ -3,6 +3,7 @@ import { Link, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
+import { COLORS } from '@/constants/theme';
 
 /**
  * NotFoundScreen - Pantalla 404
@@ -32,7 +33,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
     padding: 20,
   },
   message: {

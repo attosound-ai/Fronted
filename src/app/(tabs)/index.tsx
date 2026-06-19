@@ -8,6 +8,7 @@ import { VerificationBanner } from '@/features/verification';
 import { SuggestedAccountsCarousel } from '@/features/feed/components/SuggestedAccountsCarousel';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 import { useCallStore } from '@/stores/callStore';
+import { COLORS } from '@/constants/theme';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -38,6 +39,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
 });

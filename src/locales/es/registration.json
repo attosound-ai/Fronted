@@ -65,8 +65,11 @@
     "repQuestion": "¿Representará a un creador en ATTO SOUND?",
     "repDescription": "Está creando esta cuenta en nombre de un creador y cuenta con su permiso para gestionar y publicar su contenido.",
     "yesRepresent": "Sí, represento a un creador",
-    "iAmCreator": "Yo soy un creador",
-    "noForMe": "No, esta cuenta es para mí"
+    "noForMe": "No, esta cuenta es para mí",
+    "inmateGateQuestion": "¿Tienes un número de recluso?",
+    "inmateGateYes": "Sí",
+    "inmateGateNo": "No",
+    "inmateGateBack": "Atrás"
   },
   "creatorInmate": {
     "title": "Verifica tu identidad",

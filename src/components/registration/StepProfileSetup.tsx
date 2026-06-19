@@ -9,7 +9,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { AlertCircle, Camera, Images, CheckCircle, XCircle } from 'lucide-react-native';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Camera,
+  Images,
+  CheckCircle,
+  XCircle,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, BottomSheet } from '@/components/ui';
@@ -20,6 +27,7 @@ import { isNotEmpty, isValidUsername } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
 import { authService } from '@/lib/api/authService';
 import { useAuthStore } from '@/stores/authStore';
+import { COLORS } from '@/constants/theme';
 
 type RoleChoice = 'representative' | 'creator' | 'listener';
 
@@ -48,6 +56,7 @@ export function StepProfileSetup({
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showCropModal, setShowCropModal] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
+  const [repStage, setRepStage] = useState<'role' | 'inmateGate'>('role');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCheckedRef = useRef('');
 
@@ -114,6 +123,12 @@ export function StepProfileSetup({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [state.username, checkUsername]);
+
+  // Reset the role sheet to its first stage whenever it closes so reopening
+  // always starts on the representative question.
+  useEffect(() => {
+    if (!showRepQuestion) setRepStage('role');
+  }, [showRepQuestion]);
 
   const handleUsernameChange = (value: string) => {
     const cleaned = value.toLowerCase().replaceAll(/[^a-z0-9._]/g, '');
@@ -252,12 +267,9 @@ export function StepProfileSetup({
             <Image source={{ uri: state.avatarUri }} style={styles.avatarCircle} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Camera size={56} color="#666666" strokeWidth={2.25} />
+              <Camera size={64} color="#FFFFFF" strokeWidth={2.25} />
             </View>
           )}
-          <View style={styles.avatarBadge}>
-            <Camera size={18} color="#000000" strokeWidth={2.25} />
-          </View>
         </TouchableOpacity>
       </View>
 
@@ -361,51 +373,86 @@ export function StepProfileSetup({
         </View>
       </BottomSheet>
 
-      {/* Representative Question Bottom Sheet */}
+      {/* Role / Inmate-number Bottom Sheet (two stages) */}
       <BottomSheet
         visible={!!showRepQuestion}
         onClose={() => {
           onRepChoice?.('listener');
         }}
       >
-        <View style={styles.repContent}>
-          <Text variant="h2" style={styles.repTitle}>
-            {t('profileSetup.repQuestion')}
-          </Text>
-          <Text variant="body" style={styles.repDescription}>
-            {t('profileSetup.repDescription')}
-          </Text>
-          <View style={styles.repButtons}>
-            <Button
-              title={t('profileSetup.yesRepresent')}
-              onPress={() => {
-                haptic('light');
-                onRepChoice?.('representative');
-              }}
-              variant="primary"
-              loading={isLoading}
-            />
-            <Button
-              title={t('profileSetup.noForMe')}
-              onPress={() => {
-                haptic('light');
-                onRepChoice?.('listener');
-              }}
-              variant="outline"
-              disabled={isLoading}
-            />
-            <TouchableOpacity
-              onPress={() => {
-                haptic('light');
-                onRepChoice?.('creator');
-              }}
-              disabled={isLoading}
-              style={styles.creatorLink}
-            >
-              <Text style={styles.creatorLinkText}>{t('profileSetup.iAmCreator')}</Text>
-            </TouchableOpacity>
+        {repStage === 'role' ? (
+          <View style={styles.repContent}>
+            <Text variant="h2" style={styles.repTitle}>
+              {t('profileSetup.repQuestion')}
+            </Text>
+            <Text variant="body" style={styles.repDescription}>
+              {t('profileSetup.repDescription')}
+            </Text>
+            <View style={styles.repButtons}>
+              <Button
+                title={t('profileSetup.yesRepresent')}
+                onPress={() => {
+                  haptic('light');
+                  onRepChoice?.('representative');
+                }}
+                variant="primary"
+                loading={isLoading}
+              />
+              <Button
+                title={t('profileSetup.noForMe')}
+                onPress={() => {
+                  haptic('light');
+                  setRepStage('inmateGate');
+                }}
+                variant="outline"
+                disabled={isLoading}
+              />
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.repContent}>
+            <View style={styles.repHeaderRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  haptic('light');
+                  setRepStage('role');
+                }}
+                disabled={isLoading}
+                style={styles.repBackButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('profileSetup.inmateGateBack')}
+                hitSlop={8}
+              >
+                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
+              </TouchableOpacity>
+              <Text variant="h2" style={styles.repTitleInline}>
+                {t('profileSetup.inmateGateQuestion')}
+              </Text>
+            </View>
+            <View style={styles.repButtonsRow}>
+              <Button
+                title={t('profileSetup.inmateGateYes')}
+                onPress={() => {
+                  haptic('light');
+                  onRepChoice?.('creator');
+                }}
+                variant="primary"
+                loading={isLoading}
+                style={styles.repRowButton}
+              />
+              <Button
+                title={t('profileSetup.inmateGateNo')}
+                onPress={() => {
+                  haptic('light');
+                  onRepChoice?.('listener');
+                }}
+                variant="outline"
+                disabled={isLoading}
+                style={styles.repRowButton}
+              />
+            </View>
+          </View>
+        )}
       </BottomSheet>
 
       {/* Crop Modal */}
@@ -422,7 +469,7 @@ export function StepProfileSetup({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background.primary,
   },
   scrollContent: {
     flexGrow: 1,
@@ -446,41 +493,28 @@ const styles = StyleSheet.create({
   },
   avatarSection: {
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 12,
     paddingBottom: 8,
   },
   avatarTouchable: {
     position: 'relative',
   },
   avatarCircle: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: 270,
+    height: 270,
+    borderRadius: 135,
     backgroundColor: '#1A1A1A',
   },
   avatarPlaceholder: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: 270,
+    height: 270,
+    borderRadius: 135,
     backgroundColor: '#1A1A1A',
     borderWidth: 2,
     borderColor: '#333333',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  avatarBadge: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: '#FFFFFF',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
   },
   avatarHint: {
     color: '#666666',
@@ -624,15 +658,26 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8,
   },
-  creatorLink: {
+  repHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    marginTop: 4,
+    gap: 8,
   },
-  creatorLinkText: {
-    color: '#CCCCCC',
-    fontFamily: 'Archivo_500Medium',
-    fontSize: 14,
-    textDecorationLine: 'underline',
+  repBackButton: {
+    marginLeft: -4,
+    padding: 4,
+  },
+  repTitleInline: {
+    flex: 1,
+    color: '#FFFFFF',
+    textAlign: 'left',
+  },
+  repButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  repRowButton: {
+    flex: 1,
   },
 });

@@ -14,8 +14,8 @@ import { haptic } from '@/lib/haptics/hapticService';
  * The web hero is a UNIFORM matte black `#100e10` with NO lighting effect —
  * no spotlight, no vignette — so the background blends edge to edge with no
  * visible "bar" near the top. We mirror that exactly here: a single flat
- * `COLORS.background.primary` fill (= APP_BACKGROUND = #100e10), same as the
- * rest of the app and the website's <body>.
+ * `COLORS.background.welcome` fill (= WELCOME_BACKGROUND = #100e10), matching
+ * the website's <body>. (The rest of the app uses APP_BACKGROUND = pure black.)
  *
  * (Previous versions stacked two SVG <RadialGradient> layers to fake stage
  * lighting; the web dropped that — see atto-web hero `feat/hero-matte-no-lighting`
@@ -66,10 +66,11 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    // Negro mate plano e idéntico a la web (body bg-[#100e10]). Ver
-    // APP_BACKGROUND en theme.ts — un solo color, sin gradientes ni luces.
+    // Negro mate plano e idéntico a la web (body bg-[#100e10]). Exclusivo de
+    // Welcome — ver WELCOME_BACKGROUND en theme.ts; el resto de la app usa
+    // APP_BACKGROUND (negro puro).
     flex: 1,
-    backgroundColor: COLORS.background.primary,
+    backgroundColor: COLORS.background.welcome,
   },
   safe: {
     flex: 1,

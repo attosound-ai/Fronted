@@ -5,17 +5,20 @@
  */
 
 /**
- * 🎨 FONDO PRINCIPAL DE LA APP — ÚNICO LUGAR PARA CAMBIARLO
+ * 🎨 FONDOS DE LA APP — ÚNICO LUGAR PARA CAMBIARLOS
  * ---------------------------------------------------------
- * Negro mate (estilo pantalla de Welcome). Este es el color de fondo de
- * TODAS las pantallas. Cambia SOLO este valor y todos los fondos negros de
- * la app se actualizan a la vez (incluido el splash nativo, que lo lee desde
- * aquí en `app.config.js`).
+ * `APP_BACKGROUND`: fondo de TODAS las pantallas (y del splash nativo, que lo
+ * lee desde aquí en `app.config.js`). Negro puro.
  *
- * Ejemplos: '#100e10' (welcome, negro mate con tinte magenta) · '#000000'
- * (negro puro) · '#0A0A0A' (negro carbón).
+ * `WELCOME_BACKGROUND`: la ÚNICA excepción — solo la pantalla de Welcome lo
+ * usa (negro mate con tinte magenta, idéntico al hero de la web). Cambia cada
+ * fondo por separado editando su constante.
+ *
+ * Ejemplos: '#000000' (negro puro) · '#100e10' (negro mate con tinte magenta)
+ * · '#0A0A0A' (negro carbón).
  */
-export const APP_BACKGROUND = '#100e10';
+export const APP_BACKGROUND = '#000000';
+export const WELCOME_BACKGROUND = '#100e10';
 
 export const COLORS = {
   // Primarios
@@ -48,7 +51,8 @@ export const COLORS = {
 
   // Backgrounds (dark mode)
   background: {
-    primary: APP_BACKGROUND, // fondo base de la app (negro mate, ver APP_BACKGROUND)
+    primary: APP_BACKGROUND, // fondo base de TODAS las pantallas (negro puro)
+    welcome: WELCOME_BACKGROUND, // EXCEPCIÓN: solo la pantalla de Welcome (negro mate)
     secondary: '#111111', // superficies elevadas (inputs, cards)
     tertiary: '#1A1A1A', // superficies aún más elevadas
   },

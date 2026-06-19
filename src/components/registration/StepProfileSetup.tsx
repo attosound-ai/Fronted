@@ -377,7 +377,14 @@ export function StepProfileSetup({
       <BottomSheet
         visible={!!showRepQuestion}
         onClose={() => {
-          onRepChoice?.('listener');
+          // On the inmate-gate stage, any dismiss (back arrow intercepted by
+          // the sheet's swipe gesture, swipe-down, or backdrop tap) must return
+          // to the role question — never silently complete as a listener.
+          if (repStage === 'inmateGate') {
+            setRepStage('role');
+          } else {
+            onRepChoice?.('listener');
+          }
         }}
       >
         {repStage === 'role' ? (

@@ -23,6 +23,7 @@ import {
 import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
 import {
   Bookmark,
   Film,
@@ -36,6 +37,7 @@ import { useTranslation } from 'react-i18next';
 import {
   cloudinaryUrl,
   cloudinaryHlsUrl,
+  cloudinaryVideoMp4,
   cloudinaryPoster,
 } from '@/lib/media/cloudinaryUrl';
 import { useVideoStream } from '@/hooks/useVideoStream';
@@ -162,12 +164,16 @@ function ReelItem({
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [captionExpanded, setCaptionExpanded] = useState(false);
 
-  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
+  // Full-screen reels use a fixed 1080p MP4 (not adaptive HLS) for sharpness.
+  const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  useCallAwareVideoAudio(player);
 
   // Tracks first-frame readiness + transparently falls back HLS→MP4 on error.
   const isReady = useVideoStream(player, videoUrl, isActive);
@@ -380,12 +386,16 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
 
-  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
+  // Full-screen reels use a fixed 1080p MP4 (not adaptive HLS) for sharpness.
+  const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  useCallAwareVideoAudio(player);
 
   const isReady = useVideoStream(player, videoUrl, isActive);
 

@@ -6,6 +6,7 @@ import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -51,6 +52,9 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
     // whatever the rest of the feed is doing (the effect below keeps it synced).
     p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  useCallAwareVideoAudio(player);
 
   // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
   const isReady = useVideoStream(player, videoUrl, isVisible);

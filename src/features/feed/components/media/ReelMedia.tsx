@@ -12,7 +12,7 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
+import { cloudinaryVideoMp4 } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -21,6 +21,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -56,14 +57,19 @@ export function ReelMedia({
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
+  // Reels render full-screen: use a fixed 1080p MP4 (not adaptive HLS) so the
+  // image is sharp from the first frame. See cloudinaryVideoMp4 for the rationale.
+  const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
   });
 
-  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
+  // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  useCallAwareVideoAudio(player);
+
+  // First-frame readiness (drives the poster).
   const isReady = useVideoStream(player, videoUrl, isVisible);
   const { position, duration } = useVideoProgress(player);
 

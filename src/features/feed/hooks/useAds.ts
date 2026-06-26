@@ -1,7 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import {
+  cloudinaryUrl,
+  cloudinaryHlsUrl,
+  cloudinaryPoster,
+} from '@/lib/media/cloudinaryUrl';
 import type { FeedPost } from '@/types/post';
 
 interface AdData {
@@ -29,7 +33,10 @@ function adToFeedPost(ad: AdData): FeedPost {
       avatar: cloudinaryUrl(ad.brandAvatar, 'brand_ad_avatar'),
       isFollowing: false,
     },
-    videoUrl: ad.videoUrl,
+    // Ad creatives are Cloudinary public_ids — stream them adaptively (HLS)
+    // with a poster, same as user posts.
+    videoUrl: cloudinaryHlsUrl(ad.videoUrl) ?? ad.videoUrl,
+    thumbnailUrl: cloudinaryPoster(ad.videoUrl, 'reel') ?? undefined,
     description: ad.caption,
     likesCount: 0,
     commentsCount: 0,

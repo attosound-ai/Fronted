@@ -1,8 +1,20 @@
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type FlatListProps,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { router } from 'expo-router';
 import { Music, Film, FileText, Play } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
+import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import type { Post } from '@/types';
 import type { PostFeedSource } from '@/features/feed/hooks/usePostFeed';
 
@@ -10,6 +22,12 @@ interface ContentGridProps {
   posts: Post[];
   onEndReached?: () => void;
   ListFooterComponent?: React.ReactElement | null;
+  /** Worklet scroll handler to drive the floating navbar shrink (from useScrollOffset). */
+  onScroll?: FlatListProps<Post>['onScroll'];
+  /** Extra contentContainer style (e.g. a collapsible-header paddingTop). Merged
+   *  with the grid's own bottom inset. */
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  scrollEventThrottle?: number;
   /** Context for infinite-scroll when a post is tapped open. */
   sourceContext?: {
     source: PostFeedSource;
@@ -96,9 +114,13 @@ export function ContentGrid({
   posts,
   onEndReached,
   ListFooterComponent,
+  onScroll,
+  contentContainerStyle,
+  scrollEventThrottle = 16,
   sourceContext,
 }: ContentGridProps) {
   const { contentWidth } = useDeviceLayout();
+  const insets = useSafeAreaInsets();
   const cellSize = (contentWidth - 4) / 3;
 
   return (
@@ -111,7 +133,13 @@ export function ContentGrid({
       )}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       columnWrapperStyle={styles.row}
+      contentContainerStyle={[
+        { paddingBottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE },
+        contentContainerStyle,
+      ]}
       showsVerticalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={scrollEventThrottle}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.3}
       ListFooterComponent={ListFooterComponent}

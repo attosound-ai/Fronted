@@ -187,7 +187,7 @@ export function MessageNotificationBanner(): React.ReactElement | null {
         accessibilityRole="button"
         accessibilityLabel={`${t('header.title')} ${data.senderName}: ${data.message}`}
       >
-        <Avatar uri={data.senderAvatar} size="sm" />
+        <Avatar uri={data.senderAvatar} size="sm" fallbackText={data.senderName} />
         <View style={styles.textContainer}>
           <Text variant="h3" numberOfLines={1} style={styles.name}>
             {data.senderName}

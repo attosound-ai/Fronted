@@ -1,10 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  View,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-} from 'react-native';
+import { View, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { AlertTriangle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -40,7 +35,11 @@ export function DeleteAccountBottomSheet({
   user,
 }: DeleteAccountBottomSheetProps) {
   const { t } = useTranslation('profile');
-  const { linkedAccounts, hasLinkedAccounts, refetch: refetchLinked } = useLinkedAccounts();
+  const {
+    linkedAccounts,
+    hasLinkedAccounts,
+    refetch: refetchLinked,
+  } = useLinkedAccounts();
 
   // Refetch linked accounts every time the bottom sheet opens
   useEffect(() => {
@@ -70,9 +69,10 @@ export function DeleteAccountBottomSheet({
   const [otpIdentifier, setOtpIdentifier] = useState('');
   useEffect(() => {
     const userEmail = user.email || '';
-    const userPhone = user.phoneCountryCode && user.phoneNumber
-      ? `${user.phoneCountryCode}${user.phoneNumber}`
-      : '';
+    const userPhone =
+      user.phoneCountryCode && user.phoneNumber
+        ? `${user.phoneCountryCode}${user.phoneNumber}`
+        : '';
 
     if (userEmail || userPhone) {
       setOtpIdentifier(userEmail || userPhone);
@@ -153,7 +153,10 @@ export function DeleteAccountBottomSheet({
                 activeOpacity={0.7}
                 onPress={() => setDeleteLinked(!deleteLinked)}
               >
-                <Checkbox checked={deleteLinked} onToggle={() => setDeleteLinked(!deleteLinked)} />
+                <Checkbox
+                  checked={deleteLinked}
+                  onToggle={() => setDeleteLinked(!deleteLinked)}
+                />
                 <Text style={styles.checkboxLabel}>
                   {t('deleteAccount.deleteLinked', {
                     defaultValue: 'Also delete linked accounts',
@@ -162,10 +165,11 @@ export function DeleteAccountBottomSheet({
                 </Text>
               </TouchableOpacity>
 
-              {deleteLinked && Array.isArray(linkedAccounts) &&
+              {deleteLinked &&
+                Array.isArray(linkedAccounts) &&
                 linkedAccounts.map((acc) => (
                   <View key={acc.id} style={styles.linkedAccount}>
-                    <Avatar uri={acc.avatar} size="sm" />
+                    <Avatar uri={acc.avatar} size="sm" fallbackText={acc.username} />
                     <View>
                       <Text style={styles.linkedName}>{acc.username}</Text>
                     </View>
@@ -194,7 +198,7 @@ export function DeleteAccountBottomSheet({
       )}
 
       {step === 'otp' && (
-        <View style={styles.content}>
+        <View style={[styles.content, styles.otpContent]}>
           <Text style={styles.otpTitle}>
             {t('deleteAccount.otpTitle', {
               defaultValue: 'Verify your identity',
@@ -205,9 +209,7 @@ export function DeleteAccountBottomSheet({
             {t('deleteAccount.otpSubtitle', {
               defaultValue: 'We sent a verification code to',
             })}{' '}
-            <Text style={styles.otpIdentifier}>
-              {maskIdentifier(otpIdentifier)}
-            </Text>
+            <Text style={styles.otpIdentifier}>{maskIdentifier(otpIdentifier)}</Text>
           </Text>
 
           {isSendingOtp ? (
@@ -264,9 +266,11 @@ export function DeleteAccountBottomSheet({
               </Text>
               <Text style={styles.deletingText}>
                 {(() => {
-                  const apiMessage = (deleteError as {
-                    response?: { data?: { error?: string } };
-                  })?.response?.data?.error;
+                  const apiMessage = (
+                    deleteError as {
+                      response?: { data?: { error?: string } };
+                    }
+                  )?.response?.data?.error;
                   if (apiMessage) return apiMessage;
                   if (deleteError instanceof Error) return deleteError.message;
                   return t('deleteAccount.deleteFailedBody', {
@@ -302,6 +306,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 32,
     gap: 16,
+  },
+  // OTP step shows the keyboard, and BottomSheet already lifts the sheet by the
+  // keyboard height (+12). Avoid stacking another 32 of bottom padding so the
+  // controls sit snug above the keyboard on every device size.
+  otpContent: {
+    paddingBottom: 4,
   },
   iconWrap: {
     alignItems: 'center',

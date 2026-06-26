@@ -8,8 +8,9 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router, type Href } from 'expo-router';
 import { Bookmark, ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -82,6 +83,7 @@ export default function BookmarksScreen() {
   } = useBookmarks();
 
   const { toggleLike, toggleBookmark, toggleRepost, trackShare } = useInteractions();
+  const header = useCollapsibleHeader();
 
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
@@ -186,17 +188,7 @@ export default function BookmarksScreen() {
   }, [isLoading]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Saved</Text>
-        <View style={{ width: 28 }} />
-      </View>
+    <View style={styles.container}>
       {isLoading && bookmarks.length === 0 ? (
         <FeedSkeleton />
       ) : (
@@ -209,6 +201,7 @@ export default function BookmarksScreen() {
               refreshing={isRefreshing}
               onRefresh={refresh}
               tintColor="#FFF"
+              progressViewOffset={header.height}
             />
           }
           onEndReached={handleEndReached}
@@ -216,9 +209,12 @@ export default function BookmarksScreen() {
           ListFooterComponent={renderFooter}
           ListEmptyComponent={renderEmpty}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={
-            feedPosts.length === 0 ? styles.emptyContainer : undefined
-          }
+          onScroll={header.onScroll}
+          scrollEventThrottle={header.scrollEventThrottle}
+          contentContainerStyle={[
+            feedPosts.length === 0 ? styles.emptyContainer : undefined,
+            { paddingTop: header.height },
+          ]}
         />
       )}
 
@@ -238,7 +234,18 @@ export default function BookmarksScreen() {
           onShareTracked={() => trackShare(sharePost.id)}
         />
       )}
-    </SafeAreaView>
+
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Saved</Text>
+        <View style={{ width: 28 }} />
+      </CollapsibleHeader>
+    </View>
   );
 }
 

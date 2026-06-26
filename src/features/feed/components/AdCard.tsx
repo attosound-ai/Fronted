@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -11,7 +11,11 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Text } from '@/components/ui/Text';
+import { VideoPoster } from '@/components/ui/VideoPoster';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
+import { useVideoStream } from '@/hooks/useVideoStream';
+import { useVideoSoundStore } from '@/stores/videoSoundStore';
+import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { formatCount } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
 import { COLORS } from '@/constants/theme';
@@ -26,7 +30,9 @@ interface AdCardProps {
 export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardProps) {
   const { contentWidth } = useDeviceLayout();
   const VIDEO_HEIGHT = contentWidth * 1.6;
-  const [isMuted, setIsMuted] = useState(true);
+  // Global mute shared across every video (Instagram-style).
+  const isMuted = useVideoSoundStore((s) => s.isMuted);
+  const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [isLiked, setIsLiked] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount);
@@ -34,10 +40,15 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
   const [descExpanded, setDescExpanded] = useState(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const player = useVideoPlayer(post.videoUrl ?? null, (p) => {
+  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
+
+  const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
-    p.muted = true;
+    p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
+  const isReady = useVideoStream(player, videoUrl, isVisible);
 
   useEffect(() => {
     if (!player) return;
@@ -48,12 +59,10 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
     }
   }, [isVisible, player]);
 
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      player.muted = !prev;
-      return !prev;
-    });
-  }, [player]);
+  // Sync this player whenever the shared mute state flips.
+  useEffect(() => {
+    if (player) player.muted = isMuted;
+  }, [isMuted, player]);
 
   const handleLike = () => {
     Animated.sequence([
@@ -84,13 +93,17 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
       <View
         style={[styles.videoContainer, { width: contentWidth, height: VIDEO_HEIGHT }]}
       >
-        {post.videoUrl ? (
-          <VideoView
-            player={player}
-            style={styles.video}
-            contentFit="cover"
-            nativeControls={false}
-          />
+        {videoUrl ? (
+          <>
+            <VideoView
+              player={player}
+              style={styles.video}
+              contentFit="cover"
+              nativeControls={false}
+            />
+            {/* Poster shown until the stream produces its first frame */}
+            <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+          </>
         ) : (
           <View
             style={[styles.placeholder, { width: contentWidth, height: VIDEO_HEIGHT }]}
@@ -106,7 +119,11 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
           pointerEvents="box-none"
         >
           <View style={styles.header}>
-            <Avatar uri={post.author.avatar} size="md" />
+            <Avatar
+              uri={post.author.avatar}
+              size="md"
+              fallbackText={post.author.displayName}
+            />
             <Text style={styles.authorName}>{post.author.displayName}</Text>
             <View style={styles.sponsoredBadge}>
               <Ionicons name="megaphone-outline" size={11} color="#CCC" />
@@ -125,7 +142,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
         />
 
         {/* Mute toggle */}
-        <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={8}>
+        <TouchableOpacity style={styles.muteButton} onPress={toggleMuted} hitSlop={8}>
           <Ionicons
             name={isMuted ? 'volume-mute' : 'volume-high'}
             size={18}

@@ -135,8 +135,8 @@
     "maxSentence": "Sentencia máxima",
     "maxRelease": "Liberación máxima",
     "estRelease": "Liberación estimada",
-    "confirmPerson": "Confirmar — Esta es la persona",
-    "notThisPerson": "No es esta persona"
+    "confirmPerson": "Sí",
+    "notThisPerson": "No"
   },
   "whatHappensNext": {
     "title": "¿Qué sucede después?",
@@ -163,9 +163,7 @@
     "plans": {
       "record": {
         "name": "Record",
-        "features": [
-          "Grabación Ilimitada"
-        ]
+        "features": ["Grabación Ilimitada"]
       },
       "recordPro": {
         "name": "Record Pro",

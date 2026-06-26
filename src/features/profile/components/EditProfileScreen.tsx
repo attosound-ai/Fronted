@@ -120,7 +120,7 @@ export function EditProfileScreen() {
           {form.avatarChanged && form.avatarUri ? (
             <Image source={{ uri: form.avatarUri }} style={styles.avatarImage} />
           ) : (
-            <Avatar uri={form.avatarUri} size="xl" />
+            <Avatar uri={form.avatarUri} size="xl" fallbackText={form.username} />
           )}
           <View style={styles.avatarBadge}>
             <Camera size={14} color="#000000" strokeWidth={2.25} />

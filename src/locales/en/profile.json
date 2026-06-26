@@ -102,6 +102,22 @@
     "languageLabel": "Language",
     "appIconLabel": "App icon"
   },
+  "support": {
+    "sectionTitle": "Support",
+    "intro": "Need help or have feedback? Send us a message and our team will take a look.",
+    "contactButton": "Contact support",
+    "sheetTitle": "Contact support",
+    "category": {
+      "bug": "Bug",
+      "feedback": "Feedback",
+      "question": "Question"
+    },
+    "placeholder": "Describe your issue or feedback…",
+    "submit": "Send",
+    "thanksTitle": "Thank you!",
+    "thanksBody": "We received your message and will get back to you soon.",
+    "close": "Close"
+  },
   "actions": {
     "logout": "Log Out"
   },

@@ -1,9 +1,17 @@
 import { useState, useCallback } from 'react';
-import { View, FlatList, StyleSheet, RefreshControl, Pressable, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  RefreshControl,
+  Pressable,
+  TouchableOpacity,
+} from 'react-native';
 import { router } from 'expo-router';
 import { ChevronLeft, Plus } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { ProjectCard } from './ProjectCard';
@@ -18,6 +26,7 @@ export function ProjectListScreen() {
   const { data: projects, isLoading, refetch } = useProjects();
   const createProject = useCreateProject();
   const [sheetVisible, setSheetVisible] = useState(false);
+  const header = useCollapsibleHeader();
 
   const handleCreate = useCallback(
     (name: string, description?: string) => {
@@ -49,27 +58,17 @@ export function ProjectListScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ChevronLeft size={28} color="#FFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <Text variant="h2" style={styles.title}>
-          {t('list.title')}
-        </Text>
-        <View style={{ width: 28 }} />
-      </View>
-
+    <View style={styles.container}>
       <FlatList
         data={projects ?? []}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={
-          !projects?.length ? styles.emptyContainer : styles.listContent
-        }
+        onScroll={header.onScroll}
+        scrollEventThrottle={header.scrollEventThrottle}
+        contentContainerStyle={[
+          !projects?.length ? styles.emptyContainer : styles.listContent,
+          { paddingTop: header.height },
+        ]}
         ListEmptyComponent={isLoading ? null : <EmptyProjectsState />}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
@@ -77,6 +76,7 @@ export function ProjectListScreen() {
             refreshing={isLoading}
             onRefresh={refetch}
             tintColor="#3B82F6"
+            progressViewOffset={header.height}
           />
         }
       />
@@ -95,7 +95,19 @@ export function ProjectListScreen() {
         <Plus size={28} color="#000" strokeWidth={2.25} />
       </TouchableOpacity>
       <Toast />
-    </SafeAreaView>
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text variant="h2" style={styles.title}>
+          {t('list.title')}
+        </Text>
+        <View style={{ width: 28 }} />
+      </CollapsibleHeader>
+    </View>
   );
 }
 

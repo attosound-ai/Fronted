@@ -102,6 +102,22 @@
     "languageLabel": "Idioma",
     "appIconLabel": "Icono del app"
   },
+  "support": {
+    "sectionTitle": "Soporte",
+    "intro": "¿Necesitas ayuda o tienes comentarios? Envíanos un mensaje y nuestro equipo lo revisará.",
+    "contactButton": "Contactar soporte",
+    "sheetTitle": "Contactar soporte",
+    "category": {
+      "bug": "Error",
+      "feedback": "Comentario",
+      "question": "Pregunta"
+    },
+    "placeholder": "Describe tu problema o comentario…",
+    "submit": "Enviar",
+    "thanksTitle": "¡Gracias!",
+    "thanksBody": "Recibimos tu mensaje y te responderemos pronto.",
+    "close": "Cerrar"
+  },
   "actions": {
     "logout": "Cerrar sesión"
   },

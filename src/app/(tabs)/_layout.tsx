@@ -9,6 +9,7 @@ import { PostPublishedBanner } from '@/components/ui/PostPublishedBanner';
 import { ProfileTabIcon } from '@/components/ui/ProfileTabIcon';
 import { ProfileTabButton } from '@/components/ui/ProfileTabButton';
 import { TabBarRouter } from '@/components/navigation/TabBarRouter';
+import { ScrollOffsetProvider } from '@/contexts/ScrollOffsetContext';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/features/messages/stores/chatStore';
@@ -72,7 +73,7 @@ export default function TabsLayout() {
   }
 
   return (
-    <>
+    <ScrollOffsetProvider>
       <Tabs
         tabBar={(props) => <TabBarRouter {...props} />}
         screenOptions={{
@@ -110,7 +111,11 @@ export default function TabsLayout() {
           name="messages"
           options={{
             tabBarIcon: ({ color, focused }) => (
-              <MessageCircle size={26} color={color} strokeWidth={focused ? 2.75 : 1.75} />
+              <MessageCircle
+                size={26}
+                color={color}
+                strokeWidth={focused ? 2.75 : 1.75}
+              />
             ),
             tabBarBadge:
               totalUnread > 0 ? (totalUnread > 99 ? '99+' : totalUnread) : undefined,
@@ -149,7 +154,7 @@ export default function TabsLayout() {
 
       <MessageNotificationBanner />
       <PostPublishedBanner />
-    </>
+    </ScrollOffsetProvider>
   );
 }
 

@@ -21,6 +21,8 @@ import ReAnimated, {
   Extrapolation,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { HeaderBlur } from '@/components/ui/HeaderBlur';
+import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
 import {
   Plus,
   Users,
@@ -55,7 +57,13 @@ import { COLORS } from '@/constants/theme';
 const ATTO_LOGO_URI =
   'https://res.cloudinary.com/da9vymoah/image/upload/v1774905442/Property_1_Default_zqv4qr.png';
 
-const HEADER_HEIGHT = 58;
+const HEADER_HEIGHT = 44;
+/**
+ * Height of the header bar BELOW the safe-area inset. The home feed offsets its
+ * scroll content by `insets.top + FEED_HEADER_BAR_HEIGHT` so the first item
+ * isn't hidden behind the floating header.
+ */
+export const FEED_HEADER_BAR_HEIGHT = HEADER_HEIGHT;
 const SHEET_CONTENT_HEIGHT = 320;
 const SPRING_CONFIG = { damping: 22, stiffness: 180, mass: 0.8 };
 
@@ -73,6 +81,10 @@ export function FeedHeader() {
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
   const { isTablet } = useDeviceLayout();
+  // Shared scroll-direction signal (0 = at top / scrolling up, 1 = scrolling
+  // down) — the same value that shrinks the bottom navbar. Drives the
+  // Instagram-style hide-on-scroll-down / reveal-on-scroll-up behaviour.
+  const { collapsed } = useScrollOffset();
   const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
   const hasAdvancedProduction = useSubscriptionStore((s) =>
     s.hasEntitlement('advanced_production')
@@ -192,6 +204,23 @@ export function FeedHeader() {
     ),
   }));
 
+  // Floating-header hide/reveal. Full bar height incl. the safe-area inset so it
+  // slides completely off-screen (no sliver left in the status bar).
+  const headerTotalHeight = insets.top + HEADER_HEIGHT;
+  const hideStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: interpolate(
+          collapsed.value,
+          [0, 1],
+          [0, -headerTotalHeight],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+    opacity: interpolate(collapsed.value, [0, 1], [1, 0], Extrapolation.CLAMP),
+  }));
+
   const handleAction = useCallback(
     (action: () => void) => {
       closeSheet();
@@ -308,78 +337,89 @@ export function FeedHeader() {
         </>
       )}
 
-      {/* Header bar — extends into status bar area to mask the sheet */}
-      <View
+      {/* Floating blur header — overlays the feed, hides on scroll-down and
+          reveals on scroll-up (Instagram-style). The feed offsets its content
+          by `insets.top + FEED_HEADER_BAR_HEIGHT` so nothing starts behind it. */}
+      <ReAnimated.View
+        pointerEvents="box-none"
         style={[
           styles.header,
-          { marginTop: -insets.top, paddingTop: insets.top },
-          isTablet && styles.headerTablet,
+          { height: headerTotalHeight, paddingTop: insets.top },
+          hideStyle,
         ]}
       >
-        {!isTablet && (
-          <View style={styles.sideSlot}>
-            <TouchableOpacity
-              onPress={() =>
-                isCreatorWithPlan
-                  ? setActionSheetVisible(true)
-                  : router.push('/create-post')
-              }
-              style={styles.iconButton}
-            >
-              <Plus size={30} color="#FFF" strokeWidth={2.25} />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Frosted background that fades into the feed — no hard edge/border. */}
+        <HeaderBlur />
 
-        <TouchableOpacity
-          style={styles.logoContainer}
-          activeOpacity={0.7}
-          onPress={async () => {
-            await ScreenOrientation.unlockAsync();
-            setLogoFullscreen(true);
-          }}
+        <View
+          pointerEvents="box-none"
+          style={[styles.headerRow, isTablet && styles.headerTablet]}
         >
-          {creatorsOnly && todayLogoUri ? (
-            <Image
-              source={{ uri: todayLogoUri }}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          ) : (
-            <Image
-              source={{ uri: ATTO_LOGO_URI }}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+          {!isTablet && (
+            <View style={styles.sideSlot}>
+              <TouchableOpacity
+                onPress={() =>
+                  isCreatorWithPlan
+                    ? setActionSheetVisible(true)
+                    : router.push('/create-post')
+                }
+                style={styles.iconButton}
+              >
+                <Plus size={30} color="#FFF" strokeWidth={2.25} />
+              </TouchableOpacity>
+            </View>
           )}
-          <Text style={styles.logoSubtext} allowFontScaling={false}>
-            sound
-          </Text>
-        </TouchableOpacity>
 
-        {!isTablet && (
-          <View style={styles.sideSlot}>
-            <TouchableOpacity
-              onPress={sheetOpen ? closeSheet : openSheet}
-              style={styles.iconButton}
-            >
-              {sheetOpen ? (
-                <X size={24} color="#FFF" strokeWidth={2.25} />
-              ) : (
-                <>
-                  <Ellipsis size={24} color="#FFF" strokeWidth={2.25} />
-                  {notifUnread > 0 && <View style={styles.ellipsisDot} />}
-                  {isFilterActive && (
-                    <View style={styles.filterIndicator}>
-                      <CreatorBadge size="sm" />
-                    </View>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+          <TouchableOpacity
+            style={styles.logoContainer}
+            activeOpacity={0.7}
+            onPress={async () => {
+              await ScreenOrientation.unlockAsync();
+              setLogoFullscreen(true);
+            }}
+          >
+            {creatorsOnly && todayLogoUri ? (
+              <Image
+                source={{ uri: todayLogoUri }}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            ) : (
+              <Image
+                source={{ uri: ATTO_LOGO_URI }}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            )}
+            <Text style={styles.logoSubtext} allowFontScaling={false}>
+              sound
+            </Text>
+          </TouchableOpacity>
+
+          {!isTablet && (
+            <View style={styles.sideSlot}>
+              <TouchableOpacity
+                onPress={sheetOpen ? closeSheet : openSheet}
+                style={styles.iconButton}
+              >
+                {sheetOpen ? (
+                  <X size={24} color="#FFF" strokeWidth={2.25} />
+                ) : (
+                  <>
+                    <Ellipsis size={24} color="#FFF" strokeWidth={2.25} />
+                    {notifUnread > 0 && <View style={styles.ellipsisDot} />}
+                    {isFilterActive && (
+                      <View style={styles.filterIndicator}>
+                        <CreatorBadge size="sm" />
+                      </View>
+                    )}
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </ReAnimated.View>
 
       <ComingSoonModal
         visible={comingSoonFeature !== null}
@@ -465,13 +505,20 @@ export function FeedHeader() {
 
 const styles = StyleSheet.create({
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    // visible (not hidden) so HeaderBlur's fade can spill slightly below the bar.
+    overflow: 'visible',
+    zIndex: 10,
+  },
+  headerRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: COLORS.background.primary,
-    zIndex: 10,
   },
   headerTablet: {
     justifyContent: 'center',

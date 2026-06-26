@@ -43,7 +43,6 @@ import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
-import { BugReportFAB } from '@/components/BugReportFAB';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
@@ -421,7 +420,6 @@ function RootLayout() {
                         <Stack.Screen name="+not-found" />
                       </Stack>
                       <CallBanner />
-                      <BugReportFAB />
                       <AccountSwitchOverlay />
                     </UpdateRequiredGate>
                   )}

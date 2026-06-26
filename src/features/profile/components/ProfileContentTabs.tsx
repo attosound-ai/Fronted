@@ -341,8 +341,6 @@ const styles = StyleSheet.create({
   // Tab bar
   tabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#222222',
     marginBottom: 2,
   },
   tab: {

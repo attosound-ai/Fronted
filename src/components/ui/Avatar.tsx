@@ -30,9 +30,12 @@ const PRESET_MAP: Record<AvatarSize, 'avatar_sm' | 'avatar_md' | 'avatar_lg'> = 
 };
 
 function getInitials(text: string): string {
+  // Split on whitespace and common username separators so "John Doe" -> "JD"
+  // and "john_doe" / "john.doe" -> "JD", while "valeromadrid_" -> "V".
   return text
     .trim()
-    .split(/\s+/)
+    .split(/[\s._-]+/)
+    .filter(Boolean)
     .slice(0, 2)
     .map((word) => word[0]?.toUpperCase() ?? '')
     .join('');

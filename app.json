@@ -114,10 +114,10 @@
               "backgroundColor": "#000000"
             }
           },
-          "chrome": {
-            "ios": "./assets/icons/chrome.png",
+          "platinum": {
+            "ios": "./assets/icons/platinum.png",
             "android": {
-              "foregroundImage": "./assets/icons/chrome.png",
+              "foregroundImage": "./assets/icons/platinum.png",
               "backgroundColor": "#000000"
             }
           },

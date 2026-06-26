@@ -51,10 +51,16 @@ export function useCreatePost() {
         filePaths.push(publicId);
       }
 
-      // Build metadata
+      // Build metadata. Persisting the media's native dimensions lets the feed
+      // render the correct aspect ratio immediately, instead of starting at a
+      // 1:1 box and snapping once the player decodes the first frame.
       const metadata: Record<string, string> = {};
       if (media[0]?.duration) {
         metadata.duration = String(media[0].duration);
+      }
+      if (media[0]?.width && media[0]?.height) {
+        metadata.width = String(media[0].width);
+        metadata.height = String(media[0].height);
       }
 
       // Create the post via API

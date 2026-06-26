@@ -12,7 +12,8 @@ import {
   Dimensions,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router } from 'expo-router';
 import {
   ChevronLeft,
@@ -42,7 +43,7 @@ import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { GoldRing } from '@/components/ui/GoldRing';
 import { GOLD_FLAT } from '@/constants/gold';
 import { formatCount } from '@/utils/formatters';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import { cloudinaryUrl, cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { feedService } from '@/features/feed/services/feedService';
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -79,13 +80,16 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
+        ? (cloudinaryHlsUrl(files[0]) ?? files[0])
         : undefined,
     thumbnailUrl:
       post.metadata?.thumbnailUrl ??
       (type === 'reel' ? cloudinaryUrl(files[0], 'reel_thumb', 'video') : undefined) ??
-      (type === 'video' ? cloudinaryUrl(files[0], 'video_thumb', 'video') : undefined),
+      (type === 'video' ? cloudinaryUrl(files[0], 'video_thumb', 'video') : undefined) ??
+      undefined,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
+    mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
+    mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
@@ -133,6 +137,7 @@ export function PublicProfileScreen({
     isToggling,
   } = useUserProfile(userId);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+  const header = useCollapsibleHeader();
 
   const openPost = (post: FeedPost) => {
     router.push({
@@ -172,37 +177,39 @@ export function PublicProfileScreen({
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
+      <View style={styles.container}>
+        <View style={{ paddingTop: header.height }}>
+          <ProfileSkeleton />
+        </View>
+        <CollapsibleHeader animatedStyle={header.animatedStyle}>
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
           </TouchableOpacity>
-        </View>
-        <ProfileSkeleton />
-      </SafeAreaView>
+        </CollapsibleHeader>
+      </View>
     );
   }
 
   if (!profile && !showFallback) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
+      <View style={styles.container}>
+        <View style={[styles.centered, { paddingTop: header.height }]}>
+          <Text variant="body" style={styles.errorText}>
+            {t('publicProfile.errorLoadFailed')}
+          </Text>
+        </View>
+        <CollapsibleHeader animatedStyle={header.animatedStyle}>
           <TouchableOpacity
             onPress={() => router.back()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
           </TouchableOpacity>
-        </View>
-        <View style={styles.centered}>
-          <Text variant="body" style={styles.errorText}>
-            {t('publicProfile.errorLoadFailed')}
-          </Text>
-        </View>
-      </SafeAreaView>
+        </CollapsibleHeader>
+      </View>
     );
   }
 
@@ -220,41 +227,38 @@ export function PublicProfileScreen({
   // Clamp at the display layer too — counts must NEVER show negative.
   // safeCount captures any incident to PostHog so we can find the upstream cause.
   const postsCount = Math.max(0, profile?.postsCount ?? userPosts.length);
-  const followersCount = profile?.followersCount === undefined
-    ? 0
-    : safeCount(profile.followersCount, {
-        field: 'followersCount',
-        source: 'PublicProfileScreen.render',
-        extra: { profile_id: numericId },
-      });
-  const followingCount = profile?.followingCount === undefined
-    ? 0
-    : safeCount(profile.followingCount, {
-        field: 'followingCount',
-        source: 'PublicProfileScreen.render',
-        extra: { profile_id: numericId },
-      });
+  const followersCount =
+    profile?.followersCount === undefined
+      ? 0
+      : safeCount(profile.followersCount, {
+          field: 'followersCount',
+          source: 'PublicProfileScreen.render',
+          extra: { profile_id: numericId },
+        });
+  const followingCount =
+    profile?.followingCount === undefined
+      ? 0
+      : safeCount(profile.followingCount, {
+          field: 'followingCount',
+          source: 'PublicProfileScreen.render',
+          extra: { profile_id: numericId },
+        });
   const isFollowing = profile?.isFollowing ?? false;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: header.height }]}
         refreshControl={
           <RefreshControl
             refreshing={isFetching && !isLoading}
             onRefresh={refetch}
             tintColor="#FFFFFF"
+            progressViewOffset={header.height}
           />
         }
+        onScroll={header.onScroll}
+        scrollEventThrottle={header.scrollEventThrottle}
       >
         <View style={styles.hero}>
           <TouchableOpacity
@@ -263,11 +267,11 @@ export function PublicProfileScreen({
           >
             {role === 'creator' ? (
               <GoldRing size={104} thickness={2}>
-                <Avatar uri={avatar} size="xl" />
+                <Avatar uri={avatar} size="xl" fallbackText={username} />
               </GoldRing>
             ) : (
               <View style={styles.avatarRing}>
-                <Avatar uri={avatar} size="xl" />
+                <Avatar uri={avatar} size="xl" fallbackText={username} />
               </View>
             )}
           </TouchableOpacity>
@@ -530,7 +534,15 @@ export function PublicProfileScreen({
         </Pressable>
       </Modal>
 
-    </SafeAreaView>
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+      </CollapsibleHeader>
+    </View>
   );
 }
 
@@ -653,12 +665,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background.primary,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   centered: {
     flex: 1,

@@ -5,11 +5,12 @@
  * module isn't linked yet.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Play } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
 import { COLORS } from '@/constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -79,6 +80,27 @@ function VideoViewWrapper({
   const player = useVideoPlayer(videoUrl, (p: { loop: boolean }) => {
     p.loop = false;
   });
+
+  // If the adaptive (HLS) source can't be delivered, fall back to optimized MP4.
+  const triedFallback = useRef(false);
+  useEffect(() => {
+    if (!player) return;
+    const sub = player.addListener('statusChange', ({ status }: { status: string }) => {
+      if (status === 'error' && !triedFallback.current) {
+        const fallback = hlsToMp4Fallback(videoUrl);
+        if (!fallback) return;
+        triedFallback.current = true;
+        setTimeout(() => {
+          try {
+            player.replace(fallback);
+          } catch {
+            // player disposed — ignore
+          }
+        }, 500);
+      }
+    });
+    return () => sub.remove();
+  }, [player, videoUrl]);
 
   return (
     <View style={styles.container}>

@@ -13,11 +13,16 @@ import {
 import { Heart } from 'lucide-react-native';
 import type { FeedPost } from '@/types/post';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
-const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
-const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
-
-function clampRatio(w: number, h: number): number {
-  return Math.min(MAX_HEIGHT_RATIO, Math.max(MIN_HEIGHT_RATIO, h / w));
+/**
+ * Height-to-width ratio from the media's native dimensions.
+ *
+ * The width is always fixed to the feed's content width; the height follows the
+ * image's true aspect ratio so uploads render exactly as the creator shot them
+ * (no clamping, no cropping). Guards against zero/garbage dimensions.
+ */
+function heightRatioFor(w: number, h: number): number {
+  if (!w || w <= 0 || !h || h <= 0) return 1;
+  return h / w;
 }
 
 interface ImageMediaProps {
@@ -31,7 +36,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [heightRatio, setHeightRatio] = useState(() => {
     if (post.mediaWidth && post.mediaHeight && post.mediaWidth > 0) {
-      return clampRatio(post.mediaWidth, post.mediaHeight);
+      return heightRatioFor(post.mediaWidth, post.mediaHeight);
     }
     return 1; // default 1:1 while loading
   });
@@ -47,9 +52,9 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     Image.getSize(
       firstImage,
       (w, h) => {
-        if (w > 0) setHeightRatio(clampRatio(w, h));
+        if (w > 0) setHeightRatio(heightRatioFor(w, h));
       },
-      () => {},
+      () => {}
     );
   }, [firstImage, post.mediaWidth, post.mediaHeight]);
 
@@ -93,7 +98,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
       <Image
         source={{ uri: item }}
         style={[styles.image, { width: contentWidth, height: imageHeight }]}
-        resizeMode="cover"
+        resizeMode="contain"
       />
     </Pressable>
   );

@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { Check, Plus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { useSuggestedAccounts } from '../hooks/useSuggestedAccounts';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import type { User } from '@/types';
@@ -56,7 +55,12 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
           // border (all driven by GOLD_FILL_STOPS in constants/gold.ts).
           style={!isCreator ? styles.avatarWrapper : undefined}
         >
-          <Avatar uri={user.avatar} size="lg" creatorRing={isCreator} />
+          <Avatar
+            uri={user.avatar}
+            size="lg"
+            creatorRing={isCreator}
+            fallbackText={user.username}
+          />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -81,7 +85,6 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
         >
           {user.username}
         </Text>
-        {user.role === 'creator' && <CreatorBadge size="sm" />}
       </View>
     </View>
   );
@@ -131,10 +134,15 @@ export function SuggestedAccountsCarousel() {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: COLORS.background.primary,
-    paddingTop: 10,
+    // Most of the top space now lives in the list's contentContainer (so the
+    // glow halo stays inside the scroll bounds and isn't clipped).
+    paddingTop: 2,
   },
   list: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    // Top room so the gold glow halo around creator avatars isn't clipped by
+    // the horizontal list's bounds.
+    paddingTop: 16,
     gap: 16,
     paddingBottom: 4,
   },

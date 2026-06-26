@@ -9,8 +9,9 @@ import {
   StyleSheet,
   type ViewToken,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { useLocalSearchParams, router, type Href } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -23,7 +24,11 @@ import { useInteractions } from '@/features/feed/hooks/useInteractions';
 import { useFollowFeed } from '@/features/feed/hooks/useFollowFeed';
 import { usePostFeed, type PostFeedSource } from '@/features/feed/hooks/usePostFeed';
 import { feedService } from '@/features/feed/services/feedService';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import {
+  cloudinaryUrl,
+  cloudinaryHlsUrl,
+  cloudinaryPoster,
+} from '@/lib/media/cloudinaryUrl';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { Post } from '@/types';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
@@ -59,10 +64,16 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
+        ? (cloudinaryHlsUrl(files[0]) ?? files[0])
         : undefined,
-    thumbnailUrl: post.metadata?.thumbnailUrl,
+    thumbnailUrl:
+      type === 'video' || type === 'reel'
+        ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
+          post.metadata?.thumbnailUrl)
+        : post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
+    mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
+    mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
@@ -112,6 +123,7 @@ export default function PostDetailScreen() {
   const { toggleFollow, getIsFollowing } = useFollowFeed();
   const currentUserId = useAuthStore((s) => s.user?.id);
   const queryClient = useQueryClient();
+  const header = useCollapsibleHeader();
 
   const { posts, isLoading, isFetchingMore, hasMore, loadMore, refresh, isRefreshing } =
     usePostFeed({
@@ -259,24 +271,28 @@ export default function PostDetailScreen() {
     );
   }, [isFetchingMore]);
 
-  const ItemSeparator = useCallback(() => <View style={styles.separator} />, []);
+  // Creator posts are framed with their own gold border top + bottom, so a gray
+  // hairline next to one would read as an ugly double line. Drop the gray line
+  // whenever either neighbour is a creator post; keep it between regular posts.
+  const ItemSeparator = useCallback(
+    ({
+      leadingItem,
+      trailingItem,
+    }: {
+      leadingItem?: FeedPost;
+      trailingItem?: FeedPost;
+    }) => {
+      const touchesCreator =
+        leadingItem?.author?.role === 'creator' ||
+        trailingItem?.author?.role === 'creator';
+      return <View style={touchesCreator ? styles.separatorSpacer : styles.separator} />;
+    },
+    []
+  );
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <Text variant="h3" style={styles.headerTitle}>
-          Post
-        </Text>
-        <View style={{ width: 28 }} />
-      </View>
-
+    <View style={styles.container}>
       {isLoading && feedPosts.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator color="#FFF" />
@@ -300,6 +316,7 @@ export default function PostDetailScreen() {
               refreshing={isRefreshing}
               onRefresh={refresh}
               tintColor="#FFF"
+              progressViewOffset={header.height}
             />
           }
           // Virtualization tuning — mirrors FeedList for consistency.
@@ -309,13 +326,14 @@ export default function PostDetailScreen() {
           windowSize={3}
           initialNumToRender={3}
           updateCellsBatchingPeriod={100}
-          scrollEventThrottle={16}
+          onScroll={header.onScroll}
+          scrollEventThrottle={header.scrollEventThrottle}
           directionalLockEnabled
           // Viewability for autoplay of videos/audio
           viewabilityConfig={viewabilityConfig.current}
           onViewableItemsChanged={onViewableItemsChanged.current}
           extraData={visibleIds}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingTop: header.height }]}
         />
       )}
 
@@ -335,7 +353,20 @@ export default function PostDetailScreen() {
           onShareTracked={() => trackShare(sharePost.id)}
         />
       )}
-    </SafeAreaView>
+
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text variant="h3" style={styles.headerTitle}>
+          Post
+        </Text>
+        <View style={{ width: 28 }} />
+      </CollapsibleHeader>
+    </View>
   );
 }
 
@@ -369,6 +400,11 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#222',
     marginVertical: 8,
+  },
+  // Same vertical gap as `separator` but no gray line — used next to gold-framed
+  // creator posts so their border isn't doubled up.
+  separatorSpacer: {
+    height: 8,
   },
   footer: {
     paddingVertical: 24,

@@ -102,11 +102,11 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
       >
         {user.role === 'creator' ? (
           <GoldRing size={104} thickness={2}>
-            <Avatar uri={user.avatar} size="xl" />
+            <Avatar uri={user.avatar} size="xl" fallbackText={user.username} />
           </GoldRing>
         ) : (
           <View style={styles.avatarRing}>
-            <Avatar uri={user.avatar} size="xl" />
+            <Avatar uri={user.avatar} size="xl" fallbackText={user.username} />
           </View>
         )}
       </TouchableOpacity>
@@ -239,16 +239,6 @@ export function ProfileHero({ user, onEditProfile }: ProfileHeroProps) {
           </Text>
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        onPress={onEditProfile}
-        activeOpacity={0.7}
-        style={styles.editButton}
-      >
-        <Text variant="body" style={styles.editButtonText}>
-          {t('hero.editProfile')}
-        </Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -343,20 +333,6 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     color: '#888888',
-  },
-  editButton: {
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 9999,
-    paddingVertical: 8,
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    marginTop: 12,
-  },
-  editButtonText: {
-    color: '#FFF',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 14,
   },
   avatarModal: {
     flex: 1,

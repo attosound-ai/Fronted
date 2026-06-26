@@ -20,8 +20,15 @@ import {
 import { router, type Href } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/ui/Text';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import {
+  cloudinaryUrl,
+  cloudinaryHlsUrl,
+  cloudinaryPoster,
+} from '@/lib/media/cloudinaryUrl';
+import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
+import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { COLORS, SPACING } from '@/constants/theme';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useFeed } from '../hooks/useFeed';
@@ -77,10 +84,16 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
+        ? (cloudinaryHlsUrl(files[0]) ?? files[0])
         : undefined,
-    thumbnailUrl: post.metadata?.thumbnailUrl,
+    thumbnailUrl:
+      type === 'video' || type === 'reel'
+        ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
+          post.metadata?.thumbnailUrl)
+        : post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
+    mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
+    mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
@@ -124,6 +137,8 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   const followedUsers = useFollowStore((s) => s.followedUsers);
   const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
   const qc = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const { scrollHandler, expand } = useScrollOffset();
 
   const flatListRef = useRef<FlatList<FeedPost>>(null);
 
@@ -139,9 +154,10 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('feedScrollToTop', () => {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      expand(); // pop the floating navbar back to full size
     });
     return () => sub.remove();
-  }, []);
+  }, [expand]);
 
   // Video auto-play: track visible post IDs.
   // Ref holds the truth (read during render). State update is deferred via
@@ -313,7 +329,20 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
     );
   }
 
-  const ItemSeparator = () => <View style={styles.separator} />;
+  // Creator posts carry their own gold border (top + bottom); a gray hairline
+  // next to one reads as an ugly double line. Drop the gray line whenever a
+  // neighbour is a creator post; keep it between regular posts.
+  const ItemSeparator = ({
+    leadingItem,
+    trailingItem,
+  }: {
+    leadingItem?: FeedPost;
+    trailingItem?: FeedPost;
+  }) => {
+    const touchesCreator =
+      leadingItem?.author?.role === 'creator' || trailingItem?.author?.role === 'creator';
+    return <View style={touchesCreator ? styles.separatorSpacer : styles.separator} />;
+  };
 
   return (
     <>
@@ -323,7 +352,11 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
         renderItem={renderPost}
         keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeaderComponent}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE,
+        }}
         refreshControl={refreshCtrl}
+        onScroll={scrollHandler}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
@@ -395,6 +428,11 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#222',
     marginVertical: 8,
+  },
+  // Same vertical gap as `separator` but no gray line — used next to gold-framed
+  // creator posts so their border isn't doubled up.
+  separatorSpacer: {
+    height: 8,
   },
   footer: {
     paddingVertical: SPACING.lg,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,13 +12,18 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { useAuthStore } from '@/stores/authStore';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { Text } from '@/components/ui/Text';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
+import { useVideoStream } from '@/hooks/useVideoStream';
+import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { VideoPoster } from '@/components/ui/VideoPoster';
+import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
+import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import type { FeedPost, PostAuthor } from '@/types/post';
 import { COLORS } from '@/constants/theme';
 
@@ -46,17 +51,21 @@ export function ReelMedia({
   const currentUserId = useAuthStore((s) => s.user?.id);
   const isOwnPost =
     currentUserId !== undefined && String(post.author.id) === String(currentUserId);
-  const [isMuted, setIsMuted] = useState(true);
+  // Global mute shared across every video (Instagram-style).
+  const isMuted = useVideoSoundStore((s) => s.isMuted);
+  const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
-    : null;
+  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
-    p.muted = true;
+    p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
+  const isReady = useVideoStream(player, videoUrl, isVisible);
+  const { position, duration } = useVideoProgress(player);
 
   useEffect(() => {
     if (!player) return;
@@ -67,12 +76,11 @@ export function ReelMedia({
     }
   }, [isVisible, player]);
 
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      player.muted = !prev;
-      return !prev;
-    });
-  }, [player]);
+  // Sync this player whenever the shared mute state flips so one video's
+  // toggle applies to every other mounted video.
+  useEffect(() => {
+    if (player) player.muted = isMuted;
+  }, [isMuted, player]);
 
   if (!videoUrl) {
     return (
@@ -93,6 +101,12 @@ export function ReelMedia({
         nativeControls={false}
       />
 
+      {/* Poster shown until the stream produces its first frame */}
+      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+
+      {/* Thin progress line at the bottom edge */}
+      <VideoProgressBar position={position} duration={duration} showTime={false} />
+
       {/* Top gradient — author info + follow + menu */}
       <LinearGradient
         colors={['rgba(0,0,0,0.55)', 'transparent']}
@@ -107,6 +121,7 @@ export function ReelMedia({
             uri={post.author.avatar}
             size="md"
             creatorRing={post.author.role === 'creator'}
+            fallbackText={post.author.username}
           />
           <Text style={styles.authorName} numberOfLines={1} maxFontSizeMultiplier={1.15}>
             {post.author.username}
@@ -157,7 +172,7 @@ export function ReelMedia({
       {/* Mute toggle — bottom-right corner (must render after gradient to be on top) */}
       <TouchableOpacity
         style={styles.muteButton}
-        onPress={toggleMute}
+        onPress={toggleMuted}
         activeOpacity={0.7}
       >
         {isMuted ? (

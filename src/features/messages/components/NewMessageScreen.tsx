@@ -45,7 +45,7 @@ export function NewMessageScreen() {
           name: item.username,
         })}
       >
-        <Avatar uri={item.avatar} size="md" />
+        <Avatar uri={item.avatar} size="md" fallbackText={item.username} />
         <View style={styles.userInfo}>
           <Text variant="h3" numberOfLines={1}>
             {item.username}

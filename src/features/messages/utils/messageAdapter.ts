@@ -5,6 +5,7 @@
  */
 
 import type { IMessage, User as GiftedUser } from 'react-native-gifted-chat';
+import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import type { ChatMessage, Reaction } from '../types';
 
 export interface AttoMessage extends IMessage {
@@ -62,7 +63,10 @@ export function toGiftedMessage(
     pending: msg.status === 'sending',
     // Media fields
     image: msg.contentType === 'image' ? msg.content : undefined,
-    video: msg.contentType === 'video' ? msg.content : undefined,
+    video:
+      msg.contentType === 'video'
+        ? (cloudinaryHlsUrl(msg.content) ?? msg.content)
+        : undefined,
     audio: msg.contentType === 'audio' ? msg.content : undefined,
     // System message for deleted
     system: msg.isDeleted,

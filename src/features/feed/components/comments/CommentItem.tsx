@@ -63,6 +63,7 @@ export function CommentItem({
         uri={comment.author?.avatar ?? null}
         size="sm"
         creatorRing={comment.author?.role === 'creator'}
+        fallbackText={comment.author?.username}
       />
       <View style={styles.content}>
         <View style={styles.usernameRow}>

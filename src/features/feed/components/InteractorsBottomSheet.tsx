@@ -82,7 +82,7 @@ export function InteractorsBottomSheet({
               onPress={() => handleUserPress(item.id)}
               activeOpacity={0.7}
             >
-              <Avatar uri={item.avatar} size="sm" />
+              <Avatar uri={item.avatar} size="sm" fallbackText={item.username} />
               <View style={styles.textCol}>
                 <Text style={styles.displayName}>{item.username}</Text>
               </View>

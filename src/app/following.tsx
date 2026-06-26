@@ -5,8 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -35,6 +36,8 @@ export default function FollowingScreen() {
   const targetId = userId ? Number(userId) : Number(currentUserId);
   const activeMode = mode ?? 'following';
   const title = activeMode === 'followers' ? 'Followers' : 'Following';
+
+  const header = useCollapsibleHeader();
 
   const { data, isLoading, isError } = useQuery({
     queryKey:
@@ -69,7 +72,7 @@ export default function FollowingScreen() {
         })
       }
     >
-      <Avatar uri={item.avatar} size="md" />
+      <Avatar uri={item.avatar} size="md" fallbackText={item.username} />
       <View style={styles.info}>
         <Text style={styles.username}>{item.username}</Text>
       </View>
@@ -78,17 +81,7 @@ export default function FollowingScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <View style={{ width: 28 }} />
-      </View>
+    <View style={styles.container}>
       {isLoading ? (
         <UserListSkeleton />
       ) : isError ? (
@@ -109,12 +102,25 @@ export default function FollowingScreen() {
           data={users}
           renderItem={renderUser}
           keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingTop: header.height }]}
           showsVerticalScrollIndicator={false}
+          onScroll={header.onScroll}
+          scrollEventThrottle={header.scrollEventThrottle}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
-    </SafeAreaView>
+
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <View style={{ width: 28 }} />
+      </CollapsibleHeader>
+    </View>
   );
 }
 

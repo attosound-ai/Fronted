@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -27,7 +26,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bookmark,
   Film,
-  Heart,
   Megaphone,
   MessageCircle,
   Send,
@@ -35,12 +33,23 @@ import {
   VolumeX,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import {
+  cloudinaryUrl,
+  cloudinaryHlsUrl,
+  cloudinaryPoster,
+} from '@/lib/media/cloudinaryUrl';
+import { useVideoStream } from '@/hooks/useVideoStream';
+import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { VideoPoster } from '@/components/ui/VideoPoster';
+import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
+import { Avatar } from '@/components/ui/Avatar';
+import { ThumbsUpIcon } from '@/components/ui/ThumbsUpIcon';
 import { useAuthStore } from '@/stores/authStore';
 import { useReelsFeed } from '../hooks/useReelsFeed';
 import { useInteractions } from '../hooks/useInteractions';
 import { useFollowFeed } from '../hooks/useFollowFeed';
 import { useFollowStore } from '@/stores/followStore';
+import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import { LinkedText } from './LinkedText';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { feedService } from '../services/feedService';
@@ -50,15 +59,16 @@ import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
 import { formatCount } from '@/utils/formatters';
 import { ReelsSkeleton } from '@/components/ui/Skeleton';
-import type { FeedPost, PostAuthor, PostType } from '@/types/post'; // PostType used in toFeedPost helper
+import type { FeedPost, PostType } from '@/types/post'; // PostType used in toFeedPost helper
 import type { Post } from '@/types';
 import { COLORS } from '@/constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TAB_BAR_HEIGHT = 49;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const REEL_HEIGHT = SCREEN_HEIGHT - TAB_BAR_HEIGHT;
+// Full-bleed: the floating Liquid Glass navbar overlays reels (TikTok/IG style),
+// so each reel fills the whole screen rather than reserving tab-bar height.
+const REEL_HEIGHT = SCREEN_HEIGHT;
 
 // ─── Post conversion helpers (mirrored from FeedList.tsx) ─────────────────────
 
@@ -91,10 +101,16 @@ function toFeedPost(post: Post): FeedPost {
         : undefined,
     videoUrl:
       type === 'video' || type === 'reel'
-        ? (cloudinaryUrl(files[0], 'video_original', 'video') ?? files[0])
+        ? (cloudinaryHlsUrl(files[0]) ?? files[0])
         : undefined,
-    thumbnailUrl: post.metadata?.thumbnailUrl,
+    thumbnailUrl:
+      type === 'video' || type === 'reel'
+        ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
+          post.metadata?.thumbnailUrl)
+        : post.metadata?.thumbnailUrl,
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
+    mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
+    mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
     commentsCount: post.commentsCount,
@@ -141,17 +157,21 @@ function ReelItem({
   const { t } = useTranslation('feed');
   const isOwnPost =
     currentUserId !== undefined && String(post.author.id) === String(currentUserId);
-  const [isMuted, setIsMuted] = useState(true);
+  // Global mute shared across every video (Instagram-style).
+  const isMuted = useVideoSoundStore((s) => s.isMuted);
+  const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [captionExpanded, setCaptionExpanded] = useState(false);
 
-  const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
-    : null;
+  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
-    p.muted = true;
+    p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // Tracks first-frame readiness + transparently falls back HLS→MP4 on error.
+  const isReady = useVideoStream(player, videoUrl, isActive);
+  const { position, duration } = useVideoProgress(player);
 
   // Play / pause driven by visibility — must run as an effect, never during render
   useEffect(() => {
@@ -163,34 +183,10 @@ function ReelItem({
     }
   }, [isActive, player]);
 
-  // Auto-recover from error state
+  // Sync this player whenever the shared mute state flips.
   useEffect(() => {
-    if (!player || !videoUrl) return;
-    const sub = player.addListener('statusChange', ({ status }) => {
-      if (status === 'error' && isActive) {
-        setTimeout(() => {
-          try {
-            player.replace(videoUrl);
-            player.play();
-          } catch {
-            // ignore
-          }
-        }, 1000);
-      }
-    });
-    return () => sub.remove();
-  }, [player, isActive, videoUrl]);
-
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      player.muted = !prev;
-      return !prev;
-    });
-  }, [player]);
-
-  const avatarUri = post.author.avatar
-    ? (cloudinaryUrl(post.author.avatar, 'avatar_sm') ?? undefined)
-    : undefined;
+    if (player) player.muted = isMuted;
+  }, [isMuted, player]);
 
   return (
     <View style={styles.reelContainer}>
@@ -208,6 +204,12 @@ function ReelItem({
         </View>
       )}
 
+      {/* Poster shown until the stream produces its first frame */}
+      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+
+      {/* Thin progress line at the bottom edge */}
+      <VideoProgressBar position={position} duration={duration} showTime={false} />
+
       {/* ── Gradient scrim at the bottom so text is readable ── */}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.85)']}
@@ -216,28 +218,15 @@ function ReelItem({
       />
 
       {/* ── Mute / unmute ── */}
-      <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={12}>
-        {isMuted ? (
-          <VolumeX size={20} color="#FFF" strokeWidth={2.25} />
-        ) : (
-          <Volume2 size={20} color="#FFF" strokeWidth={2.25} />
-        )}
-      </TouchableOpacity>
-
       {/* ── Right-side action column ── */}
       <View style={styles.actionsColumn}>
-        {/* Like */}
+        {/* Like — thumbs up (the app's like icon) */}
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => onLike(post.id)}
           activeOpacity={0.75}
         >
-          <Heart
-            size={30}
-            color={post.isLiked ? '#EF4444' : '#FFF'}
-            fill={post.isLiked ? '#EF4444' : 'none'}
-            strokeWidth={2.25}
-          />
+          <ThumbsUpIcon size={30} color="#FFF" filled={post.isLiked} />
           <Text style={styles.actionCount} maxFontSizeMultiplier={1.0}>
             {formatCount(post.likesCount)}
           </Text>
@@ -280,6 +269,20 @@ function ReelItem({
             strokeWidth={2.25}
           />
         </TouchableOpacity>
+
+        {/* Mute — sits below the save button */}
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={toggleMuted}
+          activeOpacity={0.75}
+          hitSlop={8}
+        >
+          {isMuted ? (
+            <VolumeX size={28} color="#FFF" strokeWidth={2.25} />
+          ) : (
+            <Volume2 size={28} color="#FFF" strokeWidth={2.25} />
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* ── Bottom author + description overlay ── */}
@@ -316,15 +319,13 @@ function ReelItem({
               }
             }}
           >
-            {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial} maxFontSizeMultiplier={1.0}>
-                  {post.author.username.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <Avatar
+              uri={post.author.avatar}
+              size="md"
+              creatorRing={post.author.role === 'creator'}
+              fallbackText={post.author.username}
+              style={post.author.role === 'creator' ? undefined : styles.avatarBorder}
+            />
             <Text style={styles.username} numberOfLines={1} maxFontSizeMultiplier={1.15}>
               {post.author.username}
             </Text>
@@ -375,12 +376,18 @@ interface AdReelItemProps {
  * Same layout as ReelItem but without social actions or author row.
  */
 function AdReelItem({ post, isActive }: AdReelItemProps) {
-  const [isMuted, setIsMuted] = useState(true);
+  // Global mute shared across every video (Instagram-style).
+  const isMuted = useVideoSoundStore((s) => s.isMuted);
+  const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
 
-  const player = useVideoPlayer(post.videoUrl ?? null, (p) => {
+  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
+
+  const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
-    p.muted = true;
+    p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  const isReady = useVideoStream(player, videoUrl, isActive);
 
   useEffect(() => {
     if (!player) return;
@@ -391,16 +398,14 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
     }
   }, [isActive, player]);
 
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      player.muted = !prev;
-      return !prev;
-    });
-  }, [player]);
+  // Sync this player whenever the shared mute state flips.
+  useEffect(() => {
+    if (player) player.muted = isMuted;
+  }, [isMuted, player]);
 
   return (
     <View style={styles.reelContainer}>
-      {post.videoUrl ? (
+      {videoUrl ? (
         <VideoView
           player={player}
           style={StyleSheet.absoluteFill}
@@ -412,6 +417,9 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
           <Film size={56} color="#555" strokeWidth={2.25} />
         </View>
       )}
+
+      {/* Poster shown until the stream produces its first frame */}
+      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
 
       {/* Gradient scrim */}
       <LinearGradient
@@ -429,7 +437,7 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
       </View>
 
       {/* Mute toggle */}
-      <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={12}>
+      <TouchableOpacity style={styles.muteButton} onPress={toggleMuted} hitSlop={12}>
         {isMuted ? (
           <VolumeX size={20} color="#FFF" strokeWidth={2.25} />
         ) : (
@@ -442,9 +450,24 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
 
 // ─── ReelsFeed ────────────────────────────────────────────────────────────────
 
+// height / width threshold for a video to play full-screen as a reel.
+// 9:16 ≈ 1.78; we accept anything that tall or taller (vertical formats).
+const REEL_MIN_ASPECT = 1.6;
+
+/**
+ * Reel-eligible = an actual reel, OR a video shot vertically (~9:16+) so it
+ * fills the full-screen player cleanly. Landscape/square videos stay in the
+ * regular feed only.
+ */
+function isReelEligible(p: FeedPost): boolean {
+  if (p.type === 'reel') return true;
+  if (p.type !== 'video' || !p.mediaWidth || !p.mediaHeight) return false;
+  return p.mediaHeight / p.mediaWidth >= REEL_MIN_ASPECT;
+}
+
 /**
  * ReelsFeed — the full-screen vertical paging list.
- * Only shows posts with type 'reel' (not 'video').
+ * Shows reels plus vertical (~9:16) videos.
  */
 export function ReelsFeed() {
   const { posts, isLoading, isRefreshing, isFetchingMore, hasMore, loadMore, refresh } =
@@ -473,7 +496,7 @@ export function ReelsFeed() {
 
   const realPosts = posts
     .map(toFeedPost)
-    .filter((p) => p.type === 'reel')
+    .filter(isReelEligible)
     .map((p) => ({
       ...p,
       author: {
@@ -664,23 +687,11 @@ const styles = StyleSheet.create({
     height: REEL_HEIGHT * 0.35,
   },
 
-  muteButton: {
-    position: 'absolute',
-    top: 56,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
   // ── Right actions column ──
   actionsColumn: {
     position: 'absolute',
     right: 12,
-    bottom: 120,
+    bottom: 150,
     alignItems: 'center',
     gap: 20,
   },
@@ -696,13 +707,21 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  // Ad reels have no actions column — their mute toggle sits bottom-right,
+  // matching the position of the regular reel's mute button.
+  muteButton: {
+    position: 'absolute',
+    right: 12,
+    bottom: 150,
+  },
 
   // ── Bottom author / description ──
+  // Raised so the floating navbar never covers the caption/author.
   bottomOverlay: {
     position: 'absolute',
     left: 12,
     right: 72,
-    bottom: 56,
+    bottom: 110,
     gap: 8,
   },
   authorRow: {
@@ -715,27 +734,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  // White ring for non-creator avatars (creators get the gold ring instead).
+  avatarBorder: {
     borderWidth: 1.5,
     borderColor: '#FFF',
-  },
-  avatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#333',
-    borderWidth: 1.5,
-    borderColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    color: '#FFF',
-    fontSize: 14,
-    fontFamily: 'Archivo_600SemiBold',
   },
   username: {
     color: '#FFF',

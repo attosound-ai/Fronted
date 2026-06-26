@@ -83,7 +83,12 @@ export function PostHeader({
           onPress={() => onProfilePress?.(author)}
           activeOpacity={0.7}
         >
-          <Avatar uri={author.avatar} size="md" creatorRing={author.role === 'creator'} />
+          <Avatar
+            uri={author.avatar}
+            size="md"
+            creatorRing={author.role === 'creator'}
+            fallbackText={author.username}
+          />
           <Text
             variant="body"
             style={styles.username}

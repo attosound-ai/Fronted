@@ -291,11 +291,13 @@ export const StepConsentForm: React.FC<StepProps> = ({
               <Button
                 title={t('consentForm.confirmPerson')}
                 onPress={handleConfirmInmate}
+                style={styles.modalButton}
               />
               <Button
                 title={t('consentForm.notThisPerson')}
                 onPress={handleRejectInmate}
                 variant="outline"
+                style={styles.modalButton}
               />
             </View>
           </View>
@@ -413,7 +415,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modalButtons: {
+    flexDirection: 'row',
     gap: 12,
     paddingBottom: 8,
+  },
+  modalButton: {
+    flex: 1,
   },
 });

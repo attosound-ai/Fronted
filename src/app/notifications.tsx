@@ -8,9 +8,10 @@ import {
   StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, CheckCheck } from 'lucide-react-native';
+import { ChevronLeft, CheckCheck, Bell } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { Text } from '@/components/ui/Text';
 import { NotificationsSkeleton } from '@/components/ui/Skeleton';
 import { useNotifications } from '@/features/notifications/hooks/useNotifications';
@@ -40,6 +41,7 @@ export default function NotificationsScreen() {
   const unreadCount = useUnreadCount();
   const { markAsRead, markAllAsRead } = useMarkRead();
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const header = useCollapsibleHeader();
 
   // Auto-mark all as read when entering the screen
   useEffect(() => {
@@ -97,8 +99,46 @@ export default function NotificationsScreen() {
   const isEmpty = sections.length === 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={styles.listContainer}>
+        {isLoading && isEmpty ? (
+          <NotificationsSkeleton />
+        ) : error && isEmpty ? (
+          <View style={styles.loading}>
+            <Text style={styles.errorText}>{t('error.loadFailed')}</Text>
+          </View>
+        ) : (
+          <SectionList
+            sections={sections}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            keyExtractor={(item) => item.groupKey}
+            onScroll={header.onScroll}
+            scrollEventThrottle={header.scrollEventThrottle}
+            refreshControl={
+              <RefreshControl
+                refreshing={manualRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#FFF"
+                progressViewOffset={header.height}
+              />
+            }
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={renderFooter}
+            ListEmptyComponent={renderEmpty}
+            showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
+            contentContainerStyle={[
+              { paddingTop: header.height },
+              isEmpty && styles.emptyContainer,
+            ]}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+          />
+        )}
+      </View>
+
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
         <TouchableOpacity
           onPress={() => router.back()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -115,40 +155,8 @@ export default function NotificationsScreen() {
         ) : (
           <View style={{ width: 28 }} />
         )}
-      </View>
-
-      <View style={styles.listContainer}>
-        {isLoading && isEmpty ? (
-          <NotificationsSkeleton />
-        ) : error && isEmpty ? (
-          <View style={styles.loading}>
-            <Text style={styles.errorText}>{t('error.loadFailed')}</Text>
-          </View>
-        ) : (
-          <SectionList
-            sections={sections}
-            renderItem={renderItem}
-            renderSectionHeader={renderSectionHeader}
-            keyExtractor={(item) => item.groupKey}
-            refreshControl={
-              <RefreshControl
-                refreshing={manualRefreshing}
-                onRefresh={handleRefresh}
-                tintColor="#FFF"
-              />
-            }
-            onEndReached={handleEndReached}
-            onEndReachedThreshold={0.5}
-            ListFooterComponent={renderFooter}
-            ListEmptyComponent={renderEmpty}
-            showsVerticalScrollIndicator={false}
-            stickySectionHeadersEnabled={false}
-            contentContainerStyle={isEmpty ? styles.emptyContainer : undefined}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-          />
-        )}
-      </View>
-    </SafeAreaView>
+      </CollapsibleHeader>
+    </View>
   );
 }
 

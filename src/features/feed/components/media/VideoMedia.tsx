@@ -1,16 +1,26 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { VideoOff, VolumeX, Volume2 } from 'lucide-react-native';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
+import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
+import { useVideoStream } from '@/hooks/useVideoStream';
+import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { VideoPoster } from '@/components/ui/VideoPoster';
+import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
+import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import type { FeedPost } from '@/types/post';
 import { COLORS } from '@/constants/theme';
-const MIN_HEIGHT_RATIO = 0.5625; // 16:9 landscape
-const MAX_HEIGHT_RATIO = 1.25; // 4:5 portrait
-
-function clampRatio(w: number, h: number): number {
-  return Math.min(MAX_HEIGHT_RATIO, Math.max(MIN_HEIGHT_RATIO, h / w));
+/**
+ * Height-to-width ratio from the video's native dimensions.
+ *
+ * The width is always fixed to the feed's content width; the height follows the
+ * video's true aspect ratio so uploads render exactly as the creator shot them
+ * (no clamping, no cropping). Guards against zero/garbage dimensions.
+ */
+function heightRatioFor(w: number, h: number): number {
+  if (!w || w <= 0 || !h || h <= 0) return 1;
+  return h / w;
 }
 
 interface VideoMediaProps {
@@ -20,24 +30,33 @@ interface VideoMediaProps {
 
 export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
   const { contentWidth } = useDeviceLayout();
-  const [isMuted, setIsMuted] = useState(true);
+  // Global mute shared across every video (Instagram-style): toggling here
+  // mutes/unmutes all videos at once.
+  const isMuted = useVideoSoundStore((s) => s.isMuted);
+  const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [heightRatio, setHeightRatio] = useState(() => {
     if (post.mediaWidth && post.mediaHeight && post.mediaWidth > 0) {
-      return clampRatio(post.mediaWidth, post.mediaHeight);
+      return heightRatioFor(post.mediaWidth, post.mediaHeight);
     }
     return 1; // default 1:1 while loading
   });
 
   const containerHeight = contentWidth * heightRatio;
 
-  const videoUrl = post.videoUrl
-    ? (cloudinaryUrl(post.videoUrl, 'video_original', 'video') ?? post.videoUrl)
-    : null;
+  const videoUrl = cloudinaryHlsUrl(post.videoUrl) ?? null;
 
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
-    p.muted = true;
+    // Start at the current shared mute state so a freshly-mounted video matches
+    // whatever the rest of the feed is doing (the effect below keeps it synced).
+    p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
+  const isReady = useVideoStream(player, videoUrl, isVisible);
+
+  // Playback position + duration for the time readout and progress bar.
+  const { position, duration } = useVideoProgress(player);
 
   // Detect aspect ratio from the player's decoded video track (most reliable).
   useEffect(() => {
@@ -47,7 +66,7 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
     const readSize = () => {
       const track = player.videoTrack;
       if (track && track.size.width > 0) {
-        setHeightRatio(clampRatio(track.size.width, track.size.height));
+        setHeightRatio(heightRatioFor(track.size.width, track.size.height));
       }
     };
 
@@ -72,35 +91,17 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
     }
   }, [isVisible, player]);
 
-  // Auto-recover from error state: reload and retry playback
+  // Keep this player's audio in sync whenever the shared mute state flips —
+  // this is what makes one video's toggle apply to every other mounted video.
   useEffect(() => {
-    if (!player) return;
-    const sub = player.addListener('statusChange', ({ status }) => {
-      if (status === 'error' && isVisible && videoUrl) {
-        // Replace source to force reload
-        setTimeout(() => {
-          try {
-            player.replace(videoUrl);
-            player.play();
-          } catch {
-            // ignore if player was disposed
-          }
-        }, 1000);
-      }
-    });
-    return () => sub.remove();
-  }, [player, isVisible, videoUrl]);
-
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      player.muted = !prev;
-      return !prev;
-    });
-  }, [player]);
+    if (player) player.muted = isMuted;
+  }, [isMuted, player]);
 
   if (!videoUrl) {
     return (
-      <View style={[styles.placeholder, { width: contentWidth, height: containerHeight }]}>
+      <View
+        style={[styles.placeholder, { width: contentWidth, height: containerHeight }]}
+      >
         <VideoOff size={48} color="#666" strokeWidth={2.25} />
       </View>
     );
@@ -111,10 +112,12 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
       <VideoView
         player={player}
         style={styles.video}
-        contentFit="cover"
+        contentFit="contain"
         nativeControls={false}
       />
-      <TouchableOpacity style={styles.muteButton} onPress={toggleMute} hitSlop={8}>
+      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+      <VideoProgressBar position={position} duration={duration} />
+      <TouchableOpacity style={styles.muteButton} onPress={toggleMuted} hitSlop={8}>
         {isMuted ? (
           <VolumeX size={18} color="#FFF" strokeWidth={2.25} />
         ) : (

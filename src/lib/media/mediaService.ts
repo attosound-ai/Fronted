@@ -17,6 +17,8 @@ interface SignedUploadParams {
   folder: string;
   public_id: string;
   eager?: string;
+  /** When true, send `eager_async=true` so Cloudinary builds HLS in background. */
+  eager_async?: boolean;
   resource_type: string;
 }
 
@@ -79,6 +81,12 @@ async function uploadToCloudinary(
 
   if (params.eager) {
     formData.append('eager', params.eager);
+  }
+
+  // HLS eager transforms (video/reel) are transcoded in the background so the
+  // upload returns immediately. Must match what the backend signed.
+  if (params.eager_async) {
+    formData.append('eager_async', 'true');
   }
 
   return new Promise<CloudinaryUploadResult>((resolve, reject) => {

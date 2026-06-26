@@ -44,8 +44,9 @@ export function ProfileTabButton(props: ProfileTabButtonProps | BottomTabBarButt
 }
 
 const styles = StyleSheet.create({
+  // No `flex: 1` here: the bottom tab bar passes a fixed-width style so the
+  // compact pill's tabs stay evenly sized. Centering only.
   button: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

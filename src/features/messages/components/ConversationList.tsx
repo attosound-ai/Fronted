@@ -10,8 +10,11 @@ import {
 } from 'react-native';
 import { WifiOff, RefreshCw, Pencil } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
+import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
 import { MessagesSkeleton } from '@/components/ui/Skeleton';
@@ -37,7 +40,9 @@ export function ConversationList({
   onSelectConversation,
 }: ConversationListProps = {}) {
   const { t } = useTranslation('messages');
+  const insets = useSafeAreaInsets();
   const { conversations, isLoading, isRefreshing, error, refresh } = useConversations();
+  const header = useCollapsibleHeader();
 
   const handleConversationPress = useCallback(
     (conversationId: string, participantName: string, participantId: string) => {
@@ -71,7 +76,7 @@ export function ConversationList({
   const fab = (
     <TouchableOpacity
       onPress={handleNewMessage}
-      style={styles.fab}
+      style={[styles.fab, { bottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE + 8 }]}
       activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={t('header.newMessageAccessibility')}
@@ -82,25 +87,30 @@ export function ConversationList({
 
   if (isLoading && conversations.length === 0) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ConversationsHeader />
+      <View style={styles.container}>
         <MessagesSkeleton />
         {fab}
-      </SafeAreaView>
+        <CollapsibleHeader
+          animatedStyle={header.animatedStyle}
+          rowStyle={{ paddingHorizontal: 0 }}
+        >
+          <ConversationsHeader containerStyle={{ flex: 1, paddingVertical: 0 }} />
+        </CollapsibleHeader>
+      </View>
     );
   }
 
   if (error && conversations.length === 0) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ConversationsHeader />
+      <View style={styles.container}>
         <ScrollView
-          contentContainerStyle={styles.error}
+          contentContainerStyle={[styles.error, { paddingTop: header.height }]}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={refresh}
               tintColor={COLORS.white}
+              progressViewOffset={header.height}
             />
           }
         >
@@ -123,29 +133,47 @@ export function ConversationList({
           </TouchableOpacity>
         </ScrollView>
         {fab}
-      </SafeAreaView>
+        <CollapsibleHeader
+          animatedStyle={header.animatedStyle}
+          rowStyle={{ paddingHorizontal: 0 }}
+        >
+          <ConversationsHeader containerStyle={{ flex: 1, paddingVertical: 0 }} />
+        </CollapsibleHeader>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ConversationsHeader />
+    <View style={styles.container}>
       <FlatList
         data={conversations}
         renderItem={renderItem}
         keyExtractor={(item) => item.conversationId}
+        onScroll={header.onScroll}
+        scrollEventThrottle={header.scrollEventThrottle}
+        contentContainerStyle={{
+          paddingTop: header.height,
+          paddingBottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={refresh}
             tintColor={COLORS.white}
+            progressViewOffset={header.height}
           />
         }
         ListEmptyComponent={EmptyConversations}
         showsVerticalScrollIndicator={false}
       />
       {fab}
-    </SafeAreaView>
+      <CollapsibleHeader
+        animatedStyle={header.animatedStyle}
+        rowStyle={{ paddingHorizontal: 0 }}
+      >
+        <ConversationsHeader containerStyle={{ flex: 1, paddingVertical: 0 }} />
+      </CollapsibleHeader>
+    </View>
   );
 }
 

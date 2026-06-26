@@ -1,10 +1,26 @@
 import { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Settings } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
+
+interface ConversationsHeaderProps {
+  /**
+   * Optional style override for the header container View. Used when the
+   * header is hosted inside CollapsibleHeader so it can stretch to full
+   * width (flex: 1) and drop its own vertical padding (CollapsibleHeader's
+   * row already centres the content vertically).
+   */
+  containerStyle?: StyleProp<ViewStyle>;
+}
 
 /**
  * Header of the messages tab.
@@ -14,13 +30,13 @@ import { WallpaperPickerSheet } from './WallpaperPickerSheet';
  * the sheet is rendered directly because there's nothing else to branch
  * on yet. When more settings land, this can grow into a sub-menu.
  */
-export function ConversationsHeader() {
+export function ConversationsHeader({ containerStyle }: ConversationsHeaderProps = {}) {
   const { t } = useTranslation('messages');
   const [wallpaperSheetVisible, setWallpaperSheetVisible] = useState(false);
 
   return (
     <>
-      <View style={styles.container}>
+      <View style={[styles.container, containerStyle]}>
         <Text
           variant="h1"
           numberOfLines={1}

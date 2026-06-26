@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,10 +39,14 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectDetailScreenProps) {
+export function ProjectDetailScreen({
+  projectId,
+  publishMode = false,
+}: ProjectDetailScreenProps) {
   const { t } = useTranslation('projects');
   const queryClient = useQueryClient();
   const { data, isLoading } = useProjectDetail(projectId);
+  const header = useCollapsibleHeader();
   const deleteProject = useDeleteProject();
   const [editorOpen, setEditorOpen] = useState(false);
   const editorWasOpened = useRef(false);
@@ -155,37 +161,9 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            console.log('[ProjectDetail] X pressed, canGoBack:', router.canGoBack());
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(tabs)');
-            }
-          }}
-          style={styles.backButton}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          activeOpacity={0.5}
-        >
-          <X size={24} color="#FFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <View style={styles.headerTitle}>
-          <Text variant="h3" style={styles.title} numberOfLines={1}>
-            {project.name}
-          </Text>
-          {project.description ? (
-            <Text variant="caption" style={styles.description} numberOfLines={1}>
-              {project.description}
-            </Text>
-          ) : null}
-        </View>
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-          <Trash2 size={22} color="#EF4444" strokeWidth={2.25} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Spacer pushes statsRow and all content below the floating header overlay */}
+      <View style={{ height: header.height }} />
 
       <View style={styles.statsRow}>
         <View style={styles.stat}>
@@ -224,6 +202,8 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
         data={segments}
         keyExtractor={(item) => item.id}
         renderItem={renderSegment}
+        onScroll={header.onScroll}
+        scrollEventThrottle={header.scrollEventThrottle}
         contentContainerStyle={styles.segmentList}
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
@@ -246,7 +226,37 @@ export function ProjectDetailScreen({ projectId, publishMode = false }: ProjectD
       </View>
       <EditorLoadingModal visible={isPreloading} progress={progress} />
       <Toast />
-    </SafeAreaView>
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => {
+            console.log('[ProjectDetail] X pressed, canGoBack:', router.canGoBack());
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }}
+          style={styles.backButton}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.5}
+        >
+          <X size={24} color="#FFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <View style={styles.headerTitle}>
+          <Text variant="h3" style={styles.title} numberOfLines={1}>
+            {project.name}
+          </Text>
+          {project.description ? (
+            <Text variant="caption" style={styles.description} numberOfLines={1}>
+              {project.description}
+            </Text>
+          ) : null}
+        </View>
+        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
+          <Trash2 size={22} color="#EF4444" strokeWidth={2.25} />
+        </TouchableOpacity>
+      </CollapsibleHeader>
+    </View>
   );
 }
 

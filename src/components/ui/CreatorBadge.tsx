@@ -54,9 +54,7 @@ export function CreatorBadge({ size = 'md', style }: CreatorBadgeProps) {
   const physical = PixelRatio.roundToNearestPixel(logical);
 
   return (
-    <View
-      style={[styles.container, { width: physical, height: physical }, style]}
-    >
+    <View style={[styles.container, { width: physical, height: physical }, style]}>
       <Svg
         width={physical}
         height={physical}

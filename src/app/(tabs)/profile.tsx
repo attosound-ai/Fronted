@@ -9,9 +9,12 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useCallStore } from '@/stores/callStore';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown } from 'lucide-react-native';
+import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
+import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
@@ -36,12 +39,17 @@ import {
 } from '@/features/profile/components/ProfileContentTabs';
 import { ProfileSubscriptionSection } from '@/features/profile/components/ProfileSubscriptionSection';
 import { ProfileSettingsSection } from '@/features/profile/components/ProfileSettingsSection';
+import { ProfileSupportSection } from '@/features/profile/components/ProfileSupportSection';
 import { DeleteAccountBottomSheet } from '@/features/profile/components/DeleteAccountBottomSheet';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
+import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { COLORS } from '@/constants/theme';
 
 export default function ProfileScreen() {
+  const { t } = useTranslation('profile');
+  const insets = useSafeAreaInsets();
+  const header = useCollapsibleHeader();
   const authUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   // Fetch real counts from social-service
@@ -102,40 +110,26 @@ export default function ProfileScreen() {
   if (!user) return null;
 
   return (
-    <SafeAreaView
-      style={[styles.container, isInCall && { paddingTop: 8 }]}
-      edges={isInCall ? [] : ['top']}
-    >
+    <View style={[styles.container, isInCall && { paddingTop: 8 }]}>
       <ResponsiveContentWrapper>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => setSwitcherVisible(true)}
-            activeOpacity={0.7}
-            style={styles.headerButton}
-          >
-            <Text
-              variant="h2"
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}
-              style={styles.headerUsername}
-            >
-              @{user.username}
-            </Text>
-            <ChevronDown size={18} color="#FFFFFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        </View>
-
         <ScrollView
           style={styles.scrollView}
+          contentContainerStyle={[
+            { paddingTop: header.height },
+            { paddingBottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE },
+          ]}
           showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={400}
+          onScroll={(e) => {
+            handleScroll(e);
+            header.onScroll(e);
+          }}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
               tintColor="#FFF"
+              progressViewOffset={header.height}
             />
           }
         >
@@ -159,6 +153,7 @@ export default function ProfileScreen() {
                 {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
                 <ProfileSubscriptionSection />
                 <ProfileSettingsSection />
+                <ProfileSupportSection />
                 <ProfileActionsSection
                   onLogout={() => setLogoutVisible(true)}
                   onDeleteAccount={() => setDeleteAccountVisible(true)}
@@ -188,7 +183,33 @@ export default function ProfileScreen() {
 
         <Toast />
       </ResponsiveContentWrapper>
-    </SafeAreaView>
+
+      <CollapsibleHeader animatedStyle={header.animatedStyle}>
+        <TouchableOpacity
+          onPress={() => setSwitcherVisible(true)}
+          activeOpacity={0.7}
+          style={styles.switcherPill}
+        >
+          <Text
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            style={styles.headerUsername}
+          >
+            @{user.username}
+          </Text>
+          <ChevronDown size={16} color="#FFFFFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => router.push('/edit-profile')}
+          activeOpacity={0.7}
+          style={styles.editPill}
+        >
+          <Text style={styles.editPillText}>{t('hero.editProfile')}</Text>
+        </TouchableOpacity>
+      </CollapsibleHeader>
+    </View>
   );
 }
 
@@ -197,20 +218,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background.primary,
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#222222',
-  },
-  headerButton: {
+  switcherPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    maxWidth: '90%',
+    paddingVertical: 7,
+    flexShrink: 1,
   },
   headerUsername: {
+    color: '#FFF',
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 16,
     flexShrink: 1,
+  },
+  editPill: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 9999,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  editPillText: {
+    color: '#FFF',
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 13,
   },
   scrollView: {
     flex: 1,

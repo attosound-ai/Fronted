@@ -49,7 +49,12 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
 
   return (
     <TouchableOpacity style={styles.container} onPress={handlePress} activeOpacity={0.7}>
-      <Avatar uri={user.avatar} size="md" creatorRing={user.role === 'creator'} />
+      <Avatar
+        uri={user.avatar}
+        size="md"
+        creatorRing={user.role === 'creator'}
+        fallbackText={user.username}
+      />
 
       <View style={styles.info}>
         <View style={styles.nameRow}>

@@ -19,11 +19,22 @@ const ROWS: ReadonlyArray<ReadonlyArray<string>> = [
 
 interface DtmfKeypadProps {
   onPressDigit: (digit: string) => void;
+  /**
+   * Reports EVERY physical key tap — including taps that are dropped because
+   * the keypad is `disabled` (call not yet connected). Kept separate from
+   * `onPressDigit` (which only fires for live sends) so the caller can record
+   * dropped taps, the biggest blind spot in the Securus "press 1" flow. The
+   * component stays SDK/analytics-agnostic; it only reports the raw tap.
+   */
+  onKeyTap?: (digit: string, meta: { disabled: boolean }) => void;
   disabled?: boolean;
 }
 
-export function DtmfKeypad({ onPressDigit, disabled = false }: DtmfKeypadProps) {
+export function DtmfKeypad({ onPressDigit, onKeyTap, disabled = false }: DtmfKeypadProps) {
   const press = (digit: string) => {
+    // Report the raw tap FIRST, even when disabled, so a tap that goes nowhere
+    // still leaves a trace.
+    onKeyTap?.(digit, { disabled });
     if (disabled) return;
     void haptic('selection');
     onPressDigit(digit);
@@ -38,10 +49,14 @@ export function DtmfKeypad({ onPressDigit, disabled = false }: DtmfKeypadProps) 
               key={digit}
               style={[styles.key, disabled && styles.keyDisabled]}
               onPress={() => press(digit)}
-              disabled={disabled}
-              activeOpacity={0.6}
+              // NOT `disabled` natively: a native-disabled Touchable swallows
+              // the tap entirely, so a dropped "press 1" would leave no trace.
+              // We keep the disabled LOOK (style + no active flash + a11y state)
+              // but still receive onPress so `press` can report the dropped tap.
+              activeOpacity={disabled ? 1 : 0.6}
               accessibilityRole="button"
               accessibilityLabel={digit}
+              accessibilityState={{ disabled }}
             >
               <Text variant="h2" style={styles.keyLabel}>
                 {digit}

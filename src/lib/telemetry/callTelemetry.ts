@@ -68,6 +68,13 @@ async function snapshotAndEmit(reason: string): Promise<TickPayload> {
   Sentry.setTag('memUsedPct', String(payload.memUsedPct ?? 'n/a'));
   Sentry.setTag('lowPowerMode', String(payload.lowPowerMode ?? 'n/a'));
   Sentry.setTag('networkType', payload.networkType ?? 'n/a');
+  // Audio-path tags so a crash/watchdog DURING a call is filterable by whether
+  // the CallKit audio session ever activated and the device was enabled — the
+  // suspended-answer no-audio/black-screen path is the one most likely to also
+  // trip a WatchdogTermination, and these land the audio state on that event.
+  Sentry.setTag('audioActivated', String(payload.audioDidActivateAt != null));
+  Sentry.setTag('audioEnabled', String(payload.audioTwilioEnabled ?? 'n/a'));
+  Sentry.setTag('audioRoute', payload.audioLiveOutputPort ?? 'n/a');
 
   return payload;
 }

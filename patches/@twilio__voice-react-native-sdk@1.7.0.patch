@@ -1,0 +1,79 @@
+diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c93169659 100644
+--- a/ios/TwilioVoiceReactNative+CallKit.m
++++ b/ios/TwilioVoiceReactNative+CallKit.m
+@@ -235,6 +235,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+ 
+ #pragma mark - CXProviderDelegate
+ 
++// ── ATTO telemetry (patch-package) ───────────────────────────────────────
++// Ground-truth on the CallKit audio-session handoff. The ONLY thing that
++// starts RTP is `twilioAudioDevice.enabled = YES` inside
++// provider:didActivateAudioSession:. On an answer-from-suspended call we
++// suspect that handoff is missed/mistimed; these markers (read back in JS via
++// NativeModules.RNDeviceInfo.getCallAudioState and shipped on call_telemetry_tick)
++// prove whether each callback fired, the audio-device enabled flag, and the
++// live AVAudioSession at that instant. Pure instrumentation — NO behavior change.
++- (void)attoMarkAudio:(NSString *)event {
++    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++    [ud setDouble:[[NSDate date] timeIntervalSince1970]
++           forKey:[NSString stringWithFormat:@"atto_audio_%@_at", event]];
++    BOOL enabled = [TwilioVoiceReactNative twilioAudioDevice].enabled;
++    [ud setBool:enabled forKey:@"atto_audio_enabled"];
++    AVAudioSession *s = [AVAudioSession sharedInstance];
++    NSString *out = s.currentRoute.outputs.firstObject.portType ?: @"none";
++    NSString *inp = s.currentRoute.inputs.firstObject.portType ?: @"none";
++    [ud setObject:(s.category ?: @"") forKey:@"atto_audio_category"];
++    [ud setObject:(s.mode ?: @"") forKey:@"atto_audio_mode"];
++    [ud setObject:out forKey:@"atto_audio_outputPort"];
++    [ud setObject:inp forKey:@"atto_audio_inputPort"];
++    [ud setDouble:s.sampleRate forKey:@"atto_audio_sampleRate"];
++    [ud setBool:s.isOtherAudioPlaying forKey:@"atto_audio_otherPlaying"];
++    NSLog(@"[AttoAudio] %@ enabled=%d cat=%@ out=%@ in=%@ sr=%.0f other=%d",
++          event, enabled, s.category, out, inp, s.sampleRate, s.isOtherAudioPlaying);
++}
++
+ - (void)providerDidReset:(CXProvider *)provider {
+     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
+ }
+@@ -245,10 +272,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
+ 
+ - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
+     [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
++    [self attoMarkAudio:@"didActivate"];
+ }
+ 
+ - (void)provider:(CXProvider *)provider didDeactivateAudioSession:(AVAudioSession *)audioSession {
+     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
++    [self attoMarkAudio:@"didDeactivate"];
+ }
+ 
+ - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
+@@ -290,6 +319,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
+ }
+ 
+ - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
++    [self attoMarkAudio:@"answerAction"];
+     [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
+     [TwilioVoiceReactNative twilioAudioDevice].block();
+     
+@@ -349,6 +379,19 @@ - (void)callDidConnect:(TVOCall *)call {
+ 
+     [self stopRingback];
+ 
++    // ── ATTO candidate fix (build 55) + telemetry ────────────────────────
++    // When a call is answered from a suspended/locked app, the CallKit
++    // provider:didActivateAudioSession: handoff — the ONLY thing that sets
++    // twilioAudioDevice.enabled=YES and thereby starts RTP I/O — can be
++    // missed or mistimed, leaving a connected call with NO audio in either
++    // direction (root cause under investigation). The media session is now
++    // connected, so re-assert the audio device ON here: a harmless no-op when
++    // didActivate already fired (foreground path, enabled is already YES), a
++    // recovery when it didn't. The marker records that callDidConnect ran and
++    // the resulting enabled flag so telemetry can prove which case occurred.
++    [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
++    [self attoMarkAudio:@"callConnect"];
++
+     [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
+                        body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
+                               kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];

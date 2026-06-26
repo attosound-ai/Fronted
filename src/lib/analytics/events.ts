@@ -121,6 +121,17 @@ export const ANALYTICS_EVENTS = {
     DTMF_SENT: 'call_dtmf_sent',
     DTMF_SEND_FAILED: 'call_dtmf_send_failed',
     KEYPAD_OPENED: 'call_keypad_opened',
+    // FULL DTMF coverage so a failed "press 1 to accept Securus" leaves the
+    // EXACT reason. DTMF_KEYPRESS fires on every physical key tap — INCLUDING
+    // taps dropped because the keypad was disabled (not yet connected), the
+    // single biggest blind spot. DTMF_ATTEMPT fires on every sendDigits call
+    // with the full context (call_state, since_connected_ms, has_call_obj,
+    // send_latency_ms, error) and an `outcome`: sent | no_active_call |
+    // not_connected | invalid | busy | sdk_error — so no path is silent.
+    // KEYPAD_AUTO_OPENED records the auto-present on an inbound (Securus) connect.
+    DTMF_KEYPRESS: 'call_dtmf_keypress',
+    DTMF_ATTEMPT: 'call_dtmf_attempt',
+    KEYPAD_AUTO_OPENED: 'call_keypad_auto_opened',
     // Microphone permission. An incoming VoIP call answered from the lock
     // screen can connect with NO mic access (iOS only prompts lazily) — the
     // caller then can't hear the user. We now request at login; these events
@@ -210,6 +221,8 @@ export const ANALYTICS_EVENTS = {
     APP_ICON_PICKER_OPENED: 'profile_app_icon_picker_opened',
     APP_ICON_CHANGED: 'profile_app_icon_changed',
     APP_ICON_CHANGE_FAILED: 'profile_app_icon_change_failed',
+    SUPPORT_OPENED: 'profile_support_opened',
+    SUPPORT_SUBMITTED: 'profile_support_submitted',
   },
 
   // ── Payments ───────────────────────────────────

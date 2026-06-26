@@ -45,6 +45,10 @@ export function DtmfKeypadHost() {
     if (isConnected && direction === 'inbound' && autoOpenedSidRef.current !== callSid) {
       autoOpenedSidRef.current = callSid;
       showKeypad();
+      analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_AUTO_OPENED, {
+        call_sid: callSid,
+        direction,
+      });
     }
   }, [callSid, isConnected, direction, showKeypad]);
 
@@ -59,6 +63,19 @@ export function DtmfKeypadHost() {
           onPressDigit={(d) => {
             void sendCallDigit(d);
           }}
+          onKeyTap={(digit, meta) =>
+            analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_KEYPRESS, {
+              digit,
+              // dropped=true → the tap registered but went nowhere because the
+              // keypad was disabled (call not yet connected). The Securus blind spot.
+              dropped: meta.disabled,
+              call_state: state ?? null,
+              is_connected: isConnected,
+              call_sid: callSid ?? null,
+              direction: direction ?? null,
+              keypad_visible: keypadVisible,
+            })
+          }
           disabled={!isConnected}
         />
       </View>

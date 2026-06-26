@@ -178,7 +178,20 @@ function bindCallEvents(call: any): () => void {
     // Telemetry begins capturing tick snapshots at this point — pre-connect
     // states are already covered by startCallTelemetry() at invite/outgoing.
     void startCallTelemetry('call_connected');
-    // Do NOT touch the audio session here — Twilio owns it during the call.
+    // Re-assert PlayAndRecord shortly after connect. If the rep was browsing the
+    // feed when the call came in, expo-video had put the AVAudioSession in the
+    // Playback category (output-only, NO mic) — build-55 telemetry proved this:
+    // category=Playback / inPort=none / output on A2DP → silent both ways, while
+    // a call with no media playing showed PlayAndRecord + HFP and worked.
+    // reclaimAudioSession() flips it back to PlayAndRecord + mixWithOthers so the
+    // call regains its microphone while feed/reel audio keeps mixing in (the rep
+    // can still hear the app). The feed players are also switched to
+    // `mixWithOthers` during a call (useCallAwareVideoAudio) so they stop
+    // stealing the session going forward; this handles the already-playing case.
+    // Delayed so Twilio's own native session setup settles first.
+    setTimeout(() => {
+      void reclaimAudioSession();
+    }, 700);
   };
 
   const onConnectFailure = () => {

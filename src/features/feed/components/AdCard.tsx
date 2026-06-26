@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
+import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import { formatCount } from '@/utils/formatters';
@@ -46,6 +47,9 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
   });
+
+  // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  useCallAwareVideoAudio(player);
 
   // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
   const isReady = useVideoStream(player, videoUrl, isVisible);

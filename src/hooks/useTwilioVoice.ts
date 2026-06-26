@@ -432,37 +432,76 @@ export async function toggleHoldCall() {
  * @returns `true` only when the SDK confirms the tones were sent.
  */
 export async function sendCallDigits(digits: string): Promise<boolean> {
-  if (!activeCallObj) return false;
+  // Full context snapshot at the instant of the attempt, so EVERY exit path
+  // (incl. the silent drops) lands a queryable event with the exact reason.
+  const ac = useCallStore.getState().activeCall;
+  const state = ac?.state ?? null;
+  const connectedAtMs = ac?.connectedAt ? new Date(ac.connectedAt).getTime() : null;
+  const ctx = {
+    digits,
+    call_state: state,
+    has_call_obj: activeCallObj != null,
+    call_sid: ac?.callSid ?? null,
+    direction: ac?.direction ?? null,
+    is_muted: ac?.isMuted ?? null,
+    is_on_hold: ac?.isOnHold ?? null,
+    is_speaker: ac?.isSpeaker ?? null,
+    // How long after the call CONNECTED the digit was sent — the key Securus
+    // signal: digits pressed before the IVR prompt finishes get ignored.
+    since_connected_ms: connectedAtMs != null ? Date.now() - connectedAtMs : null,
+    was_sending: isSendingDigits,
+  };
+  const report = (outcome: string, extra?: Record<string, unknown>) =>
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_ATTEMPT, { ...ctx, outcome, ...extra });
 
-  // Tones are only meaningful on a connected media path. Pre-connect and
-  // `reconnecting` sends are dropped (Securus also ignores the keypad until
-  // its prompt finishes, so there is nothing to gain from sending early).
-  const state = useCallStore.getState().activeCall?.state;
-  if (state !== 'connected') return false;
+  // (1) No live SDK call object — the JS store can say "connected" while the
+  // native call was lost (cold-launch/recovery races). Previously a silent drop.
+  if (!activeCallObj) {
+    report('no_active_call');
+    return false;
+  }
 
-  // Validate against the SDK's accepted character set before crossing the
+  // (2) Tones are only meaningful on a connected media path. Pre-connect and
+  // `reconnecting` sends are dropped. Previously a silent drop — the most
+  // likely Securus failure (user taps "1" before the call is 'connected').
+  if (state !== 'connected') {
+    report('not_connected');
+    return false;
+  }
+
+  // (3) Validate against the SDK's accepted character set before crossing the
   // native bridge. A malformed value can only come from a programming error.
   if (!/^[0-9*#w]+$/.test(digits)) {
+    report('invalid');
     Sentry.captureException(new Error(`Invalid DTMF digits: ${digits}`), {
       tags: { feature: 'twilio-voice', step: 'send-digits-invalid' },
     });
     return false;
   }
 
-  if (isSendingDigits) return false;
+  // (4) One sendDigits() in flight at a time — a double-tap is dropped.
+  // Previously silent.
+  if (isSendingDigits) {
+    report('busy');
+    return false;
+  }
+
   isSendingDigits = true;
+  const startedAt = Date.now();
   try {
     await activeCallObj.sendDigits(digits);
-    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, { digits });
+    const latency = Date.now() - startedAt;
+    report('sent', { send_latency_ms: latency });
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, { digits, send_latency_ms: latency });
     return true;
   } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    report('sdk_error', { send_latency_ms: Date.now() - startedAt, error: message });
     Sentry.captureException(err, {
       tags: { feature: 'twilio-voice', step: 'send-digits' },
-      extra: { digits },
+      extra: { ...ctx, error: message },
     });
-    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SEND_FAILED, {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SEND_FAILED, { error: message });
     return false;
   } finally {
     isSendingDigits = false;

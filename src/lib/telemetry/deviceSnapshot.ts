@@ -6,7 +6,7 @@
  *   - safe (every external call is guarded; failures degrade to `null`)
  */
 
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -20,6 +20,58 @@ import { consumeJsLagStats } from './jsLag';
  * background", and to bracket runs that span an ambient-telemetry restart.
  */
 const PROCESS_BOOT_MS = Date.now();
+
+/**
+ * Ground-truth on the iOS CallKit audio-session handoff, read from the native
+ * markers written by the patched @twilio/voice-react-native-sdk CallKit
+ * callbacks + the live AVAudioSession. Surfaced via the patched
+ * RNDeviceInfo.getCallAudioState (see patches/react-native-device-info@*.patch).
+ * Lets us PROVE — not infer — whether the audio session activated for a call.
+ */
+interface NativeCallAudioState {
+  didActivateAt: number;
+  didDeactivateAt: number;
+  answerActionAt: number;
+  callConnectAt: number;
+  twilioAudioEnabled: boolean;
+  liveCategory: string;
+  liveMode: string;
+  liveOutputPort: string;
+  liveInputPort: string;
+  liveSampleRate: number;
+  liveOtherAudioPlaying: boolean;
+  voipPushAt: number;
+  voipPushAppState: number;
+}
+
+/**
+ * The patched react-native-device-info methods (getProcAvailableMemory,
+ * getThermalState, getCallAudioState) are NOT exposed on the library's JS
+ * `DeviceInfo` wrapper — they exist only on the native RNDeviceInfo module.
+ * Under New Architecture this legacy module is still reachable via the interop
+ * layer at NativeModules.RNDeviceInfo, so we call them directly. Calling them
+ * off the `DeviceInfo` default export silently returns `undefined`, which is
+ * why procAvailableMemory / thermalState had been `null` in all telemetry.
+ */
+const RNDeviceInfoNative = (
+  NativeModules as {
+    RNDeviceInfo?: {
+      getProcAvailableMemory?: () => Promise<number>;
+      getThermalState?: () => Promise<string>;
+      getCallAudioState?: () => Promise<NativeCallAudioState>;
+    };
+  }
+).RNDeviceInfo;
+
+async function getCallAudioState(): Promise<NativeCallAudioState | null> {
+  if (Platform.OS !== 'ios') return null;
+  try {
+    if (!RNDeviceInfoNative?.getCallAudioState) return null;
+    return await RNDeviceInfoNative.getCallAudioState();
+  } catch {
+    return null;
+  }
+}
 
 export interface DeviceSnapshot {
   // ── Memory (bytes → MB) ────────────────────────
@@ -88,6 +140,31 @@ export interface DeviceSnapshot {
   /** 'active' | 'background' | 'inactive' | 'unknown' | 'extension' */
   appState: string;
 
+  // ── Call audio path (iOS — ground truth from CallKit / AVAudioSession) ─
+  // `audioPlayers` above counts the app's OWN expo-audio players and is blind
+  // to Twilio's TVODefaultAudioDevice — these fields read the real CallKit
+  // audio-session handoff. `*At` are epoch seconds the native callback last
+  // fired (null = never). `audioDidActivateAt` proves whether
+  // didActivateAudioSession (the ONLY thing that starts RTP) actually fired.
+  audioDidActivateAt: number | null;
+  audioDidDeactivateAt: number | null;
+  audioAnswerActionAt: number | null;
+  /** epoch secs callDidConnect fired (where the build-55 candidate fix re-asserts enabled). */
+  audioCallConnectAt: number | null;
+  /** twilioAudioDevice.enabled at the last audio callback (RTP on/off). */
+  audioTwilioEnabled: boolean | null;
+  /** Live AVAudioSession category — should be PlayAndRecord during a call. */
+  audioLiveCategory: string | null;
+  audioLiveMode: string | null;
+  /** Current output route port (e.g. Receiver / Speaker / BluetoothHFP). */
+  audioLiveOutputPort: string | null;
+  audioLiveInputPort: string | null;
+  audioLiveSampleRate: number | null;
+  audioLiveOtherPlaying: boolean | null;
+  /** epoch secs the native VoIP push last arrived + its app-state raw value. */
+  audioVoipPushAt: number | null;
+  audioVoipPushAppState: number | null;
+
   // ── Static identity (cached after first call) ─
   deviceModel: string | null;
   osName: string;
@@ -138,6 +215,7 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     powerState,
     netInfo,
     staticInfo,
+    audioState,
   ] = await Promise.all([
     safe(DeviceInfo.getUsedMemory() as Promise<number>, NaN),
     safe(DeviceInfo.getTotalMemory() as Promise<number>, NaN),
@@ -147,19 +225,14 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
       NaN
     ),
     // Patched into react-native-device-info (see patches/) — iOS-only.
-    // Optional-chained so Android / older builds degrade to NaN → null.
+    // Called via the native module directly (NOT the DeviceInfo wrapper, which
+    // doesn't expose patched methods). Optional-chained → NaN/null elsewhere.
     safe(
-      (
-        DeviceInfo as unknown as {
-          getProcAvailableMemory?: () => Promise<number>;
-        }
-      ).getProcAvailableMemory?.() ?? Promise.resolve(NaN),
+      RNDeviceInfoNative?.getProcAvailableMemory?.() ?? Promise.resolve(NaN),
       NaN
     ),
     safe(
-      (
-        DeviceInfo as unknown as { getThermalState?: () => Promise<string> }
-      ).getThermalState?.() ?? Promise.resolve(null),
+      RNDeviceInfoNative?.getThermalState?.() ?? Promise.resolve(null),
       null
     ),
     safe(DeviceInfo.getFreeDiskStorage() as Promise<number>, NaN),
@@ -179,7 +252,12 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
       details: null,
     } as Awaited<ReturnType<typeof NetInfo.fetch>>),
     loadStatic(),
+    getCallAudioState(),
   ]);
+
+  // 0 / empty from the native side means "never fired / unknown" → null.
+  const a = audioState;
+  const aTs = (v: number | undefined): number | null => (v && v > 0 ? v : null);
 
   const MB = 1024 * 1024;
   const memUsedMB = Number.isFinite(memUsed) ? Math.round(memUsed / MB) : null;
@@ -248,6 +326,20 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     socketChannelsPeak: peaks.socketChannels,
     activeCalls: counters.activeCalls,
     appState: AppState.currentState ?? 'unknown',
+    audioDidActivateAt: aTs(a?.didActivateAt),
+    audioDidDeactivateAt: aTs(a?.didDeactivateAt),
+    audioAnswerActionAt: aTs(a?.answerActionAt),
+    audioCallConnectAt: aTs(a?.callConnectAt),
+    audioTwilioEnabled: a ? a.twilioAudioEnabled : null,
+    audioLiveCategory: a?.liveCategory || null,
+    audioLiveMode: a?.liveMode || null,
+    audioLiveOutputPort: a?.liveOutputPort || null,
+    audioLiveInputPort: a?.liveInputPort || null,
+    audioLiveSampleRate: a && a.liveSampleRate > 0 ? a.liveSampleRate : null,
+    audioLiveOtherPlaying: a ? a.liveOtherAudioPlaying : null,
+    audioVoipPushAt: aTs(a?.voipPushAt),
+    audioVoipPushAppState:
+      aTs(a?.voipPushAt) != null ? (a?.voipPushAppState ?? null) : null,
     ...staticInfo,
   };
 }

@@ -1,0 +1,87 @@
+diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
+index 948c561f03fc7da53f6e843867574b642d04d0ea..5fb2568f84d586669dc689d9627b53aef0aacf25 100644
+--- a/ios/RNDeviceInfo/RNDeviceInfo.m
++++ b/ios/RNDeviceInfo/RNDeviceInfo.m
+@@ -10,7 +10,9 @@
+ #include <arpa/inet.h>
+ #import <mach/mach.h>
+ #import <mach-o/arch.h>
++#import <os/proc.h>
+ #import <CoreLocation/CoreLocation.h>
++#import <AVFoundation/AVFoundation.h>
+ #import <React/RCTUtils.h>
+ #import "RNDeviceInfo.h"
+ #import "DeviceUID.h"
+@@ -964,6 +966,72 @@ - (unsigned long) getUsedMemory {
+     return @(self.getUsedMemory);
+ }
+ 
++// Returns the number of bytes still available to the process before iOS
++// will jetsam it for going over its memory limit. Critical for OOM
++// diagnostics on iOS — without this, `getUsedMemory` is unitless (we know
++// what the process is using, but not how much headroom it has). iOS 13+.
++// Returns NSNull on older iOS or if the call fails.
++RCT_EXPORT_METHOD(getProcAvailableMemory:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    if (@available(iOS 13.0, *)) {
++        size_t avail = os_proc_available_memory();
++        if (avail > 0) {
++            resolve(@(avail));
++            return;
++        }
++    }
++    resolve([NSNull null]);
++}
++
++// Returns the current thermal pressure level from iOS. When the device is
++// throttling CPU due to heat, ongoing calls/audio recordings tend to drop;
++// having this in telemetry lets us correlate thermal events with crashes.
++// Maps NSProcessInfoThermalState to lower-case strings matching the
++// Android/RN convention.
++RCT_EXPORT_METHOD(getThermalState:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    NSProcessInfoThermalState state = [NSProcessInfo processInfo].thermalState;
++    NSString *name = nil;
++    switch (state) {
++        case NSProcessInfoThermalStateNominal:  name = @"nominal"; break;
++        case NSProcessInfoThermalStateFair:     name = @"fair"; break;
++        case NSProcessInfoThermalStateSerious:  name = @"serious"; break;
++        case NSProcessInfoThermalStateCritical: name = @"critical"; break;
++        default:                                name = @"unknown"; break;
++    }
++    resolve(name);
++}
++
++// ── ATTO telemetry ───────────────────────────────────────────────────────
++// Surfaces the native CallKit audio-session markers (written by the patched
++// @twilio/voice-react-native-sdk CallKit callbacks) PLUS the LIVE
++// AVAudioSession state to JS, so `call_telemetry_tick` can prove — with no
++// inference — whether the audio session actually activated and routed for a
++// call. The *_at fields are epoch seconds (0 = never fired). Called from JS
++// via NativeModules.RNDeviceInfo.getCallAudioState(). iOS-only telemetry.
++RCT_EXPORT_METHOD(getCallAudioState:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++    AVAudioSession *s = [AVAudioSession sharedInstance];
++    NSString *out = s.currentRoute.outputs.firstObject.portType ?: @"none";
++    NSString *inp = s.currentRoute.inputs.firstObject.portType ?: @"none";
++    resolve(@{
++        // Native CallKit audio-callback markers (epoch seconds; 0 = never).
++        @"didActivateAt": @([ud doubleForKey:@"atto_audio_didActivate_at"]),
++        @"didDeactivateAt": @([ud doubleForKey:@"atto_audio_didDeactivate_at"]),
++        @"answerActionAt": @([ud doubleForKey:@"atto_audio_answerAction_at"]),
++        @"callConnectAt": @([ud doubleForKey:@"atto_audio_callConnect_at"]),
++        @"twilioAudioEnabled": @([ud boolForKey:@"atto_audio_enabled"]),
++        // Live AVAudioSession state at snapshot time.
++        @"liveCategory": (s.category ?: @""),
++        @"liveMode": (s.mode ?: @""),
++        @"liveOutputPort": out,
++        @"liveInputPort": inp,
++        @"liveSampleRate": @(s.sampleRate),
++        @"liveOtherAudioPlaying": @(s.isOtherAudioPlaying),
++        // VoIP push-arrival markers (written by AttoVoipBootstrap).
++        @"voipPushAt": @([ud doubleForKey:@"atto_last_voip_push_at"]),
++        @"voipPushAppState": @([ud integerForKey:@"atto_last_voip_push_appstate"]),
++    });
++}
++
+ RCT_EXPORT_METHOD(getUserAgent:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
+ #if TARGET_OS_TV
+     reject(@"not_available_error", @"not available on tvOS", nil);

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, AppState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -34,6 +34,35 @@ export function DtmfKeypadHost() {
 
   const isConnected = state === 'connected';
 
+  // Foreground-resume handling. The in-call keypad sheet stays presented across
+  // a lock→unlock; on New Arch the BottomSheet's Reanimated content can fail to
+  // re-prime after that cycle, leaving an empty Modal window = a black screen
+  // over the live tabs. On return to 'active' we (a) remount the sheet so its
+  // shared values re-initialize, and (b) only auto-open while truly active so it
+  // is never presented while backgrounded. RESUME_SURFACE_SNAPSHOT records which
+  // surface was up during the call, to confirm the cause on the next build.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const [resumeKey, setResumeKey] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      const active = s === 'active';
+      setAppActive(active);
+      if (!active) return;
+      const cs = useCallStore.getState();
+      if (cs.activeCall) {
+        // String literal (not an ANALYTICS_EVENTS const) to avoid touching
+        // events.ts, which has unrelated in-progress edits in the working tree.
+        analytics.capture('call_resume_surface_snapshot', {
+          keypad_visible: cs.keypadVisible,
+          call_state: cs.activeCall.state,
+          direction: cs.activeCall.direction,
+        });
+      }
+      if (cs.keypadVisible) setResumeKey((k) => k + 1);
+    });
+    return () => sub.remove();
+  }, []);
+
   // Auto-open once per call: remember the SID we've already opened for so the
   // sheet doesn't pop back up if the user dismissed it mid-call.
   const autoOpenedSidRef = useRef<string | null>(null);
@@ -42,7 +71,12 @@ export function DtmfKeypadHost() {
       autoOpenedSidRef.current = null;
       return;
     }
-    if (isConnected && direction === 'inbound' && autoOpenedSidRef.current !== callSid) {
+    if (
+      isConnected &&
+      direction === 'inbound' &&
+      appActive &&
+      autoOpenedSidRef.current !== callSid
+    ) {
       autoOpenedSidRef.current = callSid;
       showKeypad();
       analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_AUTO_OPENED, {
@@ -50,10 +84,11 @@ export function DtmfKeypadHost() {
         direction,
       });
     }
-  }, [callSid, isConnected, direction, showKeypad]);
+  }, [callSid, isConnected, direction, appActive, showKeypad]);
 
   return (
     <BottomSheet
+      key={resumeKey}
       visible={keypadVisible}
       onClose={hideKeypad}
       title={t('active.keypadTitle', 'Keypad')}

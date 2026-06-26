@@ -174,7 +174,20 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
   }));
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    // `presentationStyle="overFullScreen"` forces iOS to present this Modal in a
+    // NON-OPAQUE window over the root. Without it, a `transparent` Modal whose
+    // Reanimated-driven content fails to re-prime after a background→foreground
+    // cycle (New Arch) leaves an opaque host window on screen = a full black
+    // screen covering the app (the in-call keypad auto-opens and stays mounted
+    // across a lock→unlock — see DtmfKeypadHost). overFullScreen guarantees the
+    // app shows through even if the sheet content is momentarily missing.
+    <Modal
+      visible={visible}
+      transparent
+      presentationStyle="overFullScreen"
+      animationType="none"
+      onRequestClose={onClose}
+    >
       <GestureHandlerRootView style={styles.flex}>
         <TouchableWithoutFeedback onPress={close}>
           <Animated.View style={[styles.overlay, overlayStyle]} />

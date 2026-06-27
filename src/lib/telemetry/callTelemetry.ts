@@ -21,6 +21,8 @@ import * as Sentry from '@sentry/react-native';
 
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
+import { useCallStore } from '@/stores/callStore';
+
 import { telemetryCounters } from './counters';
 import { acquireJsLagMonitor, releaseJsLagMonitor } from './jsLag';
 import { getDeviceSnapshot, type DeviceSnapshot } from './deviceSnapshot';
@@ -36,16 +38,25 @@ let didPauseReplay = false;
 interface TickPayload extends DeviceSnapshot {
   reason: string;
   callDurationSec: number;
+  // Correlation: stitch every device snapshot to the call (and to backend +
+  // Twilio events keyed by the same CallSid).
+  call_sid: string | null;
+  call_state: string | null;
+  call_direction: string | null;
 }
 
 async function snapshotAndEmit(reason: string): Promise<TickPayload> {
   const snap = await getDeviceSnapshot();
+  const ac = useCallStore.getState().activeCall;
   const payload: TickPayload = {
     ...snap,
     reason,
     callDurationSec: callStartedAt
       ? Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000))
       : 0,
+    call_sid: ac?.callSid ?? null,
+    call_state: ac?.state ?? null,
+    call_direction: ac?.direction ?? null,
   };
 
   analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_TICK, payload);

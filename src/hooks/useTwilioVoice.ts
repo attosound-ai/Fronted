@@ -163,6 +163,82 @@ async function resolveCallerUsername(identity: string): Promise<void> {
  * Teardown is also stored at module level so terminate paths
  * (hangUpCall, etc.) can force-detach if the SDK skips `Disconnected`.
  */
+// ── WebRTC call-quality telemetry ──────────────────────────────────────────
+// Periodic Call.getStats() while connected. Directly measures audio FLOW — the
+// mic's outbound level + bytes, the remote's inbound level + bytes, packet loss,
+// jitter, MOS, RTT — the ground truth for "no audio / one-way / bad quality"
+// that the AVAudioSession category alone can't give. `mic_audio_level`+
+// `bytes_sent` == 0 is the no-mic signature; `remote_audio_level`+
+// `bytes_received` == 0 means we're not hearing them. Emitted as
+// `call_quality_stats`; SDK quality warnings as `call_quality_warning`.
+let callStatsInterval: ReturnType<typeof setInterval> | null = null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function flattenCallStats(report: any): Record<string, unknown> {
+  const local = report?.localAudioTrackStats?.[0] ?? {};
+  const remote = report?.remoteAudioTrackStats?.[0] ?? {};
+  const ice =
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    report?.iceCandidatePairStats?.find((p: any) => p?.activeCandidatePair) ??
+    report?.iceCandidatePairStats?.[0] ??
+    {};
+  return {
+    // Outbound — this device's microphone toward the remote party.
+    mic_audio_level: local.audioLevel ?? null,
+    bytes_sent: local.bytesSent ?? null,
+    packets_sent: local.packetsSent ?? null,
+    out_packets_lost: local.packetsLost ?? null,
+    out_jitter: local.jitter ?? null,
+    out_rtt: local.roundTripTime ?? null,
+    out_codec: local.codec ?? null,
+    // Inbound — the remote party toward this device.
+    remote_audio_level: remote.audioLevel ?? null,
+    bytes_received: remote.bytesRecieved ?? null,
+    packets_received: remote.packetsReceived ?? null,
+    in_packets_lost: remote.packetsLost ?? null,
+    in_jitter: remote.jitter ?? null,
+    mos: remote.mos ?? null,
+    in_codec: remote.codec ?? null,
+    // Transport (selected ICE candidate pair).
+    transport_rtt: ice.currentRoundTripTime ?? null,
+    relay_protocol: ice.relayProtocol ?? null,
+    transport_bytes_sent: ice.bytesSent ?? null,
+    transport_bytes_received: ice.bytesReceived ?? null,
+  };
+}
+
+async function captureCallStats(reason: string): Promise<void> {
+  if (!activeCallObj) return;
+  try {
+    const report = await activeCallObj.getStats();
+    const ac = useCallStore.getState().activeCall;
+    analytics.capture('call_quality_stats', {
+      reason,
+      call_sid: ac?.callSid ?? null,
+      call_state: ac?.state ?? null,
+      direction: ac?.direction ?? null,
+      is_muted: ac?.isMuted ?? null,
+      ...flattenCallStats(report),
+    });
+  } catch {
+    // getStats() can reject before media is flowing; the next tick retries.
+  }
+}
+
+function startCallStatsCapture() {
+  stopCallStatsCapture();
+  // Early one-shot (~3s) to catch a dead mic fast, then every 10s.
+  setTimeout(() => void captureCallStats('initial'), 3000);
+  callStatsInterval = setInterval(() => void captureCallStats('tick'), 10_000);
+}
+
+function stopCallStatsCapture() {
+  if (callStatsInterval) {
+    clearInterval(callStatsInterval);
+    callStatsInterval = null;
+  }
+}
+
 function bindCallEvents(call: any): () => void {
   const { Call } = getTwilio();
   const { setCallState, endCall } = useCallStore.getState();
@@ -178,6 +254,8 @@ function bindCallEvents(call: any): () => void {
     // Telemetry begins capturing tick snapshots at this point — pre-connect
     // states are already covered by startCallTelemetry() at invite/outgoing.
     void startCallTelemetry('call_connected');
+    // WebRTC quality stats (mic/remote audio levels, bytes, loss, MOS, RTT).
+    startCallStatsCapture();
     // Re-assert PlayAndRecord shortly after connect. If the rep was browsing the
     // feed when the call came in, expo-video had put the AVAudioSession in the
     // Playback category (output-only, NO mic) — build-55 telemetry proved this:
@@ -202,6 +280,8 @@ function bindCallEvents(call: any): () => void {
   };
 
   const onDisconnected = () => {
+    void captureCallStats('final');
+    stopCallStatsCapture();
     activeCallObj = null;
     void endCallTelemetry('call_disconnected');
     endCall();
@@ -212,6 +292,16 @@ function bindCallEvents(call: any): () => void {
 
   const onReconnecting = () => setCallState('reconnecting');
   const onReconnected = () => setCallState('connected');
+
+  // SDK-detected quality warnings (high-jitter, high packet loss, low MOS, ...).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onQualityWarnings = (current: any, previous: any) => {
+    analytics.capture('call_quality_warning', {
+      call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+      current_warnings: Array.isArray(current) ? current : [],
+      previous_warnings: Array.isArray(previous) ? previous : [],
+    });
+  };
 
   const teardown = () => {
     if (removed) return;
@@ -241,7 +331,13 @@ function bindCallEvents(call: any): () => void {
     } catch {
       /* noop */
     }
-    telemetryCounters.dec('twilioListeners', 5);
+    try {
+      call.off(Call.Event.QualityWarningsChanged, onQualityWarnings);
+    } catch {
+      /* noop */
+    }
+    stopCallStatsCapture();
+    telemetryCounters.dec('twilioListeners', 6);
     if (activeCallTeardown === teardown) activeCallTeardown = null;
   };
 
@@ -250,7 +346,8 @@ function bindCallEvents(call: any): () => void {
   call.on(Call.Event.Disconnected, onDisconnected);
   call.on(Call.Event.Reconnecting, onReconnecting);
   call.on(Call.Event.Reconnected, onReconnected);
-  telemetryCounters.inc('twilioListeners', 5);
+  call.on(Call.Event.QualityWarningsChanged, onQualityWarnings);
+  telemetryCounters.inc('twilioListeners', 6);
 
   // If a previous teardown was somehow still pending (stale call object),
   // run it now so we don't stack listeners across reconnect-then-rebind.

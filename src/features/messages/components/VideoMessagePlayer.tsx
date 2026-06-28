@@ -11,6 +11,12 @@ import { Play } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
+import {
+  videoLoadStarted,
+  videoLoadCompleted,
+  videoError,
+  videoFallbackUsed,
+} from '@/lib/telemetry/videoTelemetry';
 import { COLORS } from '@/constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -82,17 +88,40 @@ function VideoViewWrapper({
   });
 
   // If the adaptive (HLS) source can't be delivered, fall back to optimized MP4.
+  // Also reports load-time / error telemetry tagged to the chat surface.
   const triedFallback = useRef(false);
+  const loadStartedAt = useRef(0);
+  const loadReported = useRef(false);
   useEffect(() => {
     if (!player) return;
+    triedFallback.current = false;
+    loadReported.current = false;
+    loadStartedAt.current = Date.now();
+    videoLoadStarted({ surface: 'chat' }, videoUrl);
+
+    const reportReady = () => {
+      if (loadReported.current) return;
+      loadReported.current = true;
+      videoLoadCompleted({ surface: 'chat' }, Date.now() - loadStartedAt.current);
+    };
+    if (player.status === 'readyToPlay') reportReady();
+
     const sub = player.addListener('statusChange', ({ status }: { status: string }) => {
-      if (status === 'error' && !triedFallback.current) {
-        const fallback = hlsToMp4Fallback(videoUrl);
+      if (status === 'readyToPlay') {
+        reportReady();
+        return;
+      }
+      if (status === 'error') {
+        const fallback = !triedFallback.current ? hlsToMp4Fallback(videoUrl) : null;
+        videoError({ surface: 'chat' }, { source: videoUrl, willFallback: !!fallback });
         if (!fallback) return;
         triedFallback.current = true;
+        loadReported.current = false;
+        loadStartedAt.current = Date.now();
         setTimeout(() => {
           try {
             player.replace(fallback);
+            videoFallbackUsed({ surface: 'chat' });
           } catch {
             // player disposed — ignore
           }

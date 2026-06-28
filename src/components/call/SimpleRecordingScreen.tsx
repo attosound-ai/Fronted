@@ -40,6 +40,7 @@ import { AudioVisualizer } from './AudioVisualizer';
 import { RecBadge } from './RecBadge';
 import { RecordingControls } from './RecordingControls';
 import { UploadButton } from './UploadButton';
+import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { useCallStore } from '@/stores/callStore';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { useSimpleRecordingPlayback } from '@/hooks/useSimpleRecordingPlayback';
@@ -622,7 +623,15 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
       </View>
 
       {/* Bottom controls */}
-      <View style={styles.controlsSection}>
+      <View
+        style={[
+          styles.controlsSection,
+          // Clear the floating Liquid Glass navbar so the Publish button below
+          // the controls is never hidden behind it (client report: "the button
+          // I need is kind of hidden").
+          { paddingBottom: insets.bottom + FLOATING_NAVBAR_CLEARANCE },
+        ]}
+      >
         {/* REC badge + timer */}
         <View style={styles.badgeContainer}>
           {isRecording ? (
@@ -813,7 +822,8 @@ const styles = StyleSheet.create({
   controlsSection: {
     justifyContent: 'flex-end',
     gap: SPACING.lg,
-    paddingBottom: 32,
+    // paddingBottom is applied inline (insets.bottom + floating-navbar clearance)
+    // so the Publish button always clears the floating tab bar.
   },
   badgeContainer: {
     alignItems: 'center',

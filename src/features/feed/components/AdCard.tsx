@@ -51,8 +51,12 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
-  const isReady = useVideoStream(player, videoUrl, isVisible);
+  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback
+  // + load/error telemetry tagged to the ad surface.
+  const isReady = useVideoStream(player, videoUrl, isVisible, {
+    surface: 'ad',
+    postId: post.id,
+  });
 
   useEffect(() => {
     if (!player) return;

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
  * useReelsFeed — TikTok-style FYP feed using the /posts/reels endpoint.
  * Interaction mutations are now centralised in useInteractions.
  */
-export function useReelsFeed() {
+export function useReelsFeed(enabled: boolean = true) {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const currentUserId = useAuthStore((s) => s.user?.id);
@@ -25,7 +25,7 @@ export function useReelsFeed() {
     queryFn: ({ pageParam }) => feedService.getReelsFeed(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : undefined),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && enabled,
     staleTime: 30_000,
     // Bounded page retention: TanStack Query keeps every fetched page in
     // memory until gcTime expires. Without maxPages, scrolling 200 reels

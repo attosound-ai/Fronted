@@ -32,9 +32,12 @@ const PRESETS: Record<string, string> = {
   chat_sm: 'c_limit,w_400,f_auto,q_auto',
   chat_lg: 'c_limit,w_800,f_auto,q_auto',
 
-  // Video thumbnails (so_0 = first frame)
-  video_thumb: 'c_limit,w_750,h_750,f_jpg,q_auto,so_0',
-  reel_thumb: 'c_limit,w_480,h_854,f_jpg,q_auto,so_0',
+  // Video thumbnails (so_0 = first frame). Reels render full-screen with
+  // contentFit:cover, so the poster must be full-res (1080w) or it looks blurry
+  // while the stream's first frame loads. Feed video is contained in a card, so
+  // a smaller poster is fine there.
+  video_thumb: 'c_limit,w_1080,h_1080,f_jpg,q_auto,so_0',
+  reel_thumb: 'c_limit,w_1080,h_1920,f_jpg,q_auto,so_0',
 
   // Video delivery is handled by `cloudinaryHlsUrl` (adaptive HLS streaming) —
   // do not deliver the un-optimized original file. See helpers below.
@@ -135,4 +138,25 @@ export function hlsToMp4Fallback(url: string | null | undefined): string | null 
   return url
     .replace(HLS_PATH, `/video/upload/${MP4_FALLBACK_TRANSFORM}/`)
     .replace(/\.m3u8$/, '');
+}
+
+/**
+ * Fixed full-resolution MP4 (up to 1080p, never upscaled) for FULL-SCREEN reels.
+ *
+ * Why not HLS here: adaptive HLS ramps up from a low rung and, on short reels
+ * the user swipes through quickly, frequently never reaches the top rung — so at
+ * full-screen (`contentFit: cover`) the image stays visibly soft even on fast
+ * wifi. The feed shows video small/contained, so the same ramp looks sharp there
+ * and HLS stays the right choice. Delivering reels as a fixed high-res MP4
+ * guarantees max quality up front; the only trade-off is no adaptive downgrade
+ * on very slow networks (acceptable for short, quality-critical reels).
+ *
+ * Accepts a public_id OR an HLS url we already built (rewrites it to MP4).
+ */
+export function cloudinaryVideoMp4(publicId: string | null | undefined): string | null {
+  if (!publicId) return null;
+  // Already-built Cloudinary HLS url → rewrite to the MP4 transform.
+  if (publicId.startsWith('http')) return hlsToMp4Fallback(publicId) ?? publicId;
+  const cleanId = publicId.replace(VIDEO_EXT, '');
+  return `${BASE}/video/upload/${MP4_FALLBACK_TRANSFORM}/${cleanId}.mp4`;
 }

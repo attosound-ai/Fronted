@@ -7,11 +7,12 @@
  * Dependency Inversion: Consumes useReelsFeed / useInteractions abstractions.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -20,15 +21,18 @@ import {
   View,
   type ViewToken,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
 import {
   Bookmark,
+  ChevronLeft,
   Film,
   Megaphone,
   MessageCircle,
+  Play,
   Send,
   Volume2,
   VolumeX,
@@ -42,6 +46,7 @@ import {
 } from '@/lib/media/cloudinaryUrl';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
+import { videoPlaybackToggled } from '@/lib/telemetry/videoTelemetry';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { Avatar } from '@/components/ui/Avatar';
@@ -137,6 +142,9 @@ interface ReelItemProps {
   onComment: (id: string) => void;
   onShare: (post: FeedPost) => void;
   onFollow: (userId: number) => void;
+  /** 'cover' (FYP, 9:16 reels) or 'contain' (seeded viewer — landscape videos
+   *  get letterbox bars instead of being cropped). Defaults to 'cover'. */
+  contentFit?: 'cover' | 'contain';
 }
 
 /**
@@ -155,6 +163,7 @@ function ReelItem({
   onComment,
   onShare,
   onFollow,
+  contentFit = 'cover',
 }: ReelItemProps) {
   const { t } = useTranslation('feed');
   const isOwnPost =
@@ -163,6 +172,8 @@ function ReelItem({
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [captionExpanded, setCaptionExpanded] = useState(false);
+  // Tap-to-pause: a manual pause that overrides the auto-play-when-active logic.
+  const [userPaused, setUserPaused] = useState(false);
 
   // Full-screen reels use a fixed 1080p MP4 (not adaptive HLS) for sharpness.
   const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
@@ -175,19 +186,45 @@ function ReelItem({
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  // Tracks first-frame readiness + transparently falls back HLS→MP4 on error.
-  const isReady = useVideoStream(player, videoUrl, isActive);
+  // Tracks first-frame readiness + transparently falls back HLS→MP4 on error,
+  // and reports load-time / error telemetry tagged to this reel.
+  const isReady = useVideoStream(player, videoUrl, isActive, {
+    surface: 'reels',
+    postId: post.id,
+  });
   const { position, duration } = useVideoProgress(player);
 
-  // Play / pause driven by visibility — must run as an effect, never during render
+  // Tap the video to pause/resume. Overrides auto-play while the reel stays the
+  // active one; auto-play resumes on the next reel.
+  const togglePlayPause = useCallback(() => {
+    if (!player) return;
+    const next = !userPaused;
+    setUserPaused(next);
+    try {
+      if (next) player.pause();
+      else player.play();
+    } catch {
+      // player disposed (cell recycled) — ignore
+    }
+    videoPlaybackToggled(
+      { surface: 'reels', postId: post.id },
+      next ? 'pause' : 'play',
+      Math.round(position * 1000)
+    );
+  }, [player, userPaused, post.id, position]);
+
+  // Play / pause driven by visibility — must run as an effect, never during
+  // render. A manual tap-pause (userPaused) wins while the reel is active;
+  // scrolling away clears it so returning to the reel auto-plays again.
   useEffect(() => {
     if (!player) return;
     if (isActive) {
-      player.play();
+      if (!userPaused) player.play();
     } else {
       player.pause();
+      if (userPaused) setUserPaused(false);
     }
-  }, [isActive, player]);
+  }, [isActive, userPaused, player]);
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
@@ -201,7 +238,7 @@ function ReelItem({
         <VideoView
           player={player}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
+          contentFit={contentFit}
           nativeControls={false}
         />
       ) : (
@@ -222,6 +259,20 @@ function ReelItem({
         style={styles.bottomScrim}
         pointerEvents="none"
       />
+
+      {/* Tap anywhere on the video to pause/resume. Rendered above the video but
+          below the action column + bottom overlay, which come after and capture
+          their own taps. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={togglePlayPause} />
+
+      {/* Pause indicator while the user has tapped to pause. */}
+      {userPaused && (
+        <View style={styles.pauseOverlay} pointerEvents="none">
+          <View style={styles.pauseBadge}>
+            <Play size={42} color="#FFF" fill="#FFF" />
+          </View>
+        </View>
+      )}
 
       {/* ── Mute / unmute ── */}
       {/* ── Right-side action column ── */}
@@ -397,7 +448,10 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  const isReady = useVideoStream(player, videoUrl, isActive);
+  const isReady = useVideoStream(player, videoUrl, isActive, {
+    surface: 'reels_ad',
+    postId: post.id,
+  });
 
   useEffect(() => {
     if (!player) return;
@@ -479,23 +533,57 @@ function isReelEligible(p: FeedPost): boolean {
  * ReelsFeed — the full-screen vertical paging list.
  * Shows reels plus vertical (~9:16) videos.
  */
-export function ReelsFeed() {
-  const { posts, isLoading, isRefreshing, isFetchingMore, hasMore, loadMore, refresh } =
-    useReelsFeed();
+interface ReelsFeedProps {
+  /** Seed the pager with a specific list (e.g. tapped from the home feed)
+   *  instead of the reels FYP. When set, the reels endpoint is NOT fetched. */
+  seedPosts?: Post[];
+  /** Start the pager on this post id (within the seeded list). */
+  initialPostId?: string;
+  /** Shows a back button and is called when it's pressed (pushed-screen mode). */
+  onClose?: () => void;
+  /** Load more from the seeded source when nearing the end. */
+  onEndReached?: () => void;
+  /** Footer spinner while the seeded source loads more. */
+  isFetchingMore?: boolean;
+}
+
+export function ReelsFeed({
+  seedPosts,
+  initialPostId,
+  onClose,
+  onEndReached: onSeededEndReached,
+  isFetchingMore: seededFetchingMore,
+}: ReelsFeedProps = {}) {
+  const seeded = seedPosts !== undefined;
+  const insets = useSafeAreaInsets();
+  // The reels FYP query is disabled in seeded mode (we already have the list).
+  const {
+    posts: fypPosts,
+    isLoading,
+    isRefreshing,
+    isFetchingMore: fypFetchingMore,
+    hasMore,
+    loadMore,
+    refresh,
+  } = useReelsFeed(!seeded);
   const { toggleLike, toggleBookmark, trackShare } = useInteractions();
   const { toggleFollow, getIsFollowing } = useFollowFeed();
+  // Subscribed (even though unread) so a follow-state change re-renders the list.
   const followedUsers = useFollowStore((s) => s.followedUsers);
   const hydrateFromApi = useFollowStore((s) => s.hydrateFromApi);
   const currentUserId = useAuthStore((s) => s.user?.id);
 
-  // Hydrate follow store from API data on reels load
+  const sourcePosts = seeded ? seedPosts : fypPosts;
+  const isFetchingMore = seeded ? !!seededFetchingMore : fypFetchingMore;
+
+  // Hydrate follow store from API data
   useEffect(() => {
-    if (posts.length === 0) return;
-    const entries = posts
+    if (sourcePosts.length === 0) return;
+    const entries = sourcePosts
       .filter((p) => p.isFollowingAuthor !== undefined)
       .map((p) => ({ userId: Number(p.author.id), isFollowing: p.isFollowingAuthor! }));
     if (entries.length > 0) hydrateFromApi(entries);
-  }, [posts, hydrateFromApi]);
+  }, [sourcePosts, hydrateFromApi]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
@@ -504,9 +592,11 @@ export function ReelsFeed() {
   const reelStartRef = useRef<number>(Date.now());
   const activePostIdRef = useRef<string | null>(null);
 
-  const realPosts = posts
+  // Seeded mode shows ALL videos (so any tapped feed video opens, even
+  // landscape); the FYP keeps its reel-eligibility filter + injected ads.
+  const realPosts = sourcePosts
     .map(toFeedPost)
-    .filter(isReelEligible)
+    .filter(seeded ? (p) => p.type === 'video' || p.type === 'reel' : isReelEligible)
     .map((p) => ({
       ...p,
       author: {
@@ -514,7 +604,19 @@ export function ReelsFeed() {
         isFollowing: getIsFollowing(p.author.id, p.author.isFollowing),
       },
     }));
-  const displayPosts: FeedPost[] = injectAds(realPosts, DEMO_ADS);
+  const displayPosts: FeedPost[] = seeded ? realPosts : injectAds(realPosts, DEMO_ADS);
+
+  // Where the pager should open when seeded (the tapped video's position).
+  const initialIndex = useMemo(() => {
+    if (!initialPostId) return 0;
+    const i = displayPosts.findIndex((p) => p.id === initialPostId);
+    return i < 0 ? 0 : i;
+  }, [displayPosts, initialPostId]);
+
+  // Jump the active index to the tapped video once the seeded list is known.
+  useEffect(() => {
+    if (seeded) setActiveIndex(initialIndex);
+  }, [seeded, initialIndex]);
 
   // Viewability config — a reel is "active" when >= 80% is visible
   const viewabilityConfig = useRef({
@@ -541,10 +643,14 @@ export function ReelsFeed() {
   );
 
   const handleEndReached = useCallback(() => {
+    if (seeded) {
+      onSeededEndReached?.();
+      return;
+    }
     if (hasMore && !isFetchingMore) {
       loadMore();
     }
-  }, [hasMore, isFetchingMore, loadMore]);
+  }, [seeded, onSeededEndReached, hasMore, isFetchingMore, loadMore]);
 
   const handleFollow = useCallback(
     (userId: number) => {
@@ -568,10 +674,13 @@ export function ReelsFeed() {
           onFollow={handleFollow}
           onComment={setCommentsPostId}
           onShare={setSharePost}
+          // Seeded viewer keeps the source video's aspect (contain → landscape
+          // gets letterbox bars, no crop); the FYP fills full-screen (cover).
+          contentFit={seeded ? 'contain' : 'cover'}
         />
       );
     },
-    [activeIndex, currentUserId, toggleLike, toggleBookmark, handleFollow]
+    [activeIndex, currentUserId, toggleLike, toggleBookmark, handleFollow, seeded]
   );
 
   const renderFooter = useCallback(() => {
@@ -627,12 +736,16 @@ export function ReelsFeed() {
           ListFooterComponent={renderFooter}
           viewabilityConfig={viewabilityConfig.current}
           onViewableItemsChanged={onViewableItemsChanged.current}
+          // Open on the tapped video when seeded (getItemLayout makes this exact).
+          initialScrollIndex={seeded ? initialIndex : undefined}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={refresh}
-              tintColor="#FFF"
-            />
+            seeded ? undefined : (
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={refresh}
+                tintColor="#FFF"
+              />
+            )
           }
           // Prevent unnecessary re-renders of off-screen items
           removeClippedSubviews
@@ -645,6 +758,17 @@ export function ReelsFeed() {
             index,
           })}
         />
+
+        {/* Back button — only in pushed-screen (seeded) mode. */}
+        {onClose && (
+          <TouchableOpacity
+            onPress={onClose}
+            style={[styles.viewerBackButton, { top: insets.top + 8 }]}
+            hitSlop={16}
+          >
+            <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {commentsPostId && (
@@ -674,6 +798,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background.primary,
   },
+  viewerBackButton: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // ── Reel item ──
   reelContainer: {
@@ -695,6 +828,22 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: REEL_HEIGHT * 0.35,
+  },
+
+  // Centered play badge shown while tap-paused.
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pauseBadge: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 4, // optical centering of the play triangle
   },
 
   // ── Right actions column ──

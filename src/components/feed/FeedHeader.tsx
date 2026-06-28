@@ -23,6 +23,7 @@ import ReAnimated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
+import { useCallBarVisible } from '@/hooks/useInCallChrome';
 import {
   Plus,
   Users,
@@ -80,6 +81,10 @@ export function FeedHeader() {
   const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
+  // When the green call bar is up it already owns the status-bar area, so the
+  // header sits flush beneath it (no doubled inset) and recolors to match it.
+  const inCall = useCallBarVisible();
+  const topInset = inCall ? 0 : insets.top;
   const { isTablet } = useDeviceLayout();
   // Shared scroll-direction signal (0 = at top / scrolling up, 1 = scrolling
   // down) — the same value that shrinks the bottom navbar. Drives the
@@ -133,7 +138,7 @@ export function FeedHeader() {
   // Hidden: behind the header (top: 0 = tucked behind header bar).
   // Visible: slides down to just below the header.
   const hiddenY = 20;
-  const visibleY = insets.top + HEADER_HEIGHT;
+  const visibleY = topInset + HEADER_HEIGHT;
 
   const translateY = useSharedValue(hiddenY);
 
@@ -206,7 +211,7 @@ export function FeedHeader() {
 
   // Floating-header hide/reveal. Full bar height incl. the safe-area inset so it
   // slides completely off-screen (no sliver left in the status bar).
-  const headerTotalHeight = insets.top + HEADER_HEIGHT;
+  const headerTotalHeight = topInset + HEADER_HEIGHT;
   const hideStyle = useAnimatedStyle(() => ({
     transform: [
       {
@@ -344,12 +349,18 @@ export function FeedHeader() {
         pointerEvents="box-none"
         style={[
           styles.header,
-          { height: headerTotalHeight, paddingTop: insets.top },
+          { height: headerTotalHeight, paddingTop: topInset },
           hideStyle,
         ]}
       >
-        {/* Frosted background that fades into the feed — no hard edge/border. */}
-        <HeaderBlur />
+        {/* Frosted background that fades into the feed — no hard edge/border.
+            During a call it recolors to the green call bar (#22C55E) and goes
+            solid so it joins the bar above with no seam, then dissolves. */}
+        {inCall ? (
+          <HeaderBlur tintRgb="34, 197, 85" solid fadeExtend={36} />
+        ) : (
+          <HeaderBlur />
+        )}
 
         <View
           pointerEvents="box-none"

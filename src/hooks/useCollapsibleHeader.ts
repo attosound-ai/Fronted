@@ -1,6 +1,5 @@
 import { useCallback, useRef } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Extrapolation,
   interpolate,
@@ -9,6 +8,7 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
+import { useScreenTopInset } from '@/hooks/useInCallChrome';
 
 /**
  * useCollapsibleHeader — Instagram-style hide-on-scroll header, usable on ANY
@@ -41,7 +41,9 @@ const TIMING = { duration: 120 };
 export const DEFAULT_HEADER_BAR_HEIGHT = 48;
 
 export function useCollapsibleHeader(barHeight: number = DEFAULT_HEADER_BAR_HEIGHT) {
-  const insets = useSafeAreaInsets();
+  // 0 when the green call bar already owns the status-bar area (no doubled gap),
+  // else the real safe-area top inset.
+  const topInset = useScreenTopInset();
   // Also collapses the floating bottom navbar on tab screens; no-op elsewhere.
   const { scrollHandler: navbarHandler } = useScrollOffset();
 
@@ -75,8 +77,8 @@ export function useCollapsibleHeader(barHeight: number = DEFAULT_HEADER_BAR_HEIG
     [setTarget, navbarHandler]
   );
 
-  // Full overlay height incl. the safe-area inset, so it slides fully away.
-  const height = insets.top + barHeight;
+  // Full overlay height incl. the (call-aware) top inset, so it slides fully away.
+  const height = topInset + barHeight;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

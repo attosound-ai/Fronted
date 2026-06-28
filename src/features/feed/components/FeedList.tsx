@@ -253,6 +253,12 @@ export function FeedList({ ListHeaderComponent }: FeedListProps) {
             router.push({ pathname: '/edit-post', params: { postId: item.id } } as Href)
           }
           onDelete={() => deletePost(item.id)}
+          onOpenReel={() =>
+            router.push({
+              pathname: '/reel/[id]',
+              params: { id: item.id, source: 'feed' },
+            } as Href)
+          }
         />
       );
     },

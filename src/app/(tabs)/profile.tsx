@@ -8,7 +8,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { useCallStore } from '@/stores/callStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown } from 'lucide-react-native';
 import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
@@ -103,14 +102,10 @@ export default function ProfileScreen() {
     }
   };
 
-  const isInCall = useCallStore(
-    (s) => s.activeCall?.state === 'connected' || s.activeCall?.state === 'reconnecting'
-  );
-
   if (!user) return null;
 
   return (
-    <View style={[styles.container, isInCall && { paddingTop: 8 }]}>
+    <View style={styles.container}>
       <ResponsiveContentWrapper>
         <ScrollView
           style={styles.scrollView}

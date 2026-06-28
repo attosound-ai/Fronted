@@ -7,6 +7,7 @@ import { DtmfKeypad } from './DtmfKeypad';
 import { useCallStore } from '@/stores/callStore';
 import { sendCallDigit } from '@/hooks/useTwilioVoice';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { probeResume } from '@/lib/telemetry/resumeProbe';
 import { SPACING } from '@/constants/theme';
 
 /**
@@ -52,7 +53,9 @@ export function DtmfKeypadHost() {
       if (cs.activeCall) {
         // String literal (not an ANALYTICS_EVENTS const) to avoid touching
         // events.ts, which has unrelated in-progress edits in the working tree.
-        analytics.capture('call_resume_surface_snapshot', {
+        // probeResume adds the compositor-liveness signal (raf_fired) + suspension
+        // depth so a black resume is finally distinguishable from a healthy one.
+        probeResume('call_resume_surface_snapshot', {
           keypad_visible: cs.keypadVisible,
           call_state: cs.activeCall.state,
           direction: cs.activeCall.direction,

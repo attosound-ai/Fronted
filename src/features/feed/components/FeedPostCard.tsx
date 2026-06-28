@@ -27,6 +27,8 @@ interface FeedPostCardProps {
   onReport?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Tap a video to expand it full-screen (reel viewer). Home feed only. */
+  onOpenReel?: () => void;
 }
 
 /**
@@ -48,6 +50,7 @@ function FeedPostCardInner({
   onReport,
   onEdit,
   onDelete,
+  onOpenReel,
 }: FeedPostCardProps) {
   const [interactorsType, setInteractorsType] = useState<InteractionType | null>(null);
 
@@ -96,6 +99,7 @@ function FeedPostCardInner({
       onBookmark={onBookmark}
       onReport={onReport}
       onDelete={onDelete}
+      onOpenReel={onOpenReel}
     />
   );
 

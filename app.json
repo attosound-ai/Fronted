@@ -27,10 +27,6 @@
           "voip",
           "audio",
           "fetch",
-          "remote-notification",
-          "voip",
-          "audio",
-          "fetch",
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
@@ -98,7 +94,13 @@
           "project": "react-native"
         }
       ],
-      "expo-video",
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": false
+        }
+      ],
       "react-native-bottom-tabs",
       "@react-native-community/datetimepicker",
       "expo-notifications",

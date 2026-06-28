@@ -1,6 +1,5 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronLeft, Phone } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -9,6 +8,7 @@ import { COLORS, SPACING } from '@/constants/theme';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import { makeVoIPCall } from '@/hooks/useTwilioVoice';
 import { useCallStore } from '@/stores/callStore';
+import { useCallBarVisible, useScreenTopInset } from '@/hooks/useInCallChrome';
 
 interface ChatHeaderProps {
   participantName: string;
@@ -24,13 +24,22 @@ export function ChatHeader({
   hideBack,
 }: ChatHeaderProps) {
   const { t } = useTranslation('messages');
-  const insets = useSafeAreaInsets();
+  // 0 when the green call bar already owns the status-bar area, else the inset.
+  const topInset = useScreenTopInset();
+  // During a call the header recolors to the green call bar (flush beneath it).
+  const callBarVisible = useCallBarVisible();
   const { avatarUri, username, role } = useParticipantProfile(participantId);
   const name = username || participantName || t('conversation.fallbackUserName');
   const isInCall = useCallStore((s) => s.activeCall !== null);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + SPACING.xs }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: topInset + SPACING.xs },
+        callBarVisible && styles.containerInCall,
+      ]}
+    >
       {!hideBack && (
         <TouchableOpacity
           onPress={onBack}
@@ -90,6 +99,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm,
     paddingBottom: SPACING.sm,
     backgroundColor: 'rgba(0,0,0,0.85)',
+  },
+  // Flush under the green call bar → same green so the top chrome reads as one.
+  containerInCall: {
+    backgroundColor: '#22C55E',
   },
   backButton: {
     padding: SPACING.xs,

@@ -7,6 +7,7 @@ import { showToast } from '@/components/ui/Toast';
 import { useCallStore } from '@/stores/callStore';
 import { telephonyService } from '@/lib/api/telephonyService';
 import { projectService } from '@/lib/api/projectService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { LocalClip } from '../types';
 
 interface UseTwilioCallRecordingOptions {
@@ -51,6 +52,10 @@ export function useTwilioCallRecording({
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
 
+  // Wall-clock the armed window so call_capture_stopped can report how long
+  // capture ran vs. how much audio the backend actually produced.
+  const recordingStartedAtRef = useRef<number | null>(null);
+
   // Tick the elapsed counter at 100ms while recording so the toolbar
   // label and the live placeholder both update smoothly.
   useEffect(() => {
@@ -71,22 +76,74 @@ export function useTwilioCallRecording({
     if (!activeCall) {
       Alert.alert(
         t('toasts.recordingFailed', 'Recording failed'),
-        t('toasts.noActiveCall', 'No active call to record from.'),
+        t('toasts.noActiveCall', 'No active call to record from.')
       );
       return;
     }
+    const t0 = Date.now();
+    const sinceConnectedMs = activeCall.connectedAt
+      ? Date.now() - new Date(activeCall.connectedAt).getTime()
+      : null;
     try {
       const { streamSid } = await telephonyService.startCapture(activeCall.callSid);
       startCapture(streamSid);
       setIsRecording(true);
+      recordingStartedAtRef.current = Date.now();
+      // The dead CAPTURE_STARTED constant, finally wired. This is the client
+      // join key (call_sid + stream_sid) to every backend_recording_* event,
+      // and outcome distinguishes "never armed" from "armed but one-sided".
+      analytics.capture(ANALYTICS_EVENTS.CALL.CAPTURE_STARTED, {
+        call_sid: activeCall.callSid,
+        stream_sid: streamSid,
+        direction: activeCall.direction,
+        call_state: activeCall.state,
+        since_connected_ms: sinceConnectedMs,
+        project_id: projectIdRef.current || null,
+        active_lane_index: activeLaneRef.current,
+        start_latency_ms: Date.now() - t0,
+        outcome: 'armed',
+      });
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
+      const httpStatus =
+        (error as { response?: { status?: number } })?.response?.status ?? null;
+      analytics.capture(ANALYTICS_EVENTS.CALL.CAPTURE_STARTED, {
+        call_sid: activeCall.callSid,
+        direction: activeCall.direction,
+        call_state: activeCall.state,
+        since_connected_ms: sinceConnectedMs,
+        project_id: projectIdRef.current || null,
+        active_lane_index: activeLaneRef.current,
+        start_latency_ms: Date.now() - t0,
+        outcome: 'failed',
+        http_status: httpStatus,
+        error_message: msg,
+      });
       Alert.alert(t('toasts.recordingFailed', 'Recording failed'), msg);
     }
   }, [isRecording, isUploading, activeCall, startCapture, t]);
 
   const stopRecording = useCallback(async () => {
     if (!activeCall || !isRecording) return;
+
+    // Snapshot identity + armed window up front — activeCall mutates as the
+    // call continues, and the funnel must bind to the SAME call_sid/stream_sid
+    // the backend_recording_* events carry.
+    const callSidSnapshot = activeCall.callSid;
+    const streamSidSnapshot = activeCall.activeStreamSid;
+    const armedDurationMs = recordingStartedAtRef.current
+      ? Date.now() - recordingStartedAtRef.current
+      : null;
+
+    // Telemetry accumulators — emitted once in `finally` so every exit path
+    // (found / not-found / poll-error) closes the funnel.
+    let stopOutcome = 'not_found';
+    let pollRetriesUsed = 0;
+    let foundSegment: {
+      id: string;
+      durationMs: number;
+      fileSizeBytes: number | null;
+    } | null = null;
 
     // Snapshot the segment count BEFORE stopping the stream so we can
     // tell which segment is the new one once the backend finishes
@@ -105,7 +162,7 @@ export function useTwilioCallRecording({
       try {
         await telephonyService.stopCapture(
           activeCall.callSid,
-          activeCall.activeStreamSid,
+          activeCall.activeStreamSid
         );
       } catch {
         // Stream may have already ended; the segment is still
@@ -115,6 +172,7 @@ export function useTwilioCallRecording({
     stopCapture();
     setIsRecording(false);
     setIsUploading(true);
+    recordingStartedAtRef.current = null;
 
     // Poll the backend until the new segment is processed and visible.
     // Backend transcoding takes a few seconds.
@@ -122,11 +180,14 @@ export function useTwilioCallRecording({
     const retryDelayMs = 2000;
     try {
       for (let i = 0; i < maxRetries; i++) {
+        pollRetriesUsed = i + 1;
         await new Promise((r) => setTimeout(r, retryDelayMs));
         try {
           const allSegments = await telephonyService.getSegments(activeCall.callSid);
           if (allSegments.length > baselineCount) {
             const newSegment = allSegments[allSegments.length - 1];
+            foundSegment = newSegment;
+            stopOutcome = 'segment_found';
 
             // Link the new segment to the active project and tell the
             // backend to auto-create a single timeline clip on the
@@ -145,7 +206,7 @@ export function useTwilioCallRecording({
                 await projectService.addSegment(
                   projectIdRef.current,
                   newSegment.id,
-                  activeLaneRef.current,
+                  activeLaneRef.current
                 );
                 queryClient.invalidateQueries({
                   queryKey: ['project', projectIdRef.current],
@@ -156,7 +217,7 @@ export function useTwilioCallRecording({
                 showToast(
                   t('toasts.couldNotLink', 'Could not link recording: {{message}}', {
                     message: m,
-                  }),
+                  })
                 );
               }
             }
@@ -165,12 +226,13 @@ export function useTwilioCallRecording({
           }
         } catch (error: unknown) {
           if (i === maxRetries - 1) {
+            stopOutcome = 'poll_error';
             const msg = error instanceof Error ? error.message : String(error);
             Alert.alert(
               t('toasts.recordingFailed', 'Recording failed'),
               t('toasts.couldNotLoadRecording', 'Could not load recording: {{message}}', {
                 message: msg,
-              }),
+              })
             );
             return;
           }
@@ -178,15 +240,32 @@ export function useTwilioCallRecording({
       }
 
       // All retries exhausted without finding a new segment.
+      stopOutcome = 'not_found';
       Alert.alert(
         t('toasts.recordingNotFound', 'Recording not found'),
         t(
           'toasts.recordingNotFoundMessage',
-          'The recording is taking longer than expected to process. Try again in a few seconds.',
-        ),
+          'The recording is taking longer than expected to process. Try again in a few seconds.'
+        )
       );
     } finally {
       setIsUploading(false);
+      // Close the recording funnel. segment_found==false after retries is the
+      // client signature of a backend finalize/upload failure; armed_duration
+      // vs segment_duration exposes lost audio. Joins to
+      // backend_recording_segment.one_sided by call_sid + stream_sid.
+      analytics.capture(ANALYTICS_EVENTS.CALL.CAPTURE_STOPPED, {
+        call_sid: callSidSnapshot,
+        stream_sid: streamSidSnapshot,
+        armed_duration_ms: armedDurationMs,
+        stop_outcome: stopOutcome,
+        poll_retries_used: pollRetriesUsed,
+        segment_found: foundSegment != null,
+        segment_id: foundSegment?.id ?? null,
+        segment_duration_ms: foundSegment?.durationMs ?? null,
+        segment_file_size_bytes: foundSegment?.fileSizeBytes ?? null,
+        baseline_segment_count: baselineCount,
+      });
     }
   }, [activeCall, isRecording, stopCapture, queryClient, t]);
 

@@ -1,9 +1,9 @@
 import { type ReactNode } from 'react';
 import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderBlur } from './HeaderBlur';
 import { DEFAULT_HEADER_BAR_HEIGHT } from '@/hooks/useCollapsibleHeader';
+import { useCallBarVisible, useScreenTopInset } from '@/hooks/useInCallChrome';
 
 interface CollapsibleHeaderProps {
   /** From `useCollapsibleHeader().animatedStyle` — drives the hide/reveal. */
@@ -35,18 +35,26 @@ export function CollapsibleHeader({
   rowStyle,
   children,
 }: CollapsibleHeaderProps) {
-  const insets = useSafeAreaInsets();
+  // 0 when the green call bar already owns the status-bar area, else the inset.
+  const topInset = useScreenTopInset();
+  // During a call the header recolors to the green call bar so the whole top
+  // chrome reads as one continuous in-call surface across every section.
+  const inCall = useCallBarVisible();
 
   return (
     <Animated.View
       pointerEvents="box-none"
       style={[
         styles.container,
-        { height: insets.top + barHeight, paddingTop: insets.top },
+        { height: topInset + barHeight, paddingTop: topInset },
         animatedStyle,
       ]}
     >
-      <HeaderBlur />
+      {inCall ? (
+        <HeaderBlur tintRgb="34, 197, 85" solid fadeExtend={36} />
+      ) : (
+        <HeaderBlur />
+      )}
       <View pointerEvents="box-none" style={[styles.row, rowStyle]}>
         {children}
       </View>

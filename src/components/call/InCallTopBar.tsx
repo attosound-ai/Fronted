@@ -6,6 +6,7 @@ import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-nati
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
+import { isCallConnected, isOnCallScreen } from '@/hooks/useInCallChrome';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
 import { openKeypad } from './DtmfKeypadHost';
 
@@ -26,12 +27,10 @@ export function InCallTopBar() {
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
 
-  const isConnected =
-    activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
+  const isConnected = isCallConnected(activeCall?.state);
 
   // Hide on the dedicated call screen (it has its own controls)
-  const isOnCallScreen =
-    pathname === '/call' || pathname === '/recording' || pathname === '/(tabs)/recording';
+  const onCallScreen = isOnCallScreen(pathname);
 
   // Elapsed timer
   useEffect(() => {
@@ -50,7 +49,7 @@ export function InCallTopBar() {
     return () => clearInterval(id);
   }, [isConnected, activeCall?.connectedAt]);
 
-  if (!isConnected || isOnCallScreen) return null;
+  if (!isConnected || onCallScreen) return null;
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top }]}>

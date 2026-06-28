@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { VideoOff, VolumeX, Volume2 } from 'lucide-react-native';
 import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
@@ -27,9 +27,12 @@ function heightRatioFor(w: number, h: number): number {
 interface VideoMediaProps {
   post: FeedPost;
   isVisible?: boolean;
+  /** Tap the video to expand it full-screen (reel viewer). When omitted, tapping
+   *  does nothing (e.g. inside the post-detail / reel viewer itself). */
+  onPress?: () => void;
 }
 
-export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
+export function VideoMedia({ post, isVisible = false, onPress }: VideoMediaProps) {
   const { contentWidth } = useDeviceLayout();
   // Global mute shared across every video (Instagram-style): toggling here
   // mutes/unmutes all videos at once.
@@ -56,8 +59,12 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback.
-  const isReady = useVideoStream(player, videoUrl, isVisible);
+  // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback
+  // + load/error telemetry tagged to the feed surface.
+  const isReady = useVideoStream(player, videoUrl, isVisible, {
+    surface: 'feed',
+    postId: post.id,
+  });
 
   // Playback position + duration for the time readout and progress bar.
   const { position, duration } = useVideoProgress(player);
@@ -120,6 +127,9 @@ export function VideoMedia({ post, isVisible = false }: VideoMediaProps) {
         nativeControls={false}
       />
       <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+      {/* Tap the video to expand it full-screen (reel viewer). Sits above the
+          video but below the mute button (rendered after), which keeps its tap. */}
+      {onPress && <Pressable style={StyleSheet.absoluteFill} onPress={onPress} />}
       <VideoProgressBar position={position} duration={duration} />
       <TouchableOpacity style={styles.muteButton} onPress={toggleMuted} hitSlop={8}>
         {isMuted ? (

@@ -602,7 +602,10 @@ export async function sendCallDigits(digits: string): Promise<boolean> {
     await activeCallObj.sendDigits(digits);
     const latency = Date.now() - startedAt;
     report('sent', { send_latency_ms: latency });
-    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, { digits, send_latency_ms: latency });
+    analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, {
+      digits,
+      send_latency_ms: latency,
+    });
     return true;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1023,6 +1026,13 @@ export function useTwilioVoice() {
       // Now: named handlers, mutual `detach()` in both terminal events,
       // and an explicit counter so the leak is detectable in telemetry.
       let inviteHandlersAttached = false;
+      // Option A (CallKit-is-the-single-ring-surface): when an incoming call
+      // arrives in the FOREGROUND, CallKit's banner already rings — so we
+      // suppress our own full-screen IncomingCallScreen to kill the double-ring
+      // redundancy, and navigate to /call only once accepted (below). Background
+      // / cold-launch calls still push /call immediately (Bug #9 — /call must
+      // own the resume). This flag bridges the suppressed push to onAccepted.
+      let suppressedForegroundRing = false;
       const detachInviteHandlers = () => {
         if (!inviteHandlersAttached) return;
         inviteHandlersAttached = false;
@@ -1051,6 +1061,12 @@ export function useTwilioVoice() {
         pendingInvite = null;
         useCallStore.getState().setCallState('connected');
         bindCallEvents(call);
+        // If we suppressed the foreground ring screen (Option A), navigate now
+        // so the connected-state routing (recording / CallBanner) takes over.
+        if (suppressedForegroundRing) {
+          suppressedForegroundRing = false;
+          router.push('/call');
+        }
         analytics.capture(ANALYTICS_EVENTS.CALL.ACCEPTED, { source: 'callkit' });
         void captureCallMicPermission('callkit_accepted');
         // bindCallEvents will own telemetry from Connected/Disconnected;
@@ -1089,9 +1105,17 @@ export function useTwilioVoice() {
       // Guard with `activeCall != null` so a rapid Cancelled before the
       // 150 ms timer fires doesn't push an empty /call modal.
       setTimeout(() => {
-        if (useCallStore.getState().activeCall != null) {
-          router.push('/call');
+        const st = useCallStore.getState();
+        if (st.activeCall == null) return;
+        // Foreground + still ringing → CallKit is the single ring surface:
+        // suppress our redundant screen and defer navigation to onAccepted.
+        // Any already-accepted (connected) or background/cold-launch call falls
+        // through and pushes /call as before.
+        if (AppState.currentState === 'active' && st.activeCall.state === 'ringing') {
+          suppressedForegroundRing = true;
+          return;
         }
+        router.push('/call');
       }, 150);
     };
 

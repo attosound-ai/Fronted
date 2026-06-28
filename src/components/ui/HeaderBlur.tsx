@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,39 +16,23 @@ import { GLASS_TIER } from '@/components/navigation/GlassSurface';
  * floating header dissolves smoothly into the content with NO perceptible edge
  * or banding (Instagram-style).
  *
- * Why this shape (and why the old one banded):
- *   The previous version stacked several discrete `BlurView` bands with stepped
- *   opacity. Each band is a hard rectangle with a different blur opacity, so the
- *   eye sees a row of rectangles — exactly the "muchos rectángulos / cambios
- *   bruscos" artefact. Compositing N blurs of the same backdrop never adds up to
- *   a smooth fade; it adds visible seams.
- *
- * How the best apps actually do it — TWO smooth layers, never bands:
+ * Two smooth layers, never bands:
  *   1. A single SMOOTHSTEP gradient scrim (12 eased stops, zero slope at both
- *      ends → no hard top/bottom edge, and CAGradientLayer dithers it so there's
- *      no 8-bit banding). This is pure-JS, renders everywhere, and is the whole
- *      effect on Android. It's a clean homogeneous fade by itself.
- *   2. A TRUE progressive blur: ONE uniform `BlurView` whose OPACITY is faded by
- *      a gradient alpha mask (`@react-native-masked-view`). A single blur pass,
- *      dissolved edge-to-edge by the mask → no seams, no bands. This is the
- *      canonical iOS-quality technique (what Instagram/Apple do).
+ *      ends → no hard top/bottom edge, dithered → no 8-bit banding). Pure-JS,
+ *      renders everywhere, and is the whole effect on Android.
+ *   2. A TRUE progressive blur: ONE uniform `BlurView` faded by a gradient alpha
+ *      mask (`@react-native-masked-view`) — the canonical iOS/Instagram
+ *      technique. Self-activates once the native module is in the binary (see
+ *      `MASKED_VIEW_NATIVE_AVAILABLE`), no redbox before then.
  *
- * The mask layer needs the native `@react-native-masked-view` module, so it only
- * lights up after a native rebuild. We DETECT that at runtime (see
- * `MASKED_VIEW_NATIVE_AVAILABLE`) so the frost self-activates on the first build
- * that bundles it — no manual flag, no redbox on the current binary. Until then
- * we render only the smoothstep scrim, which is already band-free and clean.
- *
- * Render it as an absolute-fill background behind the header content; it's
- * pointerEvents="none" so touches pass straight through.
+ * Props let callers retint/resize it (e.g. the green in-call header reuses it
+ * with `tintRgb` = green and `solid` so it blends with the solid call bar).
  */
 
 /**
  * Is the native `RNCMaskedView` actually in this binary? `hasViewManagerConfig`
  * is a safe registry query — it never mounts the component, so it can't throw an
- * "unimplemented component" error. Decided once at module load:
- *   • current binary (masked-view not yet built in) → false → scrim only
- *   • after a rebuild that includes masked-view        → true  → + progressive blur
+ * "unimplemented component" error.
  */
 const MASKED_VIEW_NATIVE_AVAILABLE: boolean =
   GLASS_TIER !== 'solid' &&
@@ -58,10 +43,11 @@ const MASKED_VIEW_NATIVE_AVAILABLE: boolean =
 // fade with no visible kinks between stops.
 const STOPS = 12;
 
-// How far the fade spills BELOW the header bar, so the frost dissolves a little
-// further into the content (a softer, longer tail) instead of ending right at
-// the bar's edge. The parent headers render with overflow:visible so this shows.
-const FADE_EXTEND = 26;
+/** Default spill BELOW the header bar so the fade tail reaches into the content. */
+const FADE_EXTEND = 84;
+
+/** Default scrim tint — a touch lighter than pure black so it reads over black. */
+const DEFAULT_TINT = '20, 20, 24';
 
 /** smoothstep: 0→1 with zero slope at both ends — no hard edge anywhere. */
 function smoothstep01(t: number): number {
@@ -71,8 +57,7 @@ function smoothstep01(t: number): number {
 /**
  * Build matching `colors` + `locations` arrays for a vertical fade where the
  * alpha follows `maxAlpha * (1 - smoothstep(t))`: strong and flat near the top,
- * a long gentle tail to fully transparent at the bottom — the homogeneous shape
- * Instagram uses. `rgb` is the scrim tint; the mask uses white.
+ * a long gentle tail to fully transparent at the bottom. `rgb` is the tint.
  */
 function buildFade(rgb: string, maxAlpha: number) {
   const colors: string[] = [];
@@ -89,22 +74,38 @@ function buildFade(rgb: string, maxAlpha: number) {
   };
 }
 
-// A scrim tint a touch lighter than pure black so the fade is visible over the
-// app's black background (and darkens bright media for status-bar legibility).
-// When the frost backs it, keep it light so the glass reads through; when it's
-// the ONLY layer (no masked-view yet) make it denser so it stays visible.
-const SCRIM = buildFade('20, 20, 24', MASKED_VIEW_NATIVE_AVAILABLE ? 0.55 : 0.92);
-// The blur mask: white→transparent on the SAME smoothstep curve, so the frost
-// dissolves with the exact same homogeneous profile as the scrim.
+// The blur mask: white→transparent on the smoothstep curve (constant, reused).
 const MASK = buildFade('255, 255, 255', 1);
 
-export function HeaderBlur({ style }: { style?: StyleProp<ViewStyle> }) {
-  const showFrost = MASKED_VIEW_NATIVE_AVAILABLE;
+interface HeaderBlurProps {
+  style?: StyleProp<ViewStyle>;
+  /** Scrim tint as "r, g, b". Default ~black; the in-call bar passes green. */
+  tintRgb?: string;
+  /**
+   * Force a near-opaque scrim and skip the progressive blur. Use when the header
+   * must blend with a SOLID bar above it (the green call bar) so there's no
+   * opacity seam at the join.
+   */
+  solid?: boolean;
+  /** How far the fade spills below the bar. */
+  fadeExtend?: number;
+}
+
+export function HeaderBlur({
+  style,
+  tintRgb = DEFAULT_TINT,
+  solid = false,
+  fadeExtend = FADE_EXTEND,
+}: HeaderBlurProps) {
+  // Solid mode: opaque-ish scrim, no frost (blends with the solid bar above).
+  const showFrost = MASKED_VIEW_NATIVE_AVAILABLE && !solid;
+  const maxAlpha = solid ? 0.95 : MASKED_VIEW_NATIVE_AVAILABLE ? 0.55 : 0.92;
+  const scrim = useMemo(() => buildFade(tintRgb, maxAlpha), [tintRgb, maxAlpha]);
 
   return (
-    <View style={[styles.root, style]} pointerEvents="none">
+    <View style={[styles.root, { bottom: -fadeExtend }, style]} pointerEvents="none">
       {/* Layer 1 (back): true progressive blur — one uniform BlurView faded by a
-          smooth alpha mask. No bands, no seams. iOS only, post-rebuild. */}
+          smooth alpha mask. No bands, no seams. iOS only, when available. */}
       {showFrost && (
         <MaskedView
           style={StyleSheet.absoluteFill}
@@ -125,13 +126,10 @@ export function HeaderBlur({ style }: { style?: StyleProp<ViewStyle> }) {
         </MaskedView>
       )}
 
-      {/* Layer 2 (front): smoothstep scrim — the homogeneous fade. Darkens the
-          top for legibility, dissolves to nothing at the bottom. This is the
-          whole effect on Android and the pre-rebuild iOS look; with the frost
-          behind it, it's the IG-style dark-top → frosted-middle → clear-bottom. */}
+      {/* Layer 2 (front): smoothstep scrim — the homogeneous fade. */}
       <LinearGradient
-        colors={SCRIM.colors}
-        locations={SCRIM.locations}
+        colors={scrim.colors}
+        locations={scrim.locations}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -140,13 +138,12 @@ export function HeaderBlur({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 
 const styles = StyleSheet.create({
-  // Fills the header AND spills FADE_EXTEND px below it, so the fade tail reaches
-  // a touch further into the content. Parent headers use overflow:visible.
+  // Fills the header AND spills `fadeExtend` px below it (applied inline). Parent
+  // headers use overflow:'visible' so the spill shows.
   root: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: -FADE_EXTEND,
   },
 });

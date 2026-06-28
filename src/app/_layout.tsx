@@ -1,7 +1,7 @@
 import '@/lib/i18n';
 import '@/lib/pushNotifications'; // registers foreground notification handler
 import '@/lib/textScaling'; // caps Dynamic Type globally to protect layouts
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 // NOTE: We deliberately DO NOT import `react-native-audio-api` anywhere
 // in the app at module-load time. The library installs global
@@ -21,7 +21,7 @@ import { PostHogProvider, PostHogErrorBoundary, usePostHog } from 'posthog-react
 import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SplashScreen from 'expo-splash-screen';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { useFonts } from 'expo-font';
 
 // Patched Archivo TTFs with corrected hhea/OS-2 metrics so iOS does not
@@ -43,6 +43,7 @@ import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
+import { probeResume, markAppBackgrounded } from '@/lib/telemetry/resumeProbe';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
@@ -192,10 +193,33 @@ function RootLayout() {
   // user foregrounds into a black splash covering the already-rendered app
   // (Bug #2: "black screen after answering"). Re-hiding on 'active' reveals it.
   // Idempotent and cheap.
+  // Deep-suspension black-screen mitigation + diagnosis. On a real
+  // background→active transition (e.g. a VoIP-wake after the phone was off) iOS
+  // can purge the New-Arch root drawable; the JS tree resumes but renders black
+  // (build-56 telemetry: ticks + resume snapshot fire, surface stays dark).
+  //   (a) re-hide the splash as before (prior Bug #2),
+  //   (b) emit app_resume_probe so we can finally SEE whether the compositor
+  //       came back (raf_fired) + how deep the suspension was, and
+  //   (c) nudge the root with a sub-pixel transform to force Fabric to re-commit
+  //       and re-acquire a drawable.
+  const prevAppStateRef = useRef(AppState.currentState);
+  const [resumeNudge, setResumeNudge] = useState(false);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') {
-        SplashScreen.hideAsync().catch(() => {});
+      const prev = prevAppStateRef.current;
+      prevAppStateRef.current = next;
+      if (next !== 'active') {
+        markAppBackgrounded();
+        return;
+      }
+      SplashScreen.hideAsync().catch(() => {});
+      if (prev !== 'active') {
+        probeResume('app_resume_probe', {
+          in_call: useCallStore.getState().activeCall != null,
+          prev_state: prev,
+        });
+        setResumeNudge(true);
+        requestAnimationFrame(() => requestAnimationFrame(() => setResumeNudge(false)));
       }
     });
     return () => sub.remove();
@@ -249,7 +273,17 @@ function RootLayout() {
             client={queryClient}
             persistOptions={{ persister: queryPersister, maxAge: 1000 * 60 * 60 * 24 }}
           >
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView
+              style={[
+                { flex: 1 },
+                // Sub-pixel transform pulse on deep resume re-commits the Fabric
+                // root so a purged drawable is re-acquired (black-screen fix).
+                // Reverted after two frames; imperceptible.
+                resumeNudge
+                  ? { transform: [{ translateY: StyleSheet.hairlineWidth }] }
+                  : null,
+              ]}
+            >
               <KeyboardProvider>
                 <SafeAreaProvider>
                   <StatusBar style="light" />
@@ -387,6 +421,16 @@ function RootLayout() {
                           options={{
                             headerShown: false,
                             animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="reel/[id]"
+                          options={{
+                            headerShown: false,
+                            // Fade so tapping a feed video reads as "expanding"
+                            // into the full-screen reel viewer (Instagram-style).
+                            animation: 'fade',
+                            contentStyle: { backgroundColor: COLORS.background.primary },
                           }}
                         />
                         <Stack.Screen

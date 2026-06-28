@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
+import { useCallBarVisible, useScreenTopInset } from '@/hooks/useInCallChrome';
 import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 import { SearchBar } from '@/features/search/components/SearchBar';
@@ -59,6 +60,10 @@ export default function SearchScreen() {
   // height so the lists offset by exactly the right amount. Scroll still drives
   // the bottom navbar collapse via the global scroll handler.
   const { scrollHandler } = useScrollOffset();
+  // 0 when the green call bar already owns the status-bar area, else the inset.
+  const topInset = useScreenTopInset();
+  // During a call the pinned header recolors to the green call bar.
+  const inCall = useCallBarVisible();
   const [measuredBand, setMeasuredBand] = useState(0);
   // Reset the measurement when the tabs appear/disappear so the estimate covers
   // the height change until the next layout pass lands.
@@ -66,7 +71,7 @@ export default function SearchScreen() {
     setMeasuredBand(0);
   }, [hasQuery]);
   const estimatedBand = SEARCH_BAR_BAND + (hasQuery ? TAB_BAR_BAND : 0);
-  const headerHeight = insets.top + (measuredBand || estimatedBand);
+  const headerHeight = topInset + (measuredBand || estimatedBand);
 
   const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
     const h = Math.round(e.nativeEvent.layout.height);
@@ -197,9 +202,13 @@ export default function SearchScreen() {
             while content scrolls behind its fading blur — no hide-on-scroll. */}
         <View
           pointerEvents="box-none"
-          style={[styles.floatingHeader, { paddingTop: insets.top }]}
+          style={[styles.floatingHeader, { paddingTop: topInset }]}
         >
-          <HeaderBlur />
+          {inCall ? (
+            <HeaderBlur tintRgb="34, 197, 85" solid fadeExtend={36} />
+          ) : (
+            <HeaderBlur />
+          )}
           <View onLayout={onHeaderLayout}>
             <View style={styles.searchRow}>
               <SearchBar

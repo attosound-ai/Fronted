@@ -22,7 +22,7 @@ export function UploadButton({ onUpload, disabled, isUploading }: UploadButtonPr
         <ActivityIndicator size="small" color="#555" />
       ) : (
         <CloudUpload
-          size={36}
+          size={44}
           color={disabled ? '#555' : COLORS.white}
           strokeWidth={1.75}
         />
@@ -34,7 +34,7 @@ export function UploadButton({ onUpload, disabled, isUploading }: UploadButtonPr
 const styles = StyleSheet.create({
   button: {
     alignSelf: 'center',
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
   buttonDisabled: {
     opacity: 0.4,

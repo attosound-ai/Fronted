@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { View, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -7,12 +7,14 @@ import {
   Ellipsis,
   VolumeX,
   Volume2,
+  Play,
   Bookmark,
   Flag,
   Trash2,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { cloudinaryVideoMp4 } from '@/lib/media/cloudinaryUrl';
+import { videoPlaybackToggled } from '@/lib/telemetry/videoTelemetry';
 import { useAuthStore } from '@/stores/authStore';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -56,6 +58,8 @@ export function ReelMedia({
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
   const [menuVisible, setMenuVisible] = useState(false);
+  // Tap-to-pause: a manual pause that overrides auto-play-when-visible.
+  const [userPaused, setUserPaused] = useState(false);
 
   // Reels render full-screen: use a fixed 1080p MP4 (not adaptive HLS) so the
   // image is sharp from the first frame. See cloudinaryVideoMp4 for the rationale.
@@ -69,18 +73,42 @@ export function ReelMedia({
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  // First-frame readiness (drives the poster).
-  const isReady = useVideoStream(player, videoUrl, isVisible);
+  // First-frame readiness (drives the poster) + load/error telemetry.
+  const isReady = useVideoStream(player, videoUrl, isVisible, {
+    surface: 'reel_media',
+    postId: post.id,
+  });
   const { position, duration } = useVideoProgress(player);
 
+  // Tap the video to pause/resume.
+  const togglePlayPause = useCallback(() => {
+    if (!player) return;
+    const next = !userPaused;
+    setUserPaused(next);
+    try {
+      if (next) player.pause();
+      else player.play();
+    } catch {
+      // player disposed — ignore
+    }
+    videoPlaybackToggled(
+      { surface: 'reel_media', postId: post.id },
+      next ? 'pause' : 'play',
+      Math.round(position * 1000)
+    );
+  }, [player, userPaused, post.id, position]);
+
+  // A manual tap-pause wins while visible; scrolling away clears it so the reel
+  // auto-plays again when it returns into view.
   useEffect(() => {
     if (!player) return;
     if (isVisible) {
-      player.play();
+      if (!userPaused) player.play();
     } else {
       player.pause();
+      if (userPaused) setUserPaused(false);
     }
-  }, [isVisible, player]);
+  }, [isVisible, userPaused, player]);
 
   // Sync this player whenever the shared mute state flips so one video's
   // toggle applies to every other mounted video.
@@ -112,6 +140,19 @@ export function ReelMedia({
 
       {/* Thin progress line at the bottom edge */}
       <VideoProgressBar position={position} duration={duration} showTime={false} />
+
+      {/* Tap anywhere on the video to pause/resume. Below the overlays (author /
+          menu / mute), which render after and capture their own taps. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={togglePlayPause} />
+
+      {/* Pause indicator while tap-paused. */}
+      {userPaused && (
+        <View style={styles.pauseOverlay} pointerEvents="none">
+          <View style={styles.pauseBadge}>
+            <Play size={38} color="#FFF" fill="#FFF" />
+          </View>
+        </View>
+      )}
 
       {/* Top gradient — author info + follow + menu */}
       <LinearGradient
@@ -262,6 +303,20 @@ const styles = StyleSheet.create({
   video: {
     width: '100%',
     height: '100%',
+  },
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pauseBadge: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 4,
   },
   placeholder: {
     backgroundColor: '#111',

@@ -82,6 +82,21 @@ export const ANALYTICS_EVENTS = {
     FOLLOW_PRESSED: 'feed_follow_pressed',
   },
 
+  // ── Video (playback + load diagnostics) ───────
+  // Full lifecycle so a slow/broken video is never silent:
+  // LOAD_STARTED → LOAD_COMPLETED (carries load_ms) is the load-time funnel;
+  // LOAD_ERROR (+ Sentry exception) and FALLBACK_USED capture breakage and the
+  // HLS→MP4 recovery; PLAYBACK_TOGGLED records tap-to-pause/play; STALLED marks
+  // mid-playback buffering. Every event carries `surface` (reels/feed/…)+`post_id`.
+  VIDEO: {
+    LOAD_STARTED: 'video_load_started',
+    LOAD_COMPLETED: 'video_load_completed',
+    LOAD_ERROR: 'video_load_error',
+    FALLBACK_USED: 'video_fallback_used',
+    PLAYBACK_TOGGLED: 'video_playback_toggled',
+    STALLED: 'video_stalled',
+  },
+
   // ── Calls ──────────────────────────────────────
   CALL: {
     // Fires at the very TOP of onCallInvite, before any auto-switch work, so

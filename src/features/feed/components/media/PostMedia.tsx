@@ -17,6 +17,8 @@ interface PostMediaProps {
   onBookmark?: () => void;
   onReport?: () => void;
   onDelete?: () => void;
+  /** Tap a video to expand it full-screen (reel viewer). Home feed only. */
+  onOpenReel?: () => void;
 }
 
 /**
@@ -37,6 +39,7 @@ export function PostMedia({
   onBookmark,
   onReport,
   onDelete,
+  onOpenReel,
 }: PostMediaProps) {
   switch (post.type) {
     case 'audio':
@@ -44,7 +47,7 @@ export function PostMedia({
     case 'image':
       return <ImageMedia post={post} onDoubleTap={onDoubleTap} />;
     case 'video':
-      return <VideoMedia post={post} isVisible={isVisible} />;
+      return <VideoMedia post={post} isVisible={isVisible} onPress={onOpenReel} />;
     case 'reel':
       return (
         <ReelMedia

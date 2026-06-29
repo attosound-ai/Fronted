@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { Platform, ActionSheetIOS, AppState } from 'react-native';
+import { Platform, ActionSheetIOS, AppState, NativeModules } from 'react-native';
 import { setAudioModeAsync, AudioModule } from 'expo-audio';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
@@ -318,6 +318,7 @@ function bindCallEvents(call: any): () => void {
     void captureCallStats('final');
     stopCallStatsCapture();
     activeCallObj = null;
+    restoreInjectionDevice();
     void endCallTelemetry('call_disconnected');
     endCall();
     // Restore normal audio mode after the call ends
@@ -480,6 +481,7 @@ export async function acceptIncomingCall() {
   }
 
   try {
+    await installInjectionDeviceIfEnabled();
     const call = await invite.accept();
     activeCallObj = call;
     pendingInvite = null;
@@ -523,6 +525,31 @@ export function rejectIncomingCall() {
   useCallStore.getState().endCall();
 }
 
+// ── ATTO audio injection: device install/restore ───────────────────────────
+// Swap in the custom AVAudioEngine injection device BEFORE a call connects (only
+// when the feature flag is on — Twilio forbids swapping the device mid-call), and
+// restore the stock device when the call ends. Flag OFF (default) => never called
+// => the stock TVODefaultAudioDevice is untouched and base calls are byte-identical.
+// Key mirrors AUDIO_INJECTION_FLAG in lib/callAudio/createAudioInjector.ts.
+async function installInjectionDeviceIfEnabled(): Promise<void> {
+  if (!IS_IOS) return;
+  if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) return;
+  try {
+    await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
+  } catch {
+    // best-effort: a failed install just leaves the stock device (no injection)
+  }
+}
+
+function restoreInjectionDevice(): void {
+  if (!IS_IOS) return;
+  try {
+    void NativeModules.AttoAudioInjection?.restoreDefaultDevice?.();
+  } catch {
+    // best-effort; idempotent on the native side
+  }
+}
+
 export function hangUpCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ENDED);
   // Tactile + audible hang-up feedback (WhatsApp-style). The chime mixes over
@@ -549,6 +576,8 @@ export function hangUpCall() {
     }
     activeCallObj = null;
   }
+  // Restore the stock audio device in case the SDK skips Disconnected (idempotent).
+  restoreInjectionDevice();
   useCallStore.getState().endCall();
 }
 
@@ -821,6 +850,7 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
     // numeric identity so we never end up with "Default Contact" again.
     const contactHandle = recipientName ? `@${recipientName}` : `user-${recipientUserId}`;
 
+    await installInjectionDeviceIfEnabled();
     const call = await voice.connect(token, {
       contactHandle,
       params: {

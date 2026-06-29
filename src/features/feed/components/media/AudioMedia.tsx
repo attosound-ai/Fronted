@@ -9,6 +9,7 @@ import {
 import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
+import { InjectIntoCallButton } from '@/components/call/InjectIntoCallButton';
 import type { FeedPost } from '@/types/post';
 
 interface AudioMediaProps {
@@ -78,6 +79,15 @@ export function AudioMedia({ post }: AudioMediaProps) {
       <Text style={styles.time}>
         {currentTime} / {duration}
       </Text>
+
+      {/* Play this track INTO an active call (renders only when a call is
+          connected AND the audio-injection flag is on — dark otherwise). */}
+      {post.audioUrl ? (
+        <InjectIntoCallButton
+          source={{ kind: 'post', uri: post.audioUrl, postId: post.id }}
+          size={20}
+        />
+      ) : null}
     </View>
   );
 }

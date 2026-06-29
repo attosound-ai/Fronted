@@ -100,7 +100,8 @@
   "settings": {
     "sectionTitle": "Settings",
     "languageLabel": "Language",
-    "appIconLabel": "App icon"
+    "appIconLabel": "App icon",
+    "analyticsLabel": "Analytics"
   },
   "support": {
     "sectionTitle": "Support",
@@ -119,7 +120,8 @@
     "close": "Close"
   },
   "actions": {
-    "logout": "Log Out"
+    "logout": "Log Out",
+    "deleteAccount": "Delete Account"
   },
   "logout": {
     "sheetTitle": "Log Out",
@@ -155,7 +157,16 @@
     "avatarSheetEditCurrent": "Edit current photo",
     "avatarSheetFromGallery": "Choose from gallery",
     "avatarSheetFromCamera": "Take a photo",
-    "avatarSheetCancel": "Cancel"
+    "avatarSheetCancel": "Cancel",
+    "socialLinksTitle": "Social Links",
+    "spotifyPlaceholder": "Artist name or URI",
+    "websiteLabel": "Website",
+    "extendedInfoTitle": "Extended Info",
+    "locationLabel": "Location",
+    "locationPlaceholder": "City, State",
+    "recordLabelLabel": "Record Label",
+    "recordLabelPlaceholder": "Independent",
+    "bookingEmailLabel": "Booking Email"
   },
   "publicProfile": {
     "headerTitle": "Profile",
@@ -167,7 +178,9 @@
     "roleBadgeRepresentative": "Representative",
     "roleBadgeVerified": "Verified",
     "followButton": "Follow",
-    "followingButton": "Following"
+    "followingButton": "Following",
+    "messageButton": "Message",
+    "noPosts": "No posts yet"
   },
   "appIcon": {
     "title": "App icon",
@@ -177,5 +190,50 @@
     "error": "Couldn't load icons. Please try again later.",
     "errorChange": "Couldn't change the icon. Please try again.",
     "errorChangeReboot": "iOS is blocking the icon change. Please restart your iPhone and try again."
+  },
+  "followList": {
+    "titleFollowers": "Followers",
+    "titleFollowing": "Following",
+    "errorLoad": "Could not load following list",
+    "emptyFollowers": "No followers yet",
+    "emptyFollowing": "You're not following anyone yet"
+  },
+  "accountSwitcher": {
+    "roleRepresentative": "Representative",
+    "roleCreator": "Creator account",
+    "roleListener": "Listener",
+    "endCallFirst": "End the current call before switching accounts",
+    "title": "Switch account",
+    "activeNow": "Active now",
+    "addAccount": "Add account"
+  },
+  "preview": {
+    "nameFallback": "Your Name"
+  },
+  "content": {
+    "postThumbnailA11y": "Post by {{username}}",
+    "postsGridA11y": "User posts grid",
+    "savedGridA11y": "Saved posts grid",
+    "emptyPosts": "No posts yet",
+    "emptySaved": "No saved posts",
+    "tabPostsA11y": "Posts",
+    "tabSavedA11y": "Saved",
+    "tabSettingsA11y": "Settings"
+  },
+  "deleteAccount": {
+    "title": "Delete Account",
+    "warningTitle": "This action is permanent",
+    "warningBody": "All your data will be permanently deleted: posts, messages, likes, comments, followers, subscriptions, and more. This cannot be undone.",
+    "deleteLinked": "Also delete linked accounts",
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "otpTitle": "Verify your identity",
+    "otpSubtitle": "We sent a verification code to",
+    "otpError": "Invalid code. Please try again.",
+    "deleteButton": "Delete My Account",
+    "deleteFailed": "Something went wrong",
+    "deleteFailedBody": "We could not delete your account. Please try again later.",
+    "close": "Close",
+    "deleting": "Deleting your account..."
   }
 }

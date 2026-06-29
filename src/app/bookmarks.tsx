@@ -13,6 +13,7 @@ import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
 import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router, type Href } from 'expo-router';
 import { Bookmark, ChevronLeft } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useAuthStore } from '@/stores/authStore';
 import { FeedPostCard } from '@/features/feed/components/FeedPostCard';
@@ -72,6 +73,7 @@ function toFeedPost(post: Post): FeedPost {
 // ---------------------------------------------------------------------------
 
 export default function BookmarksScreen() {
+  const { t } = useTranslation(['feed', 'common']);
   const {
     bookmarks,
     isLoading,
@@ -94,17 +96,17 @@ export default function BookmarksScreen() {
 
   const handleDeletePost = useCallback(
     (postId: string) => {
-      Alert.alert('Delete Post', 'Are you sure?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('bookmarks.deleteTitle'), t('bookmarks.deleteConfirm'), [
+        { text: t('common:buttons.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common:buttons.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await feedService.deletePost(postId);
               refresh();
             } catch {
-              Alert.alert('Error', 'Failed to delete the post.');
+              Alert.alert(t('common:errors.title'), t('bookmarks.deleteFailed'));
             }
           },
         },
@@ -179,9 +181,9 @@ export default function BookmarksScreen() {
     return (
       <View style={styles.empty}>
         <Bookmark size={52} color="#444" strokeWidth={2.25} />
-        <Text style={styles.emptyTitle}>No saved posts yet</Text>
+        <Text style={styles.emptyTitle}>{t('bookmarks.emptyTitle')}</Text>
         <Text style={styles.emptySubtitle}>
-          Tap the bookmark icon on any post to save it here.
+          {t('bookmarks.emptySubtitle')}
         </Text>
       </View>
     );
@@ -242,7 +244,7 @@ export default function BookmarksScreen() {
         >
           <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Saved</Text>
+        <Text style={styles.headerTitle}>{t('bookmarks.headerTitle')}</Text>
         <View style={{ width: 28 }} />
       </CollapsibleHeader>
     </View>

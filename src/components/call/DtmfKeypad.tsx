@@ -2,6 +2,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
 import { haptic } from '@/lib/haptics/hapticService';
+import { playDtmfTone } from '@/lib/sound/callSounds';
 import { COLORS, SPACING } from '@/constants/theme';
 
 /**
@@ -30,13 +31,18 @@ interface DtmfKeypadProps {
   disabled?: boolean;
 }
 
-export function DtmfKeypad({ onPressDigit, onKeyTap, disabled = false }: DtmfKeypadProps) {
+export function DtmfKeypad({
+  onPressDigit,
+  onKeyTap,
+  disabled = false,
+}: DtmfKeypadProps) {
   const press = (digit: string) => {
     // Report the raw tap FIRST, even when disabled, so a tap that goes nowhere
     // still leaves a trace.
     onKeyTap?.(digit, { disabled });
     if (disabled) return;
     void haptic('selection');
+    playDtmfTone(digit); // authentic dual-tone, mixes over the live call
     onPressDigit(digit);
   };
 

@@ -47,7 +47,7 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
       {/* Timestamp */}
       <Text variant="caption" style={styles.timestamp} maxFontSizeMultiplier={1.1}>
         {formatRelativeTime(post.createdAt)}
-        {post.isEdited && ' · edited'}
+        {post.isEdited && ` ${t('post.editedSuffix')}`}
       </Text>
     </View>
   );

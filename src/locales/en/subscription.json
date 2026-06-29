@@ -57,5 +57,34 @@
   "errorTitle": "Error",
   "errorUpgradeFailed": "Failed to process upgrade. Please try again.",
   "errorCancelFailed": "Failed to cancel. Please try again.",
-  "merchantName": "ATTO SOUND"
+  "merchantName": "ATTO SOUND",
+  "changeSheet": {
+    "downgradeScheduled": "We'll switch you to {{plan}} on {{date}}.",
+    "title": "Change plan",
+    "upgradeSubtitle": "Charged today for the {{days}} days remaining in your current cycle.",
+    "activatesNow": "Activates immediately",
+    "downgradeSubtitle": "You'll keep your current plan until {{date}}, then switch to {{plan}} at the next billing cycle. No refund for the remaining time on your current plan.",
+    "alreadyOnPlan": "You're already on this plan.",
+    "confirmUpgrade": "Pay {{amount}} & upgrade",
+    "confirmDowngrade": "Schedule downgrade"
+  },
+  "cancelPendingDialog": {
+    "title": "Cancel scheduled change?",
+    "message": "You'll keep your current plan and won't be switched.",
+    "keepScheduled": "Keep",
+    "confirm": "Cancel scheduled"
+  },
+  "scheduledBadge": "Scheduled",
+  "downgradeButton": "Downgrade",
+  "title": "Subscription",
+  "creatorOnly": {
+    "title": "Subscriptions are for creators only",
+    "subtitle": "Listening, browsing and messaging are free. Subscription plans are reserved for creator accounts (artists with a registered inmate number)."
+  },
+  "pendingBanner": {
+    "title": "Scheduled: switching to {{plan}}",
+    "applies": "On {{date}}",
+    "cancel": "Cancel"
+  },
+  "errorPreviewFailed": "Could not load preview"
 }

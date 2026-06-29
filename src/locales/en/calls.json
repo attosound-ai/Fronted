@@ -6,7 +6,8 @@
   },
   "outgoing": {
     "label": "Calling...",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "unknownRecipient": "Unknown"
   },
   "active": {
     "loading": "Loading project…",
@@ -35,11 +36,14 @@
     "clipVolume": "Clip Volume",
     "capturingAudio": "Capturing Audio",
     "laneName": "Lane Name",
-    "laneNamePrompt": "Enter a name for lane {{number}}"
+    "laneNamePrompt": "Enter a name for lane {{number}}",
+    "recBadge": "REC",
+    "micPermissionRequired": "Microphone permission is required to record."
   },
   "banner": {
     "tapToRecord": "Tap to Record",
-    "callInProgress": "Call in progress"
+    "callInProgress": "Call in progress",
+    "openRecordScreen": "Open Record"
   },
   "simple": {
     "delete": "Delete",
@@ -56,7 +60,8 @@
     "exportNotAvailableMessage": "File export is not available on this device.",
     "exportFailed": "Could not export audio: {{message}}",
     "deleteConfirm": "Delete Recording?",
-    "deleteConfirmMessage": "This will permanently delete the recorded audio."
+    "deleteConfirmMessage": "This will permanently delete the recorded audio.",
+    "noWritableDirectory": "No writable directory available"
   },
   "projectPicker": {
     "selectProject": "Select Project",

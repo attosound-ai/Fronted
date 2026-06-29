@@ -20,6 +20,7 @@ import Animated, {
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { imageCropService, CropRegion } from '@/lib/media/imageCropService';
@@ -51,6 +52,7 @@ export function ImageCropModal({
   onCrop,
   onCancel,
 }: ImageCropModalProps) {
+  const { t } = useTranslation('common');
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const circleSize = screenWidth - CIRCLE_PADDING * 2;
@@ -232,11 +234,11 @@ export function ImageCropModal({
               disabled={isProcessing}
             >
               <Text variant="body" style={styles.cancelText}>
-                Cancel
+                {t('buttons.cancel')}
               </Text>
             </TouchableOpacity>
             <Text variant="body" style={styles.headerTitle}>
-              Position Photo
+              {t('imageCrop.title')}
             </Text>
             <View style={styles.headerButton}>
               {isProcessing ? (
@@ -247,7 +249,7 @@ export function ImageCropModal({
                     variant="body"
                     style={[styles.applyText, !imgDims && styles.dimmed]}
                   >
-                    Apply
+                    {t('buttons.apply')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -332,7 +334,7 @@ export function ImageCropModal({
 
           <View style={styles.bottomArea}>
             <Text variant="small" style={styles.hintText}>
-              Drag and pinch to position your photo
+              {t('imageCrop.hint')}
             </Text>
           </View>
         </View>

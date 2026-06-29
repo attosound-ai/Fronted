@@ -10,6 +10,7 @@ import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useCallStore } from '@/stores/callStore';
 import { isCallConnected, isOnCallScreen } from '@/hooks/useInCallChrome';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import { preloadCallSounds } from '@/lib/sound/callSounds';
 import { openKeypad } from './DtmfKeypadHost';
 
 function formatElapsed(seconds: number): string {
@@ -30,6 +31,12 @@ export function InCallTopBar() {
   const [elapsed, setElapsed] = useState(0);
 
   const isConnected = isCallConnected(activeCall?.state);
+
+  // Warm the DTMF + end-call players the moment a call is live, so the first
+  // keypad tap / hang-up is instant (no allocation on the interaction).
+  useEffect(() => {
+    if (isConnected) preloadCallSounds();
+  }, [isConnected]);
 
   // Hide on the dedicated call screen (it has its own controls)
   const onCallScreen = isOnCallScreen(pathname);

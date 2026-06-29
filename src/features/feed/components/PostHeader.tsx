@@ -199,7 +199,7 @@ export function PostHeader({
                   <Pencil size={24} color="#FFF" strokeWidth={2.25} />
                 </View>
                 <Text variant="body" style={styles.menuText}>
-                  Edit post
+                  {t('post.menuEdit')}
                 </Text>
               </TouchableOpacity>
               <View style={styles.menuDivider} />
@@ -215,7 +215,7 @@ export function PostHeader({
                   <Trash2 size={24} color="#EF4444" strokeWidth={2.25} />
                 </View>
                 <Text variant="body" style={styles.menuTextDanger}>
-                  Delete post
+                  {t('post.menuDelete')}
                 </Text>
               </TouchableOpacity>
             </>

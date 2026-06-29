@@ -48,25 +48,59 @@ const PLANS: {
   },
 ];
 
-const AVATAR_ANGLES = [
-  'Front — look straight at the camera',
-  'Left 45° — turn head slightly left',
-  'Right 45° — turn head slightly right',
-  'Full left profile',
-  'Full right profile',
-  'Slight down angle',
-  'Slight up angle',
+// Angle translation keys (shared between the card list and the PDF export).
+const AVATAR_ANGLE_KEYS = [
+  'subscription.avatar.angles.front',
+  'subscription.avatar.angles.left45',
+  'subscription.avatar.angles.right45',
+  'subscription.avatar.angles.fullLeft',
+  'subscription.avatar.angles.fullRight',
+  'subscription.avatar.angles.slightDown',
+  'subscription.avatar.angles.slightUp',
+] as const;
+
+// Pricing data for the value packs. `count === 1` renders the "Single" label,
+// otherwise the pluralised "{{count}} messages" label.
+const AVATAR_PACK_PRICES = [
+  { count: 1, price: '$5', perClip: '$5/clip' },
+  { count: 5, price: '$20', perClip: '$4/clip' },
+  { count: 10, price: '$35', perClip: '$3.50/clip' },
+  { count: 15, price: '$48', perClip: '$3.20/clip' },
+  { count: 20, price: '$60', perClip: '$3/clip' },
 ];
 
-const AVATAR_PACKS = [
-  { label: 'Single', price: '$5', perClip: '$5/clip' },
-  { label: '5 messages', price: '$20', perClip: '$4/clip' },
-  { label: '10 messages', price: '$35', perClip: '$3.50/clip' },
-  { label: '15 messages', price: '$48', perClip: '$3.20/clip' },
-  { label: '20 messages', price: '$60', perClip: '$3/clip' },
-];
+// ─── Avatar Card ──────────────────────────────────────────────────────────────
 
-const AVATAR_INSTRUCTIONS_HTML = `<!DOCTYPE html>
+function AvatarCard() {
+  const { t } = useTranslation(['registration', 'common']);
+  const [expanded, setExpanded] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const avatarAngles = AVATAR_ANGLE_KEYS.map((key) => t(key));
+  const avatarPacks = AVATAR_PACK_PRICES.map((pack) => ({
+    label:
+      pack.count === 1
+        ? t('subscription.avatar.packs.single')
+        : t('subscription.avatar.packs.messages', { count: pack.count }),
+    price: pack.price,
+    perClip: pack.perClip,
+  }));
+
+  const toggle = () => {
+    // LayoutAnimation removed — crashes on RN 0.81.5 New Architecture
+    setExpanded((v) => !v);
+  };
+
+  const buildInstructionsHtml = () => {
+    const anglesHtml = avatarAngles.map((angle) => `    <li>${angle}</li>`).join('\n');
+    const packsHtml = avatarPacks
+      .map(
+        (pack) =>
+          `    <tr><td>${pack.label}</td><td>${pack.price}</td><td>${pack.perClip}</td></tr>`
+      )
+      .join('\n');
+
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -86,56 +120,35 @@ const AVATAR_INSTRUCTIONS_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>ATTO Avatar Creation Instructions</h1>
-  <p class="subtitle">Create your own AI Avatar to post 10-second messages on ATTO's platform.</p>
-  <h2>Step 1 — Take 6–7 Photos of Your Face</h2>
-  <p><strong>Rules for all photos:</strong></p>
+  <h1>${t('subscription.avatar.pdf.title')}</h1>
+  <p class="subtitle">${t('subscription.avatar.pdf.subtitle')}</p>
+  <h2>${t('subscription.avatar.pdf.step1Heading')}</h2>
+  <p><strong>${t('subscription.avatar.pdf.rulesLabel')}</strong></p>
   <ul>
-    <li>Face fully visible — no hats or sunglasses</li>
-    <li>Neutral expression, mouth closed</li>
-    <li>Look straight at the camera unless noted</li>
-    <li>Only head and shoulders should appear</li>
-    <li>Plain background (walls are fine)</li>
+    <li>${t('subscription.avatar.pdf.rule1')}</li>
+    <li>${t('subscription.avatar.pdf.rule2')}</li>
+    <li>${t('subscription.avatar.pdf.rule3')}</li>
+    <li>${t('subscription.avatar.pdf.rule4')}</li>
+    <li>${t('subscription.avatar.pdf.rule5')}</li>
   </ul>
-  <p><strong>Required angles:</strong></p>
+  <p><strong>${t('subscription.avatar.pdf.requiredAngles')}</strong></p>
   <ul>
-    <li>Front — look straight at the camera</li>
-    <li>Left 45° — turn head slightly left</li>
-    <li>Right 45° — turn head slightly right</li>
-    <li>Full left profile</li>
-    <li>Full right profile</li>
-    <li>Slight down angle</li>
-    <li>Slight up angle</li>
+${anglesHtml}
   </ul>
-  <h2>Step 2 — Mail Photos to ATTO</h2>
+  <h2>${t('subscription.avatar.pdf.step2Heading')}</h2>
   <div class="address">ATTO<br/>1245 Farmington Ave., PMB 1368<br/>West Hartford, Connecticut 06107</div>
-  <p>Do not send photos via email or other platforms. Our team will upload them and create your avatar — usually in 1–3 days.</p>
-  <h2>Step 3 — Your Family Posts Messages</h2>
-  <p>Once your avatar is ready, family or friends log into their ATTO account, choose "Post Avatar Message," type what you want to say, and your avatar delivers it as a 10-second video — visible to everyone on ATTO and shareable privately.</p>
-  <h2>Value Packs</h2>
+  <p>${t('subscription.avatar.pdf.step2Body')}</p>
+  <h2>${t('subscription.avatar.pdf.step3Heading')}</h2>
+  <p>${t('subscription.avatar.pdf.step3Body')}</p>
+  <h2>${t('subscription.avatar.valuePacks')}</h2>
   <table>
     <tr><th>Pack</th><th>Price</th><th>Per clip</th></tr>
-    <tr><td>Single</td><td>$5</td><td>$5/clip</td></tr>
-    <tr><td>5 messages</td><td>$20</td><td>$4/clip</td></tr>
-    <tr><td>10 messages</td><td>$35</td><td>$3.50/clip</td></tr>
-    <tr><td>15 messages</td><td>$48</td><td>$3.20/clip</td></tr>
-    <tr><td>20 messages</td><td>$60</td><td>$3/clip</td></tr>
+${packsHtml}
   </table>
-  <p class="tip">Tip: The more angles you submit over time, the more lifelike your avatar becomes.</p>
+  <p class="tip">${t('subscription.avatar.tip')}</p>
   <div class="footer">ATTO Sound · attosound.com</div>
 </body>
 </html>`;
-
-// ─── Avatar Card ──────────────────────────────────────────────────────────────
-
-function AvatarCard() {
-  const { t } = useTranslation('registration');
-  const [expanded, setExpanded] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-
-  const toggle = () => {
-    // LayoutAnimation removed — crashes on RN 0.81.5 New Architecture
-    setExpanded((v) => !v);
   };
 
   const handleSharePDF = async () => {
@@ -143,20 +156,23 @@ function AvatarCard() {
     try {
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Not supported', 'Sharing is not available on this device.');
+        Alert.alert(
+          t('subscription.avatar.shareNotSupportedTitle'),
+          t('subscription.avatar.shareNotSupportedMessage')
+        );
         return;
       }
       const { uri } = await Print.printToFileAsync({
-        html: AVATAR_INSTRUCTIONS_HTML,
+        html: buildInstructionsHtml(),
         base64: false,
       });
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'ATTO Avatar Instructions',
+        dialogTitle: t('subscription.avatar.shareDialogTitle'),
         UTI: 'com.adobe.pdf',
       });
     } catch (err) {
-      Alert.alert('Error', 'Could not generate the PDF. Please try again.');
+      Alert.alert(t('common:errors.title'), t('subscription.avatar.pdfError'));
       console.error('[SharePDF]', err);
     } finally {
       setIsSharing(false);
@@ -167,7 +183,7 @@ function AvatarCard() {
     <View style={avatarStyles.card}>
       {/* Floating badge */}
       <View style={avatarStyles.floatingBadge}>
-        <Text style={avatarStyles.floatingBadgeText}>NEW</Text>
+        <Text style={avatarStyles.floatingBadgeText}>{t('subscription.avatar.badgeNew')}</Text>
       </View>
 
       {/* Header row */}
@@ -180,7 +196,9 @@ function AvatarCard() {
       {/* Expandable instructions */}
       <TouchableOpacity onPress={toggle} activeOpacity={0.7} style={avatarStyles.toggle}>
         <Text style={avatarStyles.toggleText}>
-          {expanded ? 'Hide instructions' : 'How it works'}
+          {expanded
+            ? t('subscription.avatar.hideInstructions')
+            : t('subscription.avatar.howItWorks')}
         </Text>
         {expanded ? (
           <ChevronUp size={14} color="#666" strokeWidth={2.25} />
@@ -197,13 +215,12 @@ function AvatarCard() {
               <Text style={avatarStyles.stepNumText}>1</Text>
             </View>
             <View style={{ flex: 1, gap: 6 }}>
-              <Text style={avatarStyles.stepTitle}>Take 6–7 photos of your face</Text>
+              <Text style={avatarStyles.stepTitle}>{t('subscription.avatar.step1Title')}</Text>
               <Text style={avatarStyles.stepNote}>
-                Face fully visible · Neutral expression · Plain background · Head and
-                shoulders only
+                {t('subscription.avatar.step1Note')}
               </Text>
               <View style={avatarStyles.angleList}>
-                {AVATAR_ANGLES.map((angle) => (
+                {avatarAngles.map((angle) => (
                   <View key={angle} style={avatarStyles.angleRow}>
                     <View style={avatarStyles.dot} />
                     <Text style={avatarStyles.angleText}>{angle}</Text>
@@ -221,14 +238,14 @@ function AvatarCard() {
               <Text style={avatarStyles.stepNumText}>2</Text>
             </View>
             <View style={{ flex: 1, gap: 4 }}>
-              <Text style={avatarStyles.stepTitle}>Mail photos to ATTO</Text>
+              <Text style={avatarStyles.stepTitle}>{t('subscription.avatar.step2Title')}</Text>
               <Text style={avatarStyles.address}>
                 ATTO{'\n'}
                 1245 Farmington Ave., PMB 1368{'\n'}
                 West Hartford, CT 06107
               </Text>
               <Text style={avatarStyles.stepNote}>
-                Our team uploads them and creates your avatar in 1–3 days.
+                {t('subscription.avatar.step2Note')}
               </Text>
             </View>
           </View>
@@ -241,11 +258,9 @@ function AvatarCard() {
               <Text style={avatarStyles.stepNumText}>3</Text>
             </View>
             <View style={{ flex: 1, gap: 4 }}>
-              <Text style={avatarStyles.stepTitle}>Your family posts messages</Text>
+              <Text style={avatarStyles.stepTitle}>{t('subscription.avatar.step3Title')}</Text>
               <Text style={avatarStyles.stepNote}>
-                They log in, choose "Post Avatar Message," type what you want to say, and
-                your avatar delivers it as a 10-second video — visible to everyone on ATTO
-                and shareable privately.
+                {t('subscription.avatar.step3Note')}
               </Text>
             </View>
           </View>
@@ -253,8 +268,8 @@ function AvatarCard() {
           <View style={avatarStyles.divider} />
 
           {/* Packs */}
-          <Text style={avatarStyles.packsTitle}>Value Packs</Text>
-          {AVATAR_PACKS.map((pack) => (
+          <Text style={avatarStyles.packsTitle}>{t('subscription.avatar.valuePacks')}</Text>
+          {avatarPacks.map((pack) => (
             <View key={pack.label} style={avatarStyles.packRow}>
               <Text style={avatarStyles.packLabel}>{pack.label}</Text>
               <View style={avatarStyles.packRight}>
@@ -264,10 +279,7 @@ function AvatarCard() {
             </View>
           ))}
 
-          <Text style={avatarStyles.tip}>
-            Tip: The more angles you submit over time, the more lifelike your avatar
-            becomes.
-          </Text>
+          <Text style={avatarStyles.tip}>{t('subscription.avatar.tip')}</Text>
 
           <TouchableOpacity
             onPress={handleSharePDF}

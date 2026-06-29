@@ -161,7 +161,7 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
         <View style={styles.contextBar}>
           <Pencil size={14} color="#3B82F6" strokeWidth={2.25} />
           <Text variant="caption" style={styles.editingText}>
-            Editing comment
+            {t('comments.editingLabel')}
           </Text>
           <TouchableOpacity onPress={cancelEditing} hitSlop={8} style={styles.cancelBtn}>
             <X size={16} color="#999" strokeWidth={2.25} />
@@ -174,7 +174,9 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder={editing ? 'Edit your comment...' : t('post.addCommentPlaceholder')}
+          placeholder={
+            editing ? t('comments.editPlaceholder') : t('post.addCommentPlaceholder')
+          }
           placeholderTextColor="#555"
           value={text}
           onChangeText={setText}

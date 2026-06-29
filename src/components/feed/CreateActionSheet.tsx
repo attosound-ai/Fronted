@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { PenLine, Music, Mic } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
@@ -11,6 +12,7 @@ interface CreateActionSheetProps {
 }
 
 export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: CreateActionSheetProps) {
+  const { t } = useTranslation('feed');
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.options}>
@@ -24,8 +26,10 @@ export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: C
         >
           <PenLine size={22} color="#FFFFFF" strokeWidth={2.25} />
           <View style={styles.optionText}>
-            <Text style={styles.optionTitle}>New Post</Text>
-            <Text style={styles.optionSubtitle}>Share with your audience</Text>
+            <Text style={styles.optionTitle}>{t('createActions.newPostTitle')}</Text>
+            <Text style={styles.optionSubtitle}>
+              {t('header.createOptionUploadSubtitle')}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -40,8 +44,12 @@ export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: C
           >
             <Music size={22} color="#FFFFFF" strokeWidth={2.25} />
             <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>Projects</Text>
-              <Text style={styles.optionSubtitle}>Record and produce music</Text>
+              <Text style={styles.optionTitle}>
+                {t('header.createOptionProjectsTitle')}
+              </Text>
+              <Text style={styles.optionSubtitle}>
+                {t('createActions.projectsSubtitle')}
+              </Text>
             </View>
           </TouchableOpacity>
         ) : (
@@ -55,8 +63,10 @@ export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: C
           >
             <Mic size={22} color="#FFFFFF" strokeWidth={2.25} />
             <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>Record</Text>
-              <Text style={styles.optionSubtitle}>Record and publish audio</Text>
+              <Text style={styles.optionTitle}>{t('createActions.recordTitle')}</Text>
+              <Text style={styles.optionSubtitle}>
+                {t('createActions.recordSubtitle')}
+              </Text>
             </View>
           </TouchableOpacity>
         )}

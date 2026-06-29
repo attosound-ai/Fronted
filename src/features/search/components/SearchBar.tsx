@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Search, XCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 interface SearchBarProps {
   value: string;
@@ -11,9 +12,11 @@ interface SearchBarProps {
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = 'Search...',
+  placeholder,
 }: SearchBarProps) {
+  const { t } = useTranslation('feed');
   const inputRef = useRef<TextInput>(null);
+  const resolvedPlaceholder = placeholder ?? t('search.placeholder');
 
   return (
     <View style={styles.container}>
@@ -23,7 +26,7 @@ export function SearchBar({
         style={styles.input}
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         placeholderTextColor="#666"
         returnKeyType="search"
         autoCorrect={false}

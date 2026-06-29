@@ -127,7 +127,9 @@ export function LaneEditSheet({
                     { backgroundColor: swatch },
                     isSelected && styles.swatchSelected,
                   ]}
-                  accessibilityLabel={`Color ${swatch}`}
+                  accessibilityLabel={t('timeline.laneColorSwatchAccessibility', {
+                    color: swatch,
+                  })}
                   accessibilityState={{ selected: isSelected }}
                 >
                   {isSelected && (

@@ -30,7 +30,7 @@ export function VerificationBanner() {
     return null;
   }
 
-  const creatorName = user.creatorName || 'Unknown Creator';
+  const creatorName = user.creatorName || t('verification.unknownCreator');
   const creatorEmail = user.creatorEmail || user.email;
 
   const handleEdit = () => {
@@ -52,8 +52,7 @@ export function VerificationBanner() {
           <ActivityIndicator color="#666" size="small" />
         ) : !hasBridgePhone ? (
           <Text variant="caption" style={styles.noBridgeText}>
-            Bridge number not set up. Please complete your subscription or contact
-            support.
+            {t('verification.bridgeNotSetUp')}
           </Text>
         ) : (
           <>

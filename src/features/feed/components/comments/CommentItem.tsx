@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ellipsis } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { LinkedText } from '../LinkedText';
 import { Avatar } from '@/components/ui/Avatar';
@@ -31,8 +32,13 @@ export function CommentItem({
   canModify,
   isReply,
 }: CommentItemProps) {
+  const { t } = useTranslation(['feed', 'common']);
   const showActions = () => {
-    const options = ['Edit', 'Delete', 'Cancel'];
+    const options = [
+      t('comments.edit'),
+      t('common:buttons.delete'),
+      t('common:buttons.cancel'),
+    ];
     const destructiveIndex = 1;
     const cancelIndex = 2;
 
@@ -49,10 +55,14 @@ export function CommentItem({
         }
       );
     } else {
-      Alert.alert('Comment', '', [
-        { text: 'Edit', onPress: () => onEdit?.(comment.id, comment.comment) },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(comment.id) },
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('comments.menuTitle'), '', [
+        { text: t('comments.edit'), onPress: () => onEdit?.(comment.id, comment.comment) },
+        {
+          text: t('common:buttons.delete'),
+          style: 'destructive',
+          onPress: () => onDelete?.(comment.id),
+        },
+        { text: t('common:buttons.cancel'), style: 'cancel' },
       ]);
     }
   };
@@ -68,7 +78,7 @@ export function CommentItem({
       <View style={styles.content}>
         <View style={styles.usernameRow}>
           <Text variant="body" style={styles.username}>
-            {comment.author?.username ?? 'unknown'}
+            {comment.author?.username ?? t('comments.unknownUser')}
           </Text>
           {comment.author?.role === 'creator' && <CreatorBadge size="sm" />}
         </View>
@@ -81,7 +91,7 @@ export function CommentItem({
           </Text>
           {comment.isEdited && (
             <Text variant="caption" style={styles.editedBadge}>
-              (edited)
+              {t('comments.editedBadge')}
             </Text>
           )}
           {!isReply && (
@@ -90,7 +100,7 @@ export function CommentItem({
               hitSlop={8}
             >
               <Text variant="caption" style={styles.replyBtn}>
-                Reply
+                {t('comments.reply')}
               </Text>
             </TouchableOpacity>
           )}

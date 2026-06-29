@@ -157,7 +157,7 @@ export function VideoOverlayHeader({
                 <Trash2 size={24} color="#EF4444" strokeWidth={2.25} />
               </View>
               <Text style={styles.menuTextDanger} maxFontSizeMultiplier={1.2}>
-                Delete post
+                {t('post.menuDelete')}
               </Text>
             </TouchableOpacity>
           </>

@@ -15,7 +15,8 @@
     "upgrade": "Upgrade",
     "subscribe": "Subscribe",
     "copy": "Copy",
-    "share": "Share"
+    "share": "Share",
+    "apply": "Apply"
   },
   "toasts": {
     "copiedToClipboard": "Copied to clipboard",
@@ -31,7 +32,15 @@
     "importFailed": "Import failed: {{message}}",
     "failedToUpdate": "Failed to update",
     "failedToUploadAvatar": "Failed to upload avatar",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "permissionDenied": "Permission required",
+    "micPermission": "Microphone permission is required to record audio.",
+    "recordingFailed": "Recording failed",
+    "noActiveCall": "No active call to record from.",
+    "couldNotLink": "Could not link recording: {{message}}",
+    "couldNotLoadRecording": "Could not load recording: {{message}}",
+    "recordingNotFound": "Recording not found",
+    "recordingNotFoundMessage": "The recording is taking longer than expected to process. Try again in a few seconds."
   },
   "time": {
     "now": "now",
@@ -82,7 +91,9 @@
     "avatarUploadSkipped": "Photo upload failed. You can add it later from your profile.",
     "paymentFailed": "Payment failed. Please try again.",
     "upgradeFailed": "Failed to process upgrade. Please try again.",
-    "cancelFailed": "Failed to cancel. Please try again."
+    "cancelFailed": "Failed to cancel. Please try again.",
+    "title": "Error",
+    "usernameTaken": "Username already taken"
   },
   "phoneInput": {
     "placeholder": "Phone number",
@@ -113,5 +124,20 @@
     "code": "404",
     "message": "This page doesn't exist",
     "goHome": "Go back home"
+  },
+  "datePicker": {
+    "selectDate": "Select date"
+  },
+  "imageCrop": {
+    "title": "Position Photo",
+    "hint": "Drag and pinch to position your photo"
+  },
+  "select": {
+    "placeholder": "Select an option"
+  },
+  "updateRequired": {
+    "title": "Update ATTO SOUND",
+    "body": "This version of the app is no longer supported. Update from the store to keep using ATTO SOUND.",
+    "cta": "Open the store"
   }
 }

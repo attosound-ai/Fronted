@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
 import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { useQuery } from '@tanstack/react-query';
@@ -28,6 +29,7 @@ interface FollowingUser {
 }
 
 export default function FollowingScreen() {
+  const { t } = useTranslation('profile');
   const { userId, mode } = useLocalSearchParams<{
     userId?: string;
     mode?: 'followers' | 'following';
@@ -35,7 +37,10 @@ export default function FollowingScreen() {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const targetId = userId ? Number(userId) : Number(currentUserId);
   const activeMode = mode ?? 'following';
-  const title = activeMode === 'followers' ? 'Followers' : 'Following';
+  const title =
+    activeMode === 'followers'
+      ? t('followList.titleFollowers')
+      : t('followList.titleFollowing');
 
   const header = useCollapsibleHeader();
 
@@ -86,15 +91,15 @@ export default function FollowingScreen() {
         <UserListSkeleton />
       ) : isError ? (
         <View style={styles.center}>
-          <Text style={styles.emptyText}>Could not load following list</Text>
+          <Text style={styles.emptyText}>{t('followList.errorLoad')}</Text>
         </View>
       ) : users.length === 0 ? (
         <View style={styles.center}>
           <Users size={48} color="#333" strokeWidth={2.25} />
           <Text style={styles.emptyText}>
             {activeMode === 'followers'
-              ? 'No followers yet'
-              : "You're not following anyone yet"}
+              ? t('followList.emptyFollowers')
+              : t('followList.emptyFollowing')}
           </Text>
         </View>
       ) : (

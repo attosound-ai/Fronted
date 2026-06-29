@@ -26,6 +26,13 @@ export function markAppBackgrounded(): void {
   lastBackgroundAt = Date.now();
 }
 
+/** Elapsed ms since the app last left 'active' (null if it never backgrounded).
+ *  Used to gate the deep-resume remount: only a long suspension purges GPU
+ *  content, so we only pay the remount cost when it's actually warranted. */
+export function msSinceBackground(): number | null {
+  return lastBackgroundAt != null ? Date.now() - lastBackgroundAt : null;
+}
+
 /**
  * Schedule a one-shot resume probe and emit `eventName` ~300ms after resume with
  * the compositor-liveness signal merged into `props`.

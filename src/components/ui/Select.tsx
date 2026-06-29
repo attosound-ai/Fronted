@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
 
 import { Text } from './Text';
@@ -22,16 +23,18 @@ interface SelectProps {
 
 export function Select({
   label,
-  placeholder = 'Select an option',
+  placeholder,
   options,
   value,
   onChange,
   error,
   footer,
 }: SelectProps) {
+  const { t } = useTranslation('common');
   const [isOpen, setIsOpen] = useState(false);
 
   const selectedOption = options.find((o) => o.value === value);
+  const resolvedPlaceholder = placeholder ?? t('select.placeholder');
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
@@ -61,7 +64,7 @@ export function Select({
           numberOfLines={1}
           maxFontSizeMultiplier={1.1}
         >
-          {selectedOption?.label ?? placeholder}
+          {selectedOption?.label ?? resolvedPlaceholder}
         </Text>
         {isOpen ? (
           <ChevronUp size={18} color="#666666" strokeWidth={2.25} />

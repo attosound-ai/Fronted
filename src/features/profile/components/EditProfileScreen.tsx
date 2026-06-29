@@ -163,7 +163,7 @@ export function EditProfileScreen() {
               numberOfLines={1}
               maxFontSizeMultiplier={1.1}
             >
-              Social Links
+              {t('edit.socialLinksTitle')}
             </Text>
             <Input
               label="Instagram"
@@ -197,7 +197,7 @@ export function EditProfileScreen() {
               label="Spotify"
               value={form.socialSpotify}
               onChangeText={(text) => updateField('socialSpotify', text)}
-              placeholder="Artist name or URI"
+              placeholder={t('edit.spotifyPlaceholder')}
               autoCapitalize="none"
             />
             <Input
@@ -208,7 +208,7 @@ export function EditProfileScreen() {
               autoCapitalize="none"
             />
             <Input
-              label="Website"
+              label={t('edit.websiteLabel')}
               value={form.website}
               onChangeText={(text) => updateField('website', text)}
               placeholder="https://..."
@@ -221,22 +221,22 @@ export function EditProfileScreen() {
               numberOfLines={1}
               maxFontSizeMultiplier={1.1}
             >
-              Extended Info
+              {t('edit.extendedInfoTitle')}
             </Text>
             <Input
-              label="Location"
+              label={t('edit.locationLabel')}
               value={form.location}
               onChangeText={(text) => updateField('location', text)}
-              placeholder="City, State"
+              placeholder={t('edit.locationPlaceholder')}
             />
             <Input
-              label="Record Label"
+              label={t('edit.recordLabelLabel')}
               value={form.recordLabel}
               onChangeText={(text) => updateField('recordLabel', text)}
-              placeholder="Independent"
+              placeholder={t('edit.recordLabelPlaceholder')}
             />
             <Input
-              label="Booking Email"
+              label={t('edit.bookingEmailLabel')}
               value={form.bookingEmail}
               onChangeText={(text) => updateField('bookingEmail', text)}
               placeholder="booking@example.com"

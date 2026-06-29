@@ -425,7 +425,7 @@ function ReelItem({
               style={styles.followButton}
             >
               <Text style={styles.followText} maxFontSizeMultiplier={1.0}>
-                + Follow
+                {t('reels.followButton')}
               </Text>
             </TouchableOpacity>
           )}
@@ -463,6 +463,7 @@ interface AdReelItemProps {
  * Same layout as ReelItem but without social actions or author row.
  */
 function AdReelItem({ post, isActive }: AdReelItemProps) {
+  const { t } = useTranslation('feed');
   // Global mute shared across every video (Instagram-style).
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
@@ -528,7 +529,7 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
       <View style={styles.adSponsoredBadge}>
         <Megaphone size={12} color="#CCC" strokeWidth={2.25} />
         <Text style={styles.adSponsoredText} maxFontSizeMultiplier={1.0}>
-          Sponsored
+          {t('reels.sponsored')}
         </Text>
       </View>
 
@@ -571,6 +572,7 @@ export function ReelsFeed({
   onEndReached: onSeededEndReached,
   isFetchingMore: seededFetchingMore,
 }: ReelsFeedProps = {}) {
+  const { t } = useTranslation('feed');
   const seeded = seedPosts !== undefined;
   const insets = useSafeAreaInsets();
   // The reels FYP query is disabled in seeded mode (we already have the list).
@@ -733,10 +735,10 @@ export function ReelsFeed({
       >
         <Film size={56} color="#555" strokeWidth={2.25} />
         <Text style={styles.emptyText} maxFontSizeMultiplier={1.2}>
-          No reels yet
+          {t('reels.emptyTitle')}
         </Text>
         <Text style={styles.emptySubtext} maxFontSizeMultiplier={1.2}>
-          Pull down to refresh
+          {t('reels.emptySubtitle')}
         </Text>
       </ScrollView>
     );

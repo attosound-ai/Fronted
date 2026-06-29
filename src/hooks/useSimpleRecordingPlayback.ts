@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioSampleListener,
+  setAudioModeAsync,
+} from 'expo-audio';
 import { useCallStore } from '@/stores/callStore';
 import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
 import type { AudioSegment } from '@/types/call';
@@ -9,7 +14,7 @@ import type { AudioSegment } from '@/types/call';
  * Plays segments one after another without timeline seeking.
  */
 export function useSimpleRecordingPlayback(
-  segments: (AudioSegment & { downloadUrl?: string })[],
+  segments: (AudioSegment & { downloadUrl?: string })[]
 ) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -27,10 +32,50 @@ export function useSimpleRecordingPlayback(
   });
   const status = useAudioPlayerStatus(player);
 
-  const totalDuration = segments.reduce(
-    (sum, s) => sum + (s.durationMs ?? 0),
-    0,
-  );
+  // Real-time playback amplitude (B2): tap the decoded PCM and expose its RMS so
+  // the visualizer follows the ACTUAL recording instead of a generic animation.
+  // The sample callback fires per audio buffer (fast), so we stash RMS in a ref
+  // and sample it into state on a 60ms interval — decoupling render rate from
+  // the buffer rate keeps it cheap.
+  const playbackAmpRef = useRef(0);
+  const [amplitude, setAmplitude] = useState(0);
+
+  useEffect(() => {
+    try {
+      player.setAudioSamplingEnabled(true);
+    } catch {
+      // sampling unsupported here — the wave just falls back to generic motion
+    }
+  }, [player]);
+
+  useAudioSampleListener(player, (sample) => {
+    const frames = sample.channels?.[0]?.frames;
+    if (!frames || frames.length === 0) return;
+    // Subsample (≤256 points) so RMS stays O(1)-ish regardless of buffer size.
+    const step = Math.max(1, Math.floor(frames.length / 256));
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < frames.length; i += step) {
+      const f = frames[i];
+      sum += f * f;
+      n++;
+    }
+    const rms = Math.sqrt(sum / Math.max(1, n));
+    // perceptual curve + gain so quiet speech still reads on the wave
+    playbackAmpRef.current = Math.max(0, Math.min(1, Math.sqrt(rms) * 1.5));
+  });
+
+  useEffect(() => {
+    if (!isPlaying) {
+      playbackAmpRef.current = 0;
+      setAmplitude(0);
+      return;
+    }
+    const id = setInterval(() => setAmplitude(playbackAmpRef.current), 60);
+    return () => clearInterval(id);
+  }, [isPlaying]);
+
+  const totalDuration = segments.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
 
   // When a segment finishes, advance to the next or stop.
   // Use a ref guard because status.didJustFinish can stay true across renders.
@@ -114,6 +159,7 @@ export function useSimpleRecordingPlayback(
 
   return {
     isPlaying,
+    amplitude,
     currentTime: status.currentTime ?? 0,
     totalDuration,
     toggle,

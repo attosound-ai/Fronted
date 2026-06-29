@@ -13,6 +13,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 // neutralize in testing. Until we find a Twilio-safe alternative, all
 // timeline playback uses `expo-audio` (no audible pan, but Twilio-safe).
 import { useMountEffect } from '@/hooks';
+import { useTranslation } from 'react-i18next';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
@@ -43,18 +44,24 @@ import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
-import { probeResume, markAppBackgrounded } from '@/lib/telemetry/resumeProbe';
+import {
+  probeResume,
+  markAppBackgrounded,
+  msSinceBackground,
+} from '@/lib/telemetry/resumeProbe';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  // The native SDK is started earlier, in ios/ATTO/AppDelegate.swift, so crashes
-  // in the pre-JS launch window (watchdog / first-launch-after-update) are caught
-  // — that window was our blind spot. Do NOT let JS re-initialize native here;
-  // reuse the already-running native client (environment/release/dist + mobile
-  // replay are configured natively). This JS init only wires the JS layer.
+  // The native SDK is armed at process-start on BOTH platforms by the
+  // withSentryNativeInit config plugin (ios/ATTO/AppDelegate.swift +
+  // android/.../MainApplication.kt), so crashes/ANRs in the pre-JS launch window
+  // (watchdog / first-launch-after-update) are captured — that window was our
+  // blind spot. So JS does NOT re-initialize native; it reuses the already-running
+  // native client (environment + masked mobile replay are configured natively).
+  // This JS init only wires the JS layer.
   autoInitializeNativeSdk: false,
   tracesSampleRate: 0,
   replaysSessionSampleRate: 1.0,
@@ -171,6 +178,7 @@ function ErrorFallback() {
 }
 
 function RootLayout() {
+  const { t } = useTranslation('messages');
   const initialize = useAuthStore((s) => s.initialize);
   useTwilioVoice();
   useMicrophonePermission();
@@ -210,6 +218,16 @@ function RootLayout() {
   //       and re-acquire a drawable.
   const prevAppStateRef = useRef(AppState.currentState);
   const [resumeNudge, setResumeNudge] = useState(false);
+  // Bumped on a DEEP resume to force a full remount of the content subtree. A
+  // sub-pixel transform (resumeNudge) only re-commits layout — it does NOT
+  // re-paint layers whose GPU backing store iOS purged during a long
+  // suspension, which is why the phone-off black screen survived build 58. A
+  // key change unmounts + remounts the views, so they re-acquire fresh
+  // drawables. Gated to deep suspensions only (≥2min) so normal multitasking
+  // is never remounted; providers/call store/Twilio call live above it and are
+  // untouched.
+  const [deepResumeKey, setDeepResumeKey] = useState(0);
+  const DEEP_RESUME_MS = 120_000;
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       const prev = prevAppStateRef.current;
@@ -220,12 +238,17 @@ function RootLayout() {
       }
       SplashScreen.hideAsync().catch(() => {});
       if (prev !== 'active') {
+        const deep = (msSinceBackground() ?? 0) >= DEEP_RESUME_MS;
         probeResume('app_resume_probe', {
           in_call: useCallStore.getState().activeCall != null,
           prev_state: prev,
+          deep_resume: deep,
+          remounted: deep,
         });
         setResumeNudge(true);
         requestAnimationFrame(() => requestAnimationFrame(() => setResumeNudge(false)));
+        // Deep suspension → remount to recover from a purged drawable (black screen).
+        if (deep) setDeepResumeKey((k) => k + 1);
       }
     });
     return () => sub.remove();
@@ -294,7 +317,7 @@ function RootLayout() {
                 <SafeAreaProvider>
                   <StatusBar style="light" />
                   {!fontsLoaded ? null : (
-                    <UpdateRequiredGate>
+                    <UpdateRequiredGate key={deepResumeKey}>
                       <InCallTopBar />
                       <DtmfKeypadHost />
                       <Stack
@@ -378,7 +401,7 @@ function RootLayout() {
                         <Stack.Screen
                           name="new-message"
                           options={{
-                            title: 'New Message',
+                            title: t('newMessage.headerTitle'),
                             presentation: 'modal',
                             animation: 'slide_from_bottom',
                           }}

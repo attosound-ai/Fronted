@@ -23,7 +23,7 @@ const MAX_CHARS = 2200;
 
 export default function EditPostScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
-  const { t } = useTranslation('feed');
+  const { t } = useTranslation(['feed', 'common']);
   const user = useAuthStore((s) => s.user);
   const { editPost, isEditing } = useEditPost();
 
@@ -42,7 +42,7 @@ export default function EditPostScreen() {
         setOriginalText(text);
       })
       .catch(() => {
-        Alert.alert('Error', 'Could not load post');
+        Alert.alert(t('common:errors.title'), t('edit.loadFailed'));
         router.back();
       })
       .finally(() => setIsLoading(false));
@@ -74,7 +74,7 @@ export default function EditPostScreen() {
           <X size={24} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <Text variant="h3" style={styles.headerTitle}>
-          Edit Post
+          {t('edit.headerTitle')}
         </Text>
         <TouchableOpacity
           style={[styles.saveButton, !hasChanges && styles.saveButtonDisabled]}

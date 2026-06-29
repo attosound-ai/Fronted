@@ -31,7 +31,17 @@
     "comments": "Comentários",
     "noCommentsYet": "Ainda não há comentários. Seja o primeiro!",
     "replyingTo": "Respondendo a {{username}}",
-    "addCommentPlaceholder": "Adicione um comentário..."
+    "addCommentPlaceholder": "Adicione um comentário...",
+    "deleteAlertTitle": "Excluir publicação",
+    "deleteAlertMessage": "Tem certeza de que deseja excluir esta publicação?",
+    "deleteFailed": "Não foi possível excluir a publicação. Tente novamente.",
+    "loadError": "Não foi possível carregar esta publicação.",
+    "detailTitle": "Publicação",
+    "editedSuffix": "· editado",
+    "menuEdit": "Editar publicação",
+    "menuDelete": "Excluir publicação",
+    "following": "Seguindo",
+    "suggestedForYou": "Sugerido para você"
   },
   "create": {
     "placeholder": "O que você está pensando?",
@@ -47,7 +57,11 @@
     "fromGallery": "Galeria",
     "fromFiles": "Arquivos",
     "fromProject": "Abrir projeto",
-    "addMore": "Adicionar mais"
+    "addMore": "Adicionar mais",
+    "replaceAttachment": "Substituir o anexo atual?",
+    "replaceButton": "Substituir",
+    "takePhoto": "Câmera",
+    "recordVideo": "Gravar"
   },
   "verification": {
     "bannerTitle": "Autorização pendente",
@@ -66,7 +80,9 @@
     "placeholderCreatorEmail": "Digite o e-mail do criador (opcional)",
     "labelCreatorPhone": "Número de contato do criador",
     "warningReauthorize": "Alterar as informações de contato do criador cancelará sua autorização atual e exigirá uma nova verificação.",
-    "saveButton": "Salvar e reautorizar"
+    "saveButton": "Salvar e reautorizar",
+    "unknownCreator": "Criador desconhecido",
+    "bridgeNotSetUp": "O número de ponte não está configurado. Conclua sua assinatura ou entre em contato com o suporte."
   },
   "list": {
     "errorLoadTitle": "Erro ao carregar",
@@ -74,7 +90,11 @@
   },
   "search": {
     "title": "Explorar",
-    "subtitle": "Descubra novos conteúdos"
+    "subtitle": "Descubra novos conteúdos",
+    "placeholder": "Buscar...",
+    "tabPeople": "Pessoas",
+    "tabContent": "Conteúdo",
+    "noResults": "Nenhum resultado para \"{{query}}\""
   },
   "listen": {
     "title": "Projetos"
@@ -99,5 +119,57 @@
     "reposts": "Republicações",
     "shares": "Compartilhamentos",
     "noResults": "Ninguém ainda"
+  },
+  "bookmarks": {
+    "deleteTitle": "Excluir publicação",
+    "deleteConfirm": "Tem certeza?",
+    "deleteFailed": "Não foi possível excluir a publicação.",
+    "emptyTitle": "Nenhuma publicação salva ainda",
+    "emptySubtitle": "Toque no ícone de marcador em qualquer publicação para salvá-la aqui.",
+    "headerTitle": "Salvos"
+  },
+  "edit": {
+    "headerTitle": "Editar publicação",
+    "loadFailed": "Não foi possível carregar a publicação"
+  },
+  "createActions": {
+    "newPostTitle": "Nova publicação",
+    "projectsSubtitle": "Grave e produza música",
+    "recordTitle": "Gravar",
+    "recordSubtitle": "Grave e publique áudio"
+  },
+  "fullscreenViewer": {
+    "artBy": "Arte de ",
+    "swipeToClose": "Deslize para baixo para fechar"
+  },
+  "voters": {
+    "title": "{{emoji}} Avaliou {{rating}}",
+    "empty": "Ninguém ainda"
+  },
+  "ad": {
+    "sponsored": "Patrocinado"
+  },
+  "reels": {
+    "followButton": "+ Seguir",
+    "sponsored": "Patrocinado",
+    "emptyTitle": "Ainda não há reels",
+    "emptySubtitle": "Puxe para baixo para atualizar"
+  },
+  "comments": {
+    "edit": "Editar",
+    "menuTitle": "Comentário",
+    "unknownUser": "desconhecido",
+    "editedBadge": "(editado)",
+    "reply": "Responder",
+    "editingLabel": "Editando comentário",
+    "editPlaceholder": "Edite seu comentário..."
+  },
+  "poem": {
+    "showMore": "Ver mais",
+    "showLess": "Ver menos"
+  },
+  "comingSoon": {
+    "title": "Em Breve",
+    "showSupport": "Mostre seu apoio aos criadores enviando doações diretamente. Esse recurso estará disponível em breve!"
   }
 }

@@ -769,7 +769,7 @@ export function ChatScreen({
             <View style={styles.replyPreviewBar} />
             <View style={styles.replyPreviewContent}>
               <Text style={styles.replyPreviewName}>
-                {replyMessage.user.name || 'You'}
+                {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
               </Text>
               <Text style={styles.replyPreviewText} numberOfLines={1}>
                 {replyMessage.text}

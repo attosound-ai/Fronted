@@ -15,7 +15,8 @@
     "upgrade": "Fazer Upgrade",
     "subscribe": "Assinar",
     "copy": "Copiar",
-    "share": "Compartilhar"
+    "share": "Compartilhar",
+    "apply": "Aplicar"
   },
   "toasts": {
     "copiedToClipboard": "Copiado para a área de transferência",
@@ -31,7 +32,15 @@
     "importFailed": "Falha na importação: {{message}}",
     "failedToUpdate": "Falha ao atualizar",
     "failedToUploadAvatar": "Falha ao enviar o avatar",
-    "invalidCredentials": "Credenciais inválidas"
+    "invalidCredentials": "Credenciais inválidas",
+    "permissionDenied": "Permissão necessária",
+    "micPermission": "É necessária permissão do microfone para gravar áudio.",
+    "recordingFailed": "Falha na gravação",
+    "noActiveCall": "Nenhuma chamada ativa para gravar.",
+    "couldNotLink": "Não foi possível vincular a gravação: {{message}}",
+    "couldNotLoadRecording": "Não foi possível carregar a gravação: {{message}}",
+    "recordingNotFound": "Gravação não encontrada",
+    "recordingNotFoundMessage": "A gravação está demorando mais do que o esperado para processar. Tente novamente em alguns segundos."
   },
   "time": {
     "now": "agora",
@@ -82,7 +91,9 @@
     "avatarUploadSkipped": "Não foi possível enviar a foto. Você pode adicioná-la depois no seu perfil.",
     "paymentFailed": "Falha no pagamento. Tente novamente.",
     "upgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
-    "cancelFailed": "Falha ao cancelar. Tente novamente."
+    "cancelFailed": "Falha ao cancelar. Tente novamente.",
+    "title": "Erro",
+    "usernameTaken": "Este nome de usuário já está em uso"
   },
   "phoneInput": {
     "placeholder": "Número de telefone",
@@ -113,5 +124,20 @@
     "code": "404",
     "message": "Esta página não existe",
     "goHome": "Voltar ao início"
+  },
+  "datePicker": {
+    "selectDate": "Selecionar data"
+  },
+  "imageCrop": {
+    "title": "Posicionar foto",
+    "hint": "Arraste e pince para posicionar sua foto"
+  },
+  "select": {
+    "placeholder": "Selecione uma opção"
+  },
+  "updateRequired": {
+    "title": "Atualizar o ATTO SOUND",
+    "body": "Esta versão do app não é mais compatível. Atualize na loja para continuar usando o ATTO SOUND.",
+    "cta": "Abrir a loja"
   }
 }

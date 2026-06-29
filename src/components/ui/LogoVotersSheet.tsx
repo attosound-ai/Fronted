@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Avatar } from '@/components/ui/Avatar';
@@ -35,11 +36,12 @@ export function LogoVotersSheet({
   ratingFilter,
   onClose,
 }: LogoVotersSheetProps) {
+  const { t } = useTranslation('feed');
   const [users, setUsers] = useState<Voter[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const emoji = RATING_EMOJIS[ratingFilter - 1] ?? '';
-  const title = `${emoji} Rated ${ratingFilter}`;
+  const title = t('voters.title', { emoji, rating: ratingFilter });
 
   useEffect(() => {
     if (!visible || !logoId) return;
@@ -61,7 +63,7 @@ export function LogoVotersSheet({
       {isLoading ? (
         <ActivityIndicator color="#FFF" style={styles.loader} />
       ) : users.length === 0 ? (
-        <Text style={styles.empty}>No one yet</Text>
+        <Text style={styles.empty}>{t('voters.empty')}</Text>
       ) : (
         <FlatList
           data={users}

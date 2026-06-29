@@ -2,6 +2,7 @@ import React, { memo, useCallback, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Pencil } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import type { LaneMeta } from '../types';
@@ -49,8 +50,9 @@ export const LanePanel = memo(function LanePanel({
   onGainChange,
   onPanChange,
 }: LanePanelProps) {
+  const { t } = useTranslation('projects');
   const color = meta?.color ?? '#555';
-  const name = meta?.name || `Track ${laneIndex + 1}`;
+  const name = meta?.name || t('timeline.laneDefaultName', { index: laneIndex + 1 });
   const muted = meta?.muted ?? false;
   const solo = meta?.solo ?? false;
   const gainDb = meta?.gainDb ?? 0;
@@ -139,7 +141,7 @@ export const LanePanel = memo(function LanePanel({
             style={styles.editButton}
             activeOpacity={0.6}
             accessibilityRole="button"
-            accessibilityLabel="Edit track"
+            accessibilityLabel={t('timeline.laneEditTrackAccessibility')}
           >
             <Pencil size={12} color="#888" strokeWidth={2.25} />
           </TouchableOpacity>
@@ -148,7 +150,7 @@ export const LanePanel = memo(function LanePanel({
         {/* Gain group */}
         <View style={styles.sliderGroup}>
           <View style={styles.labelRow}>
-            <Text style={styles.metricLabel}>Gain</Text>
+            <Text style={styles.metricLabel}>{t('timeline.laneGainLabel')}</Text>
             <TouchableOpacity onPress={handleResetGain} hitSlop={6}>
               <Text style={styles.metricValue}>{formatDb(gainDb)}</Text>
             </TouchableOpacity>
@@ -172,7 +174,7 @@ export const LanePanel = memo(function LanePanel({
         {/* Pan group */}
         <View style={styles.sliderGroup}>
           <View style={styles.labelRow}>
-            <Text style={styles.metricLabel}>Pan</Text>
+            <Text style={styles.metricLabel}>{t('timeline.lanePanLabel')}</Text>
             <TouchableOpacity onPress={handleResetPan} hitSlop={6}>
               <Text style={styles.metricValue}>{formatPan(pan)}</Text>
             </TouchableOpacity>
@@ -197,7 +199,7 @@ export const LanePanel = memo(function LanePanel({
           style={[styles.pillButton, muted && styles.pillButtonMuteActive]}
           activeOpacity={0.7}
         >
-          <Text style={[styles.pillText, muted && styles.pillTextActive]}>Mute</Text>
+          <Text style={[styles.pillText, muted && styles.pillTextActive]}>{t('timeline.laneMute')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onToggleSolo}
@@ -205,7 +207,7 @@ export const LanePanel = memo(function LanePanel({
           style={[styles.pillButton, solo && styles.pillButtonSoloActive]}
           activeOpacity={0.7}
         >
-          <Text style={[styles.pillText, solo && styles.pillTextActive]}>Solo</Text>
+          <Text style={[styles.pillText, solo && styles.pillTextActive]}>{t('timeline.laneSolo')}</Text>
         </TouchableOpacity>
       </View>
     </View>

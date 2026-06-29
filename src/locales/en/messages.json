@@ -9,7 +9,8 @@
     "subtitle": "Start a conversation"
   },
   "error": {
-    "loadingMessages": "Error loading messages"
+    "loadingMessages": "Error loading messages",
+    "retry": "Retry"
   },
   "conversation": {
     "fallbackUserName": "User",
@@ -24,7 +25,11 @@
     "errorFailedToSend": "Failed to send message",
     "startingConversation": "Starting conversation...",
     "errorFailedToStart": "Couldn't open this conversation",
-    "retry": "Try again"
+    "retry": "Try again",
+    "messageDeleted": "Message deleted",
+    "you": "You",
+    "edited": "edited",
+    "editPlaceholder": "Edit message..."
   },
   "chatHeader": {
     "backAccessibilityLabel": "Go back",
@@ -53,5 +58,22 @@
     "noneLabel": "None",
     "loading": "Loading wallpapers...",
     "error": "Could not load wallpapers. Please try again later."
+  },
+  "splitView": {
+    "emptyTitle": "Your Messages",
+    "emptySubtitle": "Select a conversation to start chatting"
+  },
+  "actions": {
+    "copied": "Copied",
+    "deleteConfirmTitle": "Delete Message",
+    "deleteConfirmBody": "This cannot be undone.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "react": "React",
+    "reply": "Reply",
+    "copy": "Copy",
+    "edit": "Edit",
+    "editing": "Editing",
+    "title": "Message"
   }
 }

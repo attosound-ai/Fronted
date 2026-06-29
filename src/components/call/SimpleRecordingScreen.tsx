@@ -45,7 +45,12 @@ import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics
 import { useCallStore } from '@/stores/callStore';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { useSimpleRecordingPlayback } from '@/hooks/useSimpleRecordingPlayback';
-import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import {
+  hangUpCall,
+  toggleMuteCall,
+  toggleSpeaker,
+  getActiveCallAudioLevels,
+} from '@/hooks/useTwilioVoice';
 import { openKeypad } from './DtmfKeypadHost';
 import { telephonyService } from '@/lib/api/telephonyService';
 import { projectService } from '@/lib/api/projectService';
@@ -100,6 +105,9 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
+  // Remote party's live audio level (0..1) while recording during a call, polled
+  // from Twilio getStats — lets the waveform react to THEM talking too (B1).
+  const [remoteLevel, setRemoteLevel] = useState(0);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadSheetVisible, setUploadSheetVisible] = useState(false);
@@ -143,6 +151,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
   // Playback
   const {
     isPlaying,
+    amplitude: playbackAmplitude,
     toggle: togglePlayback,
     stop: stopPlayback,
   } = useSimpleRecordingPlayback(localSegments);
@@ -155,6 +164,28 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     }, 1000);
     return () => clearInterval(id);
   }, [isRecording]);
+
+  // Poll the remote party's audio level while recording during a call so the
+  // waveform reacts to THEM talking too (B1). The local mic stays on the fast
+  // 60ms metering recorder for our own voice; getStats (~160ms, coarser) only
+  // folds in the remote level.
+  useEffect(() => {
+    if (!isRecording || !activeCall) {
+      setRemoteLevel(0);
+      return;
+    }
+    let cancelled = false;
+    const id = setInterval(() => {
+      void getActiveCallAudioLevels().then(({ remote }) => {
+        if (!cancelled) setRemoteLevel(remote);
+      });
+    }, 160);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      setRemoteLevel(0);
+    };
+  }, [isRecording, activeCall]);
 
   // ── Start recording ──
   const handleRecord = useCallback(async () => {
@@ -194,10 +225,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          t('active.recordingFailed'),
-          'Microphone permission is required to record.'
-        );
+        Alert.alert(t('active.recordingFailed'), t('active.micPermissionRequired'));
         return;
       }
       await setAudioModeAsync({
@@ -394,7 +422,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     async (sourceUri: string, extension: string) => {
       const baseDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
       if (!baseDir) {
-        throw new Error('No writable directory available');
+        throw new Error(t('simple.noWritableDirectory'));
       }
       const targetUri = `${baseDir}atto-export-${Date.now()}.${extension}`;
 
@@ -407,7 +435,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
       await FileSystem.downloadAsync(sourceUri, targetUri);
       return targetUri;
     },
-    []
+    [t]
   );
 
   const handleExportToFiles = useCallback(async () => {
@@ -554,7 +582,13 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
           isActive={isRecording || isPlaying}
           width={visualizerWidth}
           height={200}
-          liveAmplitude={isRecording ? currentAmplitude : undefined}
+          liveAmplitude={
+            isRecording
+              ? Math.max(currentAmplitude, remoteLevel) // both sides (B1)
+              : isPlaying
+                ? playbackAmplitude // real playback RMS (B2)
+                : undefined
+          }
         />
       </View>
 
@@ -720,11 +754,20 @@ const styles = StyleSheet.create({
     height: 28,
   },
   attoSubtext: {
+    // Match the home-feed header's "SOUND" exactly (FeedHeader.logoSubtext): a
+    // 5-letter word spread to span the 100px wordmark width above it. Bumping
+    // font size alone would be too tall — letterSpacing does the spanning.
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
-    fontSize: 7,
-    letterSpacing: 2.5,
+    fontSize: 12,
+    lineHeight: 14,
+    letterSpacing: 11,
     textTransform: 'uppercase',
+    textAlign: 'center',
+    width: 100,
+    // letterSpacing leaves a trailing gap after the last letter; nudge right so
+    // the caps sit optically centred under the wordmark (render-only).
+    transform: [{ translateX: 5 }],
   },
   callBarControls: {
     flexDirection: 'row',

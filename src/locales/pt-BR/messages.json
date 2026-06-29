@@ -1,14 +1,16 @@
 {
   "header": {
     "title": "Mensagens",
-    "newMessageAccessibility": "Nova mensagem"
+    "newMessageAccessibility": "Nova mensagem",
+    "settingsAccessibility": "Configurações de mensagens"
   },
   "empty": {
     "title": "Nenhuma mensagem ainda",
     "subtitle": "Inicie uma conversa"
   },
   "error": {
-    "loadingMessages": "Erro ao carregar mensagens"
+    "loadingMessages": "Erro ao carregar mensagens",
+    "retry": "Tentar novamente"
   },
   "conversation": {
     "fallbackUserName": "Usuário",
@@ -23,7 +25,11 @@
     "errorFailedToSend": "Falha ao enviar a mensagem",
     "startingConversation": "Iniciando conversa...",
     "errorFailedToStart": "Não foi possível abrir esta conversa",
-    "retry": "Tentar novamente"
+    "retry": "Tentar novamente",
+    "messageDeleted": "Mensagem excluída",
+    "you": "Você",
+    "edited": "editado",
+    "editPlaceholder": "Editar mensagem..."
   },
   "newMessage": {
     "headerTitle": "Nova Mensagem",
@@ -33,5 +39,41 @@
     "creatingConversation": "Criando conversa...",
     "errorFailedToStart": "Falha ao iniciar a conversa",
     "messageUserAccessibility": "Mensagem para {{name}}"
+  },
+  "splitView": {
+    "emptyTitle": "Suas mensagens",
+    "emptySubtitle": "Selecione uma conversa para começar a conversar"
+  },
+  "actions": {
+    "copied": "Copiado",
+    "deleteConfirmTitle": "Excluir mensagem",
+    "deleteConfirmBody": "Esta ação não pode ser desfeita.",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "react": "Reagir",
+    "reply": "Responder",
+    "copy": "Copiar",
+    "edit": "Editar",
+    "editing": "Editando",
+    "title": "Mensagem"
+  },
+  "chatHeader": {
+    "backAccessibilityLabel": "Voltar",
+    "voiceCallAccessibilityLabel": "Chamada de voz"
+  },
+  "typing": {
+    "suffix": " está digitando",
+    "full": "{{name}} está digitando..."
+  },
+  "media": {
+    "audioUnavailable": "Áudio indisponível",
+    "videoUnavailable": "Vídeo indisponível"
+  },
+  "wallpaperPicker": {
+    "title": "Plano de fundo do chat",
+    "subtitle": "Escolha um plano de fundo. A alteração se aplica a todos os seus chats.",
+    "noneLabel": "Nenhum",
+    "loading": "Carregando planos de fundo...",
+    "error": "Não foi possível carregar os planos de fundo. Tente novamente mais tarde."
   }
 }

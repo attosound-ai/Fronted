@@ -6,7 +6,8 @@
   },
   "outgoing": {
     "label": "Llamando...",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "unknownRecipient": "Desconocido"
   },
   "active": {
     "loading": "Cargando proyecto…",
@@ -35,11 +36,14 @@
     "clipVolume": "Volumen del clip",
     "capturingAudio": "Capturando audio",
     "laneName": "Nombre de la pista",
-    "laneNamePrompt": "Ingrese un nombre para la pista {{number}}"
+    "laneNamePrompt": "Ingrese un nombre para la pista {{number}}",
+    "recBadge": "REC",
+    "micPermissionRequired": "Se requiere permiso del micrófono para grabar."
   },
   "banner": {
     "tapToRecord": "Toque para grabar",
-    "callInProgress": "Llamada en curso"
+    "callInProgress": "Llamada en curso",
+    "openRecordScreen": "Abrir grabación"
   },
   "simple": {
     "delete": "Eliminar",
@@ -56,7 +60,8 @@
     "exportNotAvailableMessage": "La exportación de archivos no está disponible en este dispositivo.",
     "exportFailed": "No se pudo exportar el audio: {{message}}",
     "deleteConfirm": "¿Eliminar grabación?",
-    "deleteConfirmMessage": "Esto eliminará permanentemente el audio grabado."
+    "deleteConfirmMessage": "Esto eliminará permanentemente el audio grabado.",
+    "noWritableDirectory": "No hay un directorio disponible para escribir"
   },
   "projectPicker": {
     "selectProject": "Seleccionar proyecto",

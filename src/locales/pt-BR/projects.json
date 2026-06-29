@@ -94,6 +94,21 @@
     "errorRemoveClipsFirst": "Remova os clipes desta faixa primeiro",
     "volumeModalTitle": "Volume do Clipe",
     "volumeDoneButton": "Concluir",
-    "loadingTitle": "Otimizando sua experiência..."
+    "loadingTitle": "Otimizando sua experiência...",
+    "laneColorSwatchAccessibility": "Cor {{color}}",
+    "laneGainLabel": "Ganho",
+    "lanePanLabel": "Pan",
+    "laneMute": "Mudo",
+    "laneSolo": "Solo",
+    "laneEditTrackAccessibility": "Editar faixa"
+  },
+  "picker": {
+    "title": "Meus projetos",
+    "namePlaceholder": "Nome do projeto",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "newProject": "Novo projeto",
+    "empty": "Você ainda não tem projetos",
+    "segments": "gravações"
   }
 }

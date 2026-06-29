@@ -38,6 +38,8 @@ interface MixerStoreState {
   isMixRecording: boolean;
   /** Mixer sheet visibility — store-level so a single global host renders it. */
   mixerVisible: boolean;
+  /** Local file path of the most recent finished multitrack mix (for playback/publish). */
+  lastMixPath: string | null;
 }
 
 interface MixerStoreActions {
@@ -46,6 +48,7 @@ interface MixerStoreActions {
   setMetronomeEnabled: (on: boolean) => void;
   setBpm: (bpm: number) => void;
   setMixRecording: (on: boolean) => void;
+  setLastMixPath: (path: string | null) => void;
   showMixer: () => void;
   hideMixer: () => void;
   resetMixer: () => void;
@@ -67,6 +70,7 @@ const DEFAULTS = {
   bpm: 90,
   isMixRecording: false,
   mixerVisible: false,
+  lastMixPath: null as string | null,
 };
 
 export const useMixerStore = create<MixerStoreState & MixerStoreActions>((set) => ({
@@ -90,6 +94,8 @@ export const useMixerStore = create<MixerStoreState & MixerStoreActions>((set) =
   setBpm: (bpm) => set({ bpm: Math.max(40, Math.min(240, Math.round(bpm))) }),
 
   setMixRecording: (on) => set({ isMixRecording: on }),
+
+  setLastMixPath: (path) => set({ lastMixPath: path }),
 
   showMixer: () => set({ mixerVisible: true }),
   hideMixer: () => set({ mixerVisible: false }),

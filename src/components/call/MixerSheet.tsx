@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { View, Switch, TouchableOpacity, StyleSheet } from 'react-native';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import {
   Mic,
   Phone,
@@ -9,6 +10,7 @@ import {
   Plus,
   Circle,
   Square,
+  Play,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Slider } from '@/components/ui/Slider';
@@ -47,6 +49,9 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
   const setMetronomeEnabled = useMixerStore((s) => s.setMetronomeEnabled);
   const setBpm = useMixerStore((s) => s.setBpm);
   const setMixRecording = useMixerStore((s) => s.setMixRecording);
+  const lastMixPath = useMixerStore((s) => s.lastMixPath);
+  const setLastMixPath = useMixerStore((s) => s.setLastMixPath);
+  const mixPlayerRef = useRef<AudioPlayer | null>(null);
 
   // Mirror a channel change to BOTH the store and the native bus.
   const onGain = useCallback(
@@ -88,12 +93,29 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
     void haptic('medium');
     if (isMixRecording) {
       setMixRecording(false);
-      await mixerService.stopMixRecording();
+      const path = await mixerService.stopMixRecording();
+      if (path) setLastMixPath(path);
     } else {
+      setLastMixPath(null);
       setMixRecording(true);
       await mixerService.startMixRecording();
     }
-  }, [isMixRecording, setMixRecording]);
+  }, [isMixRecording, setMixRecording, setLastMixPath]);
+
+  // Play the finished mix locally so the rep can review the multitrack. Uses
+  // keepAudioSessionActive so reviewing during a live call doesn't drop it.
+  const playLastMix = useCallback(() => {
+    if (!lastMixPath) return;
+    void haptic('selection');
+    try {
+      mixPlayerRef.current?.remove();
+      const player = createAudioPlayer(lastMixPath, { keepAudioSessionActive: true });
+      mixPlayerRef.current = player;
+      player.play();
+    } catch {
+      // best-effort
+    }
+  }, [lastMixPath]);
 
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Mezclador">
@@ -195,6 +217,17 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
             {isMixRecording ? 'Detener mezcla' : 'Grabar mezcla'}
           </Text>
         </TouchableOpacity>
+
+        {lastMixPath && !isMixRecording ? (
+          <TouchableOpacity
+            style={styles.playMixBtn}
+            onPress={playLastMix}
+            activeOpacity={0.85}
+          >
+            <Play size={16} color="#FFF" fill="#FFF" strokeWidth={2.25} />
+            <Text style={styles.playMixText}>Escuchar mezcla</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </BottomSheet>
   );
@@ -293,5 +326,18 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 16,
+  },
+  playMixBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  playMixText: {
+    color: '#FFF',
+    fontFamily: 'Archivo_500Medium',
+    fontSize: 15,
   },
 });

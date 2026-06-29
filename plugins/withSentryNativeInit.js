@@ -44,6 +44,10 @@ const IOS_BLOCK = `    // SENTRY_NATIVE_INIT (withSentryNativeInit plugin) — a
       options.sessionReplay.onErrorSampleRate = 1.0
       options.sessionReplay.maskAllText = true
       options.sessionReplay.maskAllImages = true
+      // Parity with the old JS maskAllVectors:true — mask react-native-svg too.
+      if let svg = NSClassFromString("RNSVGSvgView") {
+        options.sessionReplay.maskedViewClasses = [svg]
+      }
     }
 `;
 
@@ -90,6 +94,8 @@ const ANDROID_BLOCK = `    // SENTRY_NATIVE_INIT (withSentryNativeInit plugin) �
       replay.setSessionSampleRate(1.0)
       replay.setMaskAllText(true)
       replay.setMaskAllImages(true)
+      // Parity with the old JS maskAllVectors:true — mask react-native-svg too.
+      replay.addMaskViewClass("com.horcrux.svg.SvgView")
     }
 `;
 

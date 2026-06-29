@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..15ae2c98e65edae48dc1be63e3de40838387220a
+index 0000000000000000000000000000000000000000..fd5981b829d897f5ac18f8d2aa7711cd53b9dafd
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,112 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -68,13 +68,60 @@ index 0000000000000000000000000000000000000000..15ae2c98e65edae48dc1be63e3de4083
 +/* Live local-monitor (playout) toggle. */
 +- (void)setMonitor:(BOOL)on;
 +
++#pragma mark - ATTO 4-channel record MIXER (additive; never alters the live call)
++
++/*
++ * Client-side multitrack recording mixer. This is an ADDITIVE tap/record graph
++ * layered on top of the existing engine: the live-call capture/render paths are
++ * untouched (byte-identical whether the mixer is on or off). Four channels are
++ * summed (each with independent gain + record-enable) into ONE local file:
++ *
++ *   index 0  "mic"        — this device's microphone (the PCM sent to Twilio)
++ *   index 1  "remote"     — the other party (the PCM received from Twilio)
++ *   index 2  "app"        — the injected track (the existing file-injection audio)
++ *   index 3  "metronome"  — a synthesized click at the given BPM
++ *
++ * Mic + remote are tapped from the real-time C callbacks via lock-free ring
++ * buffers (memcpy only — no malloc/lock/ObjC-messaging on the audio thread). A
++ * separate serial consumer drains the rings, applies gain + record-enable, sums
++ * with clipping protection, and writes an AVAudioFile.
++ */
++
++/*
++ * Set a channel's gain (0..1) and whether it is summed into the recorded file.
++ * `channel` is one of @"mic" / @"remote" / @"app" / @"metronome" (unknown values
++ * are ignored). Thread-safe; may be called from any thread at any time.
++ */
++- (void)setMixerChannel:(NSString *)channel gain:(float)gain record:(BOOL)record;
++
++/*
++ * Enable/disable the metronome click and set its tempo (BPM is clamped to
++ * 40..240). When enabled the click is audible in the LOCAL monitor (so the rep
++ * can keep time) and, if its channel is record-enabled, baked into the mix.
++ * Thread-safe.
++ */
++- (void)setMetronome:(BOOL)enabled bpm:(NSInteger)bpm;
++
++/*
++ * Begin the multitrack record. Creates a .caf file in NSTemporaryDirectory at
++ * the engine's mono/float processing format and starts the consumer. Returns the
++ * absolute file path, or nil on failure (already recording / file open error).
++ */
++- (nullable NSString *)startMixRecording;
++
++/*
++ * Stop the multitrack record, finalize + close the file, and return the absolute
++ * path of the finished recording (nil if not recording / on error).
++ */
++- (nullable NSString *)stopMixRecording;
++
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15859e98b5
+index 0000000000000000000000000000000000000000..105d51dfa0112d310c41ea72d7577bdef5070b36
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,1427 @@
+@@ -0,0 +1,2296 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -90,8 +137,138 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +
 +#import "AttoAudioEngineDevice.h"
 +
++#import <stdatomic.h>
++
 +// We want to get as close to 10 msec buffers as possible because this is what the media engine prefers.
 +static double const kPreferredIOBufferDuration = 0.01;
++
++#pragma mark - ATTO mixer ring buffer (lock-free SPSC, float32)
++
++/*
++ * Lock-free single-producer / single-consumer ring buffer of float32 mono
++ * samples. One writer (the real-time audio callback / tap) and one reader (the
++ * recording consumer). Only memcpy + atomic index loads/stores happen on the
++ * producer side, so it is safe to write from a Core Audio render thread.
++ *
++ * Capacity is a power-of-two number of FLOAT samples so we can mask instead of
++ * modulo. Sized generously (~1s at 48kHz) to absorb consumer scheduling jitter.
++ * On overrun (consumer fell behind) the oldest data is dropped by advancing the
++ * read index; on underrun the consumer simply gets zeros for the missing frames.
++ * Both are graceful — they degrade the RECORDING only, never the live call.
++ */
++typedef struct AttoRingBuffer {
++    float *data;                 // capacity floats, preallocated
++    size_t capacity;             // power of two
++    size_t mask;                 // capacity - 1
++    _Atomic(size_t) writeIndex;  // monotonically increasing, masked on access
++    _Atomic(size_t) readIndex;   // monotonically increasing, masked on access
++} AttoRingBuffer;
++
++// ~1 second of mono float32 at 48kHz, rounded up to a power of two.
++static const size_t kAttoRingCapacityFrames = 65536; // 2^16
++
++static void AttoRingInit(AttoRingBuffer *rb) {
++    rb->capacity = kAttoRingCapacityFrames;
++    rb->mask = kAttoRingCapacityFrames - 1;
++    rb->data = (float *)calloc(kAttoRingCapacityFrames, sizeof(float));
++    atomic_store_explicit(&rb->writeIndex, 0, memory_order_relaxed);
++    atomic_store_explicit(&rb->readIndex, 0, memory_order_relaxed);
++}
++
++static void AttoRingFree(AttoRingBuffer *rb) {
++    if (rb->data) {
++        free(rb->data);
++        rb->data = NULL;
++    }
++}
++
++static void AttoRingReset(AttoRingBuffer *rb) {
++    // Consumer-side only (called when not recording / between sessions).
++    atomic_store_explicit(&rb->writeIndex, 0, memory_order_relaxed);
++    atomic_store_explicit(&rb->readIndex, 0, memory_order_relaxed);
++}
++
++/*
++ * Producer: write `count` float samples. Real-time safe (no malloc/lock/ObjC).
++ * If the buffer would overflow we drop this write entirely (cheap + bounded)
++ * rather than partially writing — keeping channel frame alignment intact.
++ */
++static inline void AttoRingWrite(AttoRingBuffer *rb, const float *src, size_t count) {
++    if (rb->data == NULL || count == 0) return;
++    size_t w = atomic_load_explicit(&rb->writeIndex, memory_order_relaxed);
++    size_t r = atomic_load_explicit(&rb->readIndex, memory_order_acquire);
++    size_t used = w - r;
++    if (used + count > rb->capacity) {
++        // Overrun: consumer is behind. Drop this chunk; don't corrupt alignment.
++        return;
++    }
++    size_t start = w & rb->mask;
++    size_t firstChunk = rb->capacity - start;
++    if (firstChunk >= count) {
++        memcpy(&rb->data[start], src, count * sizeof(float));
++    } else {
++        memcpy(&rb->data[start], src, firstChunk * sizeof(float));
++        memcpy(&rb->data[0], src + firstChunk, (count - firstChunk) * sizeof(float));
++    }
++    atomic_store_explicit(&rb->writeIndex, w + count, memory_order_release);
++}
++
++/*
++ * Consumer: read up to `count` float samples into `dst`. Returns the number of
++ * samples actually available (the rest of `dst`, if any, is zero-filled by the
++ * caller). Only called from the single consumer queue.
++ */
++static inline size_t AttoRingRead(AttoRingBuffer *rb, float *dst, size_t count) {
++    if (rb->data == NULL || count == 0) return 0;
++    size_t r = atomic_load_explicit(&rb->readIndex, memory_order_relaxed);
++    size_t w = atomic_load_explicit(&rb->writeIndex, memory_order_acquire);
++    size_t available = w - r;
++    size_t toRead = (available < count) ? available : count;
++    if (toRead == 0) return 0;
++    size_t start = r & rb->mask;
++    size_t firstChunk = rb->capacity - start;
++    if (firstChunk >= toRead) {
++        memcpy(dst, &rb->data[start], toRead * sizeof(float));
++    } else {
++        memcpy(dst, &rb->data[start], firstChunk * sizeof(float));
++        memcpy(dst + firstChunk, &rb->data[0], (toRead - firstChunk) * sizeof(float));
++    }
++    atomic_store_explicit(&rb->readIndex, r + toRead, memory_order_release);
++    return toRead;
++}
++
++/*
++ * Real-time-safe helper: convert a block of mono int16 PCM to float [-1,1] and
++ * push it into a ring buffer, in fixed-size chunks so the stack frame is small
++ * and bounded (no malloc). Safe to call from a Core Audio render thread.
++ * `byteSize` is the int16 buffer's size in BYTES; frames = byteSize / 2.
++ */
++static inline void AttoPushInt16AsFloat(AttoRingBuffer *rb, const int16_t *src, UInt32 byteSize) {
++    if (rb == NULL || rb->data == NULL || src == NULL || byteSize < 2) return;
++    size_t frames = byteSize / sizeof(int16_t);
++    const float scale = 1.0f / 32768.0f;
++    float tmp[512];
++    size_t done = 0;
++    while (done < frames) {
++        size_t chunk = frames - done;
++        if (chunk > 512) chunk = 512;
++        for (size_t i = 0; i < chunk; i++) {
++            tmp[i] = (float)src[done + i] * scale;
++        }
++        AttoRingWrite(rb, tmp, chunk);
++        done += chunk;
++    }
++}
++
++#pragma mark - ATTO mixer channel indices
++
++typedef NS_ENUM(NSInteger, AttoMixChannel) {
++    AttoMixChannelMic = 0,
++    AttoMixChannelRemote = 1,
++    AttoMixChannelApp = 2,
++    AttoMixChannelMetronome = 3,
++    AttoMixChannelCount = 4,
++};
 +
 +// We will use mono playback and recording where available.
 +static size_t const kPreferredNumberOfChannels = 1;
@@ -123,6 +300,15 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +     * callback in order to receive mixed audio data from AVAudioEngine in real time.
 +     */
 +    void *renderBlock;
++
++    /*
++     * ATTO mixer (additive): pointer to the REMOTE channel ring buffer. Filled from
++     * the playout engine's manual-rendering inputBlock with the pure remote PCM
++     * (post TVOAudioDeviceReadRenderData, pre local-monitor mix). NULL when not
++     * recording, so the live render path is byte-identical when the mixer is off.
++     * The int16 PCM is converted to float and pushed via AttoRingWrite (memcpy).
++     */
++    AttoRingBuffer *remoteRing;
 +} AudioRendererContext;
 +
 +// Audio renderer contexts used in core audio's record callback to retrieve the sdk's audio device context.
@@ -144,6 +330,15 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +     * callback in order to receive mixed audio data from AVAudioEngine in real time.
 +     */
 +    void *renderBlock;
++
++    /*
++     * ATTO mixer (additive): pointer to the MIC channel ring buffer. Filled from
++     * the record callback with EXACTLY the PCM that is handed to Twilio via
++     * TVOAudioDeviceWriteCaptureData (i.e. the same mic-bearing buffer). NULL when
++     * not recording, so the live capture path is byte-identical when the mixer is
++     * off. The int16 PCM is converted to float and pushed via AttoRingWrite.
++     */
++    AttoRingBuffer *micRing;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -180,9 +375,52 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +@property (nonatomic, strong, nullable) NSTimer *statusTimer;
 +@property (nonatomic, assign) double currentDurationMs;
 +
++// ATTO 4-channel record mixer state.
++// `mixLock` guards the gain/record param arrays + the recording bookkeeping
++// (file handle, isRecording, consumer source). The real-time callbacks NEVER take
++// this lock; they only memcpy into the ring buffers (whose pointers in the C
++// contexts are published/retracted under @synchronized around start/stop).
++@property (nonatomic, strong) NSLock *mixLock;
++@property (nonatomic, assign) BOOL mixRecording;
++@property (nonatomic, strong, nullable) AVAudioFile *mixFile;
++@property (nonatomic, copy, nullable) NSString *mixFilePath;
++@property (nonatomic, strong, nullable) dispatch_queue_t mixConsumerQueue;
++@property (nonatomic, strong, nullable) dispatch_source_t mixConsumerTimer;
++@property (nonatomic, strong, nullable) AVAudioFormat *mixFileFormat;
++
++// Metronome generation state.
++@property (nonatomic, assign) BOOL metronomeOn;
++@property (nonatomic, assign) NSInteger metronomeBpm;
++@property (nonatomic, strong, nullable) AVAudioPlayerNode *metronomePlayoutPlayer; // local monitor (rep hears it)
++@property (nonatomic, strong, nullable) AVAudioPCMBuffer *metronomeClickBuffer;    // synthesized click (playout format)
++@property (nonatomic, strong, nullable) NSTimer *metronomeTimer;                   // schedules monitor clicks
++
 +@end
 +
-+@implementation AttoAudioEngineDevice
++@implementation AttoAudioEngineDevice {
++    /*
++     * ATTO mixer C-level state. Ring buffers for the four channels (mic + remote
++     * are written from the real-time C callbacks; app from an AVAudioEngine tap;
++     * metronome is synthesized in the consumer). The gain/record arrays are
++     * plain scalars read by the consumer; writes are serialized by `mixLock` and
++     * are word-sized so a torn read is impossible — the consumer just samples the
++     * latest value each pull (no glitch beyond one buffer).
++     */
++    AttoRingBuffer _micRing;
++    AttoRingBuffer _remoteRing;
++    AttoRingBuffer _appRing;
++    float _channelGain[AttoMixChannelCount];     // 0..1
++    BOOL  _channelRecord[AttoMixChannelCount];    // include in mix
++    BOOL  _ringsAllocated;
++
++    // Metronome phase, advanced by the consumer in file-sample units.
++    double _metronomeSampleRate;     // file sample rate (consumer format)
++    uint64_t _metronomeSamplesPerBeat;
++    uint64_t _metronomeSampleCounter; // counts up; emits a click each period
++    float *_metronomeClickSamples;    // synthesized mono click (consumer format)
++    size_t _metronomeClickLength;     // frames in the click
++    size_t _metronomeClickPos;        // current playhead within an active click (== length when idle)
++}
 +
 +#pragma mark - Init & Dealloc
 +
@@ -206,6 +444,21 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +        _fileGain = 1.0f;
 +        _monitorEnabled = YES;
 +        _currentDurationMs = 0.0;
++
++        // ATTO mixer defaults (mirrors mixerStore DEFAULT_CHANNELS).
++        _mixLock = [[NSLock alloc] init];
++        _mixRecording = NO;
++        _channelGain[AttoMixChannelMic]       = 0.9f;
++        _channelGain[AttoMixChannelRemote]    = 0.9f;
++        _channelGain[AttoMixChannelApp]       = 0.8f;
++        _channelGain[AttoMixChannelMetronome] = 0.6f;
++        _channelRecord[AttoMixChannelMic]       = YES;
++        _channelRecord[AttoMixChannelRemote]    = YES;
++        _channelRecord[AttoMixChannelApp]       = YES;
++        _channelRecord[AttoMixChannelMetronome] = NO;
++        _metronomeOn = NO;
++        _metronomeBpm = 90;
++        _ringsAllocated = NO;
 +
 +        /*
 +         * Initialize rendering and capturing context. The deviceContext will be be filled in when startRendering or
@@ -239,6 +492,19 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +
 +- (void)dealloc {
 +    [self unregisterAVAudioSessionObservers];
++
++    // ATTO mixer: stop any consumer + free ring buffers / synthesized click.
++    [self teardownMixConsumer];
++    if (_ringsAllocated) {
++        AttoRingFree(&_micRing);
++        AttoRingFree(&_remoteRing);
++        AttoRingFree(&_appRing);
++        _ringsAllocated = NO;
++    }
++    if (_metronomeClickSamples) {
++        free(_metronomeClickSamples);
++        _metronomeClickSamples = NULL;
++    }
 +
 +    [self teardownAudioEngine];
 +
@@ -293,7 +559,27 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +#pragma mark - Private (AVAudioEngine)
 +
 +- (BOOL)setupAudioEngine {
-+    return [self setupPlayoutAudioEngine] && [self setupRecordAudioEngine];
++    BOOL ok = [self setupPlayoutAudioEngine] && [self setupRecordAudioEngine];
++
++    // ATTO mixer: if a record session is live, re-establish the engine-bound
++    // mixer pieces (metronome monitor + app tap) after the engines were rebuilt
++    // (media-services reset / format-change restart). The ring buffers, consumer,
++    // and file are untouched by the engine rebuild, so the recording continues.
++    if (ok) {
++        BOOL recording;
++        [self.mixLock lock];
++        recording = _mixRecording;
++        [self.mixLock unlock];
++        if (recording) {
++            dispatch_block_t work = ^{
++                [self rebuildMetronomeMonitor];
++                [self installAppTap];
++            };
++            if ([NSThread isMainThread]) { work(); } else { dispatch_async(dispatch_get_main_queue(), work); }
++        }
++    }
++
++    return ok;
 +}
 +
 +// Non-nil no-op AVAudioSession config block. The SDK's CallKit hooks call
@@ -442,6 +728,18 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +                                                        */
 +                                                       TVOAudioDeviceReadRenderData(context->deviceContext, audioBuffer, audioBufferSizeInBytes);
 +
++                                                       // === ATTO mixer REMOTE tap (additive; live path unchanged) ===
++                                                       // `audioBuffer` now holds the PURE remote int16 PCM (before the
++                                                       // local-monitor file player is mixed in by this engine). When a
++                                                       // record session is live, copy it into the remote ring. memcpy +
++                                                       // atomics only — real-time safe. `remoteRing` is NULL otherwise.
++                                                       if (context->remoteRing) {
++                                                           AttoPushInt16AsFloat(context->remoteRing,
++                                                                                (const int16_t *)audioBuffer,
++                                                                                audioBufferSizeInBytes);
++                                                       }
++                                                       // === end ATTO remote tap ===
++
 +                                                   } else {
 +
 +                                                       /*
@@ -473,6 +771,24 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +}
 +
 +- (void)teardownAudioEngine {
++    // ATTO mixer: drop the metronome monitor + app tap before the engines go away
++    // (their nodes belong to these engines). The recorded mix consumer + ring
++    // buffers are independent and keep running; the tapped channels just go silent
++    // until the engines are rebuilt (handled by rebuildMetronomeMonitor/installAppTap
++    // on restore). This never touches the recorded FILE.
++    if (self.metronomeTimer) {
++        [self.metronomeTimer invalidate];
++        self.metronomeTimer = nil;
++    }
++    if (self.metronomePlayoutPlayer) {
++        if (self.metronomePlayoutPlayer.isPlaying) {
++            [self.metronomePlayoutPlayer stop];
++        }
++        @try { [_playoutEngine detachNode:self.metronomePlayoutPlayer]; } @catch (__unused NSException *e) {}
++        self.metronomePlayoutPlayer = nil;
++    }
++    @try { [self.recordReverb removeTapOnBus:0]; } @catch (__unused NSException *e) {}
++
 +    [self teardownPlayer];
 +    [_playoutEngine stop];
 +    _playoutEngine = nil;
@@ -717,6 +1033,594 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +    }
 +
 +    return destBuffer;
++}
++
++#pragma mark - ATTO 4-channel record MIXER
++
++/*
++ * RECORDING-CONSUMER DESIGN CHOICE
++ * --------------------------------
++ * We do NOT add nodes to the live playout/record engines (that could perturb the
++ * call path) and we do NOT build a second offline AVAudioEngine + AVAudioSourceNode
++ * (more moving parts, format coupling, and another real-time graph to babysit).
++ *
++ * Instead: four lock-free SPSC ring buffers + ONE serial dispatch consumer driven
++ * by a repeating dispatch_source timer. The real-time callbacks only memcpy mic /
++ * remote into their rings; an AVAudioEngine tap memcpys the injected "app" track
++ * into its ring; the metronome is synthesized by the consumer at sample-accurate
++ * phase. The consumer pulls a fixed frame quantum from each ring, applies gain +
++ * record-enable, sums with hard-clip protection, and appends to an AVAudioFile.
++ * File I/O therefore happens entirely OFF the audio threads. If the mixer is off
++ * all ring pointers in the C contexts are NULL and the engine is byte-identical.
++ */
++
++// Map a JS channel name to its index; returns -1 for unknown names.
++- (NSInteger)indexForChannelName:(NSString *)channel {
++    if ([channel isEqualToString:@"mic"]) return AttoMixChannelMic;
++    if ([channel isEqualToString:@"remote"]) return AttoMixChannelRemote;
++    if ([channel isEqualToString:@"app"]) return AttoMixChannelApp;
++    if ([channel isEqualToString:@"metronome"]) return AttoMixChannelMetronome;
++    return -1;
++}
++
++- (void)setMixerChannel:(NSString *)channel gain:(float)gain record:(BOOL)record {
++    NSInteger idx = [self indexForChannelName:channel];
++    if (idx < 0) {
++        return;
++    }
++    if (gain < 0.0f) gain = 0.0f;
++    if (gain > 1.0f) gain = 1.0f;
++
++    [self.mixLock lock];
++    _channelGain[idx] = gain;
++    _channelRecord[idx] = record;
++    [self.mixLock unlock];
++}
++
++#pragma mark - Metronome
++
++- (void)setMetronome:(BOOL)enabled bpm:(NSInteger)bpm {
++    if (bpm < 40) bpm = 40;
++    if (bpm > 240) bpm = 240;
++
++    [self.mixLock lock];
++    _metronomeOn = enabled;
++    _metronomeBpm = bpm;
++    // Recompute samples-per-beat against the recording (consumer) sample rate. If
++    // recording hasn't started yet, _metronomeSampleRate is 0 and this is finalized
++    // in -startMixRecording.
++    if (_metronomeSampleRate > 0.0) {
++        _metronomeSamplesPerBeat = (uint64_t)llround((60.0 / (double)bpm) * _metronomeSampleRate);
++        if (_metronomeSamplesPerBeat == 0) _metronomeSamplesPerBeat = 1;
++    }
++    [self.mixLock unlock];
++
++    // Drive the LOCAL monitor click (so the rep hears the beat) on the main run
++    // loop. The RECORDED metronome is generated independently + sample-accurately
++    // by the consumer, so monitor jitter never affects the file.
++    dispatch_block_t work = ^{
++        [self rebuildMetronomeMonitor];
++    };
++    if ([NSThread isMainThread]) {
++        work();
++    } else {
++        dispatch_async(dispatch_get_main_queue(), work);
++    }
++}
++
++/*
++ * (Re)build the local-monitor metronome: a dedicated AVAudioPlayerNode on the
++ * playout engine plus an NSTimer that schedules one synthesized click per beat.
++ * This is the AUDIBLE path only; it is independent of the recorded mix.
++ */
++- (void)rebuildMetronomeMonitor {
++    // Tear down any existing monitor first.
++    if (self.metronomeTimer) {
++        [self.metronomeTimer invalidate];
++        self.metronomeTimer = nil;
++    }
++    if (self.metronomePlayoutPlayer) {
++        if (self.metronomePlayoutPlayer.isPlaying) {
++            [self.metronomePlayoutPlayer stop];
++        }
++        @try {
++            [self.playoutEngine detachNode:self.metronomePlayoutPlayer];
++        } @catch (__unused NSException *e) {}
++        self.metronomePlayoutPlayer = nil;
++    }
++
++    BOOL on;
++    NSInteger bpm;
++    [self.mixLock lock];
++    on = _metronomeOn;
++    bpm = _metronomeBpm;
++    [self.mixLock unlock];
++
++    if (!on) {
++        return;
++    }
++    if (self.playoutEngine == nil) {
++        return;
++    }
++
++    // Build a click buffer at the playout engine's format and attach a player.
++    AVAudioFormat *fmt = [self.playoutEngine.mainMixerNode outputFormatForBus:0];
++    if (fmt == nil || fmt.sampleRate <= 0) {
++        return;
++    }
++    self.metronomeClickBuffer = [self synthesizeClickBufferForFormat:fmt];
++    if (self.metronomeClickBuffer == nil) {
++        return;
++    }
++
++    AVAudioPlayerNode *player = [[AVAudioPlayerNode alloc] init];
++    [self.playoutEngine attachNode:player];
++    [self.playoutEngine connect:player to:self.playoutEngine.mainMixerNode format:fmt];
++    self.metronomePlayoutPlayer = player;
++
++    if (self.playoutEngine.isRunning) {
++        [player play];
++    }
++
++    NSTimeInterval interval = 60.0 / (double)bpm;
++    self.metronomeTimer = [NSTimer scheduledTimerWithTimeInterval:interval
++                                                           target:self
++                                                         selector:@selector(tickMetronomeMonitor)
++                                                         userInfo:nil
++                                                          repeats:YES];
++    // Fire one immediately so the first beat isn't delayed by a full period.
++    [self tickMetronomeMonitor];
++}
++
++- (void)tickMetronomeMonitor {
++    AVAudioPlayerNode *player = self.metronomePlayoutPlayer;
++    AVAudioPCMBuffer *click = self.metronomeClickBuffer;
++    if (player == nil || click == nil) {
++        return;
++    }
++    // Gate the audible click on the metronome channel gain so the slider also
++    // controls what the rep hears (record-enable only affects the FILE).
++    float gain;
++    [self.mixLock lock];
++    gain = _channelGain[AttoMixChannelMetronome];
++    [self.mixLock unlock];
++
++    [player setVolume:gain];
++    if (self.playoutEngine.isRunning && !player.isPlaying) {
++        [player play];
++    }
++    [player scheduleBuffer:click atTime:nil options:0 completionHandler:nil];
++}
++
++/*
++ * Synthesize a short percussive click (no bundled asset): ~30ms of a ~1kHz sine
++ * with a fast exponential decay envelope, at the requested format's sample rate.
++ * Mono; if the format has >1 channel we fill channel 0 (player upmixes).
++ */
++- (nullable AVAudioPCMBuffer *)synthesizeClickBufferForFormat:(AVAudioFormat *)format {
++    if (format == nil || format.sampleRate <= 0) {
++        return nil;
++    }
++    double sr = format.sampleRate;
++    AVAudioFrameCount frames = (AVAudioFrameCount)(0.030 * sr); // 30ms
++    if (frames < 1) frames = 1;
++
++    AVAudioPCMBuffer *buf = [[AVAudioPCMBuffer alloc] initWithPCMFormat:format frameCapacity:frames];
++    if (buf == nil) {
++        return nil;
++    }
++    buf.frameLength = frames;
++
++    const double freq = 1000.0;   // 1kHz click
++    const double decay = 25.0;    // exponential decay rate (per second)
++    const double twoPiF = 2.0 * M_PI * freq;
++
++    if (format.commonFormat == AVAudioPCMFormatFloat32 && buf.floatChannelData != NULL) {
++        float *ch = buf.floatChannelData[0];
++        for (AVAudioFrameCount i = 0; i < frames; i++) {
++            double t = (double)i / sr;
++            double env = exp(-decay * t);
++            ch[i] = (float)(0.9 * env * sin(twoPiF * t));
++        }
++    } else if (format.commonFormat == AVAudioPCMFormatInt16 && buf.int16ChannelData != NULL) {
++        int16_t *ch = buf.int16ChannelData[0];
++        for (AVAudioFrameCount i = 0; i < frames; i++) {
++            double t = (double)i / sr;
++            double env = exp(-decay * t);
++            double s = 0.9 * env * sin(twoPiF * t);
++            ch[i] = (int16_t)(s * 32767.0);
++        }
++    } else {
++        // Unsupported click format; bail (monitor just won't tick).
++        return nil;
++    }
++    return buf;
++}
++
++/*
++ * Build the synthesized click as a raw float array at the CONSUMER (file) sample
++ * rate, used to render the metronome directly into the recorded mix. Stored in
++ * _metronomeClickSamples / _metronomeClickLength. Caller holds no lock; this is
++ * only invoked from -startMixRecording before the consumer starts.
++ */
++- (void)buildRecordedClickAtSampleRate:(double)sr {
++    if (_metronomeClickSamples) {
++        free(_metronomeClickSamples);
++        _metronomeClickSamples = NULL;
++        _metronomeClickLength = 0;
++    }
++    if (sr <= 0) return;
++
++    size_t frames = (size_t)(0.030 * sr);
++    if (frames < 1) frames = 1;
++    float *samples = (float *)malloc(frames * sizeof(float));
++    if (samples == NULL) return;
++
++    const double freq = 1000.0;
++    const double decay = 25.0;
++    const double twoPiF = 2.0 * M_PI * freq;
++    for (size_t i = 0; i < frames; i++) {
++        double t = (double)i / sr;
++        double env = exp(-decay * t);
++        samples[i] = (float)(0.9 * env * sin(twoPiF * t));
++    }
++    _metronomeClickSamples = samples;
++    _metronomeClickLength = frames;
++    _metronomeClickPos = frames; // start idle (no click in progress)
++}
++
++#pragma mark - App (injection) channel tap
++
++/*
++ * Install a tap on the record file player's post-reverb node so the INJECTED
++ * track (and only it — isolated from the mic) flows into the "app" ring. The tap
++ * delivers mono float at the node's output format; we push it straight in (the
++ * record engine and the consumer file share the same engine sample rate, so no
++ * resample is needed for the app channel). Tap callbacks may safely memcpy.
++ */
++- (void)installAppTap {
++    AVAudioNode *tapNode = self.recordReverb ?: (AVAudioNode *)self.recordFilePlayer;
++    if (tapNode == nil) {
++        return;
++    }
++    AVAudioFormat *fmt = [tapNode outputFormatForBus:0];
++    if (fmt == nil) {
++        return;
++    }
++    AttoRingBuffer *appRing = &_appRing;
++    @try {
++        [tapNode removeTapOnBus:0];
++    } @catch (__unused NSException *e) {}
++    @try {
++        [tapNode installTapOnBus:0
++                      bufferSize:1024
++                          format:fmt
++                           block:^(AVAudioPCMBuffer * _Nonnull buffer, AVAudioTime * _Nonnull when) {
++            if (buffer.floatChannelData == NULL) {
++                return;
++            }
++            const float *src = buffer.floatChannelData[0]; // mono / first channel
++            AttoRingWrite(appRing, src, (size_t)buffer.frameLength);
++        }];
++    } @catch (__unused NSException *e) {
++        // Tap install can throw if the node isn't in a running engine; non-fatal.
++    }
++}
++
++- (void)removeAppTap {
++    AVAudioNode *tapNode = self.recordReverb ?: (AVAudioNode *)self.recordFilePlayer;
++    if (tapNode == nil) {
++        return;
++    }
++    @try {
++        [tapNode removeTapOnBus:0];
++    } @catch (__unused NSException *e) {}
++}
++
++#pragma mark - Record lifecycle
++
++- (nullable NSString *)startMixRecording {
++    [self.mixLock lock];
++    if (_mixRecording) {
++        [self.mixLock unlock];
++        NSLog(@"[AttoAudioEngineDevice] startMixRecording: already recording");
++        return self.mixFilePath;
++    }
++
++    // Allocate ring buffers lazily on first record.
++    if (!_ringsAllocated) {
++        AttoRingInit(&_micRing);
++        AttoRingInit(&_remoteRing);
++        AttoRingInit(&_appRing);
++        _ringsAllocated = YES;
++    } else {
++        AttoRingReset(&_micRing);
++        AttoRingReset(&_remoteRing);
++        AttoRingReset(&_appRing);
++    }
++
++    // The recorded file format: mono float32 at the active engine sample rate.
++    double sampleRate = [AVAudioSession sharedInstance].sampleRate;
++    if (sampleRate <= 0) sampleRate = (double)kPreferredSampleRate;
++
++    AVAudioFormat *fileFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
++                                                                 sampleRate:sampleRate
++                                                                   channels:1
++                                                                interleaved:NO];
++    if (fileFormat == nil) {
++        [self.mixLock unlock];
++        NSLog(@"[AttoAudioEngineDevice] startMixRecording: bad file format");
++        return nil;
++    }
++
++    NSString *fileName = [NSString stringWithFormat:@"atto-mix-%.0f.caf", [[NSDate date] timeIntervalSince1970] * 1000.0];
++    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
++    NSURL *url = [NSURL fileURLWithPath:path];
++
++    // Write float PCM (.caf supports float natively, lossless, no encoder hiccups).
++    NSDictionary *settings = @{
++        AVFormatIDKey: @(kAudioFormatLinearPCM),
++        AVSampleRateKey: @(sampleRate),
++        AVNumberOfChannelsKey: @(1),
++        AVLinearPCMBitDepthKey: @(32),
++        AVLinearPCMIsFloatKey: @(YES),
++        AVLinearPCMIsBigEndianKey: @(NO),
++        AVLinearPCMIsNonInterleaved: @(NO),
++    };
++
++    NSError *error = nil;
++    AVAudioFile *file = [[AVAudioFile alloc] initForWriting:url
++                                                   settings:settings
++                                               commonFormat:AVAudioPCMFormatFloat32
++                                                interleaved:NO
++                                                      error:&error];
++    if (file == nil) {
++        [self.mixLock unlock];
++        NSLog(@"[AttoAudioEngineDevice] startMixRecording: failed to open file %@, error = %@", path, error);
++        return nil;
++    }
++
++    self.mixFile = file;
++    self.mixFilePath = path;
++    self.mixFileFormat = fileFormat;
++
++    // Metronome phase setup at the file sample rate.
++    _metronomeSampleRate = sampleRate;
++    NSInteger bpm = _metronomeBpm;
++    _metronomeSamplesPerBeat = (uint64_t)llround((60.0 / (double)bpm) * sampleRate);
++    if (_metronomeSamplesPerBeat == 0) _metronomeSamplesPerBeat = 1;
++    _metronomeSampleCounter = 0;
++
++    _mixRecording = YES;
++    [self.mixLock unlock];
++
++    // Build the recorded-metronome click at the file rate (outside the lock).
++    [self buildRecordedClickAtSampleRate:sampleRate];
++
++    // Publish ring pointers into the C contexts so the real-time callbacks start
++    // tapping. @synchronized(self) matches the callbacks' setup/teardown guard.
++    // NOTE: done OUTSIDE mixLock to keep a single global lock order
++    // (@synchronized(self) is also entered by route/media handlers; never nest it
++    // under mixLock or vice-versa to avoid an inversion deadlock). A pointer store
++    // is atomic on arm64, so the callback either sees NULL or the valid ring; the
++    // ring itself was fully initialized above before this publish.
++    @synchronized(self) {
++        if (self.capturingContext) {
++            self.capturingContext->micRing = &_micRing;
++        }
++        if (self.renderingContext) {
++            self.renderingContext->remoteRing = &_remoteRing;
++        }
++    }
++
++    // App-track tap (must run on the engine's queue → main).
++    dispatch_block_t tapWork = ^{ [self installAppTap]; };
++    if ([NSThread isMainThread]) { tapWork(); } else { dispatch_sync(dispatch_get_main_queue(), tapWork); }
++
++    [self startMixConsumer];
++
++    NSLog(@"[AttoAudioEngineDevice] startMixRecording -> %@", path);
++    return path;
++}
++
++- (nullable NSString *)stopMixRecording {
++    [self.mixLock lock];
++    if (!_mixRecording) {
++        [self.mixLock unlock];
++        return nil;
++    }
++    _mixRecording = NO;
++    NSString *path = self.mixFilePath;
++    [self.mixLock unlock];
++
++    // Retract the ring pointers so the real-time callbacks stop tapping. Done
++    // OUTSIDE mixLock to preserve the single global lock order (see startMixRecording).
++    // After this, the callbacks are byte-identical to the pre-mixer behavior. The
++    // ring memory is NOT freed here (kept for reuse); the consumer's final drain
++    // below still safely reads whatever remained.
++    @synchronized(self) {
++        if (self.capturingContext) {
++            self.capturingContext->micRing = NULL;
++        }
++        if (self.renderingContext) {
++            self.renderingContext->remoteRing = NULL;
++        }
++    }
++
++    // Remove the app tap on the engine queue.
++    dispatch_block_t tapWork = ^{ [self removeAppTap]; };
++    if ([NSThread isMainThread]) { tapWork(); } else { dispatch_sync(dispatch_get_main_queue(), tapWork); }
++
++    // Stop the consumer (this drains a final time + closes the file).
++    [self teardownMixConsumer];
++
++    [self.mixLock lock];
++    self.mixFile = nil; // ARC releases → file finalized/closed
++    self.mixFilePath = nil;
++    self.mixFileFormat = nil;
++    [self.mixLock unlock];
++
++    NSLog(@"[AttoAudioEngineDevice] stopMixRecording -> %@", path);
++    return path;
++}
++
++#pragma mark - Mix consumer
++
++- (void)startMixConsumer {
++    [self teardownMixConsumer];
++
++    self.mixConsumerQueue = dispatch_queue_create("ai.atto.mixConsumer", DISPATCH_QUEUE_SERIAL);
++    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self.mixConsumerQueue);
++    self.mixConsumerTimer = timer;
++
++    // Drain every ~10ms; the rings hold ~1s so this has wide slack.
++    uint64_t intervalNs = 10 * NSEC_PER_MSEC;
++    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, intervalNs), intervalNs, 5 * NSEC_PER_MSEC);
++
++    __weak typeof(self) weakSelf = self;
++    dispatch_source_set_event_handler(timer, ^{
++        [weakSelf drainAndWriteMix];
++    });
++    dispatch_resume(timer);
++}
++
++- (void)teardownMixConsumer {
++    if (self.mixConsumerTimer) {
++        dispatch_source_t timer = self.mixConsumerTimer;
++        self.mixConsumerTimer = nil;
++        dispatch_source_cancel(timer);
++        // Final drain on the consumer queue so trailing samples land in the file.
++        if (self.mixConsumerQueue) {
++            dispatch_sync(self.mixConsumerQueue, ^{
++                [self drainAndWriteMix];
++            });
++        }
++    }
++    self.mixConsumerQueue = nil;
++}
++
++/*
++ * The consumer body. Runs ONLY on mixConsumerQueue (serial). Pulls a quantum from
++ * each ring, applies per-channel gain + record-enable, synthesizes the recorded
++ * metronome at sample-accurate phase, sums with hard-clip protection, and appends
++ * to the AVAudioFile. Mic drives the frame count (the live call always produces
++ * mic frames); remote/app are aligned best-effort and zero-filled on underrun.
++ */
++- (void)drainAndWriteMix {
++    AVAudioFile *file = self.mixFile;
++    AVAudioFormat *fmt = self.mixFileFormat;
++    if (file == nil || fmt == nil) {
++        return;
++    }
++
++    // Snapshot params under the lock (cheap; held briefly).
++    float gain[AttoMixChannelCount];
++    BOOL rec[AttoMixChannelCount];
++    BOOL metroOn;
++    uint64_t samplesPerBeat;
++    [self.mixLock lock];
++    for (int i = 0; i < AttoMixChannelCount; i++) {
++        gain[i] = _channelGain[i];
++        rec[i] = _channelRecord[i];
++    }
++    metroOn = _metronomeOn;
++    samplesPerBeat = _metronomeSamplesPerBeat ?: 1;
++    [self.mixLock unlock];
++
++    // How many mic frames are available drives this pass (cap at a sane quantum).
++    static const size_t kQuantum = 4096; // <= ring slack; ~85ms at 48k
++    float micBuf[kQuantum];
++    float remoteBuf[kQuantum];
++    float appBuf[kQuantum];
++
++    size_t micAvail = AttoRingRead(&_micRing, micBuf, kQuantum);
++    if (micAvail == 0) {
++        // Nothing captured this tick. If mic is disabled/silent we still want the
++        // other channels to advance, but without a clock we'd grow the file
++        // unbounded. Use remote as a fallback clock; else bail this tick.
++        micAvail = AttoRingRead(&_remoteRing, remoteBuf, kQuantum);
++        if (micAvail == 0) {
++            return;
++        }
++        // We already consumed remote into remoteBuf; zero mic.
++        memset(micBuf, 0, micAvail * sizeof(float));
++        // app aligned below.
++        size_t appGot = AttoRingRead(&_appRing, appBuf, micAvail);
++        if (appGot < micAvail) memset(appBuf + appGot, 0, (micAvail - appGot) * sizeof(float));
++        [self mixAndWriteFrames:micAvail
++                            mic:micBuf remote:remoteBuf app:appBuf
++                           gain:gain rec:rec metroOn:metroOn samplesPerBeat:samplesPerBeat
++                           file:file format:fmt];
++        return;
++    }
++
++    size_t frames = micAvail;
++
++    // Read the SAME number of frames from remote + app; zero-fill on underrun so
++    // channels stay phase-aligned to the mic clock.
++    size_t remoteGot = AttoRingRead(&_remoteRing, remoteBuf, frames);
++    if (remoteGot < frames) memset(remoteBuf + remoteGot, 0, (frames - remoteGot) * sizeof(float));
++
++    size_t appGot = AttoRingRead(&_appRing, appBuf, frames);
++    if (appGot < frames) memset(appBuf + appGot, 0, (frames - appGot) * sizeof(float));
++
++    [self mixAndWriteFrames:frames
++                        mic:micBuf remote:remoteBuf app:appBuf
++                       gain:gain rec:rec metroOn:metroOn samplesPerBeat:samplesPerBeat
++                       file:file format:fmt];
++}
++
++- (void)mixAndWriteFrames:(size_t)frames
++                      mic:(const float *)micBuf
++                   remote:(const float *)remoteBuf
++                      app:(const float *)appBuf
++                     gain:(const float *)gain
++                      rec:(const BOOL *)rec
++                  metroOn:(BOOL)metroOn
++           samplesPerBeat:(uint64_t)samplesPerBeat
++                     file:(AVAudioFile *)file
++                   format:(AVAudioFormat *)fmt {
++    if (frames == 0) return;
++
++    AVAudioPCMBuffer *out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:fmt
++                                                         frameCapacity:(AVAudioFrameCount)frames];
++    if (out == nil || out.floatChannelData == NULL) {
++        return;
++    }
++    out.frameLength = (AVAudioFrameCount)frames;
++    float *dst = out.floatChannelData[0];
++
++    float gMic = rec[AttoMixChannelMic] ? gain[AttoMixChannelMic] : 0.0f;
++    float gRemote = rec[AttoMixChannelRemote] ? gain[AttoMixChannelRemote] : 0.0f;
++    float gApp = rec[AttoMixChannelApp] ? gain[AttoMixChannelApp] : 0.0f;
++    float gMetro = (metroOn && rec[AttoMixChannelMetronome]) ? gain[AttoMixChannelMetronome] : 0.0f;
++
++    for (size_t i = 0; i < frames; i++) {
++        float s = micBuf[i] * gMic + remoteBuf[i] * gRemote + appBuf[i] * gApp;
++
++        // Metronome: synthesize at sample-accurate phase regardless of gating so
++        // the click position stays locked to wall-clock; only its gain is gated.
++        if (_metronomeClickSamples && _metronomeClickLength > 0) {
++            if (_metronomeSampleCounter % samplesPerBeat == 0) {
++                _metronomeClickPos = 0; // (re)trigger a click on the beat
++            }
++            if (_metronomeClickPos < _metronomeClickLength) {
++                s += _metronomeClickSamples[_metronomeClickPos] * gMetro;
++                _metronomeClickPos++;
++            }
++            _metronomeSampleCounter++;
++        }
++
++        // Hard-clip protection.
++        if (s > 1.0f) s = 1.0f;
++        else if (s < -1.0f) s = -1.0f;
++        dst[i] = s;
++    }
++
++    NSError *error = nil;
++    if (![file writeFromBuffer:out error:&error]) {
++        NSLog(@"[AttoAudioEngineDevice] mix write failed: %@", error);
++    }
 +}
 +
 +#pragma mark - ATTO status reporting
@@ -1126,6 +2030,18 @@ index 0000000000000000000000000000000000000000..398647c8dc62c82e6f4249afca034d15
 +    int8_t *audioBuffer = (int8_t *)mixedAudioBufferList->mBuffers[0].mData;
 +    UInt32 audioBufferSizeInBytes = mixedAudioBufferList->mBuffers[0].mDataByteSize;
 +
++    // === ATTO mixer MIC tap (additive; live path unchanged) ===
++    // `audioBuffer` is EXACTLY the PCM about to be sent to Twilio (mic, post
++    // VoiceProcessingIO + any record-engine mix). When a record session is live,
++    // copy it into the mic ring. memcpy + atomics only — real-time safe.
++    // `micRing` is NULL when not recording, so this is a no-op otherwise.
++    if (context->micRing && audioBuffer) {
++        AttoPushInt16AsFloat(context->micRing,
++                             (const int16_t *)audioBuffer,
++                             audioBufferSizeInBytes);
++    }
++    // === end ATTO mic tap ===
++
 +    if (context->deviceContext && audioBuffer) {
 +        TVOAudioDeviceWriteCaptureData(context->deviceContext, audioBuffer, audioBufferSizeInBytes);
 +    }
@@ -1526,10 +2442,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..30a29929d242da7d132c69e265841b785e34e37a
+index 0000000000000000000000000000000000000000..098c72ab23bfdb74580806be6bfbbbf0622004d6
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,186 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -1665,6 +2581,54 @@ index 0000000000000000000000000000000000000000..30a29929d242da7d132c69e265841b78
 +
 +RCT_EXPORT_METHOD(setInjectedMonitor:(BOOL)on) {
 +    [[AttoAudioEngineDevice sharedDevice] setMonitor:on];
++}
++
++#pragma mark - 4-channel record mixer (matches mixerService.ts)
++
++/*
++ * Set a record-mixer channel's gain (0..1) + record-enable. `channel` is one of
++ * "mic" / "remote" / "app" / "metronome". Affects ONLY the client-side recorded
++ * mix — the live call is untouched. Fire-and-forget (mirrors the JS void return).
++ */
++RCT_EXPORT_METHOD(setMixerChannel:(NSString *)channel
++                  gain:(double)gain
++                  record:(BOOL)record) {
++    [[AttoAudioEngineDevice sharedDevice] setMixerChannel:channel
++                                                     gain:(float)gain
++                                                   record:record];
++}
++
++/* Enable/disable the synthesized metronome click and set its tempo (BPM). */
++RCT_EXPORT_METHOD(setMetronome:(BOOL)enabled
++                  bpm:(double)bpm) {
++    [[AttoAudioEngineDevice sharedDevice] setMetronome:enabled
++                                                   bpm:(NSInteger)llround(bpm)];
++}
++
++/*
++ * Start the client-side multitrack record. Resolves the local file path (or null
++ * on failure). Never rejects for the "already recording" case — it resolves the
++ * existing path so the JS caller stays simple.
++ */
++RCT_EXPORT_METHOD(startMixRecording:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        NSString *path = [[AttoAudioEngineDevice sharedDevice] startMixRecording];
++        resolve(path ?: [NSNull null]);
++    } @catch (NSException *exception) {
++        reject(@"start_mix_failed", exception.reason ?: @"Failed to start mix recording", nil);
++    }
++}
++
++/* Stop the record; resolves the finished file path (or null if not recording). */
++RCT_EXPORT_METHOD(stopMixRecording:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        NSString *path = [[AttoAudioEngineDevice sharedDevice] stopMixRecording];
++        resolve(path ?: [NSNull null]);
++    } @catch (NSException *exception) {
++        reject(@"stop_mix_failed", exception.reason ?: @"Failed to stop mix recording", nil);
++    }
 +}
 +
 +@end

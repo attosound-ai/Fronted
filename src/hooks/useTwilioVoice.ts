@@ -534,19 +534,42 @@ export function rejectIncomingCall() {
 async function installInjectionDeviceIfEnabled(): Promise<void> {
   if (!IS_IOS) return;
   if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) return;
+  const call_sid = useCallStore.getState().activeCall?.callSid ?? null;
   try {
-    await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
-  } catch {
-    // best-effort: a failed install just leaves the stock device (no injection)
+    const ok = await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
+    // THE signal for the silent-injection bug: if this isn't 'installed' the
+    // custom device isn't active and the remote will hear nothing injected.
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+      outcome: ok ? 'installed' : 'install_returned_false',
+      call_sid,
+    });
+  } catch (error: unknown) {
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+      outcome: 'install_threw',
+      reason: error instanceof Error ? error.message : String(error),
+      call_sid,
+    });
   }
 }
 
 function restoreInjectionDevice(): void {
   if (!IS_IOS) return;
+  // Restore always runs (idempotent); only log it when injection was in play.
+  const wasEnabled = analytics.isFeatureEnabled('audio_injection_enabled') === true;
   try {
     void NativeModules.AttoAudioInjection?.restoreDefaultDevice?.();
-  } catch {
-    // best-effort; idempotent on the native side
+    if (wasEnabled) {
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+        outcome: 'restored',
+      });
+    }
+  } catch (error: unknown) {
+    if (wasEnabled) {
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+        outcome: 'restore_threw',
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -9,7 +9,7 @@ import {
 import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
-import { InjectIntoCallButton } from '@/components/call/InjectIntoCallButton';
+import { useNowPlayingStore } from '@/stores/nowPlayingStore';
 import type { FeedPost } from '@/types/post';
 
 interface AudioMediaProps {
@@ -30,6 +30,20 @@ export function AudioMedia({ post }: AudioMediaProps) {
     togglePlayPause,
     seekToFraction,
   } = useAudioPlayback(post.audioUrl);
+
+  // Remember the last-played feed audio so the in-call "transmit" button can push
+  // THIS track into the call (it's a global call-bar control, not per-card).
+  const setNowPlaying = useNowPlayingStore((s) => s.setNowPlaying);
+  useEffect(() => {
+    if (isPlaying && post.audioUrl) {
+      setNowPlaying({
+        kind: 'post',
+        uri: post.audioUrl,
+        postId: post.id,
+        title: post.title,
+      });
+    }
+  }, [isPlaying, post.audioUrl, post.id, post.title, setNowPlaying]);
 
   const showLoading = !isLoaded || isBuffering;
 
@@ -79,15 +93,6 @@ export function AudioMedia({ post }: AudioMediaProps) {
       <Text style={styles.time}>
         {currentTime} / {duration}
       </Text>
-
-      {/* Play this track INTO an active call (renders only when a call is
-          connected AND the audio-injection flag is on — dark otherwise). */}
-      {post.audioUrl ? (
-        <InjectIntoCallButton
-          source={{ kind: 'post', uri: post.audioUrl, postId: post.id }}
-          size={20}
-        />
-      ) : null}
     </View>
   );
 }

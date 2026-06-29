@@ -159,6 +159,19 @@ export const ANALYTICS_EVENTS = {
     // hand-off should have happened — i.e. the user is stranded (Bug #2).
     SCREEN_CONNECTED_NAV: 'call_screen_connected_nav',
     SCREEN_BLACK_FALLBACK: 'call_screen_black_fallback',
+    // Audio injection — a rep plays a phone-side track (post/reel/backing beat)
+    // INTO the call so the remote party hears it mixed with their mic. ATTEMPT
+    // fires on every inject() with the full context (call_state,
+    // since_connected_ms, source_kind, post_id) and an `outcome`: started |
+    // no_active_call | not_connected | engine_unavailable | not_supported |
+    // prepare_failed | engine_error — so no path is silent (mirrors DTMF).
+    // STOPPED carries the reason (user_stopped | call_ended | track_ended |
+    // interrupted). STATE_CHANGED is the engine snapshot tick.
+    AUDIO_INJECT_ATTEMPT: 'call_audio_inject_attempt',
+    AUDIO_INJECT_STARTED: 'call_audio_inject_started',
+    AUDIO_INJECT_STOPPED: 'call_audio_inject_stopped',
+    AUDIO_INJECT_FAILED: 'call_audio_inject_failed',
+    AUDIO_INJECT_STATE_CHANGED: 'call_audio_inject_state_changed',
   },
 
   // ── Messages ───────────────────────────────────

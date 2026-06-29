@@ -20,6 +20,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { X } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -67,6 +68,7 @@ export function FullscreenImageViewer({
   visible,
   onClose,
 }: FullscreenImageViewerProps) {
+  const { t } = useTranslation('feed');
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
@@ -262,7 +264,7 @@ export function FullscreenImageViewer({
             );
           }}
         >
-          <Text style={styles.attributionBy}>Art by </Text>
+          <Text style={styles.attributionBy}>{t('fullscreenViewer.artBy')}</Text>
           <Text style={styles.attributionName}>{logo.creator.username}</Text>
           <CreatorBadge size="sm" />
         </TouchableOpacity>
@@ -287,7 +289,7 @@ export function FullscreenImageViewer({
                 );
               }}
             >
-              <Text style={styles.attributionBy}>Art by </Text>
+              <Text style={styles.attributionBy}>{t('fullscreenViewer.artBy')}</Text>
               <Text style={styles.attributionName}>{logo.creator.username}</Text>
               <CreatorBadge size="sm" />
             </TouchableOpacity>
@@ -324,7 +326,7 @@ export function FullscreenImageViewer({
       {!logo && (
         <View style={styles.closeHint}>
           <ReAnimated.Text style={[styles.hintText, { opacity }]}>
-            Swipe down to close
+            {t('fullscreenViewer.swipeToClose')}
           </ReAnimated.Text>
         </View>
       )}

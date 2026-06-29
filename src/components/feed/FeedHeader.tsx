@@ -10,6 +10,7 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { router } from 'expo-router';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ReAnimated, {
   useSharedValue,
@@ -374,7 +375,10 @@ export function FeedHeader() {
                 }
                 style={styles.iconButton}
               >
-                <Plus size={30} color="#FFF" strokeWidth={2.25} />
+                {/* Liquid-glass circle behind the icon (badges stay siblings so
+                    they're never clipped by the glass). */}
+                <GlassSurface radius={20} style={StyleSheet.absoluteFill} />
+                <Plus size={28} color="#FFF" strokeWidth={2.25} />
               </TouchableOpacity>
             </View>
           )}
@@ -411,6 +415,7 @@ export function FeedHeader() {
                 onPress={sheetOpen ? closeSheet : openSheet}
                 style={styles.iconButton}
               >
+                <GlassSurface radius={20} style={StyleSheet.absoluteFill} />
                 {sheetOpen ? (
                   <X size={24} color="#FFF" strokeWidth={2.25} />
                 ) : (
@@ -569,7 +574,12 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 5 }],
   },
   iconButton: {
-    padding: 6,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // visible so the corner badges (ellipsisDot / filter / notif) aren't clipped
+    overflow: 'visible',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

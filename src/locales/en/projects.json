@@ -94,6 +94,21 @@
     "errorRemoveClipsFirst": "Remove clips from this lane first",
     "volumeModalTitle": "Clip Volume",
     "volumeDoneButton": "Done",
-    "loadingTitle": "Optimizing your experience..."
+    "loadingTitle": "Optimizing your experience...",
+    "laneColorSwatchAccessibility": "Color {{color}}",
+    "laneGainLabel": "Gain",
+    "lanePanLabel": "Pan",
+    "laneMute": "Mute",
+    "laneSolo": "Solo",
+    "laneEditTrackAccessibility": "Edit track"
+  },
+  "picker": {
+    "title": "My Projects",
+    "namePlaceholder": "Project name",
+    "cancel": "Cancel",
+    "create": "Create",
+    "newProject": "New project",
+    "empty": "You don't have any projects yet",
+    "segments": "recordings"
   }
 }

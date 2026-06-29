@@ -9,6 +9,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics/hapticService';
+import { playEndCallSound } from '@/lib/sound/callSounds';
 import * as Sentry from '@sentry/react-native';
 import {
   startCallTelemetry,
@@ -222,6 +224,39 @@ async function captureCallStats(reason: string): Promise<void> {
     });
   } catch {
     // getStats() can reject before media is flowing; the next tick retries.
+  }
+}
+
+/** Twilio audioLevel may arrive as 0..1 or 0..32767; map to a punchy 0..1 value. */
+function normAudioLevel(level: number | null | undefined): number {
+  if (level == null) return 0;
+  const unit = level > 1 ? level / 32767 : level;
+  // sqrt curve + gain so normal speech visibly moves the wave (raw RMS is low).
+  return Math.max(0, Math.min(1, Math.sqrt(Math.max(0, unit)) * 1.3));
+}
+
+/**
+ * One-shot live audio levels for the recording-screen waveform: the local mic's
+ * outbound level AND the remote party's inbound level, both normalised to 0..1.
+ * Lets the visualizer react to BOTH sides of the call (Twilio records both
+ * tracks; the local metering recorder only ever hears this device's mic).
+ * Returns zeros when there's no call or before media flows.
+ */
+export async function getActiveCallAudioLevels(): Promise<{
+  mic: number;
+  remote: number;
+}> {
+  if (!activeCallObj) return { mic: 0, remote: 0 };
+  try {
+    const report = await activeCallObj.getStats();
+    const local = report?.localAudioTrackStats?.[0] ?? {};
+    const remote = report?.remoteAudioTrackStats?.[0] ?? {};
+    return {
+      mic: normAudioLevel(local.audioLevel),
+      remote: normAudioLevel(remote.audioLevel),
+    };
+  } catch {
+    return { mic: 0, remote: 0 };
   }
 }
 
@@ -490,6 +525,10 @@ export function rejectIncomingCall() {
 
 export function hangUpCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ENDED);
+  // Tactile + audible hang-up feedback (WhatsApp-style). The chime mixes over
+  // the still-active session (mixWithOthers) and never seizes it — see callSounds.
+  void haptic('heavy');
+  playEndCallSound();
   void endCallTelemetry('hangup');
   // Force-detach any lingering listeners; the SDK's Disconnected event
   // *usually* runs the teardown, but we never want a stale Call object

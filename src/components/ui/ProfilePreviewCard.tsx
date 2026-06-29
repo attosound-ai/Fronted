@@ -1,4 +1,5 @@
 import { View, Image, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { User } from 'lucide-react-native';
 import { Text } from './Text';
 import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
@@ -42,6 +43,7 @@ export function ProfilePreviewCard({
   role,
   verified = false,
 }: ProfilePreviewCardProps) {
+  const { t } = useTranslation('profile');
   const resolvedUri = resolveAvatarUri(avatarSource);
   const normalizedUsername = username?.startsWith('@')
     ? username
@@ -65,7 +67,7 @@ export function ProfilePreviewCard({
 
       {/* Username — always the primary handle on previews. */}
       <Text variant="h2" style={styles.name}>
-        {normalizedUsername || 'Your Name'}
+        {normalizedUsername || t('preview.nameFallback')}
       </Text>
 
       {/* Bio */}
@@ -78,7 +80,9 @@ export function ProfilePreviewCard({
       {/* Role badge */}
       {role && role !== 'listener' && (
         <Text variant="caption" style={styles.role}>
-          {role === 'creator' ? 'Creator' : 'Representative'}
+          {role === 'creator'
+            ? t('hero.roleBadgeCreator')
+            : t('hero.roleBadgeRepresentative')}
           {verified ? ' \u2713' : ''}
         </Text>
       )}
@@ -90,7 +94,7 @@ export function ProfilePreviewCard({
             {formatCount(stats.posts)}
           </Text>
           <Text variant="caption" style={styles.statLabel}>
-            Posts
+            {t('hero.statPosts')}
           </Text>
         </View>
         <View style={styles.stat}>
@@ -98,7 +102,7 @@ export function ProfilePreviewCard({
             {formatCount(stats.followers)}
           </Text>
           <Text variant="caption" style={styles.statLabel}>
-            Followers
+            {t('hero.statFollowers')}
           </Text>
         </View>
         <View style={styles.stat}>
@@ -106,7 +110,7 @@ export function ProfilePreviewCard({
             {formatCount(stats.following)}
           </Text>
           <Text variant="caption" style={styles.statLabel}>
-            Following
+            {t('hero.statFollowing')}
           </Text>
         </View>
       </View>

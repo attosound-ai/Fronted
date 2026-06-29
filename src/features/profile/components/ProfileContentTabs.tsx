@@ -21,6 +21,7 @@ import {
 import { Grid2x2, Bookmark, User, Music, Play } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -51,6 +52,7 @@ interface ProfileContentTabsProps {
 
 /** Single grid cell rendered for every post type. */
 function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) {
+  const { t } = useTranslation('profile');
   const isVideo = post.contentType === 'video';
   const isReel = post.contentType === 'reel';
   const isAudio = post.contentType === 'audio';
@@ -73,7 +75,9 @@ function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) 
       activeOpacity={0.8}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Post by ${post.author.username}`}
+      accessibilityLabel={t('content.postThumbnailA11y', {
+        username: post.author.username,
+      })}
     >
       {firstImage && !isAudio && !isText ? (
         <>
@@ -136,6 +140,8 @@ function TabContent({
   emptyMessage: string;
   onPostPress?: (post: Post) => void;
 }) {
+  const { t } = useTranslation('profile');
+
   if (activeTab === 'settings') {
     return <View style={styles.settingsWrap}>{settingsContent}</View>;
   }
@@ -154,7 +160,11 @@ function TabContent({
 
   return (
     <View
-      accessibilityLabel={activeTab === 'posts' ? 'User posts grid' : 'Saved posts grid'}
+      accessibilityLabel={
+        activeTab === 'posts'
+          ? t('content.postsGridA11y')
+          : t('content.savedGridA11y')
+      }
     >
       <View style={styles.grid}>
         {activeData.map((item) => (
@@ -180,6 +190,7 @@ export const ProfileContentTabs = forwardRef<
   ProfileContentTabsHandle,
   ProfileContentTabsProps
 >(function ProfileContentTabs({ userId, settingsContent }, ref) {
+  const { t } = useTranslation('profile');
   const [activeTab, setActiveTab] = useState<ActiveTab>('posts');
 
   // Tapping a grid cell opens the post detail screen with the appropriate
@@ -264,7 +275,8 @@ export const ProfileContentTabs = forwardRef<
   const activeLoading = activeTab === 'posts' ? postsLoading : savedLoading;
   const activeFetchingMore =
     activeTab === 'posts' ? postsFetchingMore : savedFetchingMore;
-  const emptyMessage = activeTab === 'posts' ? 'No posts yet' : 'No saved posts';
+  const emptyMessage =
+    activeTab === 'posts' ? t('content.emptyPosts') : t('content.emptySaved');
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
@@ -276,7 +288,7 @@ export const ProfileContentTabs = forwardRef<
           onPress={() => setActiveTab('posts')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'posts' }}
-          accessibilityLabel="Posts"
+          accessibilityLabel={t('content.tabPostsA11y')}
         >
           <Grid2x2
             size={22}
@@ -291,7 +303,7 @@ export const ProfileContentTabs = forwardRef<
           onPress={() => setActiveTab('saved')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'saved' }}
-          accessibilityLabel="Saved"
+          accessibilityLabel={t('content.tabSavedA11y')}
         >
           <Bookmark
             size={22}
@@ -306,7 +318,7 @@ export const ProfileContentTabs = forwardRef<
           onPress={() => setActiveTab('settings')}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'settings' }}
-          accessibilityLabel="Settings"
+          accessibilityLabel={t('content.tabSettingsA11y')}
         >
           <User
             size={22}

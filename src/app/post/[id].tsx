@@ -13,6 +13,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
 import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { useLocalSearchParams, router, type Href } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
@@ -113,6 +114,7 @@ export default function PostDetailScreen() {
     sourceQuery?: string;
     sourceContentType?: string;
   }>();
+  const { t } = useTranslation(['feed', 'common']);
   const { id, sourceQuery, sourceContentType } = params;
   const source = parseSource(params.source);
   const sourceUserId = params.sourceUserId ? Number(params.sourceUserId) : undefined;
@@ -192,10 +194,10 @@ export default function PostDetailScreen() {
 
   const handleDelete = useCallback(
     (postId: string) => {
-      Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('post.deleteAlertTitle'), t('post.deleteAlertMessage'), [
+        { text: t('common:buttons.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common:buttons.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -209,13 +211,13 @@ export default function PostDetailScreen() {
               queryClient.removeQueries({ queryKey: QUERY_KEYS.FEED.POST(postId) });
               router.back();
             } catch {
-              Alert.alert('Error', 'Failed to delete the post. Please try again.');
+              Alert.alert(t('common:errors.title'), t('post.deleteFailed'));
             }
           },
         },
       ]);
     },
-    [currentUserId, queryClient]
+    [currentUserId, queryClient, t]
   );
 
   const renderItem = useCallback(
@@ -299,7 +301,7 @@ export default function PostDetailScreen() {
         </View>
       ) : feedPosts.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Couldn't load this post.</Text>
+          <Text style={styles.errorText}>{t('post.loadError')}</Text>
         </View>
       ) : (
         <FlatList
@@ -362,7 +364,7 @@ export default function PostDetailScreen() {
           <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <Text variant="h3" style={styles.headerTitle}>
-          Post
+          {t('post.detailTitle')}
         </Text>
         <View style={{ width: 28 }} />
       </CollapsibleHeader>

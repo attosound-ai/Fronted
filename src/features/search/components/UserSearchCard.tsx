@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Plus } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -15,6 +16,7 @@ interface UserSearchCardProps {
 }
 
 export function UserSearchCard({ user }: UserSearchCardProps) {
+  const { t } = useTranslation('feed');
   const { setFollowed, getIsFollowing } = useFollowStore();
   const isFollowing = getIsFollowing(user.id, user.isFollowing ?? false);
   const [isToggling, setIsToggling] = useState(false);
@@ -77,7 +79,7 @@ export function UserSearchCard({ user }: UserSearchCardProps) {
           <>
             {!isFollowing && <Plus size={14} color="#000" strokeWidth={2.25} />}
             <Text style={[styles.followText, isFollowing && styles.followingText]}>
-              {isFollowing ? 'Following' : 'Follow'}
+              {isFollowing ? t('post.following') : t('post.followButton')}
             </Text>
           </>
         )}

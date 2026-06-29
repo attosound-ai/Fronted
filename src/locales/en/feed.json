@@ -33,7 +33,15 @@
     "comments": "Comments",
     "noCommentsYet": "No comments yet. Be the first!",
     "replyingTo": "Replying to {{username}}",
-    "addCommentPlaceholder": "Add a comment..."
+    "addCommentPlaceholder": "Add a comment...",
+    "deleteAlertTitle": "Delete Post",
+    "deleteAlertMessage": "Are you sure you want to delete this post?",
+    "deleteFailed": "Failed to delete the post. Please try again.",
+    "loadError": "Couldn't load this post.",
+    "detailTitle": "Post",
+    "editedSuffix": "· edited",
+    "menuEdit": "Edit post",
+    "menuDelete": "Delete post"
   },
   "create": {
     "placeholder": "What's on your mind?",
@@ -49,7 +57,11 @@
     "fromGallery": "Gallery",
     "fromFiles": "Files",
     "fromProject": "Open Project",
-    "addMore": "Add more"
+    "addMore": "Add more",
+    "replaceAttachment": "Replace current attachment?",
+    "replaceButton": "Replace",
+    "takePhoto": "Camera",
+    "recordVideo": "Record"
   },
   "verification": {
     "bannerTitle": "Authorization pending",
@@ -68,7 +80,9 @@
     "placeholderCreatorEmail": "Enter creator email (optional)",
     "labelCreatorPhone": "Creator Contact Number",
     "warningReauthorize": "Changing creator contact information will cancel your current authorization and require re-verification.",
-    "saveButton": "Save and reauthorize"
+    "saveButton": "Save and reauthorize",
+    "unknownCreator": "Unknown Creator",
+    "bridgeNotSetUp": "Bridge number not set up. Please complete your subscription or contact support."
   },
   "list": {
     "errorLoadTitle": "Error loading feed",
@@ -76,7 +90,11 @@
   },
   "search": {
     "title": "Explore",
-    "subtitle": "Discover new content"
+    "subtitle": "Discover new content",
+    "placeholder": "Search...",
+    "tabPeople": "People",
+    "tabContent": "Content",
+    "noResults": "No results for \"{{query}}\""
   },
   "listen": {
     "title": "Projects"
@@ -101,5 +119,57 @@
     "reposts": "Reposts",
     "shares": "Shares",
     "noResults": "No one yet"
+  },
+  "bookmarks": {
+    "deleteTitle": "Delete Post",
+    "deleteConfirm": "Are you sure?",
+    "deleteFailed": "Failed to delete the post.",
+    "emptyTitle": "No saved posts yet",
+    "emptySubtitle": "Tap the bookmark icon on any post to save it here.",
+    "headerTitle": "Saved"
+  },
+  "edit": {
+    "headerTitle": "Edit Post",
+    "loadFailed": "Could not load post"
+  },
+  "createActions": {
+    "newPostTitle": "New Post",
+    "projectsSubtitle": "Record and produce music",
+    "recordTitle": "Record",
+    "recordSubtitle": "Record and publish audio"
+  },
+  "fullscreenViewer": {
+    "artBy": "Art by ",
+    "swipeToClose": "Swipe down to close"
+  },
+  "voters": {
+    "title": "{{emoji}} Rated {{rating}}",
+    "empty": "No one yet"
+  },
+  "ad": {
+    "sponsored": "Sponsored"
+  },
+  "reels": {
+    "followButton": "+ Follow",
+    "sponsored": "Sponsored",
+    "emptyTitle": "No reels yet",
+    "emptySubtitle": "Pull down to refresh"
+  },
+  "comments": {
+    "edit": "Edit",
+    "menuTitle": "Comment",
+    "unknownUser": "unknown",
+    "editedBadge": "(edited)",
+    "reply": "Reply",
+    "editingLabel": "Editing comment",
+    "editPlaceholder": "Edit your comment..."
+  },
+  "poem": {
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "comingSoon": {
+    "title": "Coming Soon",
+    "showSupport": "Show your support to creators by sending donations directly. This feature is coming soon!"
   }
 }

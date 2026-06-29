@@ -6,7 +6,8 @@
   },
   "outgoing": {
     "label": "Chamando...",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "unknownRecipient": "Desconhecido"
   },
   "active": {
     "loading": "Carregando projeto…",
@@ -35,11 +36,14 @@
     "clipVolume": "Volume do Clipe",
     "capturingAudio": "Capturando Áudio",
     "laneName": "Nome da Faixa",
-    "laneNamePrompt": "Digite um nome para a faixa {{number}}"
+    "laneNamePrompt": "Digite um nome para a faixa {{number}}",
+    "recBadge": "REC",
+    "micPermissionRequired": "É necessária permissão do microfone para gravar."
   },
   "banner": {
     "tapToRecord": "Toque para Gravar",
-    "callInProgress": "Chamada em andamento"
+    "callInProgress": "Chamada em andamento",
+    "openRecordScreen": "Abrir gravação"
   },
   "simple": {
     "delete": "Excluir",
@@ -47,7 +51,17 @@
     "uploadSuccess": "Gravação enviada com sucesso",
     "uploadFailed": "Falha ao enviar",
     "deleteConfirm": "Excluir Gravação?",
-    "deleteConfirmMessage": "Isso excluirá permanentemente o áudio gravado."
+    "deleteConfirmMessage": "Isso excluirá permanentemente o áudio gravado.",
+    "noWritableDirectory": "Nenhum diretório gravável disponível",
+    "uploadSheetTitle": "Escolha o que fazer",
+    "uploadOptionTitle": "Publicar gravação",
+    "uploadOptionSubtitle": "Continuar para criar publicação",
+    "exportOptionTitle": "Exportar para Arquivos",
+    "exportOptionSubtitle": "Salvar áudio no seu dispositivo",
+    "exportDialogTitle": "Exportar áudio",
+    "exportNotAvailableTitle": "Não disponível",
+    "exportNotAvailableMessage": "A exportação de arquivos não está disponível neste dispositivo.",
+    "exportFailed": "Não foi possível exportar o áudio: {{message}}"
   },
   "projectPicker": {
     "selectProject": "Selecionar Projeto",

@@ -1,5 +1,6 @@
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { CheckCircle, PlusCircle } from 'lucide-react-native';
 import { BottomSheet } from './BottomSheet';
@@ -15,16 +16,17 @@ interface AccountSwitcherBottomSheetProps {
   onClose: () => void;
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  representative: 'Representative',
-  creator: 'Creator account',
-  listener: 'Listener',
-};
+const ROLE_LABEL = {
+  representative: 'accountSwitcher.roleRepresentative',
+  creator: 'accountSwitcher.roleCreator',
+  listener: 'accountSwitcher.roleListener',
+} as const;
 
 export function AccountSwitcherBottomSheet({
   visible,
   onClose,
 }: AccountSwitcherBottomSheetProps) {
+  const { t } = useTranslation('profile');
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const switchToAccount = useAccountStore((s) => s.switchToAccount);
@@ -48,7 +50,7 @@ export function AccountSwitcherBottomSheet({
       // Preflight in switchToAccount rejects switches during an active
       // call to avoid tearing down CallKit / Twilio mid-conversation.
       if ((err as { code?: string })?.code === 'CANNOT_SWITCH_DURING_ACTIVE_CALL') {
-        showToast('End the current call before switching accounts');
+        showToast(t('accountSwitcher.endCallFirst'));
         return;
       }
       throw err;
@@ -58,7 +60,7 @@ export function AccountSwitcherBottomSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Switch account">
+    <BottomSheet visible={visible} onClose={onClose} title={t('accountSwitcher.title')}>
       <View style={styles.list}>
         {accounts.map((entry) => {
           const isActive = entry.user.id === currentId;
@@ -85,8 +87,10 @@ export function AccountSwitcherBottomSheet({
                 </Text>
                 <Text style={[styles.role, isActive && styles.roleActive]}>
                   {isActive
-                    ? 'Active now'
-                    : (ROLE_LABEL[entry.user.role] ?? entry.user.role)}
+                    ? t('accountSwitcher.activeNow')
+                    : ROLE_LABEL[entry.user.role as keyof typeof ROLE_LABEL]
+                      ? t(ROLE_LABEL[entry.user.role as keyof typeof ROLE_LABEL])
+                      : entry.user.role}
                 </Text>
               </View>
               {isSwitching ? (
@@ -111,7 +115,7 @@ export function AccountSwitcherBottomSheet({
           }}
         >
           <PlusCircle size={24} color="#FFFFFF" strokeWidth={2.25} />
-          <Text style={styles.addText}>Add account</Text>
+          <Text style={styles.addText}>{t('accountSwitcher.addAccount')}</Text>
         </TouchableOpacity>
       </View>
     </BottomSheet>

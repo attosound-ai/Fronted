@@ -21,7 +21,8 @@
   "name": {
     "title": "¿Cómo te llamas?",
     "subtitle": "Esto ayuda a que las personas te encuentren y reconozcan",
-    "placeholder": "Ingresa tu nombre completo"
+    "placeholder": "Ingresa tu nombre completo",
+    "required": "Por favor ingresa tu nombre"
   },
   "dateOfBirth": {
     "title": "¿Cuándo naciste?",
@@ -163,7 +164,9 @@
     "plans": {
       "record": {
         "name": "Record",
-        "features": ["Grabación Ilimitada"]
+        "features": [
+          "Grabación Ilimitada"
+        ]
       },
       "recordPro": {
         "name": "Record Pro",
@@ -183,6 +186,52 @@
           "Reportes de datos exportables",
           "Acceso anticipado a talentos emergentes"
         ]
+      }
+    },
+    "avatar": {
+      "angles": {
+        "front": "Frente: mira directamente a la cámara",
+        "left45": "Izquierda 45°: gira ligeramente la cabeza a la izquierda",
+        "right45": "Derecha 45°: gira ligeramente la cabeza a la derecha",
+        "fullLeft": "Perfil izquierdo completo",
+        "fullRight": "Perfil derecho completo",
+        "slightDown": "Ángulo ligeramente hacia abajo",
+        "slightUp": "Ángulo ligeramente hacia arriba"
+      },
+      "packs": {
+        "single": "Individual",
+        "messages": "{{count}} mensajes"
+      },
+      "badgeNew": "NUEVO",
+      "hideInstructions": "Ocultar instrucciones",
+      "howItWorks": "Cómo funciona",
+      "step1Title": "Toma 6 o 7 fotos de tu rostro",
+      "step1Note": "Rostro completamente visible · Expresión neutra · Fondo liso · Solo cabeza y hombros",
+      "step2Title": "Envía las fotos por correo a ATTO",
+      "step2Note": "Nuestro equipo las sube y crea tu avatar en 1 a 3 días.",
+      "step3Title": "Tu familia publica mensajes",
+      "step3Note": "Inician sesión, eligen «Publicar mensaje de avatar», escriben lo que quieres decir y tu avatar lo entrega como un video de 10 segundos, visible para todos en ATTO y que se puede compartir en privado.",
+      "valuePacks": "Paquetes de valor",
+      "tip": "Consejo: cuantos más ángulos envíes con el tiempo, más realista será tu avatar.",
+      "shareNotSupportedTitle": "No compatible",
+      "shareNotSupportedMessage": "Compartir no está disponible en este dispositivo.",
+      "shareDialogTitle": "Instrucciones del avatar de ATTO",
+      "pdfError": "No se pudo generar el PDF. Inténtalo de nuevo.",
+      "pdf": {
+        "title": "Instrucciones para crear tu avatar de ATTO",
+        "subtitle": "Crea tu propio avatar de IA para publicar mensajes de 10 segundos en la plataforma de ATTO.",
+        "step1Heading": "Paso 1 — Toma 6 o 7 fotos de tu rostro",
+        "rulesLabel": "Reglas para todas las fotos:",
+        "rule1": "Rostro completamente visible: sin gorras ni gafas de sol",
+        "rule2": "Expresión neutra, boca cerrada",
+        "rule3": "Mira directamente a la cámara salvo que se indique lo contrario",
+        "rule4": "Solo deben aparecer la cabeza y los hombros",
+        "rule5": "Fondo liso (las paredes sirven)",
+        "requiredAngles": "Ángulos requeridos:",
+        "step2Heading": "Paso 2 — Envía las fotos por correo a ATTO",
+        "step2Body": "No envíes las fotos por correo electrónico ni por otras plataformas. Nuestro equipo las subirá y creará tu avatar, normalmente en 1 a 3 días.",
+        "step3Heading": "Paso 3 — Tu familia publica mensajes",
+        "step3Body": "Cuando tu avatar esté listo, tus familiares o amigos inician sesión en su cuenta de ATTO, eligen «Publicar mensaje de avatar», escriben lo que quieres decir y tu avatar lo entrega como un video de 10 segundos, visible para todos en ATTO y que se puede compartir en privado."
       }
     }
   },

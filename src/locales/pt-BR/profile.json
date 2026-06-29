@@ -100,7 +100,8 @@
   "settings": {
     "sectionTitle": "Configurações",
     "languageLabel": "Idioma",
-    "appIconLabel": "Ícone do app"
+    "appIconLabel": "Ícone do app",
+    "analyticsLabel": "Análises"
   },
   "support": {
     "sectionTitle": "Suporte",
@@ -119,7 +120,8 @@
     "close": "Fechar"
   },
   "actions": {
-    "logout": "Sair"
+    "logout": "Sair",
+    "deleteAccount": "Excluir Conta"
   },
   "logout": {
     "sheetTitle": "Sair",
@@ -155,7 +157,16 @@
     "avatarSheetEditCurrent": "Editar foto atual",
     "avatarSheetFromGallery": "Escolher da galeria",
     "avatarSheetFromCamera": "Tirar uma foto",
-    "avatarSheetCancel": "Cancelar"
+    "avatarSheetCancel": "Cancelar",
+    "socialLinksTitle": "Redes sociais",
+    "spotifyPlaceholder": "Nome do artista ou URI",
+    "websiteLabel": "Site",
+    "extendedInfoTitle": "Informações adicionais",
+    "locationLabel": "Localização",
+    "locationPlaceholder": "Cidade, estado",
+    "recordLabelLabel": "Gravadora",
+    "recordLabelPlaceholder": "Independente",
+    "bookingEmailLabel": "E-mail para contratações"
   },
   "publicProfile": {
     "headerTitle": "Perfil",
@@ -167,7 +178,9 @@
     "roleBadgeRepresentative": "Representante",
     "roleBadgeVerified": "Verificado",
     "followButton": "Seguir",
-    "followingButton": "Seguindo"
+    "followingButton": "Seguindo",
+    "messageButton": "Mensagem",
+    "noPosts": "Ainda não há publicações"
   },
   "appIcon": {
     "title": "Ícone do app",
@@ -177,5 +190,50 @@
     "error": "Não foi possível carregar os ícones. Tente novamente mais tarde.",
     "errorChange": "Não foi possível alterar o ícone. Tente novamente.",
     "errorChangeReboot": "O iOS está bloqueando a alteração do ícone. Reinicie o iPhone e tente novamente."
+  },
+  "followList": {
+    "titleFollowers": "Seguidores",
+    "titleFollowing": "Seguindo",
+    "errorLoad": "Não foi possível carregar a lista",
+    "emptyFollowers": "Ainda sem seguidores",
+    "emptyFollowing": "Você ainda não segue ninguém"
+  },
+  "accountSwitcher": {
+    "roleRepresentative": "Representante",
+    "roleCreator": "Conta de criador",
+    "roleListener": "Ouvinte",
+    "endCallFirst": "Encerre a chamada atual antes de trocar de conta",
+    "title": "Trocar de conta",
+    "activeNow": "Ativa agora",
+    "addAccount": "Adicionar conta"
+  },
+  "preview": {
+    "nameFallback": "Seu nome"
+  },
+  "content": {
+    "postThumbnailA11y": "Publicação de {{username}}",
+    "postsGridA11y": "Grade de publicações do usuário",
+    "savedGridA11y": "Grade de publicações salvas",
+    "emptyPosts": "Ainda não há publicações",
+    "emptySaved": "Nenhuma publicação salva",
+    "tabPostsA11y": "Publicações",
+    "tabSavedA11y": "Salvos",
+    "tabSettingsA11y": "Configurações"
+  },
+  "deleteAccount": {
+    "title": "Excluir Conta",
+    "warningTitle": "Esta ação é permanente",
+    "warningBody": "Todos os seus dados serão excluídos permanentemente: publicações, mensagens, curtidas, comentários, seguidores, assinaturas e mais. Isso não pode ser desfeito.",
+    "deleteLinked": "Excluir também as contas vinculadas",
+    "continue": "Continuar",
+    "cancel": "Cancelar",
+    "otpTitle": "Verifique sua identidade",
+    "otpSubtitle": "Enviamos um código de verificação para",
+    "otpError": "Código inválido. Tente novamente.",
+    "deleteButton": "Excluir Minha Conta",
+    "deleteFailed": "Algo deu errado",
+    "deleteFailedBody": "Não foi possível excluir sua conta. Tente novamente mais tarde.",
+    "close": "Fechar",
+    "deleting": "Excluindo sua conta..."
   }
 }

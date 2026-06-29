@@ -16,6 +16,7 @@ export const namespaces = [
   'subscription',
   'feed',
   'validation',
+  'notifications',
 ] as const;
 
 i18n

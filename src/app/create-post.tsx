@@ -66,7 +66,7 @@ function ToolbarButton({
 }
 
 export default function CreatePostScreen() {
-  const { t } = useTranslation('feed');
+  const { t } = useTranslation(['feed', 'common']);
   const user = useAuthStore((s) => s.user);
   const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
   const canPublishAudio = user?.role === 'creator' && hasRecordUpload;
@@ -118,10 +118,10 @@ export default function CreatePostScreen() {
 
   const confirmReplaceAttachment = (action: () => void) => {
     if (media.length > 0) {
-      Alert.alert('', 'Replace current attachment?', [
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert('', t('create.replaceAttachment'), [
+        { text: t('common:buttons.cancel'), style: 'cancel' },
         {
-          text: 'Replace',
+          text: t('create.replaceButton'),
           onPress: () => {
             clearAttachment();
             action();
@@ -301,7 +301,7 @@ export default function CreatePostScreen() {
         showPostPublished();
       }, 400);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
+      const message = err instanceof Error ? err.message : t('common:errors.generic');
       Alert.alert(t('create.errorTitle'), message);
     }
   };

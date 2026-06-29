@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { LinkedText } from '../LinkedText';
 import type { FeedPost } from '@/types/post';
@@ -9,6 +10,7 @@ interface PoemMediaProps {
 }
 
 export function PoemMedia({ post }: PoemMediaProps) {
+  const { t } = useTranslation('feed');
   const [expanded, setExpanded] = useState(false);
   const text = post.description ?? '';
   const isLong = text.length > 300 || text.split('\n').length > 7;
@@ -21,7 +23,9 @@ export function PoemMedia({ post }: PoemMediaProps) {
       </LinkedText>
       {isLong && (
         <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.7}>
-          <Text style={styles.expand}>{expanded ? 'Show less' : 'Show more'}</Text>
+          <Text style={styles.expand}>
+            {expanded ? t('poem.showLess') : t('poem.showMore')}
+          </Text>
         </TouchableOpacity>
       )}
     </View>

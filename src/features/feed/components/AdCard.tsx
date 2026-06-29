@@ -6,6 +6,7 @@ import {
   Animated,
   Text as RNText,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -29,6 +30,7 @@ interface AdCardProps {
 }
 
 export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardProps) {
+  const { t } = useTranslation('feed');
   const { contentWidth } = useDeviceLayout();
   const VIDEO_HEIGHT = contentWidth * 1.6;
   // Global mute shared across every video (Instagram-style).
@@ -136,7 +138,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
             <View style={styles.sponsoredBadge}>
               <Ionicons name="megaphone-outline" size={11} color="#CCC" />
               <Text style={styles.sponsoredText} allowFontScaling={false}>
-                Sponsored
+                {t('ad.sponsored')}
               </Text>
             </View>
           </View>

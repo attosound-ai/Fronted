@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -40,6 +41,7 @@ export function DateOfBirthPicker({
   onChange,
   error,
 }: DateOfBirthPickerProps) {
+  const { t } = useTranslation('common');
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
 
   const handleChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -69,7 +71,7 @@ export function DateOfBirthPicker({
             variant="body"
             style={value ? styles.triggerText : styles.triggerPlaceholder}
           >
-            {value ? formatDisplay(value) : 'Select date'}
+            {value ? formatDisplay(value) : t('datePicker.selectDate')}
           </Text>
         </TouchableOpacity>
       )}

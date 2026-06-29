@@ -20,15 +20,20 @@ interface AudioVisualizerProps {
  * - Otherwise simulates an organic wave while `isActive`
  * - Flattens smoothly when inactive
  */
-export function AudioVisualizer({ isActive, width, height, liveAmplitude }: AudioVisualizerProps) {
+export function AudioVisualizer({
+  isActive,
+  width,
+  height,
+  liveAmplitude,
+}: AudioVisualizerProps) {
   const [points1, setPoints1] = useState<number[]>(() =>
-    new Array(POINT_COUNT).fill(0.5),
+    new Array(POINT_COUNT).fill(0.5)
   );
   const [points2, setPoints2] = useState<number[]>(() =>
-    new Array(POINT_COUNT).fill(0.5),
+    new Array(POINT_COUNT).fill(0.5)
   );
   const [points3, setPoints3] = useState<number[]>(() =>
-    new Array(POINT_COUNT).fill(0.5),
+    new Array(POINT_COUNT).fill(0.5)
   );
   const phaseRef = useRef(0);
   // Smoothed amplitude so sudden changes don't jitter (but still feels instant)
@@ -131,16 +136,42 @@ export function AudioVisualizer({ isActive, width, height, liveAmplitude }: Audi
 
         <G>
           {/* Soft glow background */}
-          <Path d={path1} stroke="url(#glow)" strokeWidth={14} fill="none" strokeLinecap="round" />
+          <Path
+            d={path1}
+            stroke="url(#glow)"
+            strokeWidth={14}
+            fill="none"
+            strokeLinecap="round"
+          />
 
           {/* Back layer — tertiary, wide & soft */}
-          <Path d={path3} stroke="url(#wave3)" strokeWidth={5} fill="none" strokeLinecap="round" opacity={0.6} />
+          <Path
+            d={path3}
+            stroke="url(#wave3)"
+            strokeWidth={5}
+            fill="none"
+            strokeLinecap="round"
+            opacity={0.6}
+          />
 
           {/* Mid layer — secondary */}
-          <Path d={path2} stroke="url(#wave2)" strokeWidth={3.5} fill="none" strokeLinecap="round" opacity={0.85} />
+          <Path
+            d={path2}
+            stroke="url(#wave2)"
+            strokeWidth={3.5}
+            fill="none"
+            strokeLinecap="round"
+            opacity={0.85}
+          />
 
           {/* Front layer — primary, crisp */}
-          <Path d={path1} stroke="url(#wave1)" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+          <Path
+            d={path1}
+            stroke="url(#wave1)"
+            strokeWidth={2.5}
+            fill="none"
+            strokeLinecap="round"
+          />
         </G>
       </Svg>
     </View>

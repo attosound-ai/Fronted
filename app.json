@@ -105,6 +105,7 @@
       "@react-native-community/datetimepicker",
       "expo-notifications",
       "@sentry/react-native",
+      "./plugins/withSentryNativeInit",
       "expo-sharing",
       [
         "@howincodes/expo-dynamic-app-icon",

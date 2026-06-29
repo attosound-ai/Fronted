@@ -56,5 +56,35 @@
   "errorTitle": "Erro",
   "errorUpgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
   "errorCancelFailed": "Falha ao cancelar. Tente novamente.",
-  "merchantName": "ATTO SOUND"
+  "merchantName": "ATTO SOUND",
+  "changeSheet": {
+    "downgradeScheduled": "Mudaremos você para o {{plan}} em {{date}}.",
+    "title": "Mudar plano",
+    "upgradeSubtitle": "Cobrança hoje pelos {{days}} dias restantes do seu ciclo atual.",
+    "activatesNow": "Ativa imediatamente",
+    "downgradeSubtitle": "Você manterá seu plano atual até {{date}} e mudará para o {{plan}} no próximo ciclo de cobrança. Sem reembolso pelo tempo restante do seu plano atual.",
+    "alreadyOnPlan": "Você já está neste plano.",
+    "confirmUpgrade": "Pagar {{amount}} e fazer upgrade",
+    "confirmDowngrade": "Agendar downgrade"
+  },
+  "cancelPendingDialog": {
+    "title": "Cancelar a mudança agendada?",
+    "message": "Você manterá seu plano atual e a mudança não será feita.",
+    "keepScheduled": "Manter",
+    "confirm": "Cancelar agendamento"
+  },
+  "scheduledBadge": "Agendado",
+  "downgradeButton": "Fazer Downgrade",
+  "title": "Assinatura",
+  "creatorOnly": {
+    "title": "As assinaturas são apenas para criadores",
+    "subtitle": "Ouvir, navegar e enviar mensagens é gratuito. Os planos de assinatura são reservados para contas de criadores (artistas com um número de detento registrado)."
+  },
+  "pendingBanner": {
+    "title": "Agendado: mudança para {{plan}}",
+    "applies": "Em {{date}}",
+    "cancel": "Cancelar"
+  },
+  "errorPreviewFailed": "Não foi possível carregar a prévia",
+  "successTitle": "Pronto"
 }

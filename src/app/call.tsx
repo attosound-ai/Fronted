@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
 import { useCallStore } from '@/stores/callStore';
@@ -47,6 +48,7 @@ function handOff() {
 }
 
 export default function CallScreen() {
+  const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const state = activeCall?.state;
 
@@ -98,7 +100,7 @@ export default function CallScreen() {
   if (state === 'ringing-outgoing') {
     return (
       <OutgoingCallScreen
-        recipientName={activeCall!.recipientName || activeCall!.recipientId || 'Unknown'}
+        recipientName={activeCall!.recipientName || activeCall!.recipientId || t('outgoing.unknownRecipient')}
         onCancel={hangUpCall}
       />
     );

@@ -9,7 +9,8 @@
     "subtitle": "Inicie una conversación"
   },
   "error": {
-    "loadingMessages": "Error al cargar los mensajes"
+    "loadingMessages": "Error al cargar los mensajes",
+    "retry": "Reintentar"
   },
   "conversation": {
     "fallbackUserName": "Usuario",
@@ -24,7 +25,11 @@
     "errorFailedToSend": "No se pudo enviar el mensaje",
     "startingConversation": "Iniciando conversación...",
     "errorFailedToStart": "No se pudo abrir esta conversación",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "messageDeleted": "Mensaje eliminado",
+    "you": "Tú",
+    "edited": "editado",
+    "editPlaceholder": "Editar mensaje..."
   },
   "chatHeader": {
     "backAccessibilityLabel": "Volver",
@@ -53,5 +58,22 @@
     "noneLabel": "Ninguno",
     "loading": "Cargando fondos...",
     "error": "No se pudieron cargar los fondos. Intenta de nuevo más tarde."
+  },
+  "splitView": {
+    "emptyTitle": "Tus mensajes",
+    "emptySubtitle": "Selecciona una conversación para empezar a chatear"
+  },
+  "actions": {
+    "copied": "Copiado",
+    "deleteConfirmTitle": "Eliminar mensaje",
+    "deleteConfirmBody": "Esta acción no se puede deshacer.",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "react": "Reaccionar",
+    "reply": "Responder",
+    "copy": "Copiar",
+    "edit": "Editar",
+    "editing": "Editando",
+    "title": "Mensaje"
   }
 }

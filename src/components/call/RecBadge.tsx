@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { COLORS } from '@/constants/theme';
 
@@ -19,6 +20,7 @@ function formatElapsed(seconds: number): string {
 }
 
 export function RecBadge({ isRecording, elapsed }: RecBadgeProps) {
+  const { t } = useTranslation('calls');
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function RecBadge({ isRecording, elapsed }: RecBadgeProps) {
     <View style={styles.container}>
       <View style={styles.badge}>
         <Animated.View style={[styles.dot, { opacity: pulseAnim }]} />
-        <Text style={styles.recText}>REC</Text>
+        <Text style={styles.recText}>{t('active.recBadge')}</Text>
       </View>
       <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
     </View>

@@ -11,6 +11,7 @@ import { PostMedia } from './media/PostMedia';
 import { PostActions } from './PostActions';
 import { PostEngagement } from './PostEngagement';
 import { InteractorsBottomSheet, type InteractionType } from './InteractorsBottomSheet';
+import { isVerticalVideo } from '../utils/reelFormat';
 import { COLORS } from '@/constants/theme';
 
 interface FeedPostCardProps {
@@ -70,10 +71,13 @@ function FeedPostCardInner({
   const isOwnPost =
     currentUserId !== undefined && String(post.author.id) === String(currentUserId);
   const isReel = post.type === 'reel';
+  // Reels AND vertical (~9:16) videos draw their author row INSIDE the video
+  // (VideoOverlayHeader), so the separate header above the media is suppressed.
+  const hasOverlayHeader = isReel || isVerticalVideo(post);
   const isCreatorPost = post.author.role === 'creator';
   const isAudio = post.type === 'audio';
 
-  const header = !isReel ? (
+  const header = !hasOverlayHeader ? (
     <PostHeader
       author={post.author}
       isBookmarked={post.isBookmarked}
@@ -145,7 +149,7 @@ function FeedPostCardInner({
         </View>
       ) : (
         <>
-          {isReel && !isOwnPost && !post.author.isFollowing && (
+          {hasOverlayHeader && !isOwnPost && !post.author.isFollowing && (
             <Text variant="small" style={styles.suggestedLabel}>
               {t('post.suggestedForYou')}
             </Text>

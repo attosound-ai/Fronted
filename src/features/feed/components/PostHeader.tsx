@@ -76,7 +76,15 @@ export function PostHeader({
           {t('post.suggestedForYou')}
         </Text>
       )}
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          // Creators have the glowing gold avatar ring; the glow extends ~20px
+          // past the ring, so give the row extra top/left room or it gets
+          // clipped against the card's top edge and the screen's left edge.
+          author.role === 'creator' && styles.containerCreator,
+        ]}
+      >
         <TouchableOpacity
           style={styles.authorInfo}
           onPressIn={handlePressIn}
@@ -224,6 +232,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  // Extra clearance on every side so the creator avatar's gold glow (~20px past
+  // the ring) isn't clipped: top by the card edge, left by the screen edge, and
+  // bottom by the media below — which renders after the header with an opaque
+  // background and would otherwise paint over the lower half of the glow.
+  containerCreator: {
+    paddingTop: 20,
+    paddingLeft: 22,
+    paddingBottom: 20,
   },
   authorInfo: {
     flexDirection: 'row',

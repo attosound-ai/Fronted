@@ -23,7 +23,7 @@ import ReAnimated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useScrollOffset } from '@/contexts/ScrollOffsetContext';
-import { useCallBarVisible } from '@/hooks/useInCallChrome';
+import { useScreenTopInset } from '@/hooks/useInCallChrome';
 import {
   Plus,
   Users,
@@ -81,10 +81,9 @@ export function FeedHeader() {
   const { t } = useTranslation('feed');
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
-  // When the green call bar is up it already owns the status-bar area, so the
-  // header sits flush beneath it (no doubled inset) and recolors to match it.
-  const inCall = useCallBarVisible();
-  const topInset = inCall ? 0 : insets.top;
+  // Reserves room below the green call-bar overlay when a call is up, else the
+  // real inset. The header no longer recolors green (green lives only on the bar).
+  const topInset = useScreenTopInset();
   const { isTablet } = useDeviceLayout();
   // Shared scroll-direction signal (0 = at top / scrolling up, 1 = scrolling
   // down) — the same value that shrinks the bottom navbar. Drives the
@@ -356,11 +355,10 @@ export function FeedHeader() {
         {/* Frosted background that fades into the feed — no hard edge/border.
             During a call it recolors to the green call bar (#22C55E) and goes
             solid so it joins the bar above with no seam, then dissolves. */}
-        {inCall ? (
-          <HeaderBlur tintRgb="34, 197, 85" solid fadeExtend={36} />
-        ) : (
-          <HeaderBlur />
-        )}
+        {/* Green now lives ONLY on the call bar above (InCallTopBar), fading at
+            its own bottom edge — so the feed header stays its normal dark blur
+            during a call (the green no longer bleeds onto the logo / feed). */}
+        <HeaderBlur />
 
         <View
           pointerEvents="box-none"
@@ -554,9 +552,21 @@ const styles = StyleSheet.create({
   logoSubtext: {
     color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
-    fontSize: 7,
-    letterSpacing: 2.5,
+    // Sized + letter-spaced so "SOUND" spans the same 100px width as the
+    // wordmark image above it (a short 5-letter word only reaches that width
+    // by spreading the caps — bumping font size alone would make it far too
+    // tall for the 44px header). Fixed width + centre keeps it locked to the
+    // logo's width.
+    fontSize: 12,
+    lineHeight: 14,
+    letterSpacing: 11,
     textTransform: 'uppercase',
+    textAlign: 'center',
+    width: 100,
+    // letterSpacing adds a trailing gap after the last letter, which leaves the
+    // visible caps sitting ~5px left of centre. Nudge the render right (doesn't
+    // affect layout/width) so it's optically centred under the wordmark.
+    transform: [{ translateX: 5 }],
   },
   iconButton: {
     padding: 6,

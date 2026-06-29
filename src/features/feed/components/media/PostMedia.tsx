@@ -4,6 +4,7 @@ import { ImageMedia } from './ImageMedia';
 import { VideoMedia } from './VideoMedia';
 import { ReelMedia } from './ReelMedia';
 import { PoemMedia } from './PoemMedia';
+import { isVerticalVideo } from '../../utils/reelFormat';
 
 interface PostMediaProps {
   post: FeedPost;
@@ -47,7 +48,23 @@ export function PostMedia({
     case 'image':
       return <ImageMedia post={post} onDoubleTap={onDoubleTap} />;
     case 'video':
-      return <VideoMedia post={post} isVisible={isVisible} onPress={onOpenReel} />;
+      // Vertical (~9:16) clips read like reels: the author row (avatar · name ·
+      // follow · ⋯) is drawn INSIDE the video at the top edge. Landscape/square
+      // videos keep the normal header above the media.
+      return (
+        <VideoMedia
+          post={post}
+          isVisible={isVisible}
+          onPress={onOpenReel}
+          onDoubleTap={onDoubleTap}
+          overlayHeader={isVerticalVideo(post)}
+          onProfilePress={onProfilePress}
+          onFollow={onFollow}
+          onBookmark={onBookmark}
+          onReport={onReport}
+          onDelete={onDelete}
+        />
+      );
     case 'reel':
       return (
         <ReelMedia
@@ -58,6 +75,7 @@ export function PostMedia({
           onBookmark={onBookmark}
           onReport={onReport}
           onDelete={onDelete}
+          onDoubleTap={onDoubleTap}
         />
       );
     case 'text':

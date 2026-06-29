@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
 import { useCallStore } from '@/stores/callStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   acceptIncomingCall,
@@ -30,6 +31,14 @@ import { COLORS } from '@/constants/theme';
  * no modal to pop → `replace('/(tabs)')`.
  */
 function handOff() {
+  // Record / Record-Pro users land DIRECTLY on the recorder when the call
+  // connects (free/pro users land on the tabs and use the CallBanner). `replace`
+  // is one atomic navigation — it avoids the dismiss()+delayed-push race that
+  // previously stranded record users on a black screen.
+  if (useSubscriptionStore.getState().hasEntitlement('record_upload')) {
+    router.replace('/(tabs)/recording');
+    return;
+  }
   if (router.canDismiss()) {
     router.dismiss();
   } else {

@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
+import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useCallStore } from '@/stores/callStore';
 import { isCallConnected, isOnCallScreen } from '@/hooks/useInCallChrome';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
@@ -53,47 +55,59 @@ export function InCallTopBar() {
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top }]}>
+      {/* Green frosted-blur that dissolves downward (like the search bar's blur,
+          but green) — an OVERLAY that does NOT push content (reels/feed layouts
+          untouched); screens reserve room below via useScreenTopInset. Green
+          lives ONLY here, never on the screen headers. */}
+      <HeaderBlur tintRgb="34, 197, 94" fadeExtend={28} />
       <View style={styles.content}>
-        {/* Timer */}
         <View style={styles.timerContainer}>
           <View style={styles.liveDot} />
           <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
         </View>
 
-        {/* Controls */}
-        <View style={styles.controls}>
+        <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity
-            style={[styles.btn, activeCall?.isMuted && styles.btnActive]}
+            style={[styles.glassBtnInner, activeCall?.isMuted && styles.glassBtnActive]}
             onPress={toggleMuteCall}
           >
             {activeCall?.isMuted ? (
-              <MicOff size={18} color="#FFF" strokeWidth={2.25} />
+              <MicOff size={20} color="#FFF" strokeWidth={2.25} />
             ) : (
-              <Mic size={18} color="#FFF" strokeWidth={2.25} />
+              <Mic size={20} color="#FFF" strokeWidth={2.25} />
             )}
           </TouchableOpacity>
+        </GlassSurface>
 
+        <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity
-            style={[styles.btn, activeCall?.isSpeaker && styles.btnActive]}
+            style={[styles.glassBtnInner, activeCall?.isSpeaker && styles.glassBtnActive]}
             onPress={toggleSpeaker}
           >
             {activeCall?.isSpeaker ? (
-              <Volume2 size={18} color="#FFF" strokeWidth={2.25} />
+              <Volume2 size={20} color="#FFF" strokeWidth={2.25} />
             ) : (
-              <Volume1 size={18} color="#FFF" strokeWidth={2.25} />
+              <Volume1 size={20} color="#FFF" strokeWidth={2.25} />
             )}
           </TouchableOpacity>
+        </GlassSurface>
 
-          <TouchableOpacity style={styles.btn} onPress={openKeypad}>
-            <Grid3x3 size={18} color="#FFF" strokeWidth={2.25} />
+        <GlassSurface radius={21} style={styles.glassBtn}>
+          <TouchableOpacity style={styles.glassBtnInner} onPress={openKeypad}>
+            <Grid3x3 size={20} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
+        </GlassSurface>
 
-          <TouchableOpacity style={styles.hangUpBtn} onPress={hangUpCall}>
+        <GlassSurface radius={21} style={styles.glassBtn}>
+          <TouchableOpacity
+            style={[styles.glassBtnInner, styles.hangUpTint]}
+            onPress={hangUpCall}
+          >
             <View style={styles.hangUpIcon}>
-              <Phone size={18} color="#FFF" strokeWidth={2.25} />
+              <Phone size={20} color="#FFF" strokeWidth={2.25} />
             </View>
           </TouchableOpacity>
-        </View>
+        </GlassSurface>
       </View>
     </View>
   );
@@ -101,7 +115,29 @@ export function InCallTopBar() {
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: '#22C55E',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    // The green frosted blur (HeaderBlur) is the background; let its fade spill
+    // below the bar so the green dissolves smoothly into the content.
+    overflow: 'visible',
+  },
+  glassBtn: {
+    width: 42,
+    height: 42,
+  },
+  hangUpTint: {
+    backgroundColor: 'rgba(239, 68, 68, 0.6)',
+  },
+  glassBtnInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glassBtnActive: {
+    backgroundColor: 'rgba(0,0,0,0.28)',
   },
   content: {
     flexDirection: 'row',

@@ -8,7 +8,7 @@ import { COLORS, SPACING } from '@/constants/theme';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import { makeVoIPCall } from '@/hooks/useTwilioVoice';
 import { useCallStore } from '@/stores/callStore';
-import { useCallBarVisible, useScreenTopInset } from '@/hooks/useInCallChrome';
+import { useScreenTopInset } from '@/hooks/useInCallChrome';
 
 interface ChatHeaderProps {
   participantName: string;
@@ -24,22 +24,15 @@ export function ChatHeader({
   hideBack,
 }: ChatHeaderProps) {
   const { t } = useTranslation('messages');
-  // 0 when the green call bar already owns the status-bar area, else the inset.
+  // Reserves room below the green call-bar overlay when a call is up. The header
+  // never recolors green — green lives only on the InCallTopBar.
   const topInset = useScreenTopInset();
-  // During a call the header recolors to the green call bar (flush beneath it).
-  const callBarVisible = useCallBarVisible();
   const { avatarUri, username, role } = useParticipantProfile(participantId);
   const name = username || participantName || t('conversation.fallbackUserName');
   const isInCall = useCallStore((s) => s.activeCall !== null);
 
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingTop: topInset + SPACING.xs },
-        callBarVisible && styles.containerInCall,
-      ]}
-    >
+    <View style={[styles.container, { paddingTop: topInset + SPACING.xs }]}>
       {!hideBack && (
         <TouchableOpacity
           onPress={onBack}

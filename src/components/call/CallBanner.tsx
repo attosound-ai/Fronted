@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { ProjectPickerSheet } from './ProjectPickerSheet';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 
 // ── CallBanner ─────────────────────────────────────────────
 // Red floating CTA above tab bar. Visible during an active connected call.
@@ -21,12 +22,13 @@ export function CallBanner() {
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const hasAdvancedProduction = useSubscriptionStore((s) =>
-    s.hasEntitlement('advanced_production'),
+    s.hasEntitlement('advanced_production')
   );
 
   const isConnected =
     activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
-  const isOnRecordingScreen = pathname === '/recording' || pathname === '/(tabs)/recording';
+  const isOnRecordingScreen =
+    pathname === '/recording' || pathname === '/(tabs)/recording';
 
   // Pulsing white dot
   useEffect(() => {
@@ -61,32 +63,41 @@ export function CallBanner() {
   const bottomOffset = 49 + insets.bottom;
 
   return (
-    <View style={[bannerStyles.wrapper, { bottom: bottomOffset + 8 }]}>
-      <TouchableOpacity
-        style={bannerStyles.container}
-        onPress={() => {
-          if (hasAdvancedProduction) {
-            setPickerVisible(true);
-          } else {
-            // record plan: no projects, go straight to simple recording
-            router.push('/(tabs)/recording');
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Animated.View style={[bannerStyles.recordCircle, { opacity: pulseAnim }]}>
-          <View style={bannerStyles.recordInner} />
-        </Animated.View>
-        <View style={bannerStyles.textContainer}>
-          <Text variant="small" style={bannerStyles.title}>
-            {hasAdvancedProduction ? t('banner.tapToRecord') : t('banner.openRecordScreen', 'Open Record')}
-          </Text>
-          <Text variant="small" style={bannerStyles.subtitle}>
-            {t('banner.callInProgress')}
-          </Text>
-        </View>
-        <Mic size={18} color="#FFF" strokeWidth={2.25} />
-      </TouchableOpacity>
+    <View style={[bannerStyles.wrapper, { bottom: bottomOffset }]}>
+      {/* Liquid-glass pill with a translucent red tint (iOS 26 GlassView via
+          GlassSurface; BlurView/solid fallbacks). The red shadow lives on the
+          non-clipping shadow wrapper since GlassSurface clips to its radius. */}
+      <View style={bannerStyles.shadowWrap}>
+        <GlassSurface radius={24} style={bannerStyles.glassPill}>
+          <TouchableOpacity
+            style={bannerStyles.container}
+            onPress={() => {
+              if (hasAdvancedProduction) {
+                setPickerVisible(true);
+              } else {
+                // record plan: no projects, go straight to simple recording
+                router.push('/(tabs)/recording');
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Animated.View style={[bannerStyles.recordCircle, { opacity: pulseAnim }]}>
+              <View style={bannerStyles.recordInner} />
+            </Animated.View>
+            <View style={bannerStyles.textContainer}>
+              <Text variant="small" style={bannerStyles.title}>
+                {hasAdvancedProduction
+                  ? t('banner.tapToRecord')
+                  : t('banner.openRecordScreen', 'Open Record')}
+              </Text>
+              <Text variant="small" style={bannerStyles.subtitle}>
+                {t('banner.callInProgress')}
+              </Text>
+            </View>
+            <Mic size={18} color="#FFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+        </GlassSurface>
+      </View>
       <ProjectPickerSheet
         visible={pickerVisible}
         onClose={() => setPickerVisible(false)}
@@ -102,19 +113,26 @@ const bannerStyles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
   },
+  shadowWrap: {
+    borderRadius: 24,
+    shadowColor: '#B91C1C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  glassPill: {
+    borderRadius: 24,
+  },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#B91C1C',
-    borderRadius: 24,
+    // Translucent red tint OVER the liquid glass — keeps the red identity while
+    // the GlassSurface behind it does the iOS-26 refraction/blur.
+    backgroundColor: 'rgba(185, 28, 28, 0.55)',
     paddingVertical: 8,
     paddingHorizontal: 14,
     gap: 8,
-    shadowColor: '#B91C1C',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
   },
   recordCircle: {
     width: 24,

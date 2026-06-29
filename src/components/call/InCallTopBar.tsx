@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-native';
+import {
+  Mic,
+  MicOff,
+  Volume1,
+  Volume2,
+  Phone,
+  Grid3x3,
+  SlidersHorizontal,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
@@ -12,6 +20,9 @@ import { isCallConnected, isOnCallScreen } from '@/hooks/useInCallChrome';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
 import { preloadCallSounds } from '@/lib/sound/callSounds';
 import { openKeypad } from './DtmfKeypadHost';
+import { openMixer } from './MixerHost';
+import { useFeatureFlag } from '@/lib/analytics';
+import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -29,6 +40,8 @@ export function InCallTopBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
+  // Mixer button shows only when the audio-injection feature is on (same flag).
+  const mixerEnabled = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
 
   const isConnected = isCallConnected(activeCall?.state);
 
@@ -104,6 +117,15 @@ export function InCallTopBar() {
             <Grid3x3 size={20} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
         </GlassSurface>
+
+        {/* Mixer — opens the multitrack recording mixer (flag-gated). */}
+        {mixerEnabled ? (
+          <GlassSurface radius={21} style={styles.glassBtn}>
+            <TouchableOpacity style={styles.glassBtnInner} onPress={openMixer}>
+              <SlidersHorizontal size={20} color="#FFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+          </GlassSurface>
+        ) : null}
 
         <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity

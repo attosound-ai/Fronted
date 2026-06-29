@@ -22,6 +22,7 @@ import { PostHogProvider, PostHogErrorBoundary, usePostHog } from 'posthog-react
 import * as Sentry from '@sentry/react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Application from 'expo-application';
 import { AppState, StyleSheet } from 'react-native';
 import { useFonts } from 'expo-font';
 
@@ -55,23 +56,29 @@ import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
+// --- Sentry native-init gate — prevents the "Sentry went dark" class of bug ---
+// Builds at/after this number compile the native Sentry bootstrap
+// (withSentryNativeInit → AppDelegate.swift / MainApplication.kt), which arms
+// Sentry BEFORE the JS bundle runs. On those builds JS must NOT re-init native
+// (autoInitializeNativeSdk:false) so there is a single, pre-JS-armed client.
+// On ANY older build the native bootstrap is absent, so JS MUST init native or
+// Sentry goes completely dark (the build-64 incident: zero events reported).
+// SAFETY: this stays unreachably high until you BUMP it to a build number you
+// have VERIFIED actually ships the native init (and saw events from). Until then
+// every build resolves to `true` (never dark). Unknown/NaN build → also `true`.
+const FIRST_NATIVE_SENTRY_BUILD = Number.MAX_SAFE_INTEGER; // TODO: set to verified native-init build #
+const SENTRY_NATIVE_PRE_ARMED =
+  Number(Application.nativeBuildVersion ?? NaN) >= FIRST_NATIVE_SENTRY_BUILD;
+
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  // The native SDK is armed at process-start on BOTH platforms by the
-  // withSentryNativeInit config plugin (ios/ATTO/AppDelegate.swift +
-  // android/.../MainApplication.kt), so crashes/ANRs in the pre-JS launch window
-  // (watchdog / first-launch-after-update) are captured — that window was our
-  // blind spot. So JS does NOT re-initialize native; it reuses the already-running
-  // native client (environment + masked mobile replay are configured natively).
-  // This JS init only wires the JS layer.
-  autoInitializeNativeSdk: false,
+  // false ONLY on builds that pre-arm Sentry natively (see the gate above);
+  // true everywhere else so Sentry can NEVER go dark on a build that lacks the
+  // native bootstrap (the build-64 incident reported zero events).
+  autoInitializeNativeSdk: !SENTRY_NATIVE_PRE_ARMED,
   tracesSampleRate: 0,
-  // NOTE: with autoInitializeNativeSdk:false these replay sample rates + the
-  // mobileReplayIntegration masking below are INERT — JS no longer configures
-  // native replay. The REAL sampling + masking (incl. SVG) live in the native
-  // blocks (AppDelegate.swift / MainApplication.kt via withSentryNativeInit).
-  // Don't "fix" masking here; change it in the native blocks. Kept only so the
-  // integration's JS hooks (replay_id linking) and the feedback widget register.
+  // These drive native replay whenever JS owns init (autoInitializeNativeSdk:
+  // true); masking (text + images + vectors/SVG) is set via mobileReplayIntegration.
   replaysSessionSampleRate: 1.0,
   replaysOnErrorSampleRate: 1.0,
   integrations: [

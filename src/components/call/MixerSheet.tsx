@@ -17,6 +17,8 @@ import { Slider } from '@/components/ui/Slider';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { haptic } from '@/lib/haptics/hapticService';
 import { mixerService } from '@/lib/callAudio/mixerService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useCallStore } from '@/stores/callStore';
 import { useMixerStore, MIXER_CHANNELS, type MixerChannel } from '@/stores/mixerStore';
 import { COLORS } from '@/constants/theme';
 
@@ -76,6 +78,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
       void haptic('selection');
       setMetronomeEnabled(on);
       mixerService.setMetronome(on, bpm);
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_METRONOME, { enabled: on, bpm });
     },
     [setMetronomeEnabled, bpm]
   );
@@ -91,22 +94,43 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
 
   const onToggleRecording = useCallback(async () => {
     void haptic('medium');
+    // Snapshot what the rep was mixing — the native record path is otherwise a
+    // blind spot, so the result + config captured here is the only JS signal.
+    const ctx = {
+      call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+      channels,
+      metronome_enabled: metronomeEnabled,
+      bpm,
+      native_supported: mixerService.isSupported(),
+    };
     if (isMixRecording) {
       setMixRecording(false);
       const path = await mixerService.stopMixRecording();
       if (path) setLastMixPath(path);
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+        ...ctx,
+        action: 'stop',
+        outcome: path ? 'ok' : 'no_path',
+        has_path: !!path,
+      });
     } else {
       setLastMixPath(null);
       setMixRecording(true);
-      await mixerService.startMixRecording();
+      const res = await mixerService.startMixRecording();
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+        ...ctx,
+        action: 'start',
+        outcome: res != null ? 'ok' : 'native_unavailable',
+      });
     }
-  }, [isMixRecording, setMixRecording, setLastMixPath]);
+  }, [isMixRecording, setMixRecording, setLastMixPath, channels, metronomeEnabled, bpm]);
 
   // Play the finished mix locally so the rep can review the multitrack. Uses
   // keepAudioSessionActive so reviewing during a live call doesn't drop it.
   const playLastMix = useCallback(() => {
     if (!lastMixPath) return;
     void haptic('selection');
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_PLAYBACK, { has_path: true });
     try {
       mixPlayerRef.current?.remove();
       const player = createAudioPlayer(lastMixPath, { keepAudioSessionActive: true });

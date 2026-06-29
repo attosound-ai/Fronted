@@ -172,6 +172,19 @@ export const ANALYTICS_EVENTS = {
     AUDIO_INJECT_STOPPED: 'call_audio_inject_stopped',
     AUDIO_INJECT_FAILED: 'call_audio_inject_failed',
     AUDIO_INJECT_STATE_CHANGED: 'call_audio_inject_state_changed',
+    // Native audio-DEVICE swap result — THE critical signal for the "silent
+    // injection" bug (device fails to install => rep hears monitor, remote hears
+    // nothing). `outcome`: installed | install_returned_false | install_threw |
+    // restored | restore_threw. Carries `reason` on failure + call_sid.
+    AUDIO_INJECT_DEVICE: 'call_audio_inject_device',
+    // Mixer multitrack record lifecycle. `action`: start | stop | fail.
+    // `outcome` + has_path (did native return a file) + duration_ms + a snapshot
+    // of the channel config (gain+record per channel) + metronome (enabled,bpm)
+    // so we can see exactly what the rep mixed. The native record path is the
+    // blind spot, so capturing its RESULT here is the only JS-visible signal.
+    AUDIO_MIX_RECORD: 'call_audio_mix_record',
+    AUDIO_MIX_METRONOME: 'call_audio_mix_metronome',
+    AUDIO_MIX_PLAYBACK: 'call_audio_mix_playback',
   },
 
   // ── Messages ───────────────────────────────────

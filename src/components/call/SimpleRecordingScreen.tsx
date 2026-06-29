@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScreenTopInset } from '@/hooks/useInCallChrome';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -78,6 +79,7 @@ function getAudioExportMeta(format?: string, uri?: string) {
 export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
   const { t } = useTranslation(['calls', 'common']);
   const insets = useSafeAreaInsets();
+  const topInset = useScreenTopInset();
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
 
@@ -528,89 +530,23 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
   }, [callElapsed]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {isConnected ? (
-        <>
-          {/* Green call header — with timer, centered ATTO logo, and controls */}
-          <View style={styles.callBar}>
-            <View style={styles.callTimerContainer}>
-              <View style={styles.liveDot} />
-              <Text style={styles.callTimer}>{formattedElapsed}</Text>
-            </View>
-
-            <View style={styles.callBarLogoCenter} pointerEvents="none">
-              <Image
-                source={{ uri: ATTO_LOGO_URI }}
-                style={styles.attoLogo}
-                resizeMode="contain"
-              />
-              <Text style={styles.attoSubtext}>sound</Text>
-            </View>
-
-            <View style={styles.callBarControls}>
-              <TouchableOpacity
-                style={[
-                  styles.callBarBtn,
-                  activeCall?.isMuted && styles.callBarBtnActive,
-                ]}
-                onPress={toggleMuteCall}
-              >
-                {activeCall?.isMuted ? (
-                  <MicOff size={18} color="#FFF" strokeWidth={2.25} />
-                ) : (
-                  <Mic size={18} color="#FFF" strokeWidth={2.25} />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.callBarBtn,
-                  activeCall?.isSpeaker && styles.callBarBtnActive,
-                ]}
-                onPress={toggleSpeaker}
-              >
-                {activeCall?.isSpeaker ? (
-                  <Volume2 size={18} color="#FFF" strokeWidth={2.25} />
-                ) : (
-                  <Volume1 size={18} color="#FFF" strokeWidth={2.25} />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.callBarBtn} onPress={openKeypad}>
-                <Grid3x3 size={18} color="#FFF" strokeWidth={2.25} />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.callBarHangUp} onPress={hangUpCall}>
-                <View style={{ transform: [{ rotate: '135deg' }] }}>
-                  <Phone size={18} color="#FFF" strokeWidth={2.25} />
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Back button — below the green bar during a call */}
-          <View style={styles.backRow}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton} hitSlop={16}>
-              <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        /* No call — back button + ATTO logo in top nav */
-        <View style={styles.topNav}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton} hitSlop={16}>
-            <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-          <View style={styles.topNavLogoCenter} pointerEvents="none">
-            <Image
-              source={{ uri: ATTO_LOGO_URI }}
-              style={styles.attoLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.attoSubtext}>sound</Text>
-          </View>
+    <View style={[styles.container, { paddingTop: topInset }]}>
+      {/* Back + ATTO logo only. During a call the global InCallTopBar overlay
+          renders the call controls above this — identical to every other
+          screen, so the in-call header is consistent app-wide. */}
+      <View style={styles.topNav}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton} hitSlop={16}>
+          <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
+        </TouchableOpacity>
+        <View style={styles.topNavLogoCenter} pointerEvents="none">
+          <Image
+            source={{ uri: ATTO_LOGO_URI }}
+            style={styles.attoLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.attoSubtext}>sound</Text>
         </View>
-      )}
+      </View>
 
       {/* Audio visualizer — reactive to recording or playback */}
       <View style={styles.visualizerContainer}>

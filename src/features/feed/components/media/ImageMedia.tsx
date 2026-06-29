@@ -1,18 +1,18 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
   Image,
   StyleSheet,
-  Animated,
   Pressable,
   FlatList,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
 } from 'react-native';
-import { Heart } from 'lucide-react-native';
 import type { FeedPost } from '@/types/post';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
+import { useDoubleTapLike } from '../../hooks/useDoubleTapLike';
+import { HeartBurst } from './HeartBurst';
 /**
  * Height-to-width ratio from the media's native dimensions.
  *
@@ -40,9 +40,9 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
     }
     return 1; // default 1:1 while loading
   });
-  const lastTap = useRef(0);
-  const heartScale = useRef(new Animated.Value(0)).current;
-  const heartOpacity = useRef(new Animated.Value(0)).current;
+  // Double-tap anywhere on the image → like + heart burst + haptic (shared with
+  // every other feed media surface).
+  const { handleTap, heartScale, heartOpacity } = useDoubleTapLike({ onDoubleTap });
 
   // Detect aspect ratio from first image URL if backend didn't provide dimensions
   const firstImage = images[0];
@@ -60,41 +60,18 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
 
   const imageHeight = contentWidth * heightRatio;
 
-  const handlePress = useCallback(() => {
-    const now = Date.now();
-    if (now - lastTap.current < 300) {
-      onDoubleTap?.();
-      heartScale.setValue(0);
-      heartOpacity.setValue(1);
-      Animated.parallel([
-        Animated.spring(heartScale, {
-          toValue: 1,
-          useNativeDriver: true,
-          speed: 15,
-          bounciness: 10,
-        }),
-        Animated.sequence([
-          Animated.delay(600),
-          Animated.timing(heartOpacity, {
-            toValue: 0,
-            duration: 300,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }
-    lastTap.current = now;
-  }, [onDoubleTap, heartScale, heartOpacity]);
-
-  const onMomentumEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / contentWidth);
-    setActiveIndex(index);
-  }, []);
+  const onMomentumEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const index = Math.round(e.nativeEvent.contentOffset.x / contentWidth);
+      setActiveIndex(index);
+    },
+    [contentWidth]
+  );
 
   if (images.length === 0) return null;
 
   const renderImage = ({ item }: { item: string }) => (
-    <Pressable onPress={handlePress}>
+    <Pressable onPress={handleTap}>
       <Image
         source={{ uri: item }}
         style={[styles.image, { width: contentWidth, height: imageHeight }]}
@@ -131,18 +108,7 @@ export function ImageMedia({ post, onDoubleTap }: ImageMediaProps) {
         </View>
       )}
 
-      <Animated.View
-        style={[
-          styles.heartOverlay,
-          {
-            opacity: heartOpacity,
-            transform: [{ scale: heartScale }],
-          },
-        ]}
-        pointerEvents="none"
-      >
-        <Heart size={80} color="#FFF" fill="#FFF" strokeWidth={2.25} />
-      </Animated.View>
+      <HeartBurst scale={heartScale} opacity={heartOpacity} size={80} />
     </View>
   );
 }
@@ -183,14 +149,5 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     backgroundColor: '#3B82F6',
-  },
-  heartOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });

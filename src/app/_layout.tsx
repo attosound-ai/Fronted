@@ -50,6 +50,12 @@ import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  // The native SDK is started earlier, in ios/ATTO/AppDelegate.swift, so crashes
+  // in the pre-JS launch window (watchdog / first-launch-after-update) are caught
+  // — that window was our blind spot. Do NOT let JS re-initialize native here;
+  // reuse the already-running native client (environment/release/dist + mobile
+  // replay are configured natively). This JS init only wires the JS layer.
+  autoInitializeNativeSdk: false,
   tracesSampleRate: 0,
   replaysSessionSampleRate: 1.0,
   replaysOnErrorSampleRate: 1.0,

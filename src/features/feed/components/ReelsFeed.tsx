@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
@@ -62,6 +63,9 @@ import { CreatorBadge } from '@/components/ui/CreatorBadge';
 import { feedService } from '../services/feedService';
 import { DEMO_ADS } from '../constants/adPosts';
 import { injectAds } from '../utils/injectAds';
+import { isReelEligible, isLandscapeVideo } from '../utils/reelFormat';
+import { useDoubleTapLike } from '../hooks/useDoubleTapLike';
+import { HeartBurst } from './media/HeartBurst';
 import { CommentsSheet } from './comments/CommentsSheet';
 import { ShareSheet } from './share/ShareSheet';
 import { formatCount } from '@/utils/formatters';
@@ -174,6 +178,13 @@ function ReelItem({
   const [captionExpanded, setCaptionExpanded] = useState(false);
   // Tap-to-pause: a manual pause that overrides the auto-play-when-active logic.
   const [userPaused, setUserPaused] = useState(false);
+  // Pause when the screen loses focus (e.g. opening a profile or the reel viewer
+  // over the feed) so audio never lingers behind another screen.
+  const isFocused = useIsFocused();
+  // Live "should this reel be playing" flag for the deferred single-tap handler,
+  // so a tap that lands just before scrolling away never resumes an off-screen reel.
+  const activeRef = useRef(false);
+  activeRef.current = isActive && isFocused;
 
   // Full-screen reels use a fixed 1080p MP4 (not adaptive HLS) for sharpness.
   const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
@@ -188,7 +199,7 @@ function ReelItem({
 
   // Tracks first-frame readiness + transparently falls back HLS→MP4 on error,
   // and reports load-time / error telemetry tagged to this reel.
-  const isReady = useVideoStream(player, videoUrl, isActive, {
+  const isReady = useVideoStream(player, videoUrl, isActive && isFocused, {
     surface: 'reels',
     postId: post.id,
   });
@@ -202,7 +213,9 @@ function ReelItem({
     setUserPaused(next);
     try {
       if (next) player.pause();
-      else player.play();
+      // Only resume if this reel is still the active, focused one (the single-tap
+      // action is deferred, so it can fire after a quick scroll-away).
+      else if (activeRef.current) player.play();
     } catch {
       // player disposed (cell recycled) — ignore
     }
@@ -213,18 +226,30 @@ function ReelItem({
     );
   }, [player, userPaused, post.id, position]);
 
-  // Play / pause driven by visibility — must run as an effect, never during
-  // render. A manual tap-pause (userPaused) wins while the reel is active;
-  // scrolling away clears it so returning to the reel auto-plays again.
+  // Play / pause driven by visibility AND screen focus — must run as an effect,
+  // never during render. A manual tap-pause (userPaused) wins while the reel is
+  // active; scrolling away (or the screen losing focus) clears it so returning
+  // to the reel auto-plays again.
   useEffect(() => {
     if (!player) return;
-    if (isActive) {
+    if (isActive && isFocused) {
       if (!userPaused) player.play();
     } else {
       player.pause();
       if (userPaused) setUserPaused(false);
     }
-  }, [isActive, userPaused, player]);
+  }, [isActive, isFocused, userPaused, player]);
+
+  // Double-tap → like (never unlike, Instagram-style).
+  const handleDoubleTapLike = useCallback(() => {
+    if (!post.isLiked) onLike(post.id);
+  }, [post.isLiked, post.id, onLike]);
+
+  // Single tap = pause/resume, double tap = like + heart burst.
+  const { handleTap, heartScale, heartOpacity } = useDoubleTapLike({
+    onSingleTap: togglePlayPause,
+    onDoubleTap: handleDoubleTapLike,
+  });
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
@@ -247,8 +272,10 @@ function ReelItem({
         </View>
       )}
 
-      {/* Poster shown until the stream produces its first frame */}
-      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} />
+      {/* Poster shown until the stream produces its first frame. Matches the
+          video's contentFit so a landscape clip isn't briefly shown cropped to
+          9:16 before the (contain) video settles in. */}
+      <VideoPoster uri={post.thumbnailUrl} visible={!isReady} resizeMode={contentFit} />
 
       {/* Thin progress line at the bottom edge */}
       <VideoProgressBar position={position} duration={duration} showTime={false} />
@@ -260,10 +287,10 @@ function ReelItem({
         pointerEvents="none"
       />
 
-      {/* Tap anywhere on the video to pause/resume. Rendered above the video but
-          below the action column + bottom overlay, which come after and capture
-          their own taps. */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={togglePlayPause} />
+      {/* Single tap = pause/resume, double tap = like. Rendered above the video
+          but below the action column + bottom overlay, which come after and
+          capture their own taps. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
 
       {/* Pause indicator while the user has tapped to pause. */}
       {userPaused && (
@@ -273,6 +300,9 @@ function ReelItem({
           </View>
         </View>
       )}
+
+      {/* Double-tap like heart burst */}
+      <HeartBurst scale={heartScale} opacity={heartOpacity} />
 
       {/* ── Mute / unmute ── */}
       {/* ── Right-side action column ── */}
@@ -436,6 +466,8 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
   // Global mute shared across every video (Instagram-style).
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const toggleMuted = useVideoSoundStore((s) => s.toggleMuted);
+  // Pause when the screen loses focus so ad audio never lingers behind another screen.
+  const isFocused = useIsFocused();
 
   // Full-screen reels use a fixed 1080p MP4 (not adaptive HLS) for sharpness.
   const videoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
@@ -448,19 +480,19 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
-  const isReady = useVideoStream(player, videoUrl, isActive, {
+  const isReady = useVideoStream(player, videoUrl, isActive && isFocused, {
     surface: 'reels_ad',
     postId: post.id,
   });
 
   useEffect(() => {
     if (!player) return;
-    if (isActive) {
+    if (isActive && isFocused) {
       player.play();
     } else {
       player.pause();
     }
-  }, [isActive, player]);
+  }, [isActive, isFocused, player]);
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
@@ -513,21 +545,6 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
 }
 
 // ─── ReelsFeed ────────────────────────────────────────────────────────────────
-
-// height / width threshold for a video to play full-screen as a reel.
-// 9:16 ≈ 1.78; we accept anything that tall or taller (vertical formats).
-const REEL_MIN_ASPECT = 1.6;
-
-/**
- * Reel-eligible = an actual reel, OR a video shot vertically (~9:16+) so it
- * fills the full-screen player cleanly. Landscape/square videos stay in the
- * regular feed only.
- */
-function isReelEligible(p: FeedPost): boolean {
-  if (p.type === 'reel') return true;
-  if (p.type !== 'video' || !p.mediaWidth || !p.mediaHeight) return false;
-  return p.mediaHeight / p.mediaWidth >= REEL_MIN_ASPECT;
-}
 
 /**
  * ReelsFeed — the full-screen vertical paging list.
@@ -674,9 +691,15 @@ export function ReelsFeed({
           onFollow={handleFollow}
           onComment={setCommentsPostId}
           onShare={setSharePost}
-          // Seeded viewer keeps the source video's aspect (contain → landscape
-          // gets letterbox bars, no crop); the FYP fills full-screen (cover).
-          contentFit={seeded ? 'contain' : 'cover'}
+          // Portrait/square clips fill the screen edge-to-edge (cover), just like
+          // the reels section — no letterbox bars. Only genuinely landscape
+          // videos use contain (in the seeded viewer) so they aren't cropped;
+          // there the bars are the lesser evil.
+          contentFit={
+            seeded && isLandscapeVideo(item.mediaWidth, item.mediaHeight)
+              ? 'contain'
+              : 'cover'
+          }
         />
       );
     },

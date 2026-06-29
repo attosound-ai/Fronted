@@ -10,15 +10,20 @@ import {
   Phone,
   Grid3x3,
   SlidersHorizontal,
+  Radio,
+  Square,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useCallStore } from '@/stores/callStore';
+import { useNowPlayingStore } from '@/stores/nowPlayingStore';
 import { isCallConnected, isOnCallScreen } from '@/hooks/useInCallChrome';
 import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
+import { useCallAudioInjection } from '@/hooks/useCallAudioInjection';
 import { preloadCallSounds } from '@/lib/sound/callSounds';
+import { haptic } from '@/lib/haptics/hapticService';
 import { openKeypad } from './DtmfKeypadHost';
 import { openMixer } from './MixerHost';
 import { useFeatureFlag } from '@/lib/analytics';
@@ -42,6 +47,16 @@ export function InCallTopBar() {
   const [elapsed, setElapsed] = useState(0);
   // Mixer button shows only when the audio-injection feature is on (same flag).
   const mixerEnabled = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
+  // General "transmit app audio into the call" control: injects whatever the
+  // user last played in the feed/reels (nowPlaying), not a specific post.
+  const { canInject, isInjecting, inject, stop } = useCallAudioInjection();
+  const nowPlaying = useNowPlayingStore((s) => s.track);
+
+  const onTransmit = () => {
+    void haptic('selection');
+    if (isInjecting) void stop('user_stopped');
+    else if (nowPlaying) void inject(nowPlaying);
+  };
 
   const isConnected = isCallConnected(activeCall?.state);
 
@@ -117,6 +132,27 @@ export function InCallTopBar() {
             <Grid3x3 size={20} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
         </GlassSurface>
+
+        {/* Transmit the app's currently-playing audio INTO the call (flag-gated).
+            Red Square while transmitting; the Radio dims when nothing has played. */}
+        {canInject ? (
+          <GlassSurface radius={21} style={styles.glassBtn}>
+            <TouchableOpacity
+              style={[styles.glassBtnInner, isInjecting && styles.glassBtnActive]}
+              onPress={onTransmit}
+            >
+              {isInjecting ? (
+                <Square size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
+              ) : (
+                <Radio
+                  size={20}
+                  color={nowPlaying ? '#FFF' : 'rgba(255,255,255,0.45)'}
+                  strokeWidth={2.25}
+                />
+              )}
+            </TouchableOpacity>
+          </GlassSurface>
+        ) : null}
 
         {/* Mixer — opens the multitrack recording mixer (flag-gated). */}
         {mixerEnabled ? (

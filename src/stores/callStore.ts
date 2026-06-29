@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ActiveCall, ActiveCallState } from '@/types/call';
+import type { InjectionSnapshot } from '@/lib/callAudio/AudioInjector';
 
 interface CallStoreState {
   activeCall: ActiveCall | null;
@@ -9,6 +10,12 @@ interface CallStoreState {
   // DTMF keypad overlay visibility. Lives at store level (not on ActiveCall)
   // so a single global host can render the sheet for every call surface.
   keypadVisible: boolean;
+  // Live audio-injection snapshot (a phone-side track played INTO the call).
+  // Store-level for the same reason as keypadVisible — a single global host
+  // (CallAudioInjectionHost) renders the now-playing UI for every call surface.
+  // null when nothing is being injected. Cleared on endCall so a hang-up can
+  // never strand a playing engine in the UI.
+  injection: InjectionSnapshot | null;
 }
 
 interface CallStoreActions {
@@ -25,6 +32,7 @@ interface CallStoreActions {
   setActiveProjectId: (id: string | null) => void;
   showKeypad: () => void;
   hideKeypad: () => void;
+  setInjection: (snapshot: InjectionSnapshot | null) => void;
   endCall: () => void;
 }
 
@@ -34,6 +42,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   isRegistered: false,
   registrationError: null,
   keypadVisible: false,
+  injection: null,
 
   setRegistered: (registered, error = null) =>
     set({ isRegistered: registered, registrationError: error }),
@@ -140,5 +149,13 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   showKeypad: () => set({ keypadVisible: true }),
   hideKeypad: () => set({ keypadVisible: false }),
 
-  endCall: () => set({ activeCall: null, activeProjectId: null, keypadVisible: false }),
+  setInjection: (snapshot) => set({ injection: snapshot }),
+
+  endCall: () =>
+    set({
+      activeCall: null,
+      activeProjectId: null,
+      keypadVisible: false,
+      injection: null,
+    }),
 }));

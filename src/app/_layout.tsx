@@ -44,6 +44,7 @@ import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
+import { CallAudioInjectionHost } from '@/components/call/CallAudioInjectionHost';
 import {
   probeResume,
   markAppBackgrounded,
@@ -64,6 +65,12 @@ Sentry.init({
   // This JS init only wires the JS layer.
   autoInitializeNativeSdk: false,
   tracesSampleRate: 0,
+  // NOTE: with autoInitializeNativeSdk:false these replay sample rates + the
+  // mobileReplayIntegration masking below are INERT — JS no longer configures
+  // native replay. The REAL sampling + masking (incl. SVG) live in the native
+  // blocks (AppDelegate.swift / MainApplication.kt via withSentryNativeInit).
+  // Don't "fix" masking here; change it in the native blocks. Kept only so the
+  // integration's JS hooks (replay_id linking) and the feedback widget register.
   replaysSessionSampleRate: 1.0,
   replaysOnErrorSampleRate: 1.0,
   integrations: [
@@ -320,6 +327,7 @@ function RootLayout() {
                     <UpdateRequiredGate key={deepResumeKey}>
                       <InCallTopBar />
                       <DtmfKeypadHost />
+                      <CallAudioInjectionHost />
                       <Stack
                         screenOptions={{
                           headerShown: true,

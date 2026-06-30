@@ -536,6 +536,11 @@ export function rejectIncomingCall() {
 // touches [AttoAudioEngineDevice sharedDevice], which inits the native engine on
 // EVERY hang-up (the trigger for the AVFAudio crash, Sentry REACT-NATIVE-4C).
 let injectionDeviceInstalled = false;
+// The device install is PER-ACCOUNT, not global: switching accounts resets Twilio's
+// active device, so a device installed for david.espejo did NOT carry over to
+// westcol (PostHog: westcol's record_cb_count stayed 0). Track which user we
+// installed for so each account re-installs, and re-assert on every call connect.
+let injectionDeviceUserId: string | number | null = null;
 
 export async function installInjectionDeviceIfEnabled(
   source: 'connect' | 'preinstall' = 'connect'
@@ -552,15 +557,24 @@ export async function installInjectionDeviceIfEnabled(
     });
     return;
   }
-  // Kept installed across calls (the engine is inert between them), so once it's
-  // the active device there's nothing to redo — avoids needless swap churn.
-  if (injectionDeviceInstalled) {
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  // PER-ACCOUNT, not global: the 'preinstall' path (idle) skips only when the
+  // device is already installed FOR THE CURRENT ACCOUNT — so switching to westcol
+  // still installs even though david.espejo installed earlier. The 'connect' path
+  // ALWAYS re-asserts (account switching resets Twilio's active device, so every
+  // call must re-install for whoever is now active).
+  if (
+    source === 'preinstall' &&
+    injectionDeviceInstalled &&
+    injectionDeviceUserId === currentUserId
+  ) {
     return;
   }
   const call_sid = useCallStore.getState().activeCall?.callSid ?? null;
   try {
     const ok = await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
     injectionDeviceInstalled = ok === true;
+    injectionDeviceUserId = ok === true ? currentUserId : null;
     // THE signal for the silent-injection bug: if this isn't 'installed' the
     // custom device isn't active and the remote will hear nothing injected.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {

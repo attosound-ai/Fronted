@@ -180,8 +180,18 @@ function ScreenTracker() {
   useEffect(() => {
     if (!posthog || !pathname) return;
     if (pathname === prevPathRef.current) return;
+    const from = prevPathRef.current;
     prevPathRef.current = pathname;
     posthog.screen(pathname, { route: pathname });
+    // Navigation breadcrumb so every Sentry event (incl. native crashes) shows
+    // exactly where the user navigated / which tabs they hit before it.
+    Sentry.addBreadcrumb({
+      category: 'navigation',
+      level: 'info',
+      type: 'navigation',
+      message: pathname,
+      data: { from: from ?? '(initial)', to: pathname },
+    });
   }, [pathname, posthog]);
 
   return null;

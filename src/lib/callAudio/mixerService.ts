@@ -27,6 +27,7 @@ interface NativeMixer {
   setMetronome?: (enabled: boolean, bpm: number) => void;
   startMixRecording?: () => Promise<string | null>;
   stopMixRecording?: () => Promise<string | null>;
+  getMixDiagnostics?: () => Promise<Record<string, number> | null>;
 }
 
 function nativeMixer(): NativeMixer | null {
@@ -70,6 +71,20 @@ export const mixerService = {
     trace('stopMixRecording');
     try {
       return (await nativeMixer()?.stopMixRecording?.()) ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Per-channel frame totals of the last mix (mic/remote/app/total/durationSec).
+   * Read right after stopMixRecording — the only window into whether the engine
+   * actually captured each channel (remoteFrames≈0 ⇒ engine never got the other
+   * party). null off iOS or before the native mixer ships.
+   */
+  async getMixDiagnostics(): Promise<Record<string, number> | null> {
+    try {
+      return (await nativeMixer()?.getMixDiagnostics?.()) ?? null;
     } catch {
       return null;
     }

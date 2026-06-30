@@ -43,6 +43,10 @@ import { RecordingControls } from './RecordingControls';
 import { UploadButton } from './UploadButton';
 import { FLOATING_NAVBAR_CLEARANCE } from '@/components/navigation/navbarMetrics';
 import { useCallStore } from '@/stores/callStore';
+import { useFeatureFlag } from '@/lib/analytics';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { mixerService } from '@/lib/callAudio/mixerService';
+import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { useSimpleRecordingPlayback } from '@/hooks/useSimpleRecordingPlayback';
 import {
@@ -131,9 +135,18 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     });
   }, [localSegments.length, isRecording, isProcessing]);
 
+  // When the injection feature is ON (David's account only — the client stays on
+  // the untouched Twilio path), the in-call recording IS the custom engine's
+  // multitrack mix (mic / remote / app / metronome with the mixer's toggles +
+  // gains). engineMixActiveRef tracks that a given recording used that path so
+  // handleStop finalizes it the same way it was started.
+  const injectionFlagOn = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
+  const engineMixActiveRef = useRef(false);
+
   // Local microphone recorder:
   // - Without call: saves the actual recording
-  // - During call: used ONLY for metering (we discard the file, Twilio records via Media Stream)
+  // - During call: used ONLY for metering (we discard the file; the actual audio
+  //   is recorded by Twilio Media Stream, or the engine mix when injectionFlagOn)
   const localRecorder = useAudioRecorder({
     ...RecordingPresets.HIGH_QUALITY,
     isMeteringEnabled: true,
@@ -195,6 +208,48 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     // With active call → use Twilio Media Stream for actual recording,
     // plus start the local recorder JUST for metering (real-time wave).
     if (activeCall) {
+      // Engine multitrack mix (flag ON, David's account only): the recording IS
+      // the mixer-controlled mix (mic/remote/app/metronome). Falls through to the
+      // untouched Twilio path on any failure, so a flaky engine never blocks REC.
+      if (injectionFlagOn) {
+        try {
+          const mixPath = await mixerService.startMixRecording();
+          analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+            call_sid: activeCall.callSid,
+            action: 'start',
+            engine: 'engine_mix',
+            outcome: mixPath ? 'ok' : 'native_unavailable',
+          });
+          if (mixPath) {
+            engineMixActiveRef.current = true;
+            setRecordingElapsed(0);
+            setIsRecording(true);
+            // Metering recorder still drives the live waveform.
+            try {
+              await setAudioModeAsync({
+                playsInSilentMode: true,
+                allowsRecording: true,
+                interruptionMode: 'mixWithOthers',
+              });
+              await localRecorder.prepareToRecordAsync();
+              localRecorder.record();
+            } catch (meterErr) {
+              console.warn('[SimpleRecording] metering recorder failed:', meterErr);
+            }
+            return;
+          }
+        } catch (mixErr: unknown) {
+          analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+            call_sid: activeCall.callSid,
+            action: 'start',
+            engine: 'engine_mix',
+            outcome: 'threw',
+            reason: mixErr instanceof Error ? mixErr.message : String(mixErr),
+          });
+          // fall through to Twilio
+        }
+      }
+
       try {
         const { streamSid } = await telephonyService.startCapture(activeCall.callSid);
         startCapture(streamSid);
@@ -240,7 +295,16 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
       const msg = error instanceof Error ? error.message : String(error);
       Alert.alert(t('active.recordingFailed'), msg);
     }
-  }, [activeCall, isRecording, isPlaying, startCapture, stopPlayback, localRecorder, t]);
+  }, [
+    activeCall,
+    isRecording,
+    isPlaying,
+    injectionFlagOn,
+    startCapture,
+    stopPlayback,
+    localRecorder,
+    t,
+  ]);
 
   // ── Stop recording ──
   const handleStop = useCallback(async () => {
@@ -272,6 +336,8 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
             fileSizeBytes: 0,
             storageBucket: 'local',
             storageKey: uri,
+            label: null,
+            projectId: null,
             createdAt: new Date().toISOString(),
             downloadUrl: uri,
           };
@@ -282,6 +348,68 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
         setIsRecording(false);
         const msg = error instanceof Error ? error.message : String(error);
         Alert.alert(t('active.recordingFailed'), msg);
+      }
+      return;
+    }
+
+    // Engine mix recording (flag ON): the mix file IS the recording — finalize it
+    // and turn it into a local segment, no Twilio segment polling needed.
+    if (engineMixActiveRef.current) {
+      engineMixActiveRef.current = false;
+      try {
+        await localRecorder.stop();
+      } catch {
+        // Best-effort
+      }
+      const mixPath = await mixerService.stopMixRecording();
+      // Engine capture diagnostics — the ONLY window into what the native mix
+      // actually captured. remote_frames≈0 ⇒ the engine never got the other party.
+      const diag = await mixerService.getMixDiagnostics();
+      setIsRecording(false);
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+        call_sid: activeCall.callSid,
+        action: 'stop',
+        engine: 'engine_mix',
+        outcome: mixPath ? 'ok' : 'no_path',
+        has_path: !!mixPath,
+        duration_ms: recordingElapsed * 1000,
+        mic_frames: diag?.micFrames ?? null,
+        remote_frames: diag?.remoteFrames ?? null,
+        app_frames: diag?.appFrames ?? null,
+        total_frames: diag?.totalFrames ?? null,
+        engine_duration_sec: diag?.durationSec ?? null,
+      });
+      try {
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      } catch {
+        // Best-effort
+      }
+      if (mixPath) {
+        const uri = mixPath.startsWith('file://') ? mixPath : `file://${mixPath}`;
+        const durationMs = recordingElapsed * 1000;
+        const mixSegment: AudioSegment & { downloadUrl?: string } = {
+          id: `mix-${Date.now()}`,
+          callId: activeCall.callSid,
+          twilioStreamSid: 'engine-mix',
+          segmentIndex: localSegments.length + 1,
+          track: 'mix',
+          startMs: 0,
+          endMs: durationMs,
+          durationMs,
+          format: mixPath.endsWith('.wav') ? 'wav' : 'caf',
+          sampleRate: 48000,
+          fileSizeBytes: null,
+          storageBucket: 'local',
+          storageKey: uri,
+          label: null,
+          projectId: null,
+          createdAt: new Date().toISOString(),
+          downloadUrl: uri,
+        };
+        setLocalSegments([mixSegment]);
+        showToast(t('common:toasts.recordingAdded'));
+      } else {
+        Alert.alert(t('active.recordingFailed'), 'engine mix: no file produced');
       }
       return;
     }
@@ -572,7 +700,9 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
             style={styles.attoLogo}
             resizeMode="contain"
           />
-          <Text style={styles.attoSubtext}>sound</Text>
+          <Text style={styles.attoSubtext} numberOfLines={1}>
+            sound
+          </Text>
         </View>
       </View>
 
@@ -764,7 +894,9 @@ const styles = StyleSheet.create({
     letterSpacing: 11,
     textTransform: 'uppercase',
     textAlign: 'center',
-    width: 100,
+    // Wide enough that "SOUND" + its trailing letterSpacing never wraps the D to
+    // a second line (numberOfLines={1} on the Text is the hard guarantee).
+    width: 112,
     // letterSpacing leaves a trailing gap after the last letter; nudge right so
     // the caps sit optically centred under the wordmark (render-only).
     transform: [{ translateX: 5 }],

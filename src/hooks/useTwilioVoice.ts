@@ -537,9 +537,26 @@ export function rejectIncomingCall() {
 // EVERY hang-up (the trigger for the AVFAudio crash, Sentry REACT-NATIVE-4C).
 let injectionDeviceInstalled = false;
 
-async function installInjectionDeviceIfEnabled(): Promise<void> {
+export async function installInjectionDeviceIfEnabled(
+  source: 'connect' | 'preinstall' = 'connect'
+): Promise<void> {
   if (!IS_IOS) return;
-  if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) return;
+  if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) {
+    // The flag was NOT readable at this moment. For INCOMING calls this fired at
+    // accept before flags finished loading, so westcol never installed the device
+    // and its engine stayed inert (Jun 30 telemetry). The preinstall path (idle,
+    // reactive flag) is what actually makes it reliable; this just records misses.
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+      outcome: 'install_skipped_flag_off',
+      source,
+    });
+    return;
+  }
+  // Kept installed across calls (the engine is inert between them), so once it's
+  // the active device there's nothing to redo — avoids needless swap churn.
+  if (injectionDeviceInstalled) {
+    return;
+  }
   const call_sid = useCallStore.getState().activeCall?.callSid ?? null;
   try {
     const ok = await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
@@ -548,6 +565,7 @@ async function installInjectionDeviceIfEnabled(): Promise<void> {
     // custom device isn't active and the remote will hear nothing injected.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
       outcome: ok ? 'installed' : 'install_returned_false',
+      source,
       call_sid,
     });
   } catch (error: unknown) {
@@ -555,6 +573,7 @@ async function installInjectionDeviceIfEnabled(): Promise<void> {
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
       outcome: 'install_threw',
       reason: error instanceof Error ? error.message : String(error),
+      source,
       call_sid,
     });
   }

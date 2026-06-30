@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c9330a728
+index 0000000000000000000000000000000000000000..d580483542170db88d35dd5fc617395de6694c8b
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2424 @@
+@@ -0,0 +1,2441 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -323,6 +323,11 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +     * The int16 PCM is converted to float and pushed via AttoRingWrite (memcpy).
 +     */
 +    AttoRingBuffer *remoteRing;
++    // Telemetry: how many times this render callback fired. PROVES the custom
++    // device is Twilio's ACTIVE device — if it stays 0 during a recording, Twilio
++    // is using its own default device and our engine is inert (which is exactly
++    // why westcol's recordings captured nothing).
++    uint64_t cbCount;
 +} AudioRendererContext;
 +
 +// Audio renderer contexts used in core audio's record callback to retrieve the sdk's audio device context.
@@ -353,6 +358,8 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +     * off. The int16 PCM is converted to float and pushed via AttoRingWrite.
 +     */
 +    AttoRingBuffer *micRing;
++    // Telemetry: how many times this record callback fired (see AudioRendererContext.cbCount).
++    uint64_t cbCount;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -1447,9 +1454,11 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +    @synchronized(self) {
 +        if (self.capturingContext) {
 +            self.capturingContext->micRing = &_micRing;
++            self.capturingContext->cbCount = 0; // reset per-recording fire count
 +        }
 +        if (self.renderingContext) {
 +            self.renderingContext->remoteRing = &_remoteRing;
++            self.renderingContext->cbCount = 0;
 +        }
 +    }
 +
@@ -1518,6 +1527,8 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +- (NSDictionary *)mixDiagnostics {
 +    double sr = _metronomeSampleRate > 0 ? _metronomeSampleRate : (double)kPreferredSampleRate;
 +    uint64_t total = _dbgTotalFrames;
++    uint64_t recCb = self.capturingContext ? self.capturingContext->cbCount : 0;
++    uint64_t playCb = self.renderingContext ? self.renderingContext->cbCount : 0;
 +    return @{
 +        @"micFrames": @(_dbgMicFrames),
 +        @"remoteFrames": @(_dbgRemoteFrames),
@@ -1525,6 +1536,10 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +        @"totalFrames": @(total),
 +        @"durationSec": @(sr > 0 ? (double)total / sr : 0.0),
 +        @"sampleRate": @(sr),
++        // recordCbCount/playoutCbCount == 0 ⇒ the custom device is NOT Twilio's
++        // active device (engine inert) — the smoking gun for empty recordings.
++        @"recordCbCount": @(recCb),
++        @"playoutCbCount": @(playCb),
 +    };
 +}
 +
@@ -2085,6 +2100,7 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +
 +    AudioRendererContext *context = (AudioRendererContext *)refCon;
 +    context->bufferList = bufferList;
++    context->cbCount++; // telemetry: proves the custom device is the active one
 +
 +    int8_t *audioBuffer = (int8_t *)bufferList->mBuffers[0].mData;
 +    UInt32 audioBufferSizeInBytes = bufferList->mBuffers[0].mDataByteSize;
@@ -2125,6 +2141,7 @@ index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c
 +    }
 +
 +    AudioCapturerContext *context = (AudioCapturerContext *)refCon;
++    context->cbCount++; // telemetry: proves the custom device is the active one
 +
 +    if (context->deviceContext == NULL) {
 +        return noErr;

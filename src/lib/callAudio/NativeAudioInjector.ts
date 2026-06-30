@@ -31,6 +31,8 @@ interface NativeInjectionModule {
   resumeInjectedAudio?(): Promise<void>;
   setInjectedGain(gain: number): void;
   setInjectedMonitor(on: boolean): void;
+  /** Extract a video's audio track to a temp .m4a (so video can be injected). */
+  extractAudioTrack?(videoPath: string): Promise<string>;
 }
 
 function getNativeModule(): NativeInjectionModule | null {
@@ -75,21 +77,41 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
     return this.native != null;
   }
 
-  /** Posts/reels are remote URLs; the native engine only accepts a local file. */
+  /**
+   * Remote URLs are downloaded to a local file (the engine only plays local
+   * files). VIDEO sources (reels / video posts / video messages) are then run
+   * through the native audio extractor, since the engine plays audio files, not
+   * video containers — this is what lets ANY app audio, video included, transmit.
+   */
   private async resolveLocalPath(source: InjectSource): Promise<string | null> {
+    let localPath: string | null = null;
     if (source.uri.startsWith('file://') || source.uri.startsWith('/')) {
-      return source.uri;
+      localPath = source.uri;
+    } else {
+      try {
+        const ext = source.isVideo ? 'mp4' : 'm4a';
+        const target =
+          FileSystem.cacheDirectory +
+          `inject-${source.kind}-${hashUri(source.uri)}.${ext}`;
+        const info = await FileSystem.getInfoAsync(target);
+        localPath = info.exists
+          ? target
+          : (await FileSystem.downloadAsync(source.uri, target)).uri;
+      } catch {
+        return null;
+      }
     }
-    try {
-      const target =
-        FileSystem.cacheDirectory + `inject-${source.kind}-${hashUri(source.uri)}.m4a`;
-      const info = await FileSystem.getInfoAsync(target);
-      if (info.exists) return target;
-      const { uri } = await FileSystem.downloadAsync(source.uri, target);
-      return uri;
-    } catch {
-      return null;
+    if (!localPath) return null;
+
+    // Video → extract its audio track to an .m4a the engine can play.
+    if (source.isVideo && this.native?.extractAudioTrack) {
+      try {
+        return await this.native.extractAudioTrack(localPath);
+      } catch {
+        return null;
+      }
     }
+    return localPath;
   }
 
   override async start(source: InjectSource): Promise<InjectResult> {

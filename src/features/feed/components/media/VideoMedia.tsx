@@ -3,11 +3,12 @@ import { View, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { VideoOff, VolumeX, Volume2 } from 'lucide-react-native';
-import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
+import { cloudinaryHlsUrl, cloudinaryVideoMp4 } from '@/lib/media/cloudinaryUrl';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
 import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -102,6 +103,16 @@ export function VideoMedia({
 
   // Playback position + duration for the time readout and progress bar.
   const { position, duration } = useVideoProgress(player);
+
+  // Transmittable into a live call (📡): register the MP4 (extractable audio),
+  // NOT the HLS stream, so the injector can pull this video's audio on demand.
+  const injectVideoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
+  useRegisterNowPlaying(
+    injectVideoUrl
+      ? { kind: 'video', uri: injectVideoUrl, isVideo: true, postId: post.id }
+      : null,
+    isVisible && isFocused
+  );
 
   // Detect aspect ratio from the player's decoded video track (most reliable).
   useEffect(() => {

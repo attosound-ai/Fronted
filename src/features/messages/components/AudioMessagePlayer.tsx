@@ -13,6 +13,7 @@ import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
 import { useCallStore } from '@/stores/callStore';
 import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
+import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 
 interface AudioMessagePlayerProps {
   audioUrl: string;
@@ -25,12 +26,17 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
   const [loadError, setLoadError] = useState(false);
 
   const isPlaying = status.playing;
+  // Make this chat audio transmittable into a live call (📡).
+  useRegisterNowPlaying({ kind: 'message', uri: audioUrl }, isPlaying);
   const duration = status.duration * 1000; // seconds → ms
   const position = status.currentTime * 1000;
 
+  // expo-audio's AudioStatus has no typed `error` field; read it defensively so
+  // a runtime load error still surfaces without a type error.
+  const statusError = (status as { error?: unknown }).error;
   useEffect(() => {
-    if (status.error) setLoadError(true);
-  }, [status.error]);
+    if (statusError) setLoadError(true);
+  }, [statusError]);
 
   const togglePlayback = useCallback(async () => {
     try {

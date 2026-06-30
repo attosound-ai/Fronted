@@ -14,12 +14,20 @@
  * behavior changes for users until the flag is enabled and the engine exists.
  */
 
-/** What we're injecting. Discriminated by `kind` so the engine/telemetry can
- *  treat a one-shot post differently from a loopable backing beat. */
-export type InjectSource =
-  | { kind: 'post'; uri: string; title?: string; postId?: string; durationMs?: number }
-  | { kind: 'reel'; uri: string; title?: string; postId?: string; durationMs?: number }
-  | { kind: 'beat'; uri: string; title?: string; loop?: boolean; durationMs?: number };
+/** What we're injecting. `kind` is for telemetry; `isVideo` tells the injector
+ *  the `uri` is a video container whose audio track must be extracted before it
+ *  can be played into the call. ANY audio playing in the app can be the source:
+ *  posts, reels, video, beats, the Record Pro track editor, chat media, etc. */
+export type InjectSource = {
+  kind: 'post' | 'reel' | 'video' | 'beat' | 'track' | 'message';
+  uri: string;
+  title?: string;
+  postId?: string;
+  /** true when `uri` is a video file (reel / video post / video message). */
+  isVideo?: boolean;
+  loop?: boolean;
+  durationMs?: number;
+};
 
 /** Engine lifecycle state (mirrors a media player). */
 export type InjectState =

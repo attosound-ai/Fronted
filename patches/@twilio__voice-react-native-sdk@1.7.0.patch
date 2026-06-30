@@ -2541,10 +2541,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..27839b1ed909db8045f40bdac245fbdede5e1d18
+index 0000000000000000000000000000000000000000..dea629c99bbf2c4e371e18ed3b3d4af28e31a2d9
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,266 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -2555,6 +2555,7 @@ index 0000000000000000000000000000000000000000..27839b1ed909db8045f40bdac245fbde
 +#import "AttoAudioInjection.h"
 +#import "AttoAudioEngineDevice.h"
 +#import "TwilioVoiceReactNative.h"
++#import <AVFoundation/AVFoundation.h>
 +
 +/*
 + * These class methods are added to TwilioVoiceReactNative by the human reviewer
@@ -2759,6 +2760,53 @@ index 0000000000000000000000000000000000000000..27839b1ed909db8045f40bdac245fbde
 +        resolve([[AttoAudioEngineDevice sharedDevice] mixDiagnostics]);
 +    } @catch (NSException *exception) {
 +        reject(@"mix_diagnostics_failed", exception.reason ?: @"Failed to read mix diagnostics", nil);
++    }
++}
++
++/*
++ * Extract the audio track of a VIDEO file (reel / video post / video message) to a
++ * temp .m4a so it can be injected into a call — the engine's player reads audio
++ * files (AVAudioFile), not video containers. Lets the "transmit" button push ANY
++ * app audio, including video, into the call. Resolves the local audio path.
++ */
++RCT_EXPORT_METHOD(extractAudioTrack:(NSString *)videoPath
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        NSURL *srcURL = [videoPath hasPrefix:@"file://"]
++            ? [NSURL URLWithString:videoPath]
++            : [NSURL fileURLWithPath:videoPath];
++        AVURLAsset *asset = [AVURLAsset URLAssetWithURL:srcURL options:nil];
++        if ([[asset tracksWithMediaType:AVMediaTypeAudio] count] == 0) {
++            reject(@"extract_no_audio", @"video has no audio track", nil);
++            return;
++        }
++
++        NSString *outName = [NSString stringWithFormat:@"inject-audio-%lu.m4a",
++                             (unsigned long)[videoPath hash]];
++        NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:outName];
++        NSURL *outURL = [NSURL fileURLWithPath:outPath];
++        [[NSFileManager defaultManager] removeItemAtURL:outURL error:nil];
++
++        AVAssetExportSession *export =
++            [[AVAssetExportSession alloc] initWithAsset:asset
++                                             presetName:AVAssetExportPresetAppleM4A];
++        if (export == nil) {
++            reject(@"extract_failed", @"could not create export session", nil);
++            return;
++        }
++        export.outputURL = outURL;
++        export.outputFileType = AVFileTypeAppleM4A;
++        [export exportAsynchronouslyWithCompletionHandler:^{
++            if (export.status == AVAssetExportSessionStatusCompleted) {
++                resolve(outPath);
++            } else {
++                reject(@"extract_failed",
++                       export.error.localizedDescription ?: @"audio export failed", nil);
++            }
++        }];
++    } @catch (NSException *exception) {
++        reject(@"extract_failed", exception.reason ?: @"extractAudioTrack threw", nil);
 +    }
 +}
 +

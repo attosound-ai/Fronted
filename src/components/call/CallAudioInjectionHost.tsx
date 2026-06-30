@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { useCallStore } from '@/stores/callStore';
 import { useFeatureFlag } from '@/lib/analytics';
 import {
   getAudioInjector,
   AUDIO_INJECTION_FLAG,
 } from '@/lib/callAudio/createAudioInjector';
+import { installInjectionDeviceIfEnabled } from '@/hooks/useTwilioVoice';
 
 /**
  * CallAudioInjectionHost — the single global owner of the audio-injection
@@ -44,6 +46,19 @@ export function CallAudioInjectionHost() {
       void getAudioInjector().stop('call_ended');
     }
   }, [activeCallSid]);
+
+  // PRE-INSTALL the custom audio device while IDLE so it's already Twilio's active
+  // device BEFORE an incoming call arrives. Installing at accept-time raced flag
+  // loading and silently skipped for INCOMING calls — westcol never installed, so
+  // its engine stayed inert (recording captured 0 frames, transmit was silent,
+  // wave flat; confirmed via PostHog Jun 30). useFeatureFlag is the reliable
+  // reactive flag; this re-runs whenever a call ends (sid → null) so the device
+  // is re-armed for the next call. installInjectionDeviceIfEnabled no-ops when the
+  // device is already installed, so this is cheap.
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !flagEnabled || activeCallSid) return;
+    void installInjectionDeviceIfEnabled('preinstall');
+  }, [flagEnabled, activeCallSid]);
 
   return null;
 }

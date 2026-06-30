@@ -388,6 +388,9 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
         app_frames: diag?.appFrames ?? null,
         total_frames: diag?.totalFrames ?? null,
         engine_duration_sec: diag?.durationSec ?? null,
+        // 0 ⇒ the custom device wasn't Twilio's active device (engine inert).
+        record_cb_count: diag?.recordCbCount ?? null,
+        playout_cb_count: diag?.playoutCbCount ?? null,
       });
       try {
         await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });

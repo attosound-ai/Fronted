@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import type { MixerChannel } from '@/stores/mixerStore';
 
 /**
@@ -9,6 +10,17 @@ import type { MixerChannel } from '@/stores/mixerStore';
  * No-ops (never throws) until the native mixer lands (Phase B) or off iOS — so
  * the whole Mixer UI can ship + be wired now while the engine catches up.
  */
+
+/**
+ * Record a mixer action as a Sentry breadcrumb BEFORE the native call. A native
+ * NSException in a void bridge method can't be caught by the JS try/catch below
+ * (it crashes through the bridge) — but the breadcrumb is already on the scope, so
+ * any subsequent Sentry event/crash shows the exact last mixer action. This is the
+ * trail that pinpoints a native audio crash from the report alone.
+ */
+function trace(action: string, data?: Record<string, unknown>): void {
+  Sentry.addBreadcrumb({ category: 'mixer', level: 'info', message: action, data });
+}
 
 interface NativeMixer {
   setMixerChannel?: (channel: string, gain: number, record: boolean) => void;
@@ -26,6 +38,7 @@ function nativeMixer(): NativeMixer | null {
 export const mixerService = {
   /** Push a channel's gain (0..1) + record-enable to the native mix bus. */
   setChannel(channel: MixerChannel, gain: number, record: boolean): void {
+    trace('setChannel', { channel, gain, record });
     try {
       nativeMixer()?.setMixerChannel?.(channel, gain, record);
     } catch {
@@ -34,6 +47,7 @@ export const mixerService = {
   },
 
   setMetronome(enabled: boolean, bpm: number): void {
+    trace('setMetronome', { enabled, bpm });
     try {
       nativeMixer()?.setMetronome?.(enabled, bpm);
     } catch {
@@ -43,6 +57,7 @@ export const mixerService = {
 
   /** Start the client-side multitrack record; resolves the local file path or null. */
   async startMixRecording(): Promise<string | null> {
+    trace('startMixRecording');
     try {
       return (await nativeMixer()?.startMixRecording?.()) ?? null;
     } catch {
@@ -52,6 +67,7 @@ export const mixerService = {
 
   /** Stop the record; resolves the finished local file path or null. */
   async stopMixRecording(): Promise<string | null> {
+    trace('stopMixRecording');
     try {
       return (await nativeMixer()?.stopMixRecording?.()) ?? null;
     } catch {

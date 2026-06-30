@@ -118,10 +118,10 @@ index 0000000000000000000000000000000000000000..fd5981b829d897f5ac18f8d2aa7711cd
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..80424bce4c59328ef92b8a18d35e7815d403b54b
+index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a49187ce3b4f
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2306 @@
+@@ -0,0 +1,2340 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -1711,26 +1711,60 @@ index 0000000000000000000000000000000000000000..80424bce4c59328ef92b8a18d35e7815
 +     * each source buffer to the player node's output format, so there is no pitch/
 +     * speed artifact regardless of the source file's sample rate or channel count.
 +     */
-+    const AudioStreamBasicDescription asbd = [[[self class] activeFormat] streamDescription];
-+    AVAudioFormat *format = [[AVAudioFormat alloc] initWithStreamDescription:&asbd];
++    /*
++     * THE crash fix (Sentry REACT-NATIVE-4C — crashed builds 64-66 the first time
++     * `sharedDevice` was touched: the mixer metronome toggle, or the injection
++     * install). `activeFormat` is Twilio's 16-bit INTEGER PCM TVOAudioFormat.
++     * AVAudioPlayerNode and AVAudioUnitReverb are FLOAT-only processing nodes —
++     * connecting them with an int format makes [engine connect:...] throw
++     * "[busArray ... setFormat:] returned false". (The main mixer converts the int
++     * input at line 581; effect/player buses do NOT.) Connect the music graph with
++     * a STANDARD deinterleaved float format at the active sample rate — the mixer
++     * converts to the int render format on the way out.
++     */
++    double musicSampleRate = [[self class] activeFormat].sampleRate;
++    if (musicSampleRate <= 0) {
++        musicSampleRate = (double)kPreferredSampleRate;
++    }
++    // Stereo float is what effect units expect; the mixer downmixes to the mono
++    // render layout. Building the format with the int ASBD was the crash.
++    AVAudioFormat *format =
++        [[AVAudioFormat alloc] initStandardFormatWithSampleRate:musicSampleRate channels:2];
 +
-+    player = [[AVAudioPlayerNode alloc] init];
-+    reverb = [[AVAudioUnitReverb alloc] init];
++    @try {
++        player = [[AVAudioPlayerNode alloc] init];
++        reverb = [[AVAudioUnitReverb alloc] init];
 +
-+    [reverb loadFactoryPreset:AVAudioUnitReverbPresetMediumHall];
-+    reverb.wetDryMix = 50;
++        [reverb loadFactoryPreset:AVAudioUnitReverbPresetMediumHall];
++        // Dry: injected app audio / metronome must not pick up a concert-hall tail.
++        reverb.wetDryMix = 0;
 +
-+    [engine attachNode:player];
-+    [engine attachNode:reverb];
-+    [engine connect:player to:reverb format:format];
-+    [engine connect:reverb to:engine.mainMixerNode format:format];
++        [engine attachNode:player];
++        [engine attachNode:reverb];
++        [engine connect:player to:reverb format:format];
++        [engine connect:reverb to:engine.mainMixerNode format:format];
 +
-+    if (isPlayoutEngine) {
-+        self.playoutReverb = reverb;
-+        self.playoutFilePlayer = player;
-+    } else {
-+        self.recordReverb = reverb;
-+        self.recordFilePlayer = player;
++        if (isPlayoutEngine) {
++            self.playoutReverb = reverb;
++            self.playoutFilePlayer = player;
++        } else {
++            self.recordReverb = reverb;
++            self.recordFilePlayer = player;
++        }
++    } @catch (NSException *exception) {
++        /*
++         * Last-resort safety net: a music-node setup failure must NEVER crash the
++         * app. If the graph won't connect, injection + metronome are disabled but
++         * the live call and the rest of the app keep working. NSLogged so it still
++         * shows in device logs; JS detects the dead injection path separately.
++         */
++        NSLog(@"[AttoAudioEngine] music node setup FAILED: %@ (%@) — injection/metronome disabled, call audio unaffected",
++              exception.name, exception.reason);
++        @try {
++            if (player) { [engine detachNode:player]; }
++            if (reverb) { [engine detachNode:reverb]; }
++        } @catch (NSException *ignored) {
++        }
 +    }
 +}
 +
@@ -2452,10 +2486,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..098c72ab23bfdb74580806be6bfbbbf0622004d6
+index 0000000000000000000000000000000000000000..a17c1c7e8db52dc0d7e90c56ff116f477ca5d18e
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,208 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -2586,11 +2620,19 @@ index 0000000000000000000000000000000000000000..098c72ab23bfdb74580806be6bfbbbf0
 +}
 +
 +RCT_EXPORT_METHOD(setInjectedGain:(double)gain) {
-+    [[AttoAudioEngineDevice sharedDevice] setGain:(float)gain];
++    @try {
++        [[AttoAudioEngineDevice sharedDevice] setGain:(float)gain];
++    } @catch (NSException *e) {
++        NSLog(@"[AttoAudioInjection] setInjectedGain failed: %@ (%@)", e.name, e.reason);
++    }
 +}
 +
 +RCT_EXPORT_METHOD(setInjectedMonitor:(BOOL)on) {
-+    [[AttoAudioEngineDevice sharedDevice] setMonitor:on];
++    @try {
++        [[AttoAudioEngineDevice sharedDevice] setMonitor:on];
++    } @catch (NSException *e) {
++        NSLog(@"[AttoAudioInjection] setInjectedMonitor failed: %@ (%@)", e.name, e.reason);
++    }
 +}
 +
 +#pragma mark - 4-channel record mixer (matches mixerService.ts)
@@ -2599,20 +2641,34 @@ index 0000000000000000000000000000000000000000..098c72ab23bfdb74580806be6bfbbbf0
 + * Set a record-mixer channel's gain (0..1) + record-enable. `channel` is one of
 + * "mic" / "remote" / "app" / "metronome". Affects ONLY the client-side recorded
 + * mix — the live call is untouched. Fire-and-forget (mirrors the JS void return).
++ *
++ * These are VOID exported methods — a native NSException here is NOT catchable by
++ * the JS try/catch in mixerService.ts (that only sees JS errors / promise
++ * rejections); it propagates through the bridge and crashes the app. That was the
++ * mixer-metronome crash (Sentry REACT-NATIVE-4C): the toggle reached the unguarded
++ * setMetronome, which inited sharedDevice and threw. Guard every void entry point.
 + */
 +RCT_EXPORT_METHOD(setMixerChannel:(NSString *)channel
 +                  gain:(double)gain
 +                  record:(BOOL)record) {
-+    [[AttoAudioEngineDevice sharedDevice] setMixerChannel:channel
-+                                                     gain:(float)gain
-+                                                   record:record];
++    @try {
++        [[AttoAudioEngineDevice sharedDevice] setMixerChannel:channel
++                                                         gain:(float)gain
++                                                       record:record];
++    } @catch (NSException *e) {
++        NSLog(@"[AttoAudioInjection] setMixerChannel failed: %@ (%@)", e.name, e.reason);
++    }
 +}
 +
 +/* Enable/disable the synthesized metronome click and set its tempo (BPM). */
 +RCT_EXPORT_METHOD(setMetronome:(BOOL)enabled
 +                  bpm:(double)bpm) {
-+    [[AttoAudioEngineDevice sharedDevice] setMetronome:enabled
-+                                                   bpm:(NSInteger)llround(bpm)];
++    @try {
++        [[AttoAudioEngineDevice sharedDevice] setMetronome:enabled
++                                                       bpm:(NSInteger)llround(bpm)];
++    } @catch (NSException *e) {
++        NSLog(@"[AttoAudioInjection] setMetronome failed: %@ (%@)", e.name, e.reason);
++    }
 +}
 +
 +/*

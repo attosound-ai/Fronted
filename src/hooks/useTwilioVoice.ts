@@ -531,12 +531,19 @@ export function rejectIncomingCall() {
 // restore the stock device when the call ends. Flag OFF (default) => never called
 // => the stock TVODefaultAudioDevice is untouched and base calls are byte-identical.
 // Key mirrors AUDIO_INJECTION_FLAG in lib/callAudio/createAudioInjector.ts.
+// Tracks whether we ACTUALLY swapped in the custom device this call. restore
+// only runs when this is true — otherwise calling restoreDefaultDevice needlessly
+// touches [AttoAudioEngineDevice sharedDevice], which inits the native engine on
+// EVERY hang-up (the trigger for the AVFAudio crash, Sentry REACT-NATIVE-4C).
+let injectionDeviceInstalled = false;
+
 async function installInjectionDeviceIfEnabled(): Promise<void> {
   if (!IS_IOS) return;
   if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) return;
   const call_sid = useCallStore.getState().activeCall?.callSid ?? null;
   try {
     const ok = await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
+    injectionDeviceInstalled = ok === true;
     // THE signal for the silent-injection bug: if this isn't 'installed' the
     // custom device isn't active and the remote will hear nothing injected.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
@@ -544,6 +551,7 @@ async function installInjectionDeviceIfEnabled(): Promise<void> {
       call_sid,
     });
   } catch (error: unknown) {
+    injectionDeviceInstalled = false;
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
       outcome: 'install_threw',
       reason: error instanceof Error ? error.message : String(error),
@@ -553,23 +561,18 @@ async function installInjectionDeviceIfEnabled(): Promise<void> {
 }
 
 function restoreInjectionDevice(): void {
-  if (!IS_IOS) return;
-  // Restore always runs (idempotent); only log it when injection was in play.
-  const wasEnabled = analytics.isFeatureEnabled('audio_injection_enabled') === true;
+  // Only restore if we actually installed the custom device — never touch the
+  // native engine on a normal (non-injection) call end.
+  if (!IS_IOS || !injectionDeviceInstalled) return;
+  injectionDeviceInstalled = false;
   try {
     void NativeModules.AttoAudioInjection?.restoreDefaultDevice?.();
-    if (wasEnabled) {
-      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
-        outcome: 'restored',
-      });
-    }
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, { outcome: 'restored' });
   } catch (error: unknown) {
-    if (wasEnabled) {
-      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
-        outcome: 'restore_threw',
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    }
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+      outcome: 'restore_threw',
+      reason: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 

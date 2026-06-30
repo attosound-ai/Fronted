@@ -118,10 +118,10 @@ index 0000000000000000000000000000000000000000..fd5981b829d897f5ac18f8d2aa7711cd
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..105d51dfa0112d310c41ea72d7577bdef5070b36
+index 0000000000000000000000000000000000000000..80424bce4c59328ef92b8a18d35e7815d403b54b
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2296 @@
+@@ -0,0 +1,2306 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -2057,7 +2057,17 @@ index 0000000000000000000000000000000000000000..105d51dfa0112d310c41ea72d7577bde
 +     * to the `AVAudioSession.preferredIOBufferDuration` that we've requested.
 +     */
 +    const size_t sessionFramesPerBuffer = kMaximumFramesPerBuffer;
-+    const double sessionSampleRate = [AVAudioSession sharedInstance].sampleRate;
++    double sessionSampleRate = [AVAudioSession sharedInstance].sampleRate;
++
++    // CRASH GUARD (Sentry REACT-NATIVE-4C): when the engine is initialized while
++    // the AVAudioSession is INACTIVE (e.g. sharedDevice is first touched outside a
++    // call, via restoreDefaultDevice on hang-up), sampleRate is 0 → an INVALID
++    // AVAudioFormat → [engine connect:...] throws
++    // "[busArray ... setFormat:] returned false". Fall back to the preferred rate
++    // so the node graph always connects with a valid format.
++    if (sessionSampleRate <= 0) {
++        sessionSampleRate = (double)kPreferredSampleRate;
++    }
 +
 +    return [[TVOAudioFormat alloc] initWithChannels:TVOAudioChannelsMono
 +                                         sampleRate:sessionSampleRate

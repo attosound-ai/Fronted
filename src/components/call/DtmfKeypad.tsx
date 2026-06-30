@@ -1,6 +1,7 @@
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/ui/Text';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { haptic } from '@/lib/haptics/hapticService';
 import { playDtmfTone } from '@/lib/sound/callSounds';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -51,23 +52,28 @@ export function DtmfKeypad({
       {ROWS.map((row) => (
         <View key={row.join('')} style={styles.row}>
           {row.map((digit) => (
-            <TouchableOpacity
+            <GlassSurface
               key={digit}
+              radius={KEY_SIZE / 2}
               style={[styles.key, disabled && styles.keyDisabled]}
-              onPress={() => press(digit)}
-              // NOT `disabled` natively: a native-disabled Touchable swallows
-              // the tap entirely, so a dropped "press 1" would leave no trace.
-              // We keep the disabled LOOK (style + no active flash + a11y state)
-              // but still receive onPress so `press` can report the dropped tap.
-              activeOpacity={disabled ? 1 : 0.6}
-              accessibilityRole="button"
-              accessibilityLabel={digit}
-              accessibilityState={{ disabled }}
             >
-              <Text variant="h2" style={styles.keyLabel}>
-                {digit}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.keyInner}
+                onPress={() => press(digit)}
+                // NOT `disabled` natively: a native-disabled Touchable swallows
+                // the tap entirely, so a dropped "press 1" would leave no trace.
+                // We keep the disabled LOOK (style + no active flash + a11y state)
+                // but still receive onPress so `press` can report the dropped tap.
+                activeOpacity={disabled ? 1 : 0.6}
+                accessibilityRole="button"
+                accessibilityLabel={digit}
+                accessibilityState={{ disabled }}
+              >
+                <Text variant="h2" style={styles.keyLabel}>
+                  {digit}
+                </Text>
+              </TouchableOpacity>
+            </GlassSurface>
           ))}
         </View>
       ))}
@@ -90,10 +96,11 @@ const styles = StyleSheet.create({
   key: {
     width: KEY_SIZE,
     height: KEY_SIZE,
-    borderRadius: KEY_SIZE / 2,
-    backgroundColor: COLORS.background.tertiary,
-    borderWidth: 1,
-    borderColor: COLORS.border.light,
+    // GlassSurface renders the frosted-glass fill + radius (same as the in-call
+    // bar buttons); the key just sizes it. No solid background/border here.
+  },
+  keyInner: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

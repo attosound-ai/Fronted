@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..fd5981b829d897f5ac18f8d2aa7711cd53b9dafd
+index 0000000000000000000000000000000000000000..6425b36c29c3a17df854e377e43dd1a3a3643c97
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,119 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -115,13 +115,20 @@ index 0000000000000000000000000000000000000000..fd5981b829d897f5ac18f8d2aa7711cd
 + */
 +- (nullable NSString *)stopMixRecording;
 +
++/*
++ * Per-channel frame totals for the last mix recording (mic/remote/app/total +
++ * duration). Telemetry only — read after stopMixRecording to see which channels
++ * the engine actually captured.
++ */
++- (NSDictionary *)mixDiagnostics;
++
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a49187ce3b4f
+index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53ff8b76693
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2340 @@
+@@ -0,0 +1,2388 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -412,6 +419,17 @@ index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a491
 +    float _channelGain[AttoMixChannelCount];     // 0..1
 +    BOOL  _channelRecord[AttoMixChannelCount];    // include in mix
 +    BOOL  _ringsAllocated;
++
++    // Telemetry: cumulative frames each channel actually contributed to the mix
++    // over a recording. Written ONLY on the serial mixConsumerQueue; read by JS
++    // (getMixDiagnostics) AFTER stopMixRecording tears the consumer down, so no
++    // concurrent access. remoteFrames≈0 ⇒ engine isn't capturing the other party
++    // (breaks recording + two-way audio + the inject→capture path); appFrames≈0
++    // during a transmit ⇒ the injected audio never reached the mix.
++    uint64_t _dbgMicFrames;
++    uint64_t _dbgRemoteFrames;
++    uint64_t _dbgAppFrames;
++    uint64_t _dbgTotalFrames;
 +
 +    // Metronome phase, advanced by the consumer in file-sample units.
 +    double _metronomeSampleRate;     // file sample rate (consumer format)
@@ -1392,6 +1410,11 @@ index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a491
 +    _metronomeSampleCounter = 0;
 +
 +    _mixRecording = YES;
++    // Reset per-channel telemetry counters for this recording.
++    _dbgMicFrames = 0;
++    _dbgRemoteFrames = 0;
++    _dbgAppFrames = 0;
++    _dbgTotalFrames = 0;
 +    [self.mixLock unlock];
 +
 +    // Build the recorded-metronome click at the file rate (outside the lock).
@@ -1462,6 +1485,30 @@ index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a491
 +
 +    NSLog(@"[AttoAudioEngineDevice] stopMixRecording -> %@", path);
 +    return path;
++}
++
++#pragma mark - Mix telemetry
++
++/*
++ * Per-channel frame totals for the last mix recording — the single most useful
++ * signal for "did the engine actually capture what we think?". Read by JS right
++ * after stopMixRecording (the consumer is already torn down, counters stable).
++ *   remoteFrames ≈ 0 ⇒ engine never received the other party (recording is one
++ *     sided AND two-way call audio is broken AND inject→capture won't reach them)
++ *   appFrames ≈ 0 during a transmit ⇒ injected audio never entered the mix
++ *   totalFrames == 0 ⇒ the mix captured nothing at all
++ */
++- (NSDictionary *)mixDiagnostics {
++    double sr = _metronomeSampleRate > 0 ? _metronomeSampleRate : (double)kPreferredSampleRate;
++    uint64_t total = _dbgTotalFrames;
++    return @{
++        @"micFrames": @(_dbgMicFrames),
++        @"remoteFrames": @(_dbgRemoteFrames),
++        @"appFrames": @(_dbgAppFrames),
++        @"totalFrames": @(total),
++        @"durationSec": @(sr > 0 ? (double)total / sr : 0.0),
++        @"sampleRate": @(sr),
++    };
 +}
 +
 +#pragma mark - Mix consumer
@@ -1547,6 +1594,9 @@ index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a491
 +        // app aligned below.
 +        size_t appGot = AttoRingRead(&_appRing, appBuf, micAvail);
 +        if (appGot < micAvail) memset(appBuf + appGot, 0, (micAvail - appGot) * sizeof(float));
++        _dbgRemoteFrames += micAvail; // remote drove this tick (mic was silent)
++        _dbgAppFrames += appGot;
++        _dbgTotalFrames += micAvail;
 +        [self mixAndWriteFrames:micAvail
 +                            mic:micBuf remote:remoteBuf app:appBuf
 +                           gain:gain rec:rec metroOn:metroOn samplesPerBeat:samplesPerBeat
@@ -1563,6 +1613,11 @@ index 0000000000000000000000000000000000000000..695743c1fa7a3514acb2e1d994e7a491
 +
 +    size_t appGot = AttoRingRead(&_appRing, appBuf, frames);
 +    if (appGot < frames) memset(appBuf + appGot, 0, (frames - appGot) * sizeof(float));
++
++    _dbgMicFrames += micAvail;
++    _dbgRemoteFrames += remoteGot;
++    _dbgAppFrames += appGot;
++    _dbgTotalFrames += frames;
 +
 +    [self mixAndWriteFrames:frames
 +                        mic:micBuf remote:remoteBuf app:appBuf
@@ -2486,10 +2541,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..a17c1c7e8db52dc0d7e90c56ff116f477ca5d18e
+index 0000000000000000000000000000000000000000..27839b1ed909db8045f40bdac245fbdede5e1d18
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,208 @@
+@@ -0,0 +1,218 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -2694,6 +2749,16 @@ index 0000000000000000000000000000000000000000..a17c1c7e8db52dc0d7e90c56ff116f47
 +        resolve(path ?: [NSNull null]);
 +    } @catch (NSException *exception) {
 +        reject(@"stop_mix_failed", exception.reason ?: @"Failed to stop mix recording", nil);
++    }
++}
++
++/* Telemetry: per-channel frame totals of the last mix (mic/remote/app/total). */
++RCT_EXPORT_METHOD(getMixDiagnostics:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        resolve([[AttoAudioEngineDevice sharedDevice] mixDiagnostics]);
++    } @catch (NSException *exception) {
++        reject(@"mix_diagnostics_failed", exception.reason ?: @"Failed to read mix diagnostics", nil);
 +    }
 +}
 +

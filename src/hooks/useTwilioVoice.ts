@@ -561,19 +561,17 @@ async function installInjectionDeviceIfEnabled(): Promise<void> {
 }
 
 function restoreInjectionDevice(): void {
-  // Only restore if we actually installed the custom device — never touch the
-  // native engine on a normal (non-injection) call end.
+  // The custom engine is validated NOT to break call audio, so we KEEP it
+  // installed across calls rather than swapping the audio device back on every
+  // hang-up. Twilio throws "WebRTC does not allow updating the audio device once
+  // the media stack is created" when the device is swapped while the call is
+  // tearing down (Sentry REACT-NATIVE-4E). Leaving the inert engine installed
+  // avoids that crash entirely; the next call simply reuses it (re-install at
+  // connect is a no-op since the device is already current).
   if (!IS_IOS || !injectionDeviceInstalled) return;
-  injectionDeviceInstalled = false;
-  try {
-    void NativeModules.AttoAudioInjection?.restoreDefaultDevice?.();
-    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, { outcome: 'restored' });
-  } catch (error: unknown) {
-    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
-      outcome: 'restore_threw',
-      reason: error instanceof Error ? error.message : String(error),
-    });
-  }
+  analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
+    outcome: 'kept_installed',
+  });
 }
 
 export function hangUpCall() {

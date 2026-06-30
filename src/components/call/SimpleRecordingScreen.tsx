@@ -189,9 +189,19 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
     }
     let cancelled = false;
     const id = setInterval(() => {
-      void getActiveCallAudioLevels().then(({ remote }) => {
-        if (!cancelled) setRemoteLevel(remote);
-      });
+      // While recording through the custom engine, read the REMOTE party's level
+      // straight from the engine (it has their decoded PCM) — reliable, unlike
+      // Twilio getStats' remote audioLevel which reads ~0. Fall back to getStats
+      // on the non-engine (client / non-flagged) path.
+      if (engineMixActiveRef.current) {
+        void mixerService.getMixLevels().then((lv) => {
+          if (!cancelled && lv) setRemoteLevel(lv.remote);
+        });
+      } else {
+        void getActiveCallAudioLevels().then(({ remote }) => {
+          if (!cancelled) setRemoteLevel(remote);
+        });
+      }
     }, 160);
     return () => {
       cancelled = true;
@@ -714,7 +724,7 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
           height={200}
           liveAmplitude={
             isRecording
-              ? Math.max(currentAmplitude, remoteLevel) // both sides (B1)
+              ? remoteLevel // the OTHER party ONLY (client request) — engine-sourced
               : isPlaying
                 ? playbackAmplitude // real playback RMS (B2)
                 : undefined

@@ -7,6 +7,7 @@ import {
 } from 'expo-audio';
 import { useCallStore } from '@/stores/callStore';
 import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { AudioSegment } from '@/types/call';
 
 /**
@@ -115,7 +116,22 @@ export function useSimpleRecordingPlayback(
         allowsRecording: true,
         interruptionMode: 'mixWithOthers',
       });
+    } else {
+      // No active call: force a plain PLAYBACK session. Post-call the custom
+      // engine can leave the session in a record/call config, which made the
+      // recorded mix "finish" instantly (didJustFinish fired immediately).
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
     }
+    // Telemetry to diagnose the "play stops immediately" report: file_duration_ms
+    // ≈ 0 ⇒ the recording file is empty (engine captured nothing); >0 but stops ⇒
+    // a session/format issue.
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_PLAYBACK, {
+      action: 'play',
+      url_kind: currentUrl?.startsWith('file://') ? 'local_file' : 'remote',
+      file_duration_ms: Math.round((status.duration ?? 0) * 1000),
+      is_loaded: status.isLoaded ?? null,
+      segment_count: segments.length,
+    });
     stoppedByUserRef.current = false;
     lastHandledFinishRef.current = false;
     if (!isPlaying) {
@@ -124,7 +140,7 @@ export function useSimpleRecordingPlayback(
       player.seekTo(0);
       player.play();
     }
-  }, [segments.length, isPlaying, player]);
+  }, [segments.length, isPlaying, player, currentUrl, status.duration, status.isLoaded]);
 
   const stop = useCallback(() => {
     stoppedByUserRef.current = true;

@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..6425b36c29c3a17df854e377e43dd1a3a3643c97
+index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b23f99ccd6
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,126 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -122,13 +122,20 @@ index 0000000000000000000000000000000000000000..6425b36c29c3a17df854e377e43dd1a3
 + */
 +- (NSDictionary *)mixDiagnostics;
 +
++/*
++ * Live RMS levels (0..1) — { remote, mic } — for the record-screen waveform.
++ * Polled by JS while a mix recording is active; `remote` lets the wave follow the
++ * other party specifically.
++ */
++- (NSDictionary *)mixLevels;
++
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53ff8b76693
+index 0000000000000000000000000000000000000000..e9c4be309b760d72bb2ada43e1e4041c9330a728
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2388 @@
+@@ -0,0 +1,2424 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -430,6 +437,14 @@ index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53f
 +    uint64_t _dbgRemoteFrames;
 +    uint64_t _dbgAppFrames;
 +    uint64_t _dbgTotalFrames;
++
++    // Live RMS levels (0..1, EMA-smoothed) for the record-screen waveform. Written
++    // ONLY on the serial mixConsumerQueue (not the real-time render thread), read
++    // by JS via getMixLevels. Lets the wave react specifically to the REMOTE party
++    // (the engine has their decoded PCM; Twilio getStats' remote audioLevel is
++    // unreliable and reads ~0).
++    float _remoteLevelEMA;
++    float _micLevelEMA;
 +
 +    // Metronome phase, advanced by the consumer in file-sample units.
 +    double _metronomeSampleRate;     // file sample rate (consumer format)
@@ -1410,11 +1425,13 @@ index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53f
 +    _metronomeSampleCounter = 0;
 +
 +    _mixRecording = YES;
-+    // Reset per-channel telemetry counters for this recording.
++    // Reset per-channel telemetry counters + live levels for this recording.
 +    _dbgMicFrames = 0;
 +    _dbgRemoteFrames = 0;
 +    _dbgAppFrames = 0;
 +    _dbgTotalFrames = 0;
++    _remoteLevelEMA = 0.0f;
++    _micLevelEMA = 0.0f;
 +    [self.mixLock unlock];
 +
 +    // Build the recorded-metronome click at the file rate (outside the lock).
@@ -1509,6 +1526,19 @@ index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53f
 +        @"durationSec": @(sr > 0 ? (double)total / sr : 0.0),
 +        @"sampleRate": @(sr),
 +    };
++}
++
++/*
++ * Live RMS levels (0..1) for the record-screen waveform — polled by JS while
++ * recording. `remote` is the OTHER party specifically, so the wave can react to
++ * them talking (what the client asked for) instead of the local mic. Valid only
++ * while a mix recording is active (the consumer that updates them is running).
++ */
++- (NSDictionary *)mixLevels {
++    // ×4 makes quiet speech read on the wave; clamp to 1.
++    float r = _remoteLevelEMA * 4.0f; if (r > 1.0f) r = 1.0f;
++    float m = _micLevelEMA * 4.0f;    if (m > 1.0f) m = 1.0f;
++    return @{ @"remote": @(r), @"mic": @(m) };
 +}
 +
 +#pragma mark - Mix consumer
@@ -1618,6 +1648,19 @@ index 0000000000000000000000000000000000000000..6d82b89770d34aaa5a4bb1f4812ba53f
 +    _dbgRemoteFrames += remoteGot;
 +    _dbgAppFrames += appGot;
 +    _dbgTotalFrames += frames;
++
++    // Live levels for the waveform (REMOTE-specific). RMS of this quantum, then an
++    // EMA so the displayed wave is smooth. Runs on the serial consumer queue.
++    {
++        double rs = 0.0, ms = 0.0;
++        for (size_t i = 0; i < remoteGot; i++) rs += (double)remoteBuf[i] * remoteBuf[i];
++        for (size_t i = 0; i < micAvail; i++)  ms += (double)micBuf[i] * micBuf[i];
++        float rRms = remoteGot ? (float)sqrt(rs / (double)remoteGot) : 0.0f;
++        float mRms = micAvail  ? (float)sqrt(ms / (double)micAvail)  : 0.0f;
++        const float a = 0.3f;
++        _remoteLevelEMA = _remoteLevelEMA * (1.0f - a) + rRms * a;
++        _micLevelEMA    = _micLevelEMA    * (1.0f - a) + mRms * a;
++    }
 +
 +    [self mixAndWriteFrames:frames
 +                        mic:micBuf remote:remoteBuf app:appBuf
@@ -2541,10 +2584,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..dea629c99bbf2c4e371e18ed3b3d4af28e31a2d9
+index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e309dd9159
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,276 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -2760,6 +2803,16 @@ index 0000000000000000000000000000000000000000..dea629c99bbf2c4e371e18ed3b3d4af2
 +        resolve([[AttoAudioEngineDevice sharedDevice] mixDiagnostics]);
 +    } @catch (NSException *exception) {
 +        reject(@"mix_diagnostics_failed", exception.reason ?: @"Failed to read mix diagnostics", nil);
++    }
++}
++
++/* Live { remote, mic } RMS levels for the record-screen waveform (poll while recording). */
++RCT_EXPORT_METHOD(getMixLevels:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        resolve([[AttoAudioEngineDevice sharedDevice] mixLevels]);
++    } @catch (NSException *exception) {
++        reject(@"mix_levels_failed", exception.reason ?: @"Failed to read mix levels", nil);
 +    }
 +}
 +

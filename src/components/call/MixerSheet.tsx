@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { View, Switch, TouchableOpacity, StyleSheet } from 'react-native';
 import { Mic, Phone, Music2, Timer, Minus, Plus } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Slider } from '@/components/ui/Slider';
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -10,11 +11,11 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useMixerStore, MIXER_CHANNELS, type MixerChannel } from '@/stores/mixerStore';
 import { GOLD } from '@/constants/gold';
 
-const CHANNEL_META: Record<MixerChannel, { label: string; Icon: typeof Mic }> = {
-  mic: { label: 'Mi micrófono', Icon: Mic },
-  remote: { label: 'La otra persona', Icon: Phone },
-  app: { label: 'Audio del app', Icon: Music2 },
-  metronome: { label: 'Metrónomo', Icon: Timer },
+const CHANNEL_META: Record<MixerChannel, { labelKey: string; Icon: typeof Mic }> = {
+  mic: { labelKey: 'mixer.mic', Icon: Mic },
+  remote: { labelKey: 'mixer.remote', Icon: Phone },
+  app: { labelKey: 'mixer.app', Icon: Music2 },
+  metronome: { labelKey: 'mixer.metronome', Icon: Timer },
 };
 
 // The captured sources (mic / remote / injected app audio). The metronome is NOT
@@ -42,6 +43,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
   const setChannelRecord = useMixerStore((s) => s.setChannelRecord);
   const setMetronomeEnabled = useMixerStore((s) => s.setMetronomeEnabled);
   const setBpm = useMixerStore((s) => s.setBpm);
+  const { t } = useTranslation('calls');
 
   // Mirror a channel change to BOTH the store and the native bus.
   const onGain = useCallback(
@@ -85,9 +87,9 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
   );
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Mezclador">
+    <BottomSheet visible={visible} onClose={onClose} title={t('mixer.title')}>
       <View style={styles.body}>
-        <Text style={styles.sectionLabel}>Canales de grabación</Text>
+        <Text style={styles.sectionLabel}>{t('mixer.recordingChannels')}</Text>
         {RECORD_CHANNELS.map((ch) => {
           const meta = CHANNEL_META[ch];
           const state = channels[ch];
@@ -103,7 +105,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
                   <Text
                     style={[styles.channelName, !state.record && styles.channelNameOff]}
                   >
-                    {meta.label}
+                    {t(meta.labelKey as never)}
                   </Text>
                 </View>
                 <Switch
@@ -133,7 +135,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
               color={metronomeEnabled ? GOLD.base : '#666'}
               strokeWidth={2.25}
             />
-            <Text style={styles.channelName}>Metrónomo</Text>
+            <Text style={styles.channelName}>{t('mixer.metronome')}</Text>
           </View>
           <Switch
             value={metronomeEnabled}
@@ -149,7 +151,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
           minimumTrackColor={GOLD.base}
         />
         <View style={styles.bpmRow}>
-          <Text style={styles.bpmLabel}>BPM</Text>
+          <Text style={styles.bpmLabel}>{t('mixer.bpm')}</Text>
           <TouchableOpacity
             style={styles.bpmBtn}
             onPress={() => onBpm(bpm - 1)}

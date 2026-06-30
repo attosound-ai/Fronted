@@ -28,6 +28,7 @@ interface NativeMixer {
   startMixRecording?: () => Promise<string | null>;
   stopMixRecording?: () => Promise<string | null>;
   getMixDiagnostics?: () => Promise<Record<string, number> | null>;
+  getMixLevels?: () => Promise<{ remote: number; mic: number } | null>;
 }
 
 function nativeMixer(): NativeMixer | null {
@@ -85,6 +86,19 @@ export const mixerService = {
   async getMixDiagnostics(): Promise<Record<string, number> | null> {
     try {
       return (await nativeMixer()?.getMixDiagnostics?.()) ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Live { remote, mic } RMS levels (0..1) while a mix recording is active — the
+   * record-screen waveform polls `remote` so it follows the OTHER party. null off
+   * iOS / when not recording / before the native engine ships.
+   */
+  async getMixLevels(): Promise<{ remote: number; mic: number } | null> {
+    try {
+      return (await nativeMixer()?.getMixLevels?.()) ?? null;
     } catch {
       return null;
     }

@@ -10,6 +10,7 @@ import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
 import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -72,6 +73,13 @@ export function ReelMedia({
     postId: post.id,
   });
   const { position, duration } = useVideoProgress(player);
+
+  // This reel is transmittable into a live call (📡): register it as now-playing
+  // while it's the active reel; the injector extracts its audio track on demand.
+  useRegisterNowPlaying(
+    videoUrl ? { kind: 'reel', uri: videoUrl, isVideo: true, postId: post.id } : null,
+    isVisible && isFocused && !userPaused
+  );
 
   // Tap the video to pause/resume.
   const togglePlayPause = useCallback(() => {

@@ -46,7 +46,8 @@ export function useCallAudioInjection() {
         ? Date.now() - new Date(call.connectedAt).getTime()
         : null,
       source_kind: source.kind,
-      post_id: source.kind === 'beat' ? null : (source.postId ?? null),
+      is_video: source.isVideo ?? false,
+      post_id: source.postId ?? null,
     };
 
     const land = (outcome: string, reason?: InjectReason) =>

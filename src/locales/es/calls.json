@@ -72,5 +72,14 @@
     "noProjects": "Aún no hay proyectos. Cree el primero arriba.",
     "segmentCount_one": "{{count}} segmento",
     "segmentCount_other": "{{count}} segmentos"
+  },
+  "mixer": {
+    "title": "Mezclador",
+    "recordingChannels": "Canales de grabación",
+    "mic": "Mi micrófono",
+    "remote": "La otra persona",
+    "app": "Audio del app",
+    "metronome": "Metrónomo",
+    "bpm": "BPM"
   }
 }

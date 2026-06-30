@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..d580483542170db88d35dd5fc617395de6694c8b
+index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2d662cf60
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2441 @@
+@@ -0,0 +1,2453 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -1773,11 +1773,23 @@ index 0000000000000000000000000000000000000000..d580483542170db88d35dd5fc617395d
 +    AVAudioPlayerNode *player = self.recordFilePlayer;
 +    double positionMs = 0.0;
 +
-+    AVAudioTime *nodeTime = player.lastRenderTime;
-+    AVAudioTime *playerTime = (nodeTime != nil) ? [player playerTimeForNodeTime:nodeTime] : nil;
-+    if (playerTime != nil && playerTime.sampleRate > 0) {
-+        positionMs = ((double)playerTime.sampleTime / playerTime.sampleRate) * 1000.0;
-+        if (positionMs < 0.0) positionMs = 0.0;
++    @try {
++        AVAudioTime *nodeTime = player.lastRenderTime;
++        // CRASH GUARD (Sentry REACT-NATIVE-4G "required condition is false:
++        // nodeTime == nil || nodeTime.sampleTimeValid || nodeTime.hostTimeValid"):
++        // playerTimeForNodeTime ASSERTS when the node time is invalid — which it is
++        // whenever the player/engine isn't actually running (e.g. inject started
++        // while the custom device was inert). Only query a VALID node time.
++        if (nodeTime != nil && (nodeTime.isSampleTimeValid || nodeTime.isHostTimeValid)) {
++            AVAudioTime *playerTime = [player playerTimeForNodeTime:nodeTime];
++            if (playerTime != nil && playerTime.sampleRate > 0) {
++                positionMs = ((double)playerTime.sampleTime / playerTime.sampleRate) * 1000.0;
++                if (positionMs < 0.0) positionMs = 0.0;
++            }
++        }
++    } @catch (NSException *exception) {
++        // Player isn't in a renderable state — skip this tick, never crash.
++        positionMs = 0.0;
 +    }
 +
 +    [self reportStatus:positionMs duration:self.currentDurationMs ended:NO];

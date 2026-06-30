@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useCallStore } from '@/stores/callStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useFeatureFlag } from '@/lib/analytics';
 import {
   getAudioInjector,
@@ -27,6 +28,9 @@ export function CallAudioInjectionHost() {
   const flagEnabled = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
   const setInjection = useCallStore((s) => s.setInjection);
   const activeCallSid = useCallStore((s) => s.activeCall?.callSid ?? null);
+  // Re-arm the device whenever the ACTIVE account changes — the install is
+  // per-account, so switching to westcol must trigger its own pre-install.
+  const activeUserId = useAuthStore((s) => s.user?.id ?? null);
 
   // Mirror engine snapshots → store (re-subscribes if the flag flips the engine).
   useEffect(() => {
@@ -58,7 +62,7 @@ export function CallAudioInjectionHost() {
   useEffect(() => {
     if (Platform.OS !== 'ios' || !flagEnabled || activeCallSid) return;
     void installInjectionDeviceIfEnabled('preinstall');
-  }, [flagEnabled, activeCallSid]);
+  }, [flagEnabled, activeCallSid, activeUserId]);
 
   return null;
 }

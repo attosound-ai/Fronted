@@ -52,11 +52,26 @@ export function InCallTopBar() {
   const { canInject, isInjecting, inject, stop } = useCallAudioInjection();
   const nowPlaying = useNowPlayingStore((s) => s.track);
 
+  // Transmit is a MODE, not a one-shot: tap 📡 once → from then on EVERYTHING the
+  // app plays (reel / post / video / beat — whatever becomes nowPlaying) is pushed
+  // into the call; tap again → stop. So it works regardless of what's on screen.
+  const [transmitMode, setTransmitMode] = useState(false);
+
   const onTransmit = () => {
     void haptic('selection');
-    if (isInjecting) void stop('user_stopped');
-    else if (nowPlaying) void inject(nowPlaying);
+    setTransmitMode((m) => !m);
   };
+
+  // While transmit mode is ON, follow whatever is currently playing — re-inject as
+  // the source changes so switching content keeps streaming into the call.
+  useEffect(() => {
+    if (transmitMode && nowPlaying) void inject(nowPlaying);
+  }, [transmitMode, nowPlaying?.uri, inject]);
+
+  // Stop the moment the user turns the mode off.
+  useEffect(() => {
+    if (!transmitMode && isInjecting) void stop('user_stopped');
+  }, [transmitMode, isInjecting, stop]);
 
   const isConnected = isCallConnected(activeCall?.state);
 
@@ -138,17 +153,13 @@ export function InCallTopBar() {
         {canInject ? (
           <GlassSurface radius={21} style={styles.glassBtn}>
             <TouchableOpacity
-              style={[styles.glassBtnInner, isInjecting && styles.glassBtnActive]}
+              style={[styles.glassBtnInner, transmitMode && styles.glassBtnActive]}
               onPress={onTransmit}
             >
-              {isInjecting ? (
+              {transmitMode ? (
                 <Square size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
               ) : (
-                <Radio
-                  size={20}
-                  color={nowPlaying ? '#FFF' : 'rgba(255,255,255,0.45)'}
-                  strokeWidth={2.25}
-                />
+                <Radio size={20} color="#FFF" strokeWidth={2.25} />
               )}
             </TouchableOpacity>
           </GlassSurface>

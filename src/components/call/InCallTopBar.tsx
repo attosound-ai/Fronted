@@ -26,7 +26,7 @@ import { preloadCallSounds } from '@/lib/sound/callSounds';
 import { haptic } from '@/lib/haptics/hapticService';
 import { openKeypad } from './DtmfKeypadHost';
 import { openMixer } from './MixerHost';
-import { useFeatureFlag } from '@/lib/analytics';
+import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 
 function formatElapsed(seconds: number): string {
@@ -59,7 +59,16 @@ export function InCallTopBar() {
 
   const onTransmit = () => {
     void haptic('selection');
-    setTransmitMode((m) => !m);
+    setTransmitMode((m) => {
+      const next = !m;
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_STATE_CHANGED, {
+        transmit_mode: next ? 'on' : 'off',
+        has_now_playing: !!nowPlaying,
+        source_kind: nowPlaying?.kind ?? null,
+        is_video: nowPlaying?.isVideo ?? false,
+      });
+      return next;
+    });
   };
 
   // While transmit mode is ON, follow whatever is currently playing — re-inject as

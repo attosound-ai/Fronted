@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..b97c45a05fd9c95effaf1c1c9d94ef37c5745aea
+index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193cac8c6668
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2882 @@
+@@ -0,0 +1,2896 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -571,7 +571,21 @@ index 0000000000000000000000000000000000000000..b97c45a05fd9c95effaf1c1c9d94ef37
 +        _channelGain[AttoMixChannelMetronome] = 0.6f;
 +        _channelRecord[AttoMixChannelMic]       = YES;
 +        _channelRecord[AttoMixChannelRemote]    = YES;
-+        _channelRecord[AttoMixChannelApp]       = YES;
++        /*
++         * App audio defaults to NOT being recorded (David, Aug 3).
++         *
++         * This is not a preference, it is what makes overdubbing work at all. The
++         * app channel carries whatever we are injecting into the call — typically
++         * the backing track the user is singing over. If the take records it too,
++         * then layering that take back onto the same backing track in the timeline
++         * gives you the track TWICE, slightly offset, which comb-filters into a
++         * hollow mess, with the far party's voice underneath.
++         *
++         * Recording mic + remote only yields a clean overdub. The user can turn the
++         * app channel back on from the mixer when they actually want the whole
++         * blend captured (e.g. bouncing a live performance).
++         */
++        _channelRecord[AttoMixChannelApp]       = NO;
 +        _channelRecord[AttoMixChannelMetronome] = NO;
 +        _metronomeOn = NO;
 +        _metronomeBpm = 90;

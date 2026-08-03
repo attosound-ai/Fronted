@@ -8,7 +8,10 @@
     "ios": "expo run:ios --port 8082",
     "web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:ios-libs": "./scripts/verify-audio-api-binaries.sh",
+    "build:ios": "./scripts/verify-audio-api-binaries.sh && eas build --platform ios --profile production --local --non-interactive --output ./build-final.ipa",
+    "submit:ios": "eas submit -p ios --path ./build-final.ipa --non-interactive"
   },
   "dependencies": {
     "@expo-google-fonts/archivo": "^0.4.2",

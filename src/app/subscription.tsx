@@ -66,9 +66,9 @@ export default function SubscriptionScreen() {
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const currentPlan = useSubscriptionStore((s) => s.getPlan());
-  const pendingChange = useSubscriptionStore(
-    (s) => s.subscription?.pendingChange ?? null
-  );
+  // Owner-safe: getPendingChange() only returns the pending change for the
+  // active account (never a stale cross-account value on launch/switch).
+  const pendingChange = useSubscriptionStore((s) => s.getPendingChange());
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const user = useAuthStore((s) => s.user);
   const isCreator = user?.role === 'creator' && !!user?.inmateNumber;

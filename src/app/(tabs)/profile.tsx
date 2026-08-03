@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown } from 'lucide-react-native';
 import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
 import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -60,6 +60,19 @@ export default function ProfileScreen() {
 
   const fetchSubscription = useSubscriptionStore((s) => s.fetchSubscription);
   const queryClient = useQueryClient();
+
+  // Self-heal a stuck subscription: if the plan is unresolved ("—") or the last
+  // fetch failed (transient network/5xx), refetch whenever Profile gains focus so
+  // merely opening this tab recovers it — no manual pull-to-refresh or cold restart
+  // needed. fetchSubscription dedups + self-retries, so this never spams the API.
+  useFocusEffect(
+    useCallback(() => {
+      const s = useSubscriptionStore.getState();
+      if (s.getResolvedPlan() === null || s.lastFetchFailed) {
+        void s.fetchSubscription();
+      }
+    }, [])
+  );
   const contentTabsRef = useRef<ProfileContentTabsHandle>(null);
 
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {

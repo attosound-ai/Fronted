@@ -13,9 +13,16 @@ import { ScrollOffsetProvider } from '@/contexts/ScrollOffsetContext';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/features/messages/stores/chatStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import {
+  persistColdLaunchCallKitFlag,
+  persistAudioInjectionFlag,
+} from '@/hooks/useTwilioVoice';
+import { useAccountStore } from '@/stores/accountStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
 import { useUnreadCount } from '@/features/notifications/hooks/useUnreadCount';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useConnectedCallLanding } from '@/hooks/useConnectedCallLanding';
 import { messageService } from '@/features/messages/services/messageService';
 import { COLORS } from '@/constants/theme';
 
@@ -23,6 +30,7 @@ export default function TabsLayout() {
   const [comingSoonVisible, setComingSoonVisible] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const totalUnread = useChatStore((s) => s.totalUnread);
 
   const connectSocket = useChatStore((s) => s.connectSocket);
@@ -31,6 +39,9 @@ export default function TabsLayout() {
   // Sync notification badge + register push token
   useUnreadCount();
   usePushNotifications();
+  // Global "call connected → land on the recorder" watcher — covers EXTERNAL
+  // CallKit answers where /call never mounts (its own hand-off can't run).
+  useConnectedCallLanding();
 
   // Fetch unread message count on app start (before user opens messages tab)
   useEffect(() => {
@@ -42,6 +53,33 @@ export default function TabsLayout() {
         useChatStore.getState().setTotalUnread(unread);
       })
       .catch(() => {});
+  }, [isAuthenticated]);
+
+  // Resolve the subscription plan on app start AND on every account switch, so
+  // `entitlementState` turns from unknown(null) into a definite true/false. Keyed
+  // on activeAccountId too because applyAccountSwitchCore only setUser()s and never
+  // toggles isAuthenticated — without this dep a switch-time fetch failure would
+  // never be re-driven by navigation and the plan would stay stuck at "—".
+  // fetchSubscription self-retries + dedups, so this extra trigger is idempotent.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void useSubscriptionStore.getState().fetchSubscription();
+  }, [isAuthenticated, activeAccountId]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    // Persist the cold-launch CallKit gate to NSUserDefaults NOW, on every authed
+    // app open — reliable, unlike burying it in the Twilio-registration path (which
+    // didn't run in the failed build-76 validation). PostHog flags are cached
+    // locally so this reads correctly by the time the tabs mount. See
+    // persistColdLaunchCallKitFlag / withTwilioVoipPushRegistry.js.
+    persistColdLaunchCallKitFlag();
+    // Same early disk-persist for the injection cohort — the native Twilio module
+    // -init reads it (before it assigns the audio device) to install the custom
+    // engine instead of the stock device. Writing it here, at app open, lands it
+    // on disk before Twilio registration instantiates that module. See
+    // persistAudioInjectionFlag / project_injection_device_not_pumped.
+    persistAudioInjectionFlag();
   }, [isAuthenticated]);
 
   useEffect(() => {

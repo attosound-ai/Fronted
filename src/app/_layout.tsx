@@ -39,6 +39,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
+import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
@@ -206,6 +207,7 @@ function RootLayout() {
   const { t } = useTranslation('messages');
   const initialize = useAuthStore((s) => s.initialize);
   useTwilioVoice();
+  useVoipReportTelemetry();
   useMicrophonePermission();
   useBadgeSync();
   const [fontsLoaded] = useFonts({

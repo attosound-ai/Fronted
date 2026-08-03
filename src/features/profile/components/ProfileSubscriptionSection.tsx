@@ -8,11 +8,15 @@ import { useAuthStore } from '@/stores/authStore';
 
 export function ProfileSubscriptionSection() {
   const { t } = useTranslation('profile');
-  const plan = useSubscriptionStore((s) => s.getPlan());
+  // `getResolvedPlan()` is null until the subscription for the ACTIVE account is
+  // loaded (owner-tagged) — do NOT default to "Connect Free" during that window,
+  // which flashed the wrong plan on launch / after an account switch.
+  const resolvedPlan = useSubscriptionStore((s) => s.getResolvedPlan());
   const subscription = useSubscriptionStore((s) => s.subscription);
   const role = useAuthStore((s) => s.user?.role);
   const inmateNumber = useAuthStore((s) => s.user?.inmateNumber);
-  const isFree = plan === 'connect_free';
+  const isResolved = resolvedPlan !== null;
+  const isFree = isResolved && resolvedPlan === 'connect_free';
 
   // Subscriptions are creator-only — listeners and representatives don't pay.
   if (role !== 'creator' || !inmateNumber) return null;
@@ -33,16 +37,21 @@ export function ProfileSubscriptionSection() {
       <View style={styles.card}>
         <View style={styles.planRow}>
           <View style={styles.planInfo}>
-            {isFree ? (
+            {!isResolved ? (
+              <Gem size={20} color="#333" strokeWidth={2.25} />
+            ) : isFree ? (
               <Star size={20} color="#666" strokeWidth={2.25} />
             ) : (
               <Gem size={20} color="#FFFFFF" strokeWidth={2.25} />
             )}
-            <Text variant="body" style={styles.planName}>
-              {PLAN_LABELS[plan] ?? plan}
+            <Text
+              variant="body"
+              style={[styles.planName, !isResolved && styles.planNameLoading]}
+            >
+              {isResolved ? (PLAN_LABELS[resolvedPlan] ?? resolvedPlan) : '—'}
             </Text>
           </View>
-          {!isFree && subscription?.expiresAt && (
+          {isResolved && !isFree && subscription?.expiresAt && (
             <Text variant="caption" style={styles.expiry}>
               {t('subscription.renewsLabel', {
                 date: new Date(subscription.expiresAt).toLocaleDateString(),
@@ -97,6 +106,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 15,
+  },
+  planNameLoading: {
+    color: '#555',
   },
   expiry: {
     color: '#666',

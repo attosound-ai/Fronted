@@ -1,19 +1,19 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { Mic, MicOff, Volume1, Volume2, Phone, Grid3x3 } from 'lucide-react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Text } from '@/components/ui/Text';
 import { Toast } from '@/components/ui/Toast';
 import { TimelineEditor } from '@/features/timeline/components/TimelineEditor';
+import { CallProjectChooser } from './CallProjectChooser';
 import { useProjectDetail } from '@/features/projects/hooks/useProjectDetail';
 import { useCallStore } from '@/stores/callStore';
 import { useCreatePostStore } from '@/stores/createPostStore';
-import { hangUpCall, toggleMuteCall, toggleSpeaker } from '@/hooks/useTwilioVoice';
-import { openKeypad } from './DtmfKeypadHost';
+import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
+import { INCALL_EDITOR_AUTOLOAD_FLAG } from '@/hooks/useConnectedCallLanding';
 import type { ExportResult } from '@/types/project';
 import { COLORS } from '@/constants/theme';
 
@@ -21,30 +21,56 @@ interface ActiveCallScreenProps {
   onBack: () => void;
 }
 
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
+// Hard ceiling for downloading the exported WAV to the device. Generous enough
+// for a long take on a slow link, but finite so a stalled download can't hang
+// the publish forever (downloadAsync has no built-in timeout).
+const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 /**
- * Thin wrapper that mounts the canonical `TimelineEditor` with the
- * project belonging to the active Twilio call. Renders an in-call
- * control bar (ATTO + timer + Unmute / Speaker / End) above the editor
- * via `topSlot`, and switches the editor's record button to use the
- * Twilio Media Stream pipeline via `recordingMode="twilioCall"`.
+ * Thin wrapper that mounts the canonical `TimelineEditor` with the project
+ * belonging to the active Twilio call, and switches the editor's record button
+ * to the Twilio Media Stream pipeline via `recordingMode="twilioCall"`.
  *
- * Replaces the old per-screen timeline implementation that duplicated
- * everything from `TimelineEditor` with a slightly different layout.
+ * The in-call controls (timer, mute, speaker, keypad, transmit, mixer, end) are
+ * the GLOBAL green `InCallTopBar` that already floats over this screen — we do
+ * NOT inject a second green bar here (that produced the doubled-green header).
+ * TimelineEditor reserves the bar's height at the top so its own header clears it.
  */
 export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
   const { t } = useTranslation('calls');
   const queryClient = useQueryClient();
-  const activeCall = useCallStore((s) => s.activeCall);
   const activeProjectId = useCallStore((s) => s.activeProjectId);
   const setPendingAudio = useCreatePostStore((s) => s.setPendingAudio);
 
-  const { data, isLoading } = useProjectDetail(activeProjectId ?? '');
+  // Relief (David, Jul 22): the Record Pro editor OOM-killed the app on every call.
+  // Default OFF → show a plain call screen; the rep opens the recorder deliberately.
+  // Gate the project fetch too (it pulls segments + waveforms = memory) so a plain
+  // call never touches the heavy path. Re-enable per-cohort via the flag once the
+  // editor's in-call memory is reduced. See useConnectedCallLanding for the flag.
+  const editorFlagOn = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
+  const [manualOpen, setManualOpen] = useState(false);
+  const showEditor = editorFlagOn || manualOpen;
+
+  const { data, isLoading } = useProjectDetail(showEditor ? (activeProjectId ?? '') : '');
+
+  // Telemetry: log WHY the editor is (or isn't) loading, once per distinct state,
+  // so production shows the stuck-loading reason and confirms the fix flips it to ready.
+  const loadingReason = !activeProjectId
+    ? 'no_project'
+    : isLoading
+      ? 'loading'
+      : !data
+        ? 'no_data'
+        : 'ready';
+  const loggedStateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loggedStateRef.current === loadingReason) return;
+    loggedStateRef.current = loadingReason;
+    analytics.capture(ANALYTICS_EVENTS.CALL.RECORDER_STATE, {
+      state: loadingReason,
+      has_project: !!activeProjectId,
+    });
+  }, [loadingReason, activeProjectId]);
 
   // Refresh the project query on unmount so other screens see the
   // latest clips/segments captured during the call.
@@ -60,21 +86,43 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
     };
   }, [queryClient]);
 
-  // Call elapsed timer.
-  const [callElapsed, setCallElapsed] = useState(0);
-  useEffect(() => {
-    if (!activeCall?.connectedAt) return;
-    const start = activeCall.connectedAt.getTime();
-    const tick = () => setCallElapsed(Math.floor((Date.now() - start) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [activeCall?.connectedAt]);
-
   const handlePublish = useCallback(
     async (result: ExportResult, durationMs: number) => {
       const localUri = `${FileSystem.cacheDirectory}export_${activeProjectId}_${Date.now()}.wav`;
-      await FileSystem.downloadAsync(result.downloadUrl, localUri);
+      // Download the exported WAV to the device before handing it to the
+      // post composer. This is the phase we suspected of the "Publicar tardó
+      // demasiado" slowness (the export is an uncompressed WAV), so time it and
+      // guard it: downloadAsync has no built-in timeout, and without one a
+      // stalled download would hang the publish forever.
+      const tDownload = Date.now();
+      try {
+        await Promise.race([
+          FileSystem.downloadAsync(result.downloadUrl, localUri),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error('export download timed out')),
+              DOWNLOAD_TIMEOUT_MS
+            )
+          ),
+        ]);
+        analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORT_DOWNLOAD, {
+          outcome: 'succeeded',
+          download_ms: Date.now() - tDownload,
+          file_size_bytes: result.fileSizeBytes ?? null,
+          project_id: activeProjectId ?? null,
+        });
+      } catch (error: unknown) {
+        analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORT_DOWNLOAD, {
+          outcome: 'failed',
+          download_ms: Date.now() - tDownload,
+          file_size_bytes: result.fileSizeBytes ?? null,
+          project_id: activeProjectId ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Rethrow so handleExport's catch surfaces the error toast and clears
+        // the publishing state, instead of silently pushing to an empty composer.
+        throw error;
+      }
       setPendingAudio({
         uri: localUri,
         fileName: `${data?.project.name ?? 'project'}.wav`,
@@ -85,11 +133,48 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
     [activeProjectId, data?.project.name, setPendingAudio]
   );
 
+  // Relief mode: plain call screen. No editor, no project fetch, no waveforms —
+  // so a normal call (the common case: Larry just talks) can't OOM the app. The
+  // global InCallTopBar already floats the mute/speaker/hang-up controls over
+  // this; here we only offer a deliberate "Record" entry into the editor.
+  if (!showEditor) {
+    return (
+      <View style={styles.plainContainer}>
+        <Text variant="body" style={styles.plainStatus}>
+          {t('active.onCall', 'On call')}
+        </Text>
+        <TouchableOpacity
+          style={styles.recordButton}
+          activeOpacity={0.85}
+          onPress={() => {
+            analytics.capture(ANALYTICS_EVENTS.CALL.RECORDER_STATE, {
+              state: 'manual_open',
+              has_project: !!activeProjectId,
+            });
+            setManualOpen(true);
+          }}
+        >
+          <Text variant="body" style={styles.recordButtonText}>
+            {t('active.openRecorder', 'Record')}
+          </Text>
+        </TouchableOpacity>
+        <Toast />
+      </View>
+    );
+  }
+
+  // No project on the call yet → let the rep CHOOSE one (Record Pro manages
+  // projects; deciding for them is wrong, and the old code just spun forever
+  // here because the auto-landing skips the CallBanner's project picker).
+  if (!activeProjectId) {
+    return <CallProjectChooser />;
+  }
+
   // Loading state — shown until the project payload arrives. The call
   // controls are not interactive yet because we don't know which lanes
   // exist; that's a fair tradeoff because the editor takes <1s to load
   // in practice.
-  if (isLoading || !data || !activeProjectId) {
+  if (isLoading || !data) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -101,12 +186,14 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
     );
   }
 
-  const isMuted = activeCall?.isMuted ?? false;
-  const isSpeaker = activeCall?.isSpeaker ?? false;
-
   return (
     <TimelineEditor
-      key={`${activeProjectId}-${data.project.updatedAt}`}
+      // Key on the PROJECT only, never updatedAt: every in-call recording bumps
+      // updatedAt, and keying on it force-remounted the whole editor per recording.
+      // Combined with the player-release leak that stacked ~600MB per remount →
+      // OOM (David, Jul 23). The editor already ingests new clips/segments via
+      // props, so it never needed the remount. Switching projects still remounts.
+      key={activeProjectId}
       projectId={activeProjectId}
       clips={data.clips}
       segments={data.segments}
@@ -114,68 +201,6 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
       onClose={onBack}
       onPublish={handlePublish}
       recordingMode="twilioCall"
-      topSlot={
-        <View style={styles.callBar}>
-          <View style={styles.callBarLeft}>
-            <View style={styles.liveDot} />
-            <Text variant="caption" style={styles.callTimer}>
-              {formatElapsed(callElapsed)}
-            </Text>
-          </View>
-          <View style={styles.callBarControls}>
-            <TouchableOpacity
-              style={[styles.callBtn, isMuted && styles.callBtnMutedActive]}
-              onPress={toggleMuteCall}
-              activeOpacity={0.7}
-            >
-              {isMuted ? (
-                <MicOff size={16} color="#FFF" strokeWidth={2.25} />
-              ) : (
-                <Mic size={16} color="#FFF" strokeWidth={2.25} />
-              )}
-              <Text variant="caption" style={styles.callBtnLabel}>
-                {isMuted ? t('active.unmute') : t('active.mute')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.callBtn, isSpeaker && styles.callBtnSpeakerActive]}
-              onPress={toggleSpeaker}
-              activeOpacity={0.7}
-            >
-              {isSpeaker ? (
-                <Volume2 size={16} color="#FFF" strokeWidth={2.25} />
-              ) : (
-                <Volume1 size={16} color="#FFF" strokeWidth={2.25} />
-              )}
-              <Text variant="caption" style={styles.callBtnLabel}>
-                {t('active.speaker')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.callBtn}
-              onPress={openKeypad}
-              activeOpacity={0.7}
-            >
-              <Grid3x3 size={16} color="#FFF" strokeWidth={2.25} />
-              <Text variant="caption" style={styles.callBtnLabel}>
-                {t('active.keypad')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.hangUpBtn}
-              onPress={hangUpCall}
-              activeOpacity={0.8}
-            >
-              <View style={styles.hangUpIcon}>
-                <Phone size={16} color="#FFF" strokeWidth={2.25} />
-              </View>
-              <Text variant="caption" style={styles.hangUpLabel}>
-                {t('active.end')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      }
     />
   );
 }
@@ -192,74 +217,29 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 13,
   },
-  // In-call control bar — sits above the TimelineEditor's own header
-  // via the `topSlot` prop. Green background mirrors the global
-  // `InCallTopBar` so the call state reads as consistent across the app.
-  callBar: {
-    flexDirection: 'row',
+  plainContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#22C55E',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 12,
+    justifyContent: 'center',
+    gap: 24,
   },
-  callBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFF',
-  },
-  callTimer: {
-    color: '#FFF',
-    fontFamily: 'Archivo_600SemiBold',
-    fontSize: 13,
-  },
-  callBarControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  callBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  callBtnMutedActive: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  callBtnSpeakerActive: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  callBtnLabel: {
-    color: '#FFF',
+  plainStatus: {
+    color: '#888',
     fontFamily: 'Archivo_500Medium',
-    fontSize: 11,
+    fontSize: 15,
   },
-  hangUpBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: '#EF4444',
+  recordButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#333',
+    backgroundColor: '#111',
   },
-  hangUpIcon: {
-    transform: [{ rotate: '135deg' }],
-  },
-  hangUpLabel: {
-    color: '#FFF',
+  recordButtonText: {
+    color: '#FFFFFF',
     fontFamily: 'Archivo_600SemiBold',
-    fontSize: 11,
+    fontSize: 16,
   },
 });

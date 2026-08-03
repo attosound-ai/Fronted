@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import { useCallStore } from '@/stores/callStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useFeatureFlag } from '@/lib/analytics';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
@@ -28,8 +30,19 @@ export function useCallAudioInjection() {
   const callState = useCallStore((s) => s.activeCall?.state);
   const injection = useCallStore((s) => s.injection);
 
+  // Entitlement gate: injection is for CREATORS with an ACTIVE subscription
+  // (David, Jul 21). The PostHog flag scopes to role=creator server-side, but a
+  // person property can't express "active subscription" reliably, so the sub is
+  // enforced here against the app's live entitlement state. record_upload is the
+  // same marker useConnectedCallLanding uses for a paid, recording-capable plan;
+  // null (cold-launch, sub not resolved yet) is treated as not-yet-allowed.
+  const role = useAuthStore((s) => s.user?.role);
+  const recordUpload = useSubscriptionStore((s) => s.entitlementState('record_upload'));
+  const isCreator = role === 'creator';
+  const hasActiveSub = recordUpload === true;
+
   const isConnected = callState === 'connected';
-  const canInject = flagEnabled && isConnected;
+  const canInject = flagEnabled && isConnected && isCreator && hasActiveSub;
   const isInjecting = injection?.state === 'playing' || injection?.state === 'preparing';
 
   const isTrackInjecting = useCallback(
@@ -64,6 +77,16 @@ export function useCallAudioInjection() {
     if (call.state !== 'connected') {
       land('not_connected', 'not_connected');
       return { ok: false, reason: 'not_connected' };
+    }
+    // Defense in depth: the 📡 button already hides when canInject is false, but
+    // never inject without the creator + active-subscription entitlement even if
+    // reached another way. Read live state (getState) since this closure is stable.
+    const injectRole = useAuthStore.getState().user?.role;
+    const injectSub =
+      useSubscriptionStore.getState().entitlementState('record_upload') === true;
+    if (injectRole !== 'creator' || !injectSub) {
+      land('not_permitted', 'not_permitted');
+      return { ok: false, reason: 'not_permitted' };
     }
 
     const result = await getAudioInjector().start(source);

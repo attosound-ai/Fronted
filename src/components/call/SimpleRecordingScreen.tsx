@@ -391,6 +391,9 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
         // 0 ⇒ the custom device wasn't Twilio's active device (engine inert).
         record_cb_count: diag?.recordCbCount ?? null,
         playout_cb_count: diag?.playoutCbCount ?? null,
+        // >0 ⇒ the manual mix render failed and we fell back to raw-mic
+        // passthrough (the "no te escucho" root — engine couldn't mix).
+        render_fail_count: diag?.renderFailCount ?? null,
       });
       try {
         await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });

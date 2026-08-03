@@ -40,9 +40,14 @@ export const telephonyService = {
     return data.data;
   },
 
-  async startCapture(callSid: string): Promise<StreamStartResponse> {
+  async startCapture(callSid: string, timeoutMs?: number): Promise<StreamStartResponse> {
+    // Optional per-call timeout: the caller (useTwilioCallRecording) uses a
+    // shorter one than the 15s global so a slow/unreachable backend fails fast
+    // and can be retried, instead of hanging the record button for 15s.
     const { data } = await apiClient.post<ApiResponse<StreamStartResponse>>(
-      API_ENDPOINTS.TELEPHONY.STREAM_START(callSid)
+      API_ENDPOINTS.TELEPHONY.STREAM_START(callSid),
+      undefined,
+      timeoutMs ? { timeout: timeoutMs } : undefined
     );
     return data.data;
   },

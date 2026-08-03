@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { Platform, ActionSheetIOS, AppState, NativeModules } from 'react-native';
+import { Platform, AppState, NativeModules, Settings } from 'react-native';
 import { setAudioModeAsync, AudioModule } from 'expo-audio';
 import { router } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
@@ -15,8 +15,9 @@ import * as Sentry from '@sentry/react-native';
 import {
   startCallTelemetry,
   endCallTelemetry,
-  emitTelemetryMarker,
   telemetryCounters,
+  captureCallAudioSnapshot,
+  setSpeakerOutput,
 } from '@/lib/telemetry';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
@@ -34,6 +35,10 @@ const IS_IOS = Platform.OS === 'ios';
 const TOKEN_REFRESH_MS = 50 * 60 * 1000; // Refresh every 50 minutes
 
 // ── Singleton state (module-level) ──
+// Captured at module load — proxies "process started at" to tell a cold launch
+// (the call woke a killed app) from a warm one. Module loads early at app start.
+const MODULE_LOAD_MS = Date.now();
+
 let voiceInstance: any = null;
 let pushKitReady = false;
 let activeCallObj: any = null;
@@ -63,6 +68,52 @@ let isSpeakerToggling = false;
 // sendDigits() may be in flight at a time so a double-tap on the keypad
 // cannot stack native calls on the same Call object.
 let isSendingDigits = false;
+
+// ── Consolidated per-call CONTEXT stash (call_context telemetry) ──
+// Everything we want to know to reconstruct a failed call WITHOUT interrogating
+// the user: who called whom, app-to-app vs carrier/Securus, was the app open /
+// backgrounded / a cold launch, how it was answered, and (via the live audio
+// snapshot at connect) whether audio actually came up. Populated at invite /
+// outbound-start and answer; emitted as ONE flat `call_context` row at connect
+// and disconnect. Reset by endCall.
+interface CallContextStash {
+  callSid: string | null;
+  direction: 'inbound' | 'outbound' | null;
+  localAccountId: number | null;
+  callerFrom: string | null; // invite.getFrom() — PSTN number ⇒ carrier/Securus, `client:x` ⇒ app
+  calleeTo: string | null;
+  targetUserId: number | null;
+  customParamKeys: string | null;
+  appStateAtInvite: string | null;
+  inviteAtMs: number | null;
+  processUptimeAtInviteSec: number | null; // low ⇒ cold launch (app started by the call)
+  answerBranch: string | null;
+  appStateAtAnswer: string | null;
+  answerAtMs: number | null;
+  disconnectCode: number | null;
+  disconnectMessage: string | null;
+  cleanHangup: boolean | null;
+}
+let callContextStash: CallContextStash | null = null;
+// call_context is emitted at most once per (callSid, trigger); guards the
+// connect/disconnect double-fire and any handler re-entry.
+const callContextEmitted = new Set<string>();
+
+// Classify the call by its caller identity. Securus/prison-carrier legs arrive
+// as a PSTN number (the inmate dials the bridge → Twilio → us); genuine
+// app-to-app calls arrive as a `client:<identity>` address.
+function classifyCallType(from: string | null): string {
+  if (!from) return 'unknown';
+  const f = from.trim();
+  if (f.toLowerCase().startsWith('client:')) return 'app_to_app';
+  if (/^\+?\d[\d\s()-]{5,}$/.test(f)) return 'carrier_pstn';
+  return 'unknown';
+}
+
+// NOTE: Securus "press 1" is handled by the in-call KEYPAD (DtmfKeypadHost
+// auto-opens on an inbound connect and the user taps 1) — per David's call, we do
+// NOT auto-send the DTMF. The auto-accept scheduler was removed here; the manual
+// keypad is the accept path, as it worked before.
 
 function getVoice(): any {
   if (!voiceInstance) {
@@ -305,6 +356,16 @@ function bindCallEvents(call: any): () => void {
     setTimeout(() => {
       void reclaimAudioSession();
     }, 700);
+    // Force earpiece IMMEDIATELY too (not just at the 700ms reclaim) so the
+    // window where iOS routes a "video" call to Speaker — the client's echo — is
+    // as short as possible. No-op if the user chose speaker.
+    if (useCallStore.getState().activeCall?.isSpeaker !== true) {
+      void setSpeakerOutput(false);
+    }
+    // Consolidated call_context: fire once audio has settled (after the reclaim)
+    // so the audio-session snapshot reflects the true in-call state — this is the
+    // row that proves/refutes "there was no sound" against the full variable set.
+    setTimeout(() => captureCallContext('connected'), 1500);
   };
 
   const onConnectFailure = () => {
@@ -314,7 +375,33 @@ function bindCallEvents(call: any): () => void {
     teardown();
   };
 
-  const onDisconnected = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onDisconnected = (error?: any) => {
+    // CAPTURE THE REAL DISCONNECT REASON. Twilio's Disconnected event passes an
+    // error ONLY when the call dropped abnormally (undefined = a clean hangup by
+    // either party). This was the blind spot behind "are we SURE it's Securus?":
+    // without it, a clean Securus hangup and a media/RTP timeout (code 53405, a
+    // network/audio-session failure) both logged the same generic string. Now the
+    // code tells us: 31xxx = signaling, 53xxx = media/network, undefined = hangup.
+    const disconnectCode = error?.code ?? null;
+    const disconnectMessage = error?.message ?? null;
+    const cleanHangup = error == null;
+    if (callContextStash) {
+      callContextStash.disconnectCode = disconnectCode;
+      callContextStash.disconnectMessage = disconnectMessage;
+      callContextStash.cleanHangup = cleanHangup;
+    }
+    analytics.capture(ANALYTICS_EVENTS.CALL.DISCONNECTED_REASON, {
+      clean_hangup: cleanHangup,
+      error_code: disconnectCode,
+      error_message: disconnectMessage,
+      call_sid:
+        callContextStash?.callSid ?? useCallStore.getState().activeCall?.callSid ?? null,
+    });
+    // Final consolidated context BEFORE teardown clears the stash — captures the
+    // end-state (audio category/route, app state) so a drop-at-connect vs a
+    // clean-hangup is distinguishable, with the same full variable set.
+    captureCallContext('disconnected');
     void captureCallStats('final');
     stopCallStatsCapture();
     activeCallObj = null;
@@ -405,6 +492,22 @@ function bindCallEvents(call: any): () => void {
  */
 export async function ensureAudioRoute() {
   try {
+    // Force EARPIECE (Receiver) unless the user explicitly chose speaker. iOS
+    // defaults VIDEO calls — and ours are CallKit hasVideo=YES for the lock-screen
+    // auto-open — to SPEAKER. Speaker output + the built-in mic = the client's
+    // "super echo" (call_context proved out_port=Speaker on those calls). The
+    // native overrideOutputAudioPort:None removes any speaker override and lets
+    // the natural route win (Bluetooth headset if present, else the receiver), so
+    // it doesn't fight a real headset. Speaker=true keeps the user's choice.
+    const userWantsSpeaker = useCallStore.getState().activeCall?.isSpeaker === true;
+    const applied = await setSpeakerOutput(userWantsSpeaker);
+    // Only trust the native override when it actually SUCCEEDED (ok:true). At the
+    // connect instant the session may not be active yet → overrideOutputAudioPort
+    // returns {ok:false} (non-null); the old `!= null` check treated that as done
+    // and skipped the fallback. Fall through to the Twilio device select on ok:false.
+    if (applied?.ok === true) return;
+
+    // Fallback (native unavailable OR override didn't take): re-select the device.
     const voice = voiceInstance;
     if (!voice) return;
     const { audioDevices, selectedDevice } = await voice.getAudioDevices();
@@ -460,6 +563,189 @@ async function recoverCallFromSDK(): Promise<any | null> {
 
 // ── Standalone actions (importable from anywhere) ──
 
+/**
+ * Comprehensive "how was this call answered" telemetry — THE signal for the
+ * mother-test "answered from background → dead audio both ways" failure. Fired
+ * from every branch of acceptIncomingCall with the branch it took, the AppState
+ * at answer time (background/inactive ⇒ answered from the lock screen / outside
+ * the app), the engine-install state, and a LIVE AVAudioSession snapshot (async,
+ * so it's fire-and-forget). See ANALYTICS_EVENTS.CALL.ANSWERED.
+ */
+/**
+ * Persist the cold-launch CallKit gate to NSUserDefaults so the native
+ * AttoVoipBootstrap can read it at PUSH time (a cold launch has no PostHog
+ * runtime — the decision must already be on disk). Gated on its OWN PostHog flag
+ * `coldlaunch_callkit_enabled`, DECOUPLED from `audio_injection` so the cold path
+ * can be validated WITHOUT the injection engine (whose mid-call audio-device swap
+ * is a separate crash source). Safe to call repeatedly; iOS-only no-op elsewhere.
+ * Called at app launch (reliable — see (tabs)/_layout.tsx) and on Twilio
+ * (re)registration (belt-and-suspenders).
+ */
+export function persistColdLaunchCallKitFlag() {
+  if (!IS_IOS) return;
+  try {
+    const enabled = analytics.isFeatureEnabled('coldlaunch_callkit_enabled') === true;
+    Settings.set({ atto_coldlaunch_callkit_enabled: enabled });
+  } catch {
+    // Settings is iOS-only / native module may be unavailable; ignore.
+  }
+}
+
+/**
+ * Persist the audio-injection cohort gate to NSUserDefaults so the NATIVE Twilio
+ * module's -init can read it BEFORE it assigns TwilioVoiceSDK.audioDevice.
+ *
+ * WHY (build 80 diagnostic, recordCbCount=0): the module's lazy -init runs at
+ * Twilio registration and UNCONDITIONALLY installed the STOCK audio device,
+ * clobbering the custom injection engine that JS had installed at preinstall a
+ * few seconds earlier. Incoming CallKit calls then bound to the stock device and
+ * injected audio never reached the far party. With this flag on disk, -init
+ * installs the CUSTOM engine itself (no swap, no clobber) — so it stays active
+ * for every call, including CallKit-native-accepted ones (whose accept path skips
+ * the JS re-install). Written at app launch AND on (re)registration so it's on
+ * disk before -init; iOS-only no-op elsewhere. See project_injection_device_not_pumped.
+ */
+export function persistAudioInjectionFlag() {
+  if (!IS_IOS) return;
+  try {
+    // The custom injection engine is a CREATOR feature. The PostHog flag is now
+    // scoped to role=creator server-side, but gate on role here too so a future
+    // flag widening can never install the custom audio device for a non-creator's
+    // calls (role is available early from persisted auth; subscription is checked
+    // separately at the inject ACTION in useCallAudioInjection).
+    const flagOn = analytics.isFeatureEnabled('audio_injection_enabled') === true;
+    const isCreator = useAuthStore.getState().user?.role === 'creator';
+    Settings.set({ atto_audio_injection_enabled: flagOn && isCreator });
+  } catch {
+    // Settings is iOS-only / native module may be unavailable; ignore.
+  }
+}
+
+/**
+ * Emit the ONE consolidated `call_context` row — the "all variables" event David
+ * asked for so a failed call self-reports every dimension instead of us
+ * interrogating the user:
+ *   · identity/routing: who called whom, app-to-app vs carrier/Securus, account
+ *   · handoff: cold-launch vs warm, answered via native CallKit vs in-app, branch
+ *   · app/lock state at invite / answer / connect (+ the push-time app state, the
+ *     best "was the phone locked / app not open" proxy)
+ *   · AUDIO GROUND TRUTH (captureCallAudioSnapshot): did the session activate,
+ *     is it PlayAndRecord (mic) or Playback (mic-less), is Twilio's audio enabled
+ *     — i.e. the direct signal for "there was no sound at all"
+ * Fired at connect (audio settled) and at disconnect. Deduped per (sid, trigger).
+ */
+function captureCallContext(trigger: 'connected' | 'disconnected') {
+  const s = callContextStash;
+  const sid = s?.callSid ?? useCallStore.getState().activeCall?.callSid ?? null;
+  const dedupeKey = `${sid ?? 'nosid'}:${trigger}`;
+  if (callContextEmitted.has(dedupeKey)) return;
+  callContextEmitted.add(dedupeKey);
+  if (callContextEmitted.size > 60) callContextEmitted.clear();
+
+  const nowMs = Date.now();
+  const appStateNow = AppState.currentState ?? 'unknown';
+  // Cold launch: the invite arrived within the first ~15s of the process ⇒ the
+  // call is what launched/woke the app (the "opened with iPhone first" case).
+  const wasColdLaunch =
+    s?.processUptimeAtInviteSec != null ? s.processUptimeAtInviteSec < 15 : null;
+
+  void captureCallAudioSnapshot()
+    .then((audio) => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.CONTEXT, {
+        trigger,
+        call_sid: sid,
+        direction: s?.direction ?? null,
+        local_account_id: s?.localAccountId ?? null,
+        // Identity — the "who calls whom" David wants. from = raw caller address.
+        caller_from: s?.callerFrom ?? null,
+        callee_to: s?.calleeTo ?? null,
+        call_type: classifyCallType(s?.callerFrom ?? null),
+        target_user_id: s?.targetUserId ?? null,
+        custom_param_keys: s?.customParamKeys ?? null,
+        // Handoff / how it was answered.
+        answer_branch: s?.answerBranch ?? null,
+        answered_via_callkit:
+          s?.answerBranch != null
+            ? s.answerBranch !== 'fresh_accept' || s.appStateAtAnswer !== 'active'
+            : null,
+        was_cold_launch: wasColdLaunch,
+        process_uptime_at_invite_sec: s?.processUptimeAtInviteSec ?? null,
+        // App/lock state across the lifecycle. push-time app state (from audio
+        // snapshot) is the best locked/not-open proxy; 0=active 1=inactive 2=bg.
+        app_state_at_invite: s?.appStateAtInvite ?? null,
+        app_state_at_answer: s?.appStateAtAnswer ?? null,
+        app_state_at_connect: appStateNow,
+        // Timing deltas (ms) — invite→answer→connect handoff latency.
+        invite_to_answer_ms:
+          s?.inviteAtMs != null && s?.answerAtMs != null
+            ? s.answerAtMs - s.inviteAtMs
+            : null,
+        answer_to_connect_ms: s?.answerAtMs != null ? nowMs - s.answerAtMs : null,
+        // Which audio device is bound (custom injection engine vs stock Twilio).
+        engine_installed: injectionDeviceInstalled,
+        engine_user: injectionDeviceUserId,
+        // Real disconnect reason (only meaningful on the 'disconnected' row):
+        // clean_hangup=true → someone hung up; a code → abnormal drop (53xxx
+        // media/network, 31xxx signaling). This is what settles Securus-vs-app-vs-signal.
+        disconnect_code: s?.disconnectCode ?? null,
+        disconnect_message: s?.disconnectMessage ?? null,
+        clean_hangup: s?.cleanHangup ?? null,
+        // AUDIO GROUND TRUTH — the "no sound" prover.
+        ...audio,
+      });
+    })
+    .catch(() => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.CONTEXT, {
+        trigger,
+        call_sid: sid,
+        direction: s?.direction ?? null,
+        local_account_id: s?.localAccountId ?? null,
+        caller_from: s?.callerFrom ?? null,
+        call_type: classifyCallType(s?.callerFrom ?? null),
+        answer_branch: s?.answerBranch ?? null,
+        was_cold_launch: wasColdLaunch,
+        app_state_at_connect: appStateNow,
+        audio_snapshot_failed: true,
+      });
+    });
+}
+
+function reportCallAnswered(branch: string, extra?: Record<string, unknown>) {
+  // Stash answer-time context for the consolidated call_context row.
+  if (callContextStash) {
+    callContextStash.answerBranch = branch;
+    callContextStash.appStateAtAnswer = AppState.currentState ?? 'unknown';
+    callContextStash.answerAtMs = Date.now();
+  }
+  const appStateAtAnswer = AppState.currentState ?? 'unknown';
+  // The snapshot is async (native round-trip); don't block the accept path on it.
+  void captureCallAudioSnapshot()
+    .then((audio) => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.ANSWERED, {
+        branch,
+        // background / inactive here ⇒ the user answered via the native CallKit
+        // UI while the app was NOT foregrounded — the exact case that breaks.
+        app_state: appStateAtAnswer,
+        answered_via_callkit: branch !== 'fresh_accept' || appStateAtAnswer !== 'active',
+        engine_installed: injectionDeviceInstalled,
+        engine_user: injectionDeviceUserId,
+        call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+        ...audio,
+        ...extra,
+      });
+    })
+    .catch(() => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.ANSWERED, {
+        branch,
+        app_state: appStateAtAnswer,
+        engine_installed: injectionDeviceInstalled,
+        engine_user: injectionDeviceUserId,
+        audio_snapshot_failed: true,
+        ...extra,
+      });
+    });
+}
+
 export async function acceptIncomingCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ACCEPTED);
   const invite = pendingInvite;
@@ -474,8 +760,15 @@ export async function acceptIncomingCall() {
       pendingInvite = null;
       setCallState('connected');
       bindCallEvents(recovered);
+      // CallKit accepted natively (no JS invite left) — the Connected event may
+      // have already fired before bindCallEvents ran, so onConnected's
+      // reclaimAudioSession never runs. Force it here so the session flips to
+      // PlayAndRecord (mic) instead of a lingering Playback (mic-less) category.
+      reassertCallAudioSession();
+      reportCallAnswered('recovered_no_invite');
     } else {
       endCall();
+      reportCallAnswered('no_invite_no_call');
     }
     return;
   }
@@ -487,6 +780,7 @@ export async function acceptIncomingCall() {
     pendingInvite = null;
     setCallState('connected');
     bindCallEvents(call);
+    reportCallAnswered('fresh_accept');
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
 
@@ -499,16 +793,43 @@ export async function acceptIncomingCall() {
         activeCallObj = recovered;
         setCallState('connected');
         bindCallEvents(recovered);
+        // Same as the no-invite branch: CallKit pre-accepted from the background,
+        // so Connected likely fired before we bound onConnected. Reclaim the
+        // PlayAndRecord session explicitly or the call stays mic-less both ways.
+        reassertCallAudioSession();
+        reportCallAnswered('recovered_precepted');
       } else {
         // No Call object available, but the call is live — transition anyway
         // so the UI doesn't stay stuck. Hangup/mute won't work until we get it.
         setCallState('connected');
+        reassertCallAudioSession();
+        reportCallAnswered('accepted_no_call');
       }
     } else {
       console.error('[TwilioVoice] acceptIncomingCall FAILED:', msg);
       endCall();
+      reportCallAnswered('accept_error', { error: msg });
     }
   }
+}
+
+/**
+ * Re-assert the PlayAndRecord audio session on the CallKit/background-answer
+ * path. When a call is answered from the native CallKit UI while the app is
+ * backgrounded, Twilio's Call.Event.Connected can fire BEFORE our JS handler is
+ * bound — so onConnected() (which schedules reclaimAudioSession) never runs, and
+ * the session can stay stuck in the Playback (mic-less) category the feed's
+ * expo-video left behind. Result: dead audio both ways (mother test). We reclaim
+ * twice — immediately and after a short delay — because on a cold/background
+ * answer Twilio's own native session activation (CallKit didActivateAudioSession)
+ * may land a beat later and we want PlayAndRecord to win either way.
+ */
+function reassertCallAudioSession() {
+  if (!IS_IOS) return;
+  void reclaimAudioSession();
+  setTimeout(() => {
+    void reclaimAudioSession();
+  }, 800);
 }
 
 export function rejectIncomingCall() {
@@ -546,14 +867,21 @@ export async function installInjectionDeviceIfEnabled(
   source: 'connect' | 'preinstall' = 'connect'
 ): Promise<void> {
   if (!IS_IOS) return;
-  if (analytics.isFeatureEnabled('audio_injection_enabled') !== true) {
-    // The flag was NOT readable at this moment. For INCOMING calls this fired at
-    // accept before flags finished loading, so westcol never installed the device
-    // and its engine stayed inert (Jun 30 telemetry). The preinstall path (idle,
-    // reactive flag) is what actually makes it reliable; this just records misses.
+  // Creator-only device install, mirroring persistAudioInjectionFlag. Flag is
+  // scoped to role=creator server-side; the role re-check is defense in depth.
+  const flagOn = analytics.isFeatureEnabled('audio_injection_enabled') === true;
+  const isCreator = useAuthStore.getState().user?.role === 'creator';
+  if (!flagOn || !isCreator) {
+    // The flag was NOT readable/eligible at this moment. For INCOMING calls this
+    // fired at accept before flags finished loading, so westcol never installed
+    // the device and its engine stayed inert (Jun 30 telemetry). The preinstall
+    // path (idle, reactive flag) is what actually makes it reliable; this just
+    // records misses.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
       outcome: 'install_skipped_flag_off',
       source,
+      flag_on: flagOn,
+      is_creator: isCreator,
     });
     return;
   }
@@ -751,104 +1079,74 @@ export const sendCallDigit = (digit: string): Promise<boolean> => sendCallDigits
 
 export async function toggleSpeaker() {
   // Reentrancy guard: repeated audio-route changes during a call were the
-  // last action recorded before WatchdogTermination on 2/7 PostHog
-  // sessions. Each select() can reallocate AVAudioSession buffers; stacking
-  // them concurrently is the worst case.
+  // last action recorded before WatchdogTermination on 2/7 PostHog sessions.
   if (isSpeakerToggling) return;
   isSpeakerToggling = true;
 
-  await emitTelemetryMarker('pre_speaker_toggle');
+  // Target = the OPPOSITE of the current UI speaker state (a plain on/off toggle).
+  const currentlySpeaker = useCallStore.getState().activeCall?.isSpeaker === true;
+  const wantSpeaker = !currentlySpeaker;
 
-  const finish = (extra?: Record<string, unknown>) => {
+  // Telemetry is UNCONDITIONAL now (was gated on isActive, so a toggle before the
+  // telemetry session started emitted nothing — which is exactly why the client's
+  // "couldn't turn speaker on" left ZERO events to diagnose). Always report.
+  const finish = (extra: Record<string, unknown>) => {
     isSpeakerToggling = false;
-    void emitTelemetryMarker('post_speaker_toggle', extra);
+    analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+      want_speaker: wantSpeaker,
+      ...extra,
+    });
   };
 
-  const voice = voiceInstance;
-  if (!voice) {
-    finish({ outcome: 'no_voice' });
-    return;
-  }
-
   try {
-    const { AudioDevice } = getTwilio();
-    const { audioDevices, selectedDevice } = await voice.getAudioDevices();
+    // Record the user's choice in the store FIRST, before any await. The connect
+    // reclaim (ensureAudioRoute) reads activeCall.isSpeaker to decide whether to
+    // force earpiece; if we set it only AFTER the native+Twilio awaits (~50-200ms),
+    // a reclaim firing in that window would read the stale value and REVERT a
+    // just-pressed speaker toggle back to earpiece. Set it up front so reclaim
+    // always sees the intended route.
+    useCallStore.getState().setSpeaker(wantSpeaker);
 
-    if (Platform.OS !== 'ios' || audioDevices.length <= 2) {
-      // Android or only Speaker/Earpiece — simple toggle
-      const isSpeaker = selectedDevice?.type === AudioDevice.Type.Speaker;
-      const target = audioDevices.find(
-        (d: any) =>
-          d.type === (isSpeaker ? AudioDevice.Type.Earpiece : AudioDevice.Type.Speaker)
-      );
-      if (target) {
-        await target.select();
-        useCallStore.getState().setSpeaker(!isSpeaker);
-        analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
-          is_speaker: !isSpeaker,
-        });
-        finish({ outcome: 'toggled', is_speaker: !isSpeaker });
-      } else {
-        finish({ outcome: 'no_target' });
+    // PRIMARY, RELIABLE lever: AVAudioSession.overrideOutputAudioPort via the
+    // patched native module. This is the documented CallKit speaker control and
+    // works regardless of which audio device (stock vs custom engine) is bound,
+    // and — crucially — needs NO ActionSheet, so it can't be blocked by the
+    // recording screen's bottom sheets (the client's "no matter what I did").
+    const nativeResult = await setSpeakerOutput(wantSpeaker);
+
+    // Belt-and-suspenders: also tell Twilio's AudioDevice so its notion of the
+    // selected route stays in sync (harmless if it no-ops). Best-effort.
+    let twilioSelected = false;
+    try {
+      const voice = voiceInstance;
+      if (voice) {
+        const { AudioDevice } = getTwilio();
+        const { audioDevices } = await voice.getAudioDevices();
+        const target = audioDevices?.find(
+          (d: any) =>
+            d.type ===
+            (wantSpeaker ? AudioDevice.Type.Speaker : AudioDevice.Type.Earpiece)
+        );
+        if (target) {
+          await target.select();
+          twilioSelected = true;
+        }
       }
-      return;
+    } catch {
+      /* Twilio route sync is best-effort; the native override is authoritative. */
     }
 
-    // iOS with multiple devices — show native picker (AirPods, Bluetooth, etc.)
-    const deviceLabels: Record<number, string> = {
-      [AudioDevice.Type.Earpiece]: 'iPhone',
-      [AudioDevice.Type.Speaker]: 'Speaker',
-      [AudioDevice.Type.Bluetooth]: 'Bluetooth',
-    };
-
-    const devices = audioDevices.map((d: any) => ({
-      device: d,
-      label: d.name || deviceLabels[d.type] || `Audio Device`,
-      isSelected: d.uuid === selectedDevice?.uuid,
-    }));
-
-    const options = [
-      ...devices.map((d: any) => (d.isSelected ? `${d.label} ✓` : d.label)),
-      'Cancel',
-    ];
-
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex: options.length - 1,
-        title: 'Audio Output',
-      },
-      async (buttonIndex: number) => {
-        if (buttonIndex === options.length - 1) {
-          finish({ outcome: 'picker_cancelled' });
-          return;
-        }
-        const selected = devices[buttonIndex];
-        if (!selected || selected.isSelected) {
-          finish({ outcome: 'no_change' });
-          return;
-        }
-        try {
-          await selected.device.select();
-          const isSpeaker = selected.device.type === AudioDevice.Type.Speaker;
-          useCallStore.getState().setSpeaker(isSpeaker);
-          analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
-            is_speaker: isSpeaker,
-            device_type: selected.label,
-          });
-          finish({
-            outcome: 'picker_selected',
-            is_speaker: isSpeaker,
-            device_type: selected.label,
-          });
-        } catch (err) {
-          finish({
-            outcome: 'picker_error',
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    );
+    // isSpeaker was already set optimistically above (before the awaits).
+    const applied = nativeResult ? nativeResult.ok : true;
+    finish({
+      outcome: 'applied',
+      is_speaker: wantSpeaker,
+      native_ok: nativeResult?.ok ?? null,
+      native_available: nativeResult != null,
+      live_output_port: nativeResult?.liveOutputPort ?? null,
+      twilio_selected: twilioSelected,
+      applied,
+    });
   } catch (err) {
     finish({
       outcome: 'error',
@@ -920,6 +1218,33 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
 
     const callSid = call.getSid() || `outgoing-${Date.now()}`;
     setOutgoingCall(callSid, recipientUserId, recipientName);
+    // Consolidated call_context stash (outbound). Outbound is app-initiated and
+    // always foreground, so there's no cold-launch/CallKit-handoff ambiguity —
+    // but we still want the identity + audio-ground-truth row for parity.
+    callContextEmitted.clear();
+    callContextStash = {
+      callSid,
+      direction: 'outbound',
+      localAccountId: useAccountStore.getState().activeAccountId ?? null,
+      callerFrom: null,
+      calleeTo: `user-${recipientUserId}`,
+      targetUserId: Number.isFinite(Number(recipientUserId))
+        ? Number(recipientUserId)
+        : null,
+      customParamKeys: 'To,recipientType',
+      appStateAtInvite: AppState.currentState ?? 'unknown',
+      inviteAtMs: Date.now(),
+      processUptimeAtInviteSec: Math.max(
+        0,
+        Math.floor((Date.now() - MODULE_LOAD_MS) / 1000)
+      ),
+      answerBranch: 'outbound_connect',
+      appStateAtAnswer: AppState.currentState ?? 'unknown',
+      answerAtMs: Date.now(),
+      disconnectCode: null,
+      disconnectMessage: null,
+      cleanHangup: null,
+    };
     bindCallEvents(call);
     router.push('/call');
 
@@ -1140,6 +1465,44 @@ export function useTwilioVoice() {
       const callSid = invite.getCallSid();
       const from = invite.getFrom() || 'Unknown';
 
+      // ── Consolidated call_context stash (inbound) ──
+      // Snapshot every identity/routing/launch variable at the earliest moment
+      // so the connect/disconnect call_context row is complete even on a messy
+      // CallKit handoff. Guarded — telemetry must never break the invite flow.
+      try {
+        const ctxParams =
+          typeof invite.getCustomParameters === 'function'
+            ? (invite.getCustomParameters() as Record<string, string>)
+            : {};
+        const to = typeof invite.getTo === 'function' ? invite.getTo() : null;
+        callContextEmitted.clear();
+        callContextStash = {
+          callSid,
+          direction: 'inbound',
+          localAccountId: activeAccountId ?? null,
+          callerFrom: from,
+          calleeTo: to || null,
+          targetUserId: Number.isFinite(Number(ctxParams?.TargetUserId))
+            ? Number(ctxParams.TargetUserId)
+            : null,
+          customParamKeys: Object.keys(ctxParams || {}).join(',') || null,
+          appStateAtInvite: AppState.currentState ?? 'unknown',
+          inviteAtMs: Date.now(),
+          processUptimeAtInviteSec: Math.max(
+            0,
+            Math.floor((Date.now() - MODULE_LOAD_MS) / 1000)
+          ),
+          answerBranch: null,
+          appStateAtAnswer: null,
+          answerAtMs: null,
+          disconnectCode: null,
+          disconnectMessage: null,
+          cleanHangup: null,
+        };
+      } catch {
+        /* telemetry stash is best-effort */
+      }
+
       // ── PRIMARY watchdog-leak fix (REACT-NATIVE-8) ──
       // Previously these two listeners were registered with anonymous
       // arrow functions and never removed. Every incoming call (accepted,
@@ -1273,6 +1636,19 @@ export function useTwilioVoice() {
         // re-set it on every mount idempotently to recover from any
         // out-of-band reset.
         await voice.setIncomingCallContactHandleTemplate('${DisplayName}');
+
+        // Cold-launch CallKit fix — persist the gate to NSUserDefaults so the native
+        // AttoVoipBootstrap can read it at PUSH time (a cold launch has no PostHog
+        // runtime). Uses its OWN flag `coldlaunch_callkit_enabled` — DECOUPLED from
+        // audio_injection so the cold path can be tested WITHOUT the injection engine
+        // (whose mid-call audio-device swap is a separate crash source). Belt-and-
+        // suspenders: the primary write is at app launch (see (tabs)/_layout.tsx),
+        // this one just refreshes it whenever Twilio (re)registers.
+        persistColdLaunchCallKitFlag();
+        // Same disk-persist for the injection cohort, so the native Twilio module
+        // -init installs the custom engine (not the stock device) — the fix for
+        // the clobber that left injected audio inaudible to the far party.
+        persistAudioInjectionFlag();
 
         // If we were previously registered under a different account,
         // unregister that identity before binding the new one. Without

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,7 @@ import { haptic } from '@/lib/haptics/hapticService';
 import { openKeypad } from './DtmfKeypadHost';
 import { openMixer } from './MixerHost';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
+import { mixerService } from '@/lib/callAudio/mixerService';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 
 function formatElapsed(seconds: number): string {
@@ -52,35 +53,134 @@ export function InCallTopBar() {
   const { canInject, isInjecting, inject, stop } = useCallAudioInjection();
   const nowPlaying = useNowPlayingStore((s) => s.track);
 
-  // Transmit is a MODE, not a one-shot: tap 📡 once → from then on EVERYTHING the
-  // app plays (reel / post / video / beat — whatever becomes nowPlaying) is pushed
-  // into the call; tap again → stop. So it works regardless of what's on screen.
+  // Transmit is a MODE: tap 📡 → push the audio the user is playing RIGHT NOW into
+  // the call; tap again → stop. The source is LOCKED at turn-on and does NOT change
+  // when other audio starts. This was the "mystery audio" bug (David, Jul 14): the
+  // old design followed nowPlaying live, so a background ad/feed video autoplaying
+  // mid-call HIJACKED the transmit — telemetry caught it injecting `ad-0ec56a1d…`.
+  // To transmit something else, toggle transmit off then on with it playing.
   const [transmitMode, setTransmitMode] = useState(false);
+  const [lockedSource, setLockedSource] = useState<typeof nowPlaying>(null);
 
   const onTransmit = () => {
     void haptic('selection');
-    setTransmitMode((m) => {
-      const next = !m;
-      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_STATE_CHANGED, {
-        transmit_mode: next ? 'on' : 'off',
-        has_now_playing: !!nowPlaying,
-        source_kind: nowPlaying?.kind ?? null,
-        is_video: nowPlaying?.isVideo ?? false,
-      });
-      return next;
+    const next = !transmitMode;
+    // Snapshot what's playing at THIS instant and lock it for the whole session.
+    const src = next ? useNowPlayingStore.getState().track : null;
+    setLockedSource(src);
+    setTransmitMode(next);
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_STATE_CHANGED, {
+      transmit_mode: next ? 'on' : 'off',
+      has_now_playing: !!src,
+      source_kind: src?.kind ?? null,
+      is_video: src?.isVideo ?? false,
+      post_id: src?.postId ?? null,
     });
   };
 
-  // While transmit mode is ON, follow whatever is currently playing — re-inject as
-  // the source changes so switching content keeps streaming into the call.
+  // If transmit was turned ON before anything was playing (lockedSource null),
+  // lock the FIRST source that starts (one-shot) — then never change it. Without
+  // this the button shows ON but transmits nothing until toggled again. Still
+  // immune to hijack: once locked, background autoplay is ignored.
   useEffect(() => {
-    if (transmitMode && nowPlaying) void inject(nowPlaying);
-  }, [transmitMode, nowPlaying?.uri, inject]);
+    if (transmitMode && !lockedSource && nowPlaying) setLockedSource(nowPlaying);
+  }, [transmitMode, lockedSource, nowPlaying?.uri]);
+
+  // Inject the LOCKED source (captured at turn-on). Depends on the locked source,
+  // NOT nowPlaying, so background autoplay can never swap what's transmitted.
+  useEffect(() => {
+    if (transmitMode && lockedSource) void inject(lockedSource);
+  }, [transmitMode, lockedSource?.uri, inject]);
 
   // Stop the moment the user turns the mode off.
   useEffect(() => {
     if (!transmitMode && isInjecting) void stop('user_stopped');
   }, [transmitMode, isInjecting, stop]);
+
+  // Reset transmit state when the call ENDS. InCallTopBar is mounted once for the
+  // app's whole life and only renders null when disconnected — it never unmounts,
+  // so without this, leaving transmit ON at hang-up leaves transmitMode/lockedSource
+  // set into the NEXT call: the button shows ON but the inject effect's deps are
+  // unchanged so it never re-fires → transmit silently does nothing until toggled.
+  useEffect(() => {
+    if (!isCallConnected(activeCall?.state)) {
+      setTransmitMode(false);
+      setLockedSource(null);
+    }
+  }, [activeCall?.state]);
+
+  // Snapshot the native engine mix diagnostics → PostHog. `trigger` distinguishes
+  // the auto (every connected call, ~6s in) snapshot from the inject-triggered one.
+  const captureDiag = useCallback(
+    async (trigger: string) => {
+      try {
+        const diag = await mixerService.getMixDiagnostics();
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DIAG, {
+          diag_trigger: trigger,
+          record_cb_count: diag?.recordCbCount ?? null,
+          render_fail_count: diag?.renderFailCount ?? null,
+          playout_cb_count: diag?.playoutCbCount ?? null,
+          // The 3 signals that pinpoint where injection dies:
+          record_engine_running: diag?.recordEngineRunning ?? null,
+          record_player_playing: diag?.recordPlayerPlaying ?? null,
+          playout_player_playing: diag?.playoutPlayerPlaying ?? null,
+          // build 83: is Twilio even driving the device? (bound vs AudioUnit-not-pumping)
+          start_capturing_count: diag?.startCapturingCount ?? null,
+          start_rendering_count: diag?.startRenderingCount ?? null,
+          // build 87: session-active confirmation (recordCbCount hundreds + real rate = fixed)
+          session_sample_rate: diag?.sessionSampleRate ?? null,
+          session_is_play_and_record: diag?.sessionIsPlayAndRecord ?? null,
+          // build 92: injected-pitch pinpoint — file/dest/engine rates must agree
+          last_inject_file_rate: diag?.lastInjectFileRate ?? null,
+          last_inject_dest_rate: diag?.lastInjectDestRate ?? null,
+          engines_built_rate: diag?.enginesBuiltRate ?? null,
+          // build 93: negotiated (Twilio-facing) rates — engines must match these
+          rendering_format_rate: diag?.renderingFormatRate ?? null,
+          capturing_format_rate: diag?.capturingFormatRate ?? null,
+          // build 88: AudioUnit lifecycle — starvation (all 0) vs explicit stop
+          audio_unit_start_count: diag?.audioUnitStartCount ?? null,
+          audio_unit_stop_count: diag?.audioUnitStopCount ?? null,
+          teardown_audio_unit_count: diag?.teardownAudioUnitCount ?? null,
+          interruption_began_count: diag?.interruptionBeganCount ?? null,
+          route_rebuild_count: diag?.routeRebuildCount ?? null,
+          set_active_fail_count: diag?.setActiveFailCount ?? null,
+          mic_frames: diag?.micFrames ?? null,
+          remote_frames: diag?.remoteFrames ?? null,
+          app_frames: diag?.appFrames ?? null,
+          source_kind: nowPlaying?.kind ?? null,
+          is_video: nowPlaying?.isVideo ?? false,
+          // build 89: transmit-button availability — WHY a reel+transmit may not fire.
+          // can_inject==false ⇒ the 📡 button isn't shown (flag/capability off);
+          // has_now_playing==false ⇒ no reel registered as nowPlaying to inject.
+          can_inject: canInject,
+          has_now_playing: !!nowPlaying,
+          mixer_enabled: mixerEnabled,
+          transmit_mode: transmitMode,
+        });
+      } catch {
+        // diagnostics unavailable — ignore
+      }
+    },
+    [nowPlaying, canInject, mixerEnabled, transmitMode]
+  );
+
+  // Inject-triggered snapshot (~3.5s after transmit) — WHY an injected reel may not
+  // reach the far party.
+  useEffect(() => {
+    if (!isInjecting) return;
+    const id = setTimeout(() => void captureDiag('inject'), 3500);
+    return () => clearTimeout(id);
+  }, [isInjecting, nowPlaying?.uri, captureDiag]);
+
+  // build 89: AUTO snapshot ~6s into EVERY connected call — no reel/transmit needed.
+  // This is the reliable path to the AudioUnit lifecycle counters (the transmit flow
+  // needs a reel playing, which is easy to miss), so any normal call now reports
+  // whether the unit starved vs was stopped.
+  useEffect(() => {
+    if (!isCallConnected(activeCall?.state)) return;
+    const id = setTimeout(() => void captureDiag('auto_connect'), 6000);
+    return () => clearTimeout(id);
+  }, [activeCall?.state, captureDiag]);
 
   const isConnected = isCallConnected(activeCall?.state);
 

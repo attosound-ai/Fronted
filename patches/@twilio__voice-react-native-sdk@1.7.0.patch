@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2d662cf60
+index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df665eda292
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2453 @@
+@@ -0,0 +1,2798 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -360,6 +360,10 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    AttoRingBuffer *micRing;
 +    // Telemetry: how many times this record callback fired (see AudioRendererContext.cbCount).
 +    uint64_t cbCount;
++    // Telemetry: how many times the manual mix render (or mic AudioUnitRender) FAILED
++    // and we fell back to raw-mic passthrough. >0 means the engine couldn't mix on
++    // this call (the "no te escucho" root); exposed via mixDiagnostics.
++    uint64_t renderFailCount;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -434,6 +438,49 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    BOOL  _channelRecord[AttoMixChannelCount];    // include in mix
 +    BOOL  _ringsAllocated;
 +
++    // ATTO (build 82): the TVOAudioFormat the AVAudioEngines were last BUILT with.
++    // A manual-rendering AVAudioEngine is locked to its build format; if the live
++    // call activates a different sample rate than the one present when the engines
++    // were built (at -init / module load), the frozen engine format mismatches the
++    // AudioUnit format → renderBlock fails (dead two-way audio) / graph reconnect
++    // throws (crash). ensureEngineFormatForActiveSession rebuilds the engines when
++    // this no longer equals the live activeFormat, at call start.
++    TVOAudioFormat *_enginesBuiltFormat;
++
++    // ATTO (build 83) lifecycle telemetry: how many times Twilio has driven the
++    // device's start hooks. If these are 0 during a live call, Twilio is NOT using
++    // this device (a binding problem); if >0 while recordCbCount stays 0, the device
++    // IS bound but its VoiceProcessingIO AudioUnit isn't pumping (session/format).
++    uint64_t _dbgStartCapturingCount;
++    uint64_t _dbgStartRenderingCount;
++
++    // ATTO (build 88) AudioUnit lifecycle telemetry — to definitively distinguish
++    // STARVATION (unit runs then silently stalls, no stop call) from an explicit
++    // STOP (interruption / route-change / teardown). Read in mixDiagnostics.
++    //   audioUnitStartCount / audioUnitStopCount : AudioOutputUnitStart/Stop calls
++    //   teardownAudioUnitCount                   : AudioUnit disposed
++    //   interruptionBeganCount                   : handleAudioInterruption Began (stops the unit)
++    //   routeRebuildCount                        : a route change rebuilt the engines mid-call
++    //   setActiveFailCount                       : setActive:YES that returned an error
++    // If cb stays 29 with start=1, stop=0, interruption=0, route=0 → PURE STARVATION
++    // (session issue). If stop/interruption/route > 0 → something explicitly stopped
++    // the unit. This is the signal that ends the guessing.
++    uint64_t _dbgAudioUnitStartCount;
++    uint64_t _dbgAudioUnitStopCount;
++    uint64_t _dbgTeardownAudioUnitCount;
++    uint64_t _dbgInterruptionBeganCount;
++    uint64_t _dbgRouteRebuildCount;
++    uint64_t _dbgSetActiveFailCount;
++    // ATTO (build 92): session props CACHED at the last ensure/setActive (worker
++    // thread). mixDiagnostics MUST report these, never live-read AVAudioSession —
++    // the live read is a sync XPC that deadlocked the MAIN thread against the
++    // hang-up teardown (App Hang REACT-NATIVE-4N, stack: -[AVAudioSession sampleRate]).
++    double _dbgCachedSessionRate;
++    int _dbgCachedSessionIsPAR;
++    // Rates seen by the last scheduleFile (record path) — pinpoints any pitch bug.
++    double _dbgLastInjectFileRate;
++    double _dbgLastInjectDestRate;
++
 +    // Telemetry: cumulative frames each channel actually contributed to the mix
 +    // over a recording. Written ONLY on the serial mixConsumerQueue; read by JS
 +    // (getMixDiagnostics) AFTER stopMixRecording tears the consumer down, so no
@@ -505,26 +552,33 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +         * startCapturing gets called.
 +         */
 +
-+        // Initialize the rendering context
++        // Initialize the rendering + capturing contexts (cheap; no audio I/O yet).
 +        self.renderingContext = malloc(sizeof(AudioRendererContext));
 +        memset(self.renderingContext, 0, sizeof(AudioRendererContext));
 +
-+        // Setup the AVAudioEngine along with the rendering context
-+        if (![self setupPlayoutAudioEngine]) {
-+            NSLog(@"Failed to setup AVAudioEngine");
-+        }
-+
-+        // Initialize the capturing context
 +        self.capturingContext = malloc(sizeof(AudioCapturerContext));
 +        memset(self.capturingContext, 0, sizeof(AudioCapturerContext));
 +        self.capturingContext->bufferList = &_captureBufferList;
 +
-+        [self setupAVAudioSession];
-+
-+        // Setup the AVAudioEngine along with the rendering context
-+        if (![self setupRecordAudioEngine]) {
-+            NSLog(@"Failed to setup AVAudioEngine");
-+        }
++        /*
++         * ATTO (build 83): -init is now INERT. Building the AVAudioEngines and —
++         * critically — calling setupAVAudioSession (setCategory:PlayAndRecord +
++         * setActive:YES) at module load SEIZED the global audio session the moment
++         * the custom device was installed (gated custom-device install runs at
++         * registration). That:
++         *   (a) forced the feed's video/audio into call-mode → playback stalled
++         *       ("app working weird", build 82), and
++         *   (b) collided with the incoming CallKit call's OWN session activation, so
++         *       the VoiceProcessingIO AudioUnit never started → RecordCallback never
++         *       fired (recordCbCount=0 across builds 80-82) → dead two-way audio and
++         *       the injected reel never reached the far party.
++         * Instead: build the engines against the LIVE call format lazily in
++         * ensureEngineFormatForActiveSession (startCapturing/startRendering), and set
++         * the session CATEGORY via the SDK-driven -block (no self setActive — the
++         * system/CallKit owns activation). Here we only register the route/
++         * interruption observers, which are inert and safe at module load.
++         */
++        [self registerAVAudioSessionObservers];
 +    }
 +
 +    return self;
@@ -622,28 +676,176 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    return ok;
 +}
 +
-+// Non-nil no-op AVAudioSession config block. The SDK's CallKit hooks call
-+// device.block() unconditionally; this device manages its own session, so the
-+// block does nothing — but it must never be nil (a nil block call crashes).
++/*
++ * ATTO (build 82): rebuild the AVAudioEngines against the CURRENT live session
++ * format if they were last built against a different sample rate.
++ *
++ * WHY: a manual-rendering AVAudioEngine is LOCKED to its build-time format. The
++ * engines are first built in -init (module load, gated custom-device install),
++ * when the session is idle/feed-rate or inactive (48k fallback). A live CallKit
++ * call can activate a DIFFERENT rate (48k, 24k VoIP, 8/16k Bluetooth HFP). If the
++ * frozen engine rate ≠ the AudioUnit/session rate, the record engine's
++ * manualRenderingBlock fails every RecordCallback (dead audio BOTH ways — the
++ * far party hears nothing, we render nothing) and the graph reconnect can throw
++ * (incoming-call crash, build 81). Rebuilding here — at call start, once the
++ * session rate is final — keeps engine format == AudioUnit format == call rate,
++ * which is exactly the invariant Twilio's own ExampleAVAudioEngineDevice relies on.
++ *
++ * Reuses the proven teardownAudioEngine + setupAudioEngine path (already used for
++ * mid-call route changes). Safe when the format already matches (early return).
++ */
++/*
++ * ATTO (build 93) — the format the ENGINES must be built with. The AudioUnit and
++ * Twilio's media stack run at the NEGOTIATED formats (_renderingFormat /
++ * _capturingFormat, cached when Twilio queried renderFormat/captureFormat); the
++ * hardware session rate can differ (CoreAudio SRC bridges it). Building the
++ * engines from the RAW session rate caused the "monster voice" on external
++ * CallKit answers: session flipped rate around didActivate, engines got built at
++ * the new session rate while Twilio still produced/consumed at the negotiated
++ * one -> playout rendered slow/deep. Engines MUST match the negotiated format.
++ */
++- (TVOAudioFormat *)engineTargetFormat {
++    if (_renderingFormat != nil) {
++        return _renderingFormat;
++    }
++    if (_capturingFormat != nil) {
++        return _capturingFormat;
++    }
++    return [[self class] activeFormat];
++}
++
++- (void)ensureEngineFormatForActiveSession {
++    // ATTO (build 87): ACTIVATE the call session FIRST — before reading activeFormat
++    // and building the engines. This is the fix for the deterministic ~29-callback
++    // stall (dead two-way audio, builds 83-86).
++    //
++    // WHY 29: the VoiceProcessingIO unit pre-rolls a bounded ~29 render cycles (~290ms
++    // at the 10ms buffer) then STARVES if the AVAudioSession backing it isn't ACTIVE.
++    // Build 86 called setActive:YES only in the SDK-driven -block, which runs AFTER
++    // the engines were already built here at the idle 48k fallback rate. setActive
++    // then flipped the session to the real call rate → a route-change fired →
++    // handleValidRouteChange saw a format mismatch (48k vs real) → tore the engines
++    // down mid-setup → the unit starved AGAIN (recordCbCount stuck at exactly 29 in
++    // builds 84 AND 86 — proof setActive placement, not the call itself, was wrong).
++    //
++    // Activating HERE, at call start (startCapturing/startRendering — NOT module-init,
++    // so no feed-session seizure), means: (1) the unit is backed by a live active
++    // session and keeps pumping past the pre-roll, and (2) activeFormat below reads
++    // the REAL active rate, so the engines are built correctly the first time and no
++    // later route-change teardown fires. Idempotent + safe to call on every start.
++    {
++        AVAudioSession *session = [AVAudioSession sharedInstance];
++        NSError *serr = nil;
++        [session setPreferredSampleRate:kPreferredSampleRate error:&serr];
++        [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:&serr];
++        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&serr];
++        [session setMode:AVAudioSessionModeVoiceChat error:&serr];
++        if (![session setActive:YES error:&serr]) {
++            _dbgSetActiveFailCount++; // telemetry: setActive rejected (CallKit owns session?)
++            NSLog(@"[AttoAudioEngine] ensureEngineFormat setActive failed: %@", serr);
++        }
++        // Cache session props HERE (worker thread, already doing session ops) so
++        // mixDiagnostics never live-reads AVAudioSession from the main thread.
++        _dbgCachedSessionRate = session.sampleRate;
++        _dbgCachedSessionIsPAR =
++            [session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ? 1 : 0;
++    }
++
++    TVOAudioFormat *live = [self engineTargetFormat];
++    if (_recordEngine != nil && _playoutEngine != nil &&
++        _enginesBuiltFormat != nil && [live isEqual:_enginesBuiltFormat]) {
++        return; // engines already built at the live rate — nothing to do
++    }
++    NSLog(@"[AttoAudioEngine] rebuilding engines for live format %@ (was %@)",
++          live, _enginesBuiltFormat);
++    [self teardownAudioEngine];
++    [self setupAudioEngine]; // rebuilds both, updates _enginesBuiltFormat, re-arms mixer/tap
++}
++
++// AVAudioSession config block. The SDK's CallKit hooks call device.block() at the
++// right lifecycle moment (around call setup / activation).
++//
++// ATTO (build 83): configure the call session HERE — NOT at -init. Doing this at
++// module load seized the global session (broke the feed + collided with CallKit's
++// activation → dead call audio, builds 81-82).
++//
++// ATTO (build 86): ALSO call setActive:YES here. Build 83/84 set only the category
++// and bet on CallKit to activate — telemetry proved the device then BINDS and pumps
++// (recordCbCount went 0→29, startCapturingCount=1) but the VoiceProcessingIO unit
++// STARVES (only ~29 callbacks then stalls → dead/choppy two-way audio) because the
++// session category is set but the session is never fully ACTIVE. Activating here is
++// safe: the block runs at CALL time (SDK-driven), not at module load, so it does NOT
++// reintroduce the feed/module-init seizure — it just gives the audio unit a live
++// session so it pumps at full rate. This mirrors the stock TVODefaultAudioDevice,
++// which activates the session in its own block.
 +// (_block ivar + setBlock: are auto-synthesized from the .h property.)
 +- (TVOAVAudioSessionConfigurationBlock)block {
-+    return _block ?: ^{};
++    return _block ?: ^{
++        AVAudioSession *session = [AVAudioSession sharedInstance];
++        NSError *err = nil;
++        [session setPreferredSampleRate:kPreferredSampleRate error:&err];
++        [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:&err];
++        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&err];
++        [session setMode:AVAudioSessionModeVoiceChat error:&err];
++        if (![session setActive:YES error:&err]) {
++            NSLog(@"[AttoAudioEngine] block setActive failed: %@", err);
++        }
++    };
 +}
 +
 +- (void)setEnabled:(BOOL)enabled {
++    /*
++     * ATTO (build 91) — THE dead-two-way-audio root cause, proven by the build-90
++     * lifecycle counters (start=3 stop=1 teardown=2 cb=35 = exactly this path):
++     *
++     * The SDK's CallKit hooks drive this on EVERY call: enabled=NO at answer,
++     * enabled=YES in provider:didActivateAudioSession:. The old YES branch did
++     * `[self teardownAudioUnit]; [self startAudioUnit];` — but teardownAudioUnit
++     * DISPOSES the unit and NULLs _audioUnit, and startAudioUnit never rebuilds
++     * it, so AudioOutputUnitStart(NULL) failed and the device was left with NO
++     * audio unit for the rest of the call. The unit only ever delivered its
++     * ~29-35 pre-activation pre-roll callbacks, then didActivate killed it →
++     * dead audio both ways on every CallKit call (builds 81-90).
++     *
++     * Fix: rebuild the unit (setupAudioUnitWithRenderContext) before starting it
++     * on enable — restarting under the now-CallKit-activated session is exactly
++     * the point of the didActivate hook. On disable, stop AND tear down fully so
++     * the next enable/start builds a fresh unit (a stopped-but-alive unit would
++     * be leaked by startCapturing/startRendering's unconditional setup).
++     */
 +    @synchronized(self) {
++        _enabled = enabled;
++        // No media stack yet (e.g. CallKit sets enabled=NO at answer, before the
++        // call's tracks exist) — just record the flag.
++        TVOAudioDeviceContext context = [self deviceContext];
++        if (!context) {
++            return;
++        }
 +        if (enabled) {
-+            // If the worker block is executed, then context is guaranteed to be valid.
-+            TVOAudioDeviceContext context = [self deviceContext];
-+            if (context) {
-+                TVOAudioDeviceExecuteWorkerBlock(context, ^{
-+                    _enabled = enabled;
-+
-+                    if (self.audioUnit) {
-+                        [self teardownAudioUnit];
-+                        [self startAudioUnit];
-+                    }
-+                });
++            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++                if (self.audioUnit) {
++                    [self teardownAudioUnit];
++                }
++                // ATTO (build 93): re-align the ENGINES to the negotiated format
++                // before rebuilding the unit. On external CallKit answers the
++                // format flips around didActivate; rebuilding only the unit left
++                // the playout engine at a stale rate -> far voice slow/deep.
++                [self ensureEngineFormatForActiveSession];
++                if ([self setupAudioUnitWithRenderContext:self.renderingContext
++                                           captureContext:self.capturingContext]) {
++                    [self startAudioUnit];
++                } else {
++                    NSLog(@"[AttoAudioEngine] setEnabled:YES failed to rebuild the audio unit");
++                }
++            });
++        } else {
++            // ATTO (build 92): plain stop — NO worker block, NO teardown. This runs at
++            // CallKit didDeactivate (hang-up); dispatching into the media worker while
++            // Twilio is mid-teardown fed the hang-up deadlock (App Hang RN-4N).
++            // stopAudioUnit is quick under our @synchronized; the stopRendering/
++            // stopCapturing hooks (now keyed on unit existence) do the full teardown.
++            if (self.audioUnit) {
++                [self stopAudioUnit];
 +            }
 +        }
 +    }
@@ -660,7 +862,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +
 +    // AVAudioEngine operates on the same format as the Core Audio output bus.
 +    NSError *error = nil;
-+    const AudioStreamBasicDescription asbd = [[[self class] activeFormat] streamDescription];
++    const AudioStreamBasicDescription asbd = [[self engineTargetFormat] streamDescription];
 +    AVAudioFormat *format = [[AVAudioFormat alloc] initWithStreamDescription:&asbd];
 +
 +    // Switch to manual rendering mode
@@ -709,6 +911,11 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +        return NO;
 +    }
 +
++    // ATTO (build 82): record which format the engines were just built against, so
++    // startCapturing/startRendering can detect a live-call rate mismatch and rebuild.
++    // Record is built last in BOTH -init and setupAudioEngine, so this covers both.
++    _enginesBuiltFormat = [self engineTargetFormat];
++
 +    return YES;
 +}
 +
@@ -723,7 +930,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +
 +    // AVAudioEngine operates on the same format as the Core Audio output bus.
 +    NSError *error = nil;
-+    const AudioStreamBasicDescription asbd = [[[self class] activeFormat] streamDescription];
++    const AudioStreamBasicDescription asbd = [[self engineTargetFormat] streamDescription];
 +    AVAudioFormat *format = [[AVAudioFormat alloc] initWithStreamDescription:&asbd];
 +
 +    // Switch to manual rendering mode
@@ -829,6 +1036,18 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    }
 +    @try { [self.recordReverb removeTapOnBus:0]; } @catch (__unused NSException *e) {}
 +
++    // ATTO (build 101): invalidate the renderBlock pointers BEFORE releasing the
++    // engines that own those manualRenderingBlocks. The RT playout/record callbacks
++    // read renderBlock atomically and now bail to silence when it's NULL — so
++    // niling it first means a concurrent render sees NULL (silence) instead of a
++    // dangling block pointer (EXC_BAD_ACCESS in _Block_copy, REACT-NATIVE-4Q).
++    if (self.renderingContext) {
++        self.renderingContext->renderBlock = NULL;
++    }
++    if (self.capturingContext) {
++        self.capturingContext->renderBlock = NULL;
++    }
++
 +    [self teardownPlayer];
 +    [_playoutEngine stop];
 +    _playoutEngine = nil;
@@ -915,6 +1134,9 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    // Record path — always (remote hears it).
 +    if (self.recordFilePlayer && self.recordEngine.isRunning) {
 +        AVAudioFormat *destFormat = [self.recordFilePlayer outputFormatForBus:0];
++        // Telemetry: the two rates that decide injected pitch/speed.
++        _dbgLastInjectFileRate = file.processingFormat.sampleRate;
++        _dbgLastInjectDestRate = destFormat.sampleRate;
 +        AVAudioPCMBuffer *recordBuffer = [self bufferByConverting:sourceBuffer toFormat:destFormat];
 +        if (recordBuffer) {
 +            self.recordReverb.wetDryMix = 0; // dry by default; reverb node kept for graph parity
@@ -1529,6 +1751,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    uint64_t total = _dbgTotalFrames;
 +    uint64_t recCb = self.capturingContext ? self.capturingContext->cbCount : 0;
 +    uint64_t playCb = self.renderingContext ? self.renderingContext->cbCount : 0;
++    uint64_t renderFail = self.capturingContext ? self.capturingContext->renderFailCount : 0;
 +    return @{
 +        @"micFrames": @(_dbgMicFrames),
 +        @"remoteFrames": @(_dbgRemoteFrames),
@@ -1540,6 +1763,48 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +        // active device (engine inert) — the smoking gun for empty recordings.
 +        @"recordCbCount": @(recCb),
 +        @"playoutCbCount": @(playCb),
++        // ATTO (build 87): the LIVE AVAudioSession sample rate + whether it is the
++        // PlayAndRecord category. If the session-activate fix worked, recordCbCount
++        // is now hundreds (not stuck at 29) and sessionSampleRate is the real call
++        // rate (== engine rate), confirming the unit is backed by an active session.
++        // CACHED session props (never live-read the session here: main-thread XPC
++        // deadlocked at hang-up — App Hang REACT-NATIVE-4N).
++        @"sessionSampleRate": @(_dbgCachedSessionRate),
++        @"sessionIsPlayAndRecord": @(_dbgCachedSessionIsPAR),
++        // Rates of the last injected file → the pitch-bug pinpoint: fileRate is the
++        // source, destRate is the player-graph rate it was converted to; engine rate
++        // via _enginesBuiltFormat below. Any mismatch = wrong-speed playback.
++        @"lastInjectFileRate": @(_dbgLastInjectFileRate),
++        @"lastInjectDestRate": @(_dbgLastInjectDestRate),
++        @"enginesBuiltRate": @(_enginesBuiltFormat ? _enginesBuiltFormat.sampleRate : 0),
++        // Negotiated (Twilio-facing) rates — the engines MUST match these. A
++        // mismatch here = wrong-speed audio (monster/chipmunk).
++        @"renderingFormatRate": @(_renderingFormat ? _renderingFormat.sampleRate : 0),
++        @"capturingFormatRate": @(_capturingFormat ? _capturingFormat.sampleRate : 0),
++        // ATTO (build 83): did Twilio even drive the device's start hooks this call?
++        // startCapturingCount>0 + recordCbCount==0 ⇒ device bound but AudioUnit not
++        // pumping (session/format). startCapturingCount==0 ⇒ device not bound at all.
++        @"startCapturingCount": @(_dbgStartCapturingCount),
++        @"startRenderingCount": @(_dbgStartRenderingCount),
++        // ATTO (build 88) AudioUnit lifecycle — starvation vs explicit-stop:
++        @"audioUnitStartCount": @(_dbgAudioUnitStartCount),
++        @"audioUnitStopCount": @(_dbgAudioUnitStopCount),
++        @"teardownAudioUnitCount": @(_dbgTeardownAudioUnitCount),
++        @"interruptionBeganCount": @(_dbgInterruptionBeganCount),
++        @"routeRebuildCount": @(_dbgRouteRebuildCount),
++        @"setActiveFailCount": @(_dbgSetActiveFailCount),
++        // renderFailCount > 0 ⇒ the manual mix render failed and we fell back to
++        // raw-mic passthrough (the "no te escucho" root: engine couldn't mix, but
++        // two-way audio survives via the guard). Cumulative since device install.
++        @"renderFailCount": @(renderFail),
++        // Live injection diagnosis (why an injected reel may not reach the far
++        // party): recordEngineRunning==0 ⇒ scheduleFile's record path (the remote-
++        // facing one) never scheduled; recordPlayerPlaying==0 ⇒ the injected file
++        // isn't playing on the outgoing path. With renderFailCount they pinpoint
++        // whether injection dies at scheduling, playing, or the manual-render mix.
++        @"recordEngineRunning": @(self.recordEngine.isRunning ? 1 : 0),
++        @"recordPlayerPlaying": @(self.recordFilePlayer.isPlaying ? 1 : 0),
++        @"playoutPlayerPlaying": @(self.playoutFilePlayer.isPlaying ? 1 : 0),
 +    };
 +}
 +
@@ -1847,7 +2112,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +     * a STANDARD deinterleaved float format at the active sample rate — the mixer
 +     * converts to the int render format on the way out.
 +     */
-+    double musicSampleRate = [[self class] activeFormat].sampleRate;
++    double musicSampleRate = [self engineTargetFormat].sampleRate; // match engines, not raw session
 +    if (musicSampleRate <= 0) {
 +        musicSampleRate = (double)kPreferredSampleRate;
 +    }
@@ -1939,12 +2204,23 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +
 +- (BOOL)startRendering:(nonnull TVOAudioDeviceContext)context {
 +    @synchronized(self) {
++        _dbgStartRenderingCount++; // telemetry: proves Twilio is driving this device
++
++        // ATTO (build 82): align the manual-render engine format to the LIVE call
++        // rate before wiring the AudioUnit (see ensureEngineFormatForActiveSession).
++        [self ensureEngineFormatForActiveSession];
++
 +        /*
 +         * In this example, the app always publishes an audio track. So we will start the audio unit from the capturer
 +         * call backs. We will restart the audio unit if a remote participant adds an audio track after the audio graph is
 +         * established. Also we will re-establish the audio graph in case the format changes.
 +         */
-+        if (_audioUnit && _enabled) {
++        // ATTO (build 92): tear down ANY existing unit, regardless of _enabled.
++        // With _enabled=NO real (CallKit sets it at answer), the old `&& _enabled`
++        // guard skipped this and setupAudioUnit OVERWROTE a LIVE unit -> two units
++        // double-pulled the manual render (injected file played ~2x fast + garbled)
++        // and the leaked units made hang-up teardown deadlock-prone.
++        if (_audioUnit) {
 +            [self stopAudioUnit];
 +            [self teardownAudioUnit];
 +        }
@@ -1990,7 +2266,9 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +                }
 +            });
 +
-+            if (_enabled) {
++            // ATTO (build 92): key on the unit's existence, not _enabled — a call
++            // ending after didDeactivate (enabled=NO) must still tear down.
++            if (_audioUnit) {
 +                [self stopAudioUnit];
 +                [self teardownAudioUnit];
 +            }
@@ -2037,9 +2315,20 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +
 +- (BOOL)startCapturing:(nonnull TVOAudioDeviceContext)context {
 +    @synchronized (self) {
++        _dbgStartCapturingCount++; // telemetry: proves Twilio is driving this device
++
++        // ATTO (build 82): align the manual-render engine format to the LIVE call
++        // rate BEFORE wiring the AudioUnit, or a frozen -init format kills two-way
++        // audio and can crash. No-op when already aligned.
++        [self ensureEngineFormatForActiveSession];
 +
 +        // Restart the audio unit if the audio graph is already setup and if we publish an audio track.
-+        if (_audioUnit && _enabled) {
++        // ATTO (build 92): tear down ANY existing unit, regardless of _enabled.
++        // With _enabled=NO real (CallKit sets it at answer), the old `&& _enabled`
++        // guard skipped this and setupAudioUnit OVERWROTE a LIVE unit -> two units
++        // double-pulled the manual render (injected file played ~2x fast + garbled)
++        // and the leaked units made hang-up teardown deadlock-prone.
++        if (_audioUnit) {
 +            [self stopAudioUnit];
 +            [self teardownAudioUnit];
 +        }
@@ -2086,7 +2375,9 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +                }
 +            });
 +
-+            if (_enabled) {
++            // ATTO (build 92): key on the unit's existence, not _enabled — a call
++            // ending after didDeactivate (enabled=NO) must still tear down.
++            if (_audioUnit) {
 +                [self stopAudioUnit];
 +                [self teardownAudioUnit];
 +            }
@@ -2106,11 +2397,30 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +                                                     UInt32 busNumber,
 +                                                     UInt32 numFrames,
 +                                                     AudioBufferList *bufferList) NS_AVAILABLE(NA, 11_0) {
++    AudioRendererContext *context = (AudioRendererContext *)refCon;
++
++    // ATTO (build 101) — RT-SAFE GUARD. Fixes EXC_BAD_ACCESS at 0x8 in _Block_copy
++    // (Sentry REACT-NATIVE-4Q, westcol answer): on CallKit answer the audio ROUTE
++    // changes → handleValidRouteChange → ensureEngineFormatForActiveSession →
++    // teardownAudioEngine nils _playoutEngine, releasing its manualRenderingBlock,
++    // WHILE the VoiceProcessingIO unit is still rendering. The old renderBlock was
++    // then NULL/dangling and the ARC strong-assign below did _Block_copy on it and
++    // crashed. Mirror the record callback's deviceContext guard + also require a
++    // live renderBlock; render silence in the teardown/rebuild window. renderBlock
++    // is NULLed FIRST in teardownAudioEngine so we see NULL here, not a dangling ptr.
++    if (context == NULL || context->deviceContext == NULL || context->renderBlock == NULL) {
++        if (bufferList != NULL && bufferList->mNumberBuffers > 0 &&
++            bufferList->mBuffers[0].mData != NULL) {
++            *actionFlags |= kAudioUnitRenderAction_OutputIsSilence;
++            memset(bufferList->mBuffers[0].mData, 0, bufferList->mBuffers[0].mDataByteSize);
++        }
++        return noErr;
++    }
++
 +    assert(bufferList->mNumberBuffers == 1);
 +    assert(bufferList->mBuffers[0].mNumberChannels <= 2);
 +    assert(bufferList->mBuffers[0].mNumberChannels > 0);
 +
-+    AudioRendererContext *context = (AudioRendererContext *)refCon;
 +    context->bufferList = bufferList;
 +    context->cbCount++; // telemetry: proves the custom device is the active one
 +
@@ -2121,8 +2431,11 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +    assert(audioBufferSizeInBytes == (bufferList->mBuffers[0].mNumberChannels * kAudioSampleSize * numFrames));
 +    OSStatus outputStatus = noErr;
 +
-+    // Get the mixed audio data from AVAudioEngine's output node by calling the `renderBlock`
-+    AVAudioEngineManualRenderingBlock renderBlock = (__bridge AVAudioEngineManualRenderingBlock)(context->renderBlock);
++    // Get the mixed audio data from AVAudioEngine's output node by calling the `renderBlock`.
++    // __unsafe_unretained → NO ARC objc_retainBlock/_Block_copy on the RT thread (that
++    // copy on a stale pointer WAS the crash). We already null-guarded it above.
++    __unsafe_unretained AVAudioEngineManualRenderingBlock renderBlock =
++        (__bridge AVAudioEngineManualRenderingBlock)(context->renderBlock);
 +    const AVAudioEngineManualRenderingStatus status = renderBlock(numFrames, bufferList, &outputStatus);
 +
 +    /*
@@ -2180,16 +2493,43 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +        mixedAudioBufferList->mBuffers[i].mDataByteSize = audioBufferList->mBuffers[i].mDataByteSize;
 +    }
 +
++    // ATTO (build 101): same RT-safe renderBlock guard as the playout callback —
++    // the engine can be torn down/rebuilt (route change on answer) while this RT
++    // record callback runs, leaving renderBlock NULL/stale. deviceContext is
++    // already checked at the top; also require a live block, and invoke it
++    // __unsafe_unretained so ARC never does _Block_copy on a stale pointer.
++    if (context->renderBlock == NULL) {
++        return noErr;
++    }
 +    OSStatus outputStatus = noErr;
-+    AVAudioEngineManualRenderingBlock renderBlock = (__bridge AVAudioEngineManualRenderingBlock)(context->renderBlock);
++    __unsafe_unretained AVAudioEngineManualRenderingBlock renderBlock =
++        (__bridge AVAudioEngineManualRenderingBlock)(context->renderBlock);
 +    const AVAudioEngineManualRenderingStatus ret = renderBlock(numFrames, mixedAudioBufferList, &outputStatus);
 +
-+    if (ret != AVAudioEngineManualRenderingStatusSuccess) {
-+        NSLog(@"AVAudioEngine failed mix audio");
++    int8_t *audioBuffer;
++    UInt32 audioBufferSizeInBytes;
++    if (ret == AVAudioEngineManualRenderingStatusSuccess && status == noErr) {
++        // Mix rendered OK — send the mixed (mic [+ injected]) buffer as before.
++        audioBuffer = (int8_t *)mixedAudioBufferList->mBuffers[0].mData;
++        audioBufferSizeInBytes = mixedAudioBufferList->mBuffers[0].mDataByteSize;
++    } else {
++        // SILENCE GUARD (mother test: "no te escucho", dead BOTH ways from a
++        // CallKit/background answer): the manual mix render (or the mic
++        // AudioUnitRender) FAILED — e.g. the engine's manual-rendering format is
++        // pinned to the wrong sample rate after the idle feed preinstall, so every
++        // callback fails and mixedAudioBufferList is stale garbage. Writing that to
++        // Twilio makes the remote hear silence. Fall back to the RAW MIC that
++        // AudioUnitRender just produced (same int16 mono format WriteCaptureData
++        // expects) so two-way audio SURVIVES even when the engine can't mix. This
++        // mirrors the failure guard PlayoutCallback already has. Count it — surfaced
++        // in mixDiagnostics.renderFailCount — but do NOT NSLog here: this runs on the
++        // CoreAudio real-time render thread, and NSLog takes a lock + does a syscall,
++        // which can xrun the very fallback that must keep the call intelligible. The
++        // counter (read on the main thread in mixDiagnostics) is the signal instead.
++        context->renderFailCount++;
++        audioBuffer = (status == noErr) ? (int8_t *)audioBufferList->mBuffers[0].mData : NULL;
++        audioBufferSizeInBytes = audioBufferList->mBuffers[0].mDataByteSize;
 +    }
-+
-+    int8_t *audioBuffer = (int8_t *)mixedAudioBufferList->mBuffers[0].mData;
-+    UInt32 audioBufferSizeInBytes = mixedAudioBufferList->mBuffers[0].mDataByteSize;
 +
 +    // === ATTO mixer MIC tap (additive; live path unchanged) ===
 +    // `audioBuffer` is EXACTLY the PCM about to be sent to Twilio (mic, post
@@ -2399,6 +2739,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +}
 +
 +- (BOOL)startAudioUnit {
++    _dbgAudioUnitStartCount++; // telemetry
 +    OSStatus status = AudioOutputUnitStart(_audioUnit);
 +    if (status != 0) {
 +        NSLog(@"Could not start the audio unit!");
@@ -2408,6 +2749,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +}
 +
 +- (BOOL)stopAudioUnit {
++    _dbgAudioUnitStopCount++; // telemetry: an explicit stop (not starvation)
 +    OSStatus status = AudioOutputUnitStop(_audioUnit);
 +    if (status != 0) {
 +        NSLog(@"Could not stop the audio unit!");
@@ -2418,6 +2760,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +
 +- (void)teardownAudioUnit {
 +    if (_audioUnit) {
++        _dbgTeardownAudioUnitCount++; // telemetry
 +        AudioUnitUninitialize(_audioUnit);
 +        AudioComponentInstanceDispose(_audioUnit);
 +        _audioUnit = NULL;
@@ -2455,6 +2798,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +            TVOAudioDeviceExecuteWorkerBlock(context, ^{
 +                if (type == AVAudioSessionInterruptionTypeBegan) {
 +                    NSLog(@"Interruption began.");
++                    _dbgInterruptionBeganCount++; // telemetry
 +                    self.interrupted = YES;
 +                    [self stopAudioUnit];
 +                } else {
@@ -2547,6 +2891,7 @@ index 0000000000000000000000000000000000000000..5a3e0db4b683669f414a2937b034dda2
 +                    // Restart the AVAudioEngine with new format
 +                    TVOAudioFormat *activeFormat = [[self class] activeFormat];
 +                    if (![activeFormat isEqual:self->_renderingFormat]) {
++                        self->_dbgRouteRebuildCount++; // telemetry: a route change rebuilt mid-call
 +                        [self teardownAudioEngine];
 +                        [self setupAudioEngine];
 +                    }
@@ -2894,10 +3239,61 @@ index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e3
 +
 +@end
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
-index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c93169659 100644
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc50244a15020 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m
 +++ b/ios/TwilioVoiceReactNative+CallKit.m
-@@ -235,6 +235,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -27,7 +27,19 @@ - (void)initializeCallKit {
+ 
+ - (void)initializeCallKitWithConfiguration:(NSDictionary *)configuration {
+     CXProviderConfiguration *callKitConfiguration = [CXProviderConfiguration new];
+-    
++
++    // ATTO: mark the CallKit provider as VIDEO-capable. Per Apple DTS (Kevin
++    // Elliott, forums/thread/798090), "video call" in CallKit means broadly "the
++    // call involves visual content the user might want to see" — which ATTO's
++    // in-call recording / reel-injection UI is — NOT literally a camera feed.
++    // The payoff: for VIDEO calls answered from the LOCK SCREEN, iOS "tries to
++    // authenticate the user (to unlock the device) and launches into the app if
++    // it's able to unlock." That is the ONLY sanctioned way to bring ATTO to the
++    // foreground on unlock after a locked/killed-device answer (audio-only calls
++    // stay on the native CallKit UI with no way to auto-open). Requires
++    // supportsVideo=YES here AND hasVideo=YES on every CXCallUpdate below.
++    callKitConfiguration.supportsVideo = YES;
++
+     if (configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups]) {
+         callKitConfiguration.maximumCallGroups = [configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups] intValue];
+     } else {
+@@ -101,7 +113,10 @@ - (void)reportNewIncomingCall:(TVOCallInvite *)callInvite {
+     callUpdate.supportsHolding = YES;
+     callUpdate.supportsGrouping = NO;
+     callUpdate.supportsUngrouping = NO;
+-    callUpdate.hasVideo = NO;
++    // ATTO: YES → lock-screen answer auto-launches ATTO into the foreground on
++    // unlock (see supportsVideo note above). THE critical site — this is the
++    // incoming-call report, incl. the cold-launch path (AppDelegate → SDK).
++    callUpdate.hasVideo = YES;
+ 
+     [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
+         if (!error) {
+@@ -169,7 +184,7 @@ - (void)makeCallWithAccessToken:(NSString *)accessToken
+             callUpdate.supportsHolding = YES;
+             callUpdate.supportsGrouping = NO;
+             callUpdate.supportsUngrouping = NO;
+-            callUpdate.hasVideo = NO;
++            callUpdate.hasVideo = YES; // ATTO: keep the call uniformly "video" (see note above)
+ 
+             [self.callKitProvider reportCallWithUUID:uuid updated:callUpdate];
+         }
+@@ -226,7 +241,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+     callUpdate.supportsHolding = YES;
+     callUpdate.supportsGrouping = NO;
+     callUpdate.supportsUngrouping = NO;
+-    callUpdate.hasVideo = NO;
++    callUpdate.hasVideo = YES; // ATTO: keep the call uniformly "video" (see note above)
+ 
+     dispatch_async(dispatch_get_main_queue(), ^{
+         [self.callKitProvider reportCallWithUUID:[[NSUUID alloc] initWithUUIDString:uuid] updated:callUpdate];
+@@ -235,6 +250,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
  
  #pragma mark - CXProviderDelegate
  
@@ -2931,7 +3327,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c
  - (void)providerDidReset:(CXProvider *)provider {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
  }
-@@ -245,10 +272,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
+@@ -245,10 +287,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
  
  - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
@@ -2944,7 +3340,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c
  }
  
  - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
-@@ -290,6 +319,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
+@@ -290,6 +334,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
  }
  
  - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
@@ -2952,7 +3348,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
      [TwilioVoiceReactNative twilioAudioDevice].block();
      
-@@ -349,6 +379,19 @@ - (void)callDidConnect:(TVOCall *)call {
+@@ -349,6 +394,19 @@ - (void)callDidConnect:(TVOCall *)call {
  
      [self stopRingback];
  
@@ -2973,10 +3369,18 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..fa19552296cfc79540924f6a7a6d199c
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..b7cc94145d6f732d5302f8df32a990912be2406b 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162aa87816cb 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
-@@ -25,6 +25,9 @@
+@@ -11,6 +11,7 @@
+ #import "TwilioVoiceReactNative.h"
+ #import "TwilioVoiceReactNativeConstants.h"
+ #import "TwilioVoiceStatsReport.h"
++#import "AttoAudioEngineDevice.h"
+ 
+ NSString * const kTwilioVoiceReactNativeVoiceError = @"Voice error";
+ dispatch_time_t const kPushRegistryDeviceTokenRetryTimeout = 3;
+@@ -25,6 +26,9 @@
  NSString * const kTwilioVoiceAudioDeviceUid = @"uid";
  
  static TVODefaultAudioDevice *sTwilioAudioDevice;
@@ -2986,7 +3390,66 @@ index 9832b501acdabd9720631b6af5969760802dbb55..b7cc94145d6f732d5302f8df32a99091
  
  @import TwilioVoice;
  
-@@ -142,6 +145,38 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
+@@ -90,14 +94,56 @@ - (instancetype)init {
+         NSString *reactNativeSdkVersion = kTwilioVoiceReactNativeReactNativeVoiceSDKVer;
+         setenv("com.twilio.voice.env.sdk.version", [reactNativeSdkVersion UTF8String], 1);
+ 
+-        sTwilioAudioDevice = [TVODefaultAudioDevice audioDevice];
+-        TwilioVoiceSDK.audioDevice = sTwilioAudioDevice;
++        // ATTO (patch): install the SDK audio device, but NEVER let this line crash.
++        // Re-assigning TwilioVoiceSDK.audioDevice once a media stack exists throws
++        // `TVOAudioDeviceMustBeSetBeforeMediaStackSetup` and hard-kills the app. That
++        // happens on a cold-launch incoming call: the audio-injection engine (or a
++        // native cold-launch pre-answer) installs a device + creates tracks BEFORE
++        // this lazily-instantiated TurboModule runs -init, so the stock unconditional
++        // assignment below explodes (confirmed Sentry 7594361275, build 76). On a
++        // normal warm launch this is the first audio-device setter → the assignment
++        // succeeds exactly as stock, so there is NO behaviour change. On the cold
++        // path the @catch adopts whatever device is already installed instead of
++        // dying. The precondition-check throws BEFORE mutating any state, so catching
++        // it leaves the live call's device intact.
++        @try {
++            // ATTO audio-injection (build 82): install the custom AttoAudioEngineDevice
++            // as Twilio's active device HERE (before initializeCallKit + registration),
++            // gated on the persisted cohort flag (David only), so it is the capture
++            // device for EVERY call — incl. CallKit-native-accepted incoming ones. This
++            // is what makes injected audio reach the far party (recordCbCount>0). Build
++            // 81 proved the device DOES bind here; its dead-audio + incoming-call crash
++            // came from a SEPARATE bug — the engine's manual-render format was frozen at
++            // this init time and mismatched the live CallKit call rate. That is fixed in
++            // AttoAudioEngineDevice by rebuilding the engines against the live format at
++            // startCapturing/startRendering. See project_injection_device_not_pumped.
++            BOOL attoInjectionEnabled = [[NSUserDefaults standardUserDefaults]
++                                         boolForKey:@"atto_audio_injection_enabled"];
++            if (attoInjectionEnabled) {
++                sTwilioAudioDevice = (TVODefaultAudioDevice *)[AttoAudioEngineDevice sharedDevice];
++                TwilioVoiceSDK.audioDevice = sTwilioAudioDevice;
++            } else {
++                sTwilioAudioDevice = [TVODefaultAudioDevice audioDevice];
++                TwilioVoiceSDK.audioDevice = sTwilioAudioDevice;
++            }
++        } @catch (NSException *attoAudioException) {
++            NSLog(@"[ATTO] audio device already locked by an active media stack; adopting existing (%@)",
++                  attoAudioException.name);
++            if ([TwilioVoiceSDK.audioDevice isKindOfClass:[TVODefaultAudioDevice class]]) {
++                sTwilioAudioDevice = (TVODefaultAudioDevice *)TwilioVoiceSDK.audioDevice;
++            }
++        }
+ 
+         TwilioVoiceSDK.logLevel = TVOLogLevelTrace;
+ 
+         [self subscribeToNotifications];
+         [self initializeCallKit];
+         [self initializeAudioDeviceList];
++
++        // ATTO (patch, additive): tell AttoVoipBootstrap the Twilio RN module is now
++        // alive, so it routes incoming pushes through the module (warm path) instead
++        // of the native cold-launch report branch. No behaviour change.
++        [[NSNotificationCenter defaultCenter] postNotificationName:@"AttoTwilioModuleDidInit" object:nil];
+     }
+ 
+     return self;
+@@ -142,6 +188,38 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
      return sTwilioAudioDevice;
  }
  

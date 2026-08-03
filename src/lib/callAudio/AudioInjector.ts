@@ -51,7 +51,9 @@ export type InjectReason =
   | 'prepare_failed'
   | 'engine_error'
   | 'not_supported'
-  | 'engine_unavailable';
+  | 'engine_unavailable'
+  // Caller lacks the creator + active-subscription entitlement to inject.
+  | 'not_permitted';
 
 /** Result of an imperative action. Adapters NEVER throw to callers — they
  *  resolve `{ ok: false, reason }` so the UI can react without try/catch. */

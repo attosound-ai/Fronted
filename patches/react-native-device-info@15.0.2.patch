@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..5fb2568f84d586669dc689d9627b53aef0aacf25 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877e35ba035 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,9 @@
@@ -12,7 +12,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..5fb2568f84d586669dc689d9627b53ae
  #import <React/RCTUtils.h>
  #import "RNDeviceInfo.h"
  #import "DeviceUID.h"
-@@ -964,6 +966,72 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +966,96 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -79,6 +79,30 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..5fb2568f84d586669dc689d9627b53ae
 +        // VoIP push-arrival markers (written by AttoVoipBootstrap).
 +        @"voipPushAt": @([ud doubleForKey:@"atto_last_voip_push_at"]),
 +        @"voipPushAppState": @([ud integerForKey:@"atto_last_voip_push_appstate"]),
++    });
++}
++
++// ATTO (build 98): force the call audio route to speaker / earpiece via
++// AVAudioSession.overrideOutputAudioPort — the CANONICAL CallKit speaker lever.
++// Twilio's AudioDevice.select() is unreliable once CallKit owns the session
++// (esp. lock-screen/background answers) and the JS ActionSheet route-picker
++// can't even present over the recording screen's bottom sheets — the client's
++// "couldn't turn speaker on, no matter what I did". This overrides the port
++// directly and returns the resulting live output port so JS can confirm it stuck.
++RCT_EXPORT_METHOD(setSpeakerOutput:(BOOL)enable
++                          resolver:(RCTPromiseResolveBlock)resolve
++                          rejecter:(RCTPromiseRejectBlock)reject) {
++    AVAudioSession *session = [AVAudioSession sharedInstance];
++    NSError *err = nil;
++    AVAudioSessionPortOverride override =
++        enable ? AVAudioSessionPortOverrideSpeaker : AVAudioSessionPortOverrideNone;
++    BOOL ok = [session overrideOutputAudioPort:override error:&err];
++    NSString *out = session.currentRoute.outputs.firstObject.portType ?: @"none";
++    resolve(@{
++        @"ok": @(ok),
++        @"requestedSpeaker": @(enable),
++        @"liveOutputPort": out,
++        @"error": (err ? err.localizedDescription : @""),
 +    });
 +}
 +

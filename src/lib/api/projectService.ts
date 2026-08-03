@@ -144,7 +144,13 @@ export const projectService = {
     mimeType: string,
     laneIndex: number,
     signal?: AbortSignal,
-    onProgress?: (p: { bytesSent: number; totalBytes: number }) => void
+    onProgress?: (p: { bytesSent: number; totalBytes: number }) => void,
+    /**
+     * Where on the timeline the created clip belongs, in ms. An in-call take
+     * belongs at the playhead it was performed over; without it the backend
+     * appends after the last clip on the lane. Older backends ignore the field.
+     */
+    positionInTimeline?: number
   ): Promise<TimelineClip> {
     const token = await (await import('@/lib/auth/storage')).authStorage.getToken();
     const baseUrl = apiClient.defaults.baseURL ?? '';
@@ -158,7 +164,14 @@ export const projectService = {
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         fieldName: 'file',
         mimeType,
-        parameters: { laneIndex: String(laneIndex) },
+        // Multipart parameters are strings on the wire; the backend parses them.
+        parameters:
+          positionInTimeline !== undefined && positionInTimeline >= 0
+            ? {
+                laneIndex: String(laneIndex),
+                positionInTimeline: String(Math.round(positionInTimeline)),
+              }
+            : { laneIndex: String(laneIndex) },
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
       },

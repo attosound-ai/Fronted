@@ -59,7 +59,17 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const DEFAULT_CHANNELS: Record<MixerChannel, ChannelState> = {
   mic: { gain: 0.9, record: true },
   remote: { gain: 0.9, record: true },
-  app: { gain: 0.8, record: true },
+  // App audio defaults to NOT being recorded, and this MUST stay in sync with the
+  // native default in AttoAudioEngineDevice (the store is pushed to the native bus,
+  // so a mismatch here silently defeats it).
+  //
+  // The app channel carries whatever we inject into the call — normally the backing
+  // track the user is singing over. Baking it into the take means layering that take
+  // back onto the same track in the timeline gives the track TWICE, slightly offset,
+  // comb-filtered, with the far party underneath. Recording mic + remote only yields
+  // a clean overdub. The user can switch it on from the mixer when they actually
+  // want the whole blend captured.
+  app: { gain: 0.8, record: false },
   // Metronome defaults to monitor-only (heard, not baked into the recording).
   metronome: { gain: 0.6, record: false },
 };

@@ -49,7 +49,11 @@ import { useFeatureFlag } from '@/lib/analytics';
 
 import { serverClipToLocal, clipToInput } from '../types';
 import { getTimelineDuration } from '../utils/clipOperations';
-import { msToPixels, formatTimelineMs } from '../utils/timelineCalculations';
+import {
+  msToPixels,
+  formatTimelineMs,
+  generateRulerMarks,
+} from '../utils/timelineCalculations';
 import { projectService } from '@/lib/api/projectService';
 import type { LaneMeta } from '../types';
 import type { TimelineClip, LaneMetadata, ExportResult } from '@/types/project';
@@ -446,6 +450,64 @@ export function TimelineEditor({
   const totalDuration = getTimelineDuration(state.clips);
   const totalWidth = msToPixels(totalDuration + 5000, state.zoomLevel);
   const tracksAreaHeight = TRACK_HEIGHT * state.laneCount;
+
+  // ── Editor scale telemetry ──
+  // The mounted timeline's native-view count is the freeze risk: Fabric commits
+  // mount/unmount as ONE synchronous main-thread transaction, and the Aug 3
+  // stuck-on-delete hang (REACT-NATIVE-3W: a 25-min clip = ~50k bar views) had
+  // no telemetry saying how big the tree was. `est_bar_views` mirrors
+  // WaveformView's own math (3 px per bar, capped at its MAX_BARS=512), so if
+  // either side of that math changes, change both.
+  const editorScale = useCallback(() => {
+    let estBarViews = 0;
+    for (const c of state.clips) {
+      const w = msToPixels(c.endInSegment - c.startInSegment, state.zoomLevel);
+      estBarViews += Math.min(Math.max(1, Math.floor(w / 3)), 512);
+    }
+    return {
+      clip_count: state.clips.length,
+      lane_count: state.laneCount,
+      total_duration_ms: totalDuration,
+      content_width_px: Math.round(totalWidth),
+      zoom_level: state.zoomLevel,
+      est_bar_views: estBarViews,
+      ruler_marks: generateRulerMarks(totalDuration + 5000, state.zoomLevel).length,
+    };
+  }, [state.clips, state.laneCount, state.zoomLevel, totalDuration, totalWidth]);
+  const editorScaleRef = useRef(editorScale);
+  editorScaleRef.current = editorScale;
+
+  useEffect(() => {
+    // Once per editor mount, after the initial clips have loaded. A 300ms
+    // debounce lets the server timeline hydrate so we report the real tree,
+    // not the empty shell.
+    const timer = setTimeout(() => {
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_SCALE, {
+        trigger: 'mount',
+        project_id: projectId,
+        ...editorScaleRef.current(),
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const handleDeleteClip = useCallback(() => {
+    const clip = state.clips.find((c) => c.id === state.selectedClipId);
+    // Stamp the deletion BEFORE dispatching: if the unmount still manages to
+    // hang the app, this row is the last thing out and names the exact clip.
+    analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_CLIP_DELETED, {
+      project_id: projectId,
+      clip_id: clip?.id ?? null,
+      clip_duration_ms: clip ? clip.endInSegment - clip.startInSegment : null,
+      clip_width_px: clip
+        ? Math.round(msToPixels(clip.endInSegment - clip.startInSegment, state.zoomLevel))
+        : null,
+      had_selection: !!clip,
+      ...editorScaleRef.current(),
+    });
+    deleteSelectedClip();
+  }, [state.clips, state.selectedClipId, state.zoomLevel, projectId, deleteSelectedClip]);
 
   // ── Auto-follow the record head ──
   // While recording, keep the advancing recording position in view so the user
@@ -1068,7 +1130,7 @@ export function TimelineEditor({
       {/* Toolbar — both edit ops (row 1) and project actions (row 2) */}
       <TimelineToolbar
         onSplit={splitAtPlayhead}
-        onDelete={deleteSelectedClip}
+        onDelete={handleDeleteClip}
         onDuplicate={() => {
           if (state.selectedClipId) duplicateClip(state.selectedClipId);
         }}

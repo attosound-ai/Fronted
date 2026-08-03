@@ -27,10 +27,24 @@ export interface RulerMark {
 
 const NICE_INTERVALS_MS = [500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000];
 
+/**
+ * Hard ceiling on ruler marks. Every mark is 1-2 native views (tick + label),
+ * mounted and unmounted with the editor in one synchronous Fabric transaction.
+ * The spacing-based interval alone is unbounded in the timeline DURATION: a
+ * 25-minute clip at the default zoom put ~3,000 marks (~6,000 views) on the
+ * ruler, which contributed to the main-thread hang of REACT-NATIVE-3W. Marks
+ * therefore also scale with duration so their total count stays bounded no
+ * matter how long the project or how deep the zoom.
+ */
+const MAX_RULER_MARKS = 600;
+
 export function generateRulerMarks(totalDurationMs: number, zoom: number): RulerMark[] {
   const pixelsPerMs = 0.1 * zoom;
   const targetSpacingPx = 80;
-  const targetMs = targetSpacingPx / pixelsPerMs;
+  // Worst-case minor subdivision below is 5 marks per major, so bounding majors
+  // to MAX/5 bounds the total.
+  const countTargetMs = (totalDurationMs * 5) / MAX_RULER_MARKS;
+  const targetMs = Math.max(targetSpacingPx / pixelsPerMs, countTargetMs);
 
   // Pick the smallest "nice" interval that keeps major marks >= targetSpacing apart
   let majorInterval = NICE_INTERVALS_MS[NICE_INTERVALS_MS.length - 1];
@@ -39,6 +53,11 @@ export function generateRulerMarks(totalDurationMs: number, zoom: number): Ruler
       majorInterval = interval;
       break;
     }
+  }
+  // Multi-hour timelines can exceed the largest nice interval; fall back to the
+  // next whole minute that honours the count bound rather than overflowing it.
+  if (majorInterval < targetMs) {
+    majorInterval = Math.ceil(targetMs / 60000) * 60000;
   }
 
   // Minor subdivision between majors

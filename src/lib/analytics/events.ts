@@ -427,6 +427,18 @@ export const ANALYTICS_EVENTS = {
     SEGMENT_ADDED: 'project_segment_added',
     SEGMENT_REMOVED: 'project_segment_removed',
     TIMELINE_SAVED: 'project_timeline_saved',
+    // How BIG the mounted editor actually is: clip count, total duration,
+    // content width, and the native-view estimates behind it (waveform bars +
+    // ruler marks). Fabric mounts/unmounts this tree in one synchronous
+    // main-thread transaction, so these counts ARE the freeze risk — a 25-min
+    // clip put ~50,000 bar views on screen and deleting it hung the app for
+    // long enough to be force-killed (REACT-NATIVE-3W) with zero telemetry
+    // saying why. Emitted on editor mount and stamped on clip deletion.
+    TIMELINE_SCALE: 'project_timeline_scale',
+    // A clip was deleted in the editor. This action previously emitted NOTHING,
+    // which is why the exact moment of the Aug 3 freeze had to be reconstructed
+    // from $autocapture element chains instead of read off one row.
+    TIMELINE_CLIP_DELETED: 'project_timeline_clip_deleted',
     // Publish/export funnel — instrumented per phase because "Publicar tardó
     // demasiado" for an 11s take had ZERO timing telemetry, so we couldn't tell
     // if the backend mix or the download was the slow part (David, Jul 20).

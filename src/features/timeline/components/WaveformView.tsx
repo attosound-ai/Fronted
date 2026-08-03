@@ -18,6 +18,18 @@ interface WaveformViewProps {
 const FETCH_SAMPLES = 100;
 
 /**
+ * Hard ceiling on rendered bar Views, no matter how wide the clip is. Every bar
+ * is its own native view, and Fabric mounts/unmounts a clip's entire subtree in
+ * ONE synchronous main-thread transaction. Uncapped, a 25-minute clip at the
+ * default zoom is ~150,000 px wide, so floor(width/3) produced ~50,000 views;
+ * deleting that clip blocked the main thread long enough that the client
+ * force-killed the app (Sentry REACT-NATIVE-3W, Aug 3 2026). The data behind
+ * those views is only FETCH_SAMPLES amplitudes, so past this cap the extra
+ * views carry zero information; bars simply widen to keep filling the clip.
+ */
+const MAX_BARS = 512;
+
+/**
  * Resample an amplitude array to exactly `targetCount` entries.
  * Downsamples (bucket averaging) when shrinking, upsamples (linear interpolation) when expanding.
  */
@@ -67,7 +79,14 @@ export function WaveformView({
 }: WaveformViewProps) {
   const barWidth = 2;
   const barGap = 1;
-  const numBars = Math.max(1, Math.floor(width / (barWidth + barGap)));
+  const idealBars = Math.max(1, Math.floor(width / (barWidth + barGap)));
+  const numBars = Math.min(idealBars, MAX_BARS);
+  // When capped, widen each bar so the waveform still fills the clip instead of
+  // occupying only the leftmost MAX_BARS * 3 px of it.
+  const effectiveBarWidth =
+    numBars < idealBars
+      ? Math.max(barWidth, (width - (numBars - 1) * barGap) / numBars)
+      : barWidth;
 
   // Fetch a fixed number of samples — query key never changes during zoom
   const { data: amplitudes } = useWaveformData(segmentId, samples ?? FETCH_SAMPLES);
@@ -95,7 +114,7 @@ export function WaveformView({
           <View
             key={i}
             style={{
-              width: barWidth,
+              width: effectiveBarWidth,
               height: barHeight,
               backgroundColor: color,
               borderRadius: 1,

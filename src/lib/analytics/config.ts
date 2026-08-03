@@ -24,20 +24,23 @@ export const POSTHOG_CONFIG = {
 
   enableSessionReplay: true,
   sessionReplayConfig: {
-    /** Sensitive inputs are masked individually:
-     *  - OTP/Phone/Chat: <PostHogMaskView> wrapping
-     *  - Passwords: secureTextEntry auto-masked by PostHog
-     *  - Stripe card: native Payment Sheet, not capturable */
+    /** Policy: record EVERYTHING except passwords/credentials.
+     *  Passwords never leak — the native iOS SDK masks any input where
+     *  isSecureTextEntry is true OR textContentType is in its sensibleTypes
+     *  list (password/newPassword, plus emailAddress, username, oneTimeCode,
+     *  name, address, …). So login/registration credential fields and the
+     *  OTP code stay masked even though everything else below is unmasked.
+     *  Stripe card entry is a native Payment Sheet (out-of-process), so it
+     *  is never capturable regardless. */
     maskAllTextInputs: false,
-    // Mask all by default. The screenshot pipeline allocates a second
-    // full-size CGContext per snapshot when masking happens, so masking
-    // ON globally is paradoxically RAM-cheaper than OFF on screens that
-    // do contain masked widgets — the early-out path added in
-    // posthog-ios PR #532 only fires when there are no masks at all.
-    // Use <PostHogMaskView mask={false}> to opt screens back in if a
-    // specific replay needs unmasked imagery.
-    maskAllImages: true,
-    maskAllSandboxedViews: true,
+    // Record images/avatars/feed/video (was true — replays came out mostly
+    // blacked out). Trade-off: unmasked snapshots are larger, so replay
+    // upload/storage grows on this media-heavy app. RAM is unaffected:
+    // media-only screens now hit the posthog-ios PR #532 early-out (no
+    // masks → no extra CGContext); the expensive masking pass only runs on
+    // screens that still carry a mask (the credential fields above).
+    maskAllImages: false,
+    maskAllSandboxedViews: false,
     // captureLog adds an OSLog/stdout tap that bloats replay payloads
     // on a video-heavy app. Sentry breadcrumbs cover the same need.
     captureLog: false,

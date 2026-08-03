@@ -59,11 +59,37 @@ const RNDeviceInfoNative = (
       getProcAvailableMemory?: () => Promise<number>;
       getThermalState?: () => Promise<string>;
       getCallAudioState?: () => Promise<NativeCallAudioState>;
+      setSpeakerOutput?: (enable: boolean) => Promise<{
+        ok: boolean;
+        requestedSpeaker: boolean;
+        liveOutputPort: string;
+        error: string;
+      }>;
     };
   }
 ).RNDeviceInfo;
 
-async function getCallAudioState(): Promise<NativeCallAudioState | null> {
+/**
+ * Force the call audio route to speaker/earpiece via the patched native
+ * AVAudioSession.overrideOutputAudioPort — the reliable CallKit speaker lever
+ * (Twilio's AudioDevice.select() is flaky once CallKit owns the session).
+ * Returns the resulting live output port (or null off-iOS / unavailable) so the
+ * caller can confirm the route actually changed.
+ */
+export async function setSpeakerOutput(
+  enable: boolean
+): Promise<{ ok: boolean; liveOutputPort: string } | null> {
+  if (Platform.OS !== 'ios') return null;
+  try {
+    if (!RNDeviceInfoNative?.setSpeakerOutput) return null;
+    const r = await RNDeviceInfoNative.setSpeakerOutput(enable);
+    return { ok: r.ok, liveOutputPort: r.liveOutputPort };
+  } catch {
+    return null;
+  }
+}
+
+export async function getCallAudioState(): Promise<NativeCallAudioState | null> {
   if (Platform.OS !== 'ios') return null;
   try {
     if (!RNDeviceInfoNative?.getCallAudioState) return null;
@@ -71,6 +97,34 @@ async function getCallAudioState(): Promise<NativeCallAudioState | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Lightweight, flattened audio-session snapshot for attaching to a single
+ * telemetry event (e.g. `call_answered`) — WITHOUT the cost of a full
+ * collectDeviceSnapshot(). Proves the live AVAudioSession state at the moment a
+ * call is answered: category/mode (PlayAndRecord = has mic; Playback = mic-less
+ * feed hijack → dead audio), whether Twilio enabled its audio, and how the
+ * push/answer/connect timeline lines up. Returns nulls off-iOS / when the patched
+ * native method is unavailable.
+ */
+export async function captureCallAudioSnapshot(): Promise<Record<string, unknown>> {
+  const a = await getCallAudioState();
+  return {
+    audio_twilio_enabled: a ? a.twilioAudioEnabled : null,
+    audio_live_category: a?.liveCategory || null,
+    audio_live_mode: a?.liveMode || null,
+    audio_live_input_port: a?.liveInputPort || null,
+    audio_live_output_port: a?.liveOutputPort || null,
+    audio_live_sample_rate: a && a.liveSampleRate > 0 ? a.liveSampleRate : null,
+    audio_live_other_playing: a ? a.liveOtherAudioPlaying : null,
+    audio_did_activate_at: a && a.didActivateAt > 0 ? a.didActivateAt : null,
+    audio_answer_action_at: a && a.answerActionAt > 0 ? a.answerActionAt : null,
+    audio_call_connect_at: a && a.callConnectAt > 0 ? a.callConnectAt : null,
+    audio_voip_push_at: a && a.voipPushAt > 0 ? a.voipPushAt : null,
+    audio_voip_push_app_state:
+      a && a.voipPushAt > 0 ? (a.voipPushAppState ?? null) : null,
+  };
 }
 
 export interface DeviceSnapshot {
@@ -227,14 +281,8 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     // Patched into react-native-device-info (see patches/) — iOS-only.
     // Called via the native module directly (NOT the DeviceInfo wrapper, which
     // doesn't expose patched methods). Optional-chained → NaN/null elsewhere.
-    safe(
-      RNDeviceInfoNative?.getProcAvailableMemory?.() ?? Promise.resolve(NaN),
-      NaN
-    ),
-    safe(
-      RNDeviceInfoNative?.getThermalState?.() ?? Promise.resolve(null),
-      null
-    ),
+    safe(RNDeviceInfoNative?.getProcAvailableMemory?.() ?? Promise.resolve(NaN), NaN),
+    safe(RNDeviceInfoNative?.getThermalState?.() ?? Promise.resolve(null), null),
     safe(DeviceInfo.getFreeDiskStorage() as Promise<number>, NaN),
     safe(DeviceInfo.getTotalDiskCapacity() as Promise<number>, NaN),
     safe(DeviceInfo.getBatteryLevel() as Promise<number>, NaN),
@@ -279,7 +327,9 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     : null;
   // % of the process's own budget in use: used / (used + available).
   const procMemUsedPct =
-    memUsedMB != null && procAvailableMemoryMB != null && memUsedMB + procAvailableMemoryMB > 0
+    memUsedMB != null &&
+    procAvailableMemoryMB != null &&
+    memUsedMB + procAvailableMemoryMB > 0
       ? Math.round((memUsedMB / (memUsedMB + procAvailableMemoryMB)) * 100)
       : null;
 

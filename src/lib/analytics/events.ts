@@ -14,6 +14,29 @@ export const ANALYTICS_EVENTS = {
     TOKEN_REFRESH_FAILED: 'auth_token_refresh_failed',
     SESSION_RESTORED: 'auth_session_restored',
     SESSION_EXPIRED: 'auth_session_expired',
+    // A password field received invisible whitespace/zero-width chars (iOS
+    // QuickType trailing space) that we stripped — confirms the "passwords look
+    // identical but don't match" bug in the field. `screen` says where.
+    PASSWORD_INVISIBLE_CHARS_STRIPPED: 'auth_password_invisible_chars_stripped',
+    // ── Identity coherence (Aug 1 2026 incident) ──
+    // The UI's idea of "who am I" and the JWT actually attached to requests
+    // diverged (or nearly did). DETECTED fires at the observation point,
+    // HEALED after the session was rebuilt around the server's answer.
+    IDENTITY_DESYNC_DETECTED: 'auth_identity_desync_detected',
+    IDENTITY_DESYNC_HEALED: 'auth_identity_desync_healed',
+    // A token refresh finished after the session changed hands (switch or
+    // logout mid-flight); its tokens were discarded instead of persisted.
+    REFRESH_DISCARDED_STALE: 'auth_refresh_discarded_stale',
+    // Session restore could not validate against the backend (timeout/5xx)
+    // and kept the cached session instead of logging the user out.
+    SESSION_RESTORE_DEFERRED: 'auth_session_restore_deferred',
+    // Cold start found a stored user but no tokens — a keychain read
+    // failure, not a normal logged-out boot.
+    SESSION_MISSING_TOKENS: 'auth_session_missing_tokens',
+    // loadAccounts removed stored account entries the server says are not
+    // linked to the authenticated user. Should be rare; a spike means the
+    // purge anchor is wrong again.
+    ACCOUNT_GHOST_PURGED: 'auth_account_ghost_purged',
   },
 
   // ── Registration (funnel) ──────────────────────
@@ -75,6 +98,20 @@ export const ANALYTICS_EVENTS = {
     POST_SHARED: 'feed_post_shared',
     POST_SUPPORT: 'feed_post_support_pressed',
     POST_CREATED: 'feed_post_created',
+    // Success/failure pairs so "parece que guardó pero no" is never invisible
+    // again (the edit-post bug was silent for weeks): every post mutation
+    // reports its outcome.
+    POST_CREATE_FAILED: 'feed_post_create_failed',
+    POST_EDIT_FAILED: 'feed_post_edit_failed',
+    // Edit succeeded — the DISCRIMINATOR for "Done doesn't update the post until I
+    // re-edit" (David, Jul 26, ATTO acct). Compares what we SUBMITTED vs what the
+    // backend RETURNED on the PUT: returned_matches_submitted=false means the
+    // backend didn't persist/return the new text (backend bug); true means it did
+    // and any staleness is client cache (fixed by writing this response directly).
+    // had_single_post_cache tells us the viewer was reading the FEED.POST cache.
+    POST_EDITED: 'feed_post_edited',
+    POST_DELETED: 'feed_post_deleted',
+    POST_DELETE_FAILED: 'feed_post_delete_failed',
     POST_BOOKMARKED: 'feed_post_bookmarked',
     POST_REPOSTED: 'feed_post_reposted',
     LOAD_MORE: 'feed_load_more',
@@ -116,8 +153,27 @@ export const ANALYTICS_EVENTS = {
     HOLD_TOGGLED: 'call_hold_toggled',
     CAPTURE_STARTED: 'call_capture_started',
     CAPTURE_STOPPED: 'call_capture_stopped',
+    // WHERE an in-call recording asked to be placed on the timeline. Recordings
+    // used to be appended after the last clip on the lane, so a take sung over an
+    // imported track landed detached at the end and the timeline read as wrong
+    // (David, Aug 2). We had NO data on placement at all; this makes requested
+    // position vs playhead vs lane queryable, and proves the backend honoured it.
+    RECORDING_PLACED: 'call_recording_placed',
     TWILIO_REGISTERED: 'call_twilio_registered',
     TWILIO_REGISTRATION_FAILED: 'call_twilio_registration_failed',
+    // Outcome of the native PushKit->CallKit report (AppDelegate writes it to
+    // NSUserDefaults; JS reads it via Settings on foreground). outcome: reported |
+    // gave_up, with the attempt count (×0.5s ≈ latency to report). This proves
+    // whether the extended ~12s window is enough on cold launch or a native
+    // CallKit report (independent of RN boot) is still required.
+    VOIP_PUSH_OUTCOME: 'call_voip_push_outcome',
+    // A call was in progress and the app DIED without ever reporting a terminal
+    // state (no Disconnected event, no clean end) — i.e. a silent jetsam/watchdog
+    // kill. Detected on the next launch from an MMKV marker written at call start
+    // and cleared on a clean end. Closes the blind spot where only 8 of 20 answered
+    // calls had a disconnect reason and every silent death had to be INFERRED from
+    // missing events. Carries how long the call had run and its last known state.
+    DIED_UNREPORTED: 'call_died_unreported',
     TWILIO_UNREGISTERED: 'call_twilio_unregistered',
     INVITE_AUTO_SWITCH_STARTED: 'call_invite_auto_switch_started',
     INVITE_AUTO_SWITCH_SUCCEEDED: 'call_invite_auto_switch_succeeded',
@@ -131,6 +187,24 @@ export const ANALYTICS_EVENTS = {
     // pre-disconnect, etc.) so post-mortem queries can pinpoint the leak.
     TELEMETRY_TICK: 'call_telemetry_tick',
     TELEMETRY_MARKER: 'call_telemetry_marker',
+    // Lightweight 2 s memory heartbeat during a call — memUsedMB + jsLag + the
+    // last operation marker. The 10 s full tick was too coarse to catch the
+    // in-call Record Pro editor exploding memory 200MB->1.4GB in seconds before
+    // the OOM/watchdog kill (David, Jul 22); this samples the ramp finely and
+    // ties each sample to what the app was doing (last_marker).
+    MEM_HEARTBEAT: 'call_mem_heartbeat',
+    // Fires the moment the AVAudioSession category / input / output route CHANGES
+    // during a call window (polled ~750ms, emitted only on change). This is the
+    // signal that was missing when video players silently seized the session
+    // (category→Playback, inPort→none) on a VoIP-push cold launch and left the call
+    // with no microphone — we caught that one only because a 10s tick happened to
+    // land inside a sub-second window. Now every ownership change is recorded with
+    // its from→to transition, so "who took the audio session, and when" is never a
+    // guess again. See project_video_session_hijack_drops_calls.
+    AUDIO_SESSION_CHANGED: 'call_audio_session_changed',
+    // iOS didReceiveMemoryWarning fired (native), surfaced on next foreground.
+    // Fires BEFORE jetsam, so it is the earliest warning of the OOM path.
+    MEMORY_WARNING: 'call_memory_warning',
     // DTMF keypad — lets the user send touch-tones during a call (e.g. press
     // "1" to accept a Securus/prison-carrier inmate call after the IVR prompt).
     DTMF_SENT: 'call_dtmf_sent',
@@ -147,6 +221,15 @@ export const ANALYTICS_EVENTS = {
     DTMF_KEYPRESS: 'call_dtmf_keypress',
     DTMF_ATTEMPT: 'call_dtmf_attempt',
     KEYPAD_AUTO_OPENED: 'call_keypad_auto_opened',
+    // Auto-sent "press 1" that completes the Securus accept on inbound carrier
+    // calls (build-98 telemetry proved: no "1" → Securus drops at ~60s; "1" →
+    // call connects). Each scheduled attempt reports {attempt, delay_ms, sent}.
+    SECURUS_AUTO_ACCEPT: 'call_securus_auto_accept',
+    // The REAL Twilio disconnect reason (was a blind spot — we logged a generic
+    // string for every end). clean_hangup=true → a party hung up; error_code set
+    // → abnormal drop (53xxx = media/network/audio-session, 31xxx = signaling).
+    // This is what distinguishes a Securus timeout from a media failure from a hangup.
+    DISCONNECTED_REASON: 'call_disconnected_reason',
     // Microphone permission. An incoming VoIP call answered from the lock
     // screen can connect with NO mic access (iOS only prompts lazily) — the
     // caller then can't hear the user. We now request at login; these events
@@ -177,6 +260,12 @@ export const ANALYTICS_EVENTS = {
     // nothing). `outcome`: installed | install_returned_false | install_threw |
     // restored | restore_threw. Carries `reason` on failure + call_sid.
     AUDIO_INJECT_DEVICE: 'call_audio_inject_device',
+    // Diagnostic snapshot a few seconds AFTER injection starts — pinpoints why an
+    // injected reel may not reach the far party even though JS reports "started".
+    // render_fail_count>0 ⇒ the record engine's manual render is failing (format
+    // mismatch) so RecordCallback falls back to raw mic WITHOUT the injected audio;
+    // record_cb_count==0 ⇒ the custom engine isn't Twilio's active capture device.
+    AUDIO_INJECT_DIAG: 'call_audio_inject_diag',
     // Mixer multitrack record lifecycle. `action`: start | stop | fail.
     // `outcome` + has_path (did native return a file) + duration_ms + a snapshot
     // of the channel config (gain+record per channel) + metronome (enabled,bpm)
@@ -185,6 +274,56 @@ export const ANALYTICS_EVENTS = {
     AUDIO_MIX_RECORD: 'call_audio_mix_record',
     AUDIO_MIX_METRONOME: 'call_audio_mix_metronome',
     AUDIO_MIX_PLAYBACK: 'call_audio_mix_playback',
+    // THE diagnostic for the "answered from background → dead audio both ways +
+    // bounced to feed" mother-test failure. Fires the instant a call is answered
+    // (acceptIncomingCall), capturing HOW it was answered — `branch`:
+    // fresh_accept | recovered_no_invite | recovered_precepted | accepted_no_call
+    // (a `recovered_*`/`*_precepted` branch ⇒ CallKit accepted natively while the
+    // app was backgrounded, so onConnected may never fire) — plus `app_state`
+    // (background = answered from lock screen / outside the app), whether the
+    // injection engine was installed for this user, and the LIVE AVAudioSession
+    // snapshot (category=Playback ⇒ mic-less feed hijack = dead audio;
+    // twilio_audio_enabled, input/output port, sample rate). This is what lets the
+    // next iteration PROVE why the background-answer path breaks instead of infer.
+    ANSWERED: 'call_answered',
+    // A Record Pro editor track became transmittable (registered as nowPlaying so
+    // the 📡 button can inject it into the call). Before this the editor never
+    // registered nowPlaying, so playing a track reached the rep locally but NEVER
+    // the far party — "mi madre no escucha las pistas". Pairs with the
+    // call_audio_inject_* events (which now carry source_kind='track').
+    TRACK_TRANSMIT_READY: 'call_track_transmit_ready',
+    // The transmit SOURCE changed while an injection was already running — e.g.
+    // finishing an in-call recording makes the new take the focused clip, so the
+    // registered source swaps out from under a live injection. That is exactly
+    // when "she stopped hearing it" was reported (David, Aug 2) and we had no
+    // event for it: the injector keeps playing the OLD file while the UI implies
+    // the new one. Carries both source URIs so the swap is provable.
+    TRANSMIT_SOURCE_SWAPPED: 'call_transmit_source_swapped',
+    // The post's mute button applied to the INJECTION MONITOR while transmitting
+    // (the rep stops/starts hearing the shared track; the far party keeps getting
+    // it — that's what 📡 controls). Before this, mute did nothing until transmit
+    // was turned off, because the local player is force-muted during injection.
+    AUDIO_INJECT_MONITOR: 'call_audio_inject_monitor',
+    // Record Pro in-call editor (ActiveCallScreen) state. `state`: no_project (the
+    // auto-landing skipped the project picker → editor would hang on the spinner),
+    // loading, no_data, autocreate_created, autocreate_failed, ready. Confirms the
+    // "stuck loading" bug and verifies the auto-create fix.
+    RECORDER_STATE: 'call_recorder_state',
+    // ONE consolidated "all variables" row per call, fired at connect + disconnect
+    // (trigger). Reconstructs a failure WITHOUT interrogating the user: identity
+    // (caller_from/callee_to/call_type app_to_app|carrier_pstn, local_account_id),
+    // handoff (was_cold_launch, answered_via_callkit, answer_branch, app_state at
+    // invite/answer/connect + timing deltas), engine bound, and the live audio
+    // ground truth (audio_live_category PlayAndRecord=mic vs Playback=mic-less,
+    // audio_did_activate_at, audio_twilio_enabled) — the direct "no sound" signal.
+    CONTEXT: 'call_context',
+    // /call → /recording hand-off OUTCOME (the "always land on record, even if
+    // answered outside the app" requirement). `outcome`: reached_record |
+    // bounced_to_feed | stayed. Carries entitlement state (record_upload true /
+    // false / unknown-null) + subscription_hydrated + from_route so we can see the
+    // transient-null-entitlement bounce (store not yet hydrated → treated as free
+    // → sent to feed) that the mother test hit.
+    NAV_TO_RECORD: 'call_nav_to_record',
   },
 
   // ── Messages ───────────────────────────────────
@@ -237,13 +376,38 @@ export const ANALYTICS_EVENTS = {
 
   // ── Projects ───────────────────────────────────
   PROJECT: {
+    // Full audio-import funnel. This flow had ZERO telemetry, which is exactly
+    // why a stuck "Importing your audio" was undiagnosable. `outcome`: started |
+    // succeeded | failed | cancelled | aborted_or_timeout | picker_cancelled |
+    // no_file, with size_bytes / duration_ms / error / timed_out.
+    AUDIO_IMPORT: 'project_audio_import',
+    // Decile-sampled byte progress during an import upload (~10 per import, not
+    // hundreds). Gives the throughput CURVE, which is what separates "the user's
+    // uplink is slow" from "it stalled halfway" — the single number we had before
+    // (49s total) could not tell those apart.
+    AUDIO_UPLOAD_PROGRESS: 'project_audio_upload_progress',
+    // On-device normalisation to 8 kHz mono WAV before upload. The backend already
+    // converts every import to that format, so a 27.1 MB WAV was being uploaded to
+    // produce a 2.46 MB artifact. `ratio` and `encode_ms` are what prove the win is
+    // real on a phone (encode time must stay far below the upload time it saves);
+    // outcome=failed_fallback_to_original means we shipped the raw file as before.
+    AUDIO_TRANSCODE: 'project_audio_transcode',
     CREATED: 'project_created',
     OPENED: 'project_opened',
     DELETED: 'project_deleted',
     SEGMENT_ADDED: 'project_segment_added',
     SEGMENT_REMOVED: 'project_segment_removed',
     TIMELINE_SAVED: 'project_timeline_saved',
+    // Publish/export funnel — instrumented per phase because "Publicar tardó
+    // demasiado" for an 11s take had ZERO timing telemetry, so we couldn't tell
+    // if the backend mix or the download was the slow part (David, Jul 20).
+    // `project_exported` carries outcome (started|succeeded|failed) + save_ms,
+    // export_ms (backend mix), publish_ms (onPublish end-to-end), total_ms,
+    // file_size_bytes, clip_count, timeline_duration_ms, error.
     EXPORTED: 'project_exported',
+    // The device-side download of the exported WAV (inside onPublish). Isolated
+    // from export_ms so we can attribute slowness to the WAV size vs the mix.
+    EXPORT_DOWNLOAD: 'project_export_download',
     PLAYBACK_STARTED: 'project_playback_started',
     CLIP_SPLIT: 'project_clip_split',
     CLIP_TRIMMED: 'project_clip_trimmed',
@@ -288,6 +452,13 @@ export const ANALYTICS_EVENTS = {
   // ── Network ────────────────────────────────────
   NETWORK: {
     API_REQUEST: 'api_request',
+    // An idempotent request was retried after a TRANSIENT failure (Railway
+    // edge 502/503/504, timeout, network drop). `attempt` + `outcome` make
+    // the platform's flakiness measurable and prove whether the backoff is
+    // actually rescuing requests. Proven Aug 2 2026: client-observed 502s
+    // never reach Kong (zero 5xx in its access log during those windows),
+    // so they are edge-level and a retry is the correct client answer.
+    REQUEST_RETRIED: 'api_request_retried',
   },
 
   // ── Errors ─────────────────────────────────────

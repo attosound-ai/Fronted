@@ -6,7 +6,12 @@ export {
   stopJsLagMonitor,
   getJsLagStats,
 } from './jsLag';
-export { getDeviceSnapshot, type DeviceSnapshot } from './deviceSnapshot';
+export {
+  getDeviceSnapshot,
+  captureCallAudioSnapshot,
+  setSpeakerOutput,
+  type DeviceSnapshot,
+} from './deviceSnapshot';
 export {
   startCallTelemetry,
   endCallTelemetry,

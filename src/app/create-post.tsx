@@ -24,6 +24,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMediaPreview';
 import { ProjectPickerSheet } from '@/features/projects/components/ProjectPickerSheet';
 import { useCreatePost } from '@/features/feed/hooks/useCreatePost';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useMediaPickers } from '@/features/feed/hooks/useMediaPickers';
 import { haptic } from '@/lib/haptics/hapticService';
 import type { PostType } from '@/types/post';
@@ -302,6 +303,12 @@ export default function CreatePostScreen() {
       }, 400);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : t('common:errors.generic');
+      // Outcome telemetry: a failed publish must be visible in PostHog, not just
+      // a local Alert the user dismisses and we never hear about.
+      analytics.capture(ANALYTICS_EVENTS.FEED.POST_CREATE_FAILED, {
+        post_type: postType,
+        error: message,
+      });
       Alert.alert(t('create.errorTitle'), message);
     }
   };

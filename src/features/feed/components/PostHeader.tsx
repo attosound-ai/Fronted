@@ -97,12 +97,17 @@ export function PostHeader({
             creatorRing={author.role === 'creator'}
             fallbackText={author.username}
           />
+          {/* NO adjustsFontSizeToFit here: on the New Architecture (Fabric) the
+              fit-shrink mis-measures during FlatList row recycling and collapses
+              the text FAR below minimumFontScale — randomly, on whichever row got
+              the broken measurement (seen in the wild on @attosound's row, Jul
+              2026; any author can be hit). Static size + tail ellipsis instead,
+              per the project's static-values-on-New-Arch precedent. */}
           <Text
             variant="body"
             style={styles.username}
             numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.7}
+            ellipsizeMode="tail"
             maxFontSizeMultiplier={1.0}
           >
             {author.username}

@@ -12,8 +12,20 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
 import { ReelsFeed } from '@/features/feed/components/ReelsFeed';
+import {
+  ReelViewerTabBar,
+  type ReelViewerTab,
+} from '@/components/navigation/ReelViewerTabBar';
 import { usePostFeed, type PostFeedSource } from '@/features/feed/hooks/usePostFeed';
 import { COLORS } from '@/constants/theme';
+
+// Map the source the viewer was opened from to the tab it should highlight /
+// return to, so the floating navbar behaves like the one on that tab.
+function sourceToTab(source: PostFeedSource): ReelViewerTab {
+  if (source === 'search') return 'search';
+  if (source === 'profile') return 'profile';
+  return 'index';
+}
 
 const VALID_SOURCES: readonly PostFeedSource[] = [
   'profile',
@@ -62,17 +74,27 @@ export default function ReelViewerScreen() {
   }
 
   return (
-    <ReelsFeed
-      seedPosts={posts}
-      initialPostId={id}
-      onClose={() => router.back()}
-      onEndReached={loadMore}
-      isFetchingMore={isFetchingMore}
-    />
+    <View style={styles.container}>
+      <ReelsFeed
+        seedPosts={posts}
+        initialPostId={id}
+        onClose={() => router.back()}
+        onEndReached={loadMore}
+        isFetchingMore={isFetchingMore}
+      />
+      {/* Floating navbar — the tabs navigator's bar can't reach this pushed
+          route, so mirror it here (keeps the bar visible on the full-screen
+          viewer, like Instagram). */}
+      <ReelViewerTabBar activeTab={sourceToTab(source)} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background.primary,
+  },
   loading: {
     flex: 1,
     backgroundColor: COLORS.background.primary,

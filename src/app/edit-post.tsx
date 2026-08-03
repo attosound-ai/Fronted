@@ -25,7 +25,7 @@ export default function EditPostScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const { t } = useTranslation(['feed', 'common']);
   const user = useAuthStore((s) => s.user);
-  const { editPost, isEditing } = useEditPost();
+  const { editPostAsync, isEditing } = useEditPost();
 
   const [textContent, setTextContent] = useState('');
   const [originalText, setOriginalText] = useState('');
@@ -51,10 +51,23 @@ export default function EditPostScreen() {
   const hasChanges = textContent !== originalText;
   const charCount = textContent.length;
 
-  const handleSave = () => {
-    if (!postId || !hasChanges) return;
-    editPost({ postId, textContent });
-    router.back();
+  const handleSave = async () => {
+    if (!postId || !hasChanges || isEditing) return;
+    try {
+      // Await the backend write. Only navigate back on SUCCESS — previously we
+      // fire-and-forgot and popped immediately, so a failed save (auth/5xx) looked
+      // saved (optimistic flash) then silently reverted ("guarda pero no se refleja").
+      await editPostAsync({ postId, textContent });
+      router.back();
+    } catch {
+      Alert.alert(
+        t('common:errors.title'),
+        t('edit.saveFailed', {
+          defaultValue:
+            'No se pudo guardar el cambio. Revisa tu conexión e inténtalo de nuevo.',
+        })
+      );
+    }
   };
 
   if (isLoading) {

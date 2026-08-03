@@ -102,6 +102,7 @@ function FeedPostCardInner({
       onFollow={onFollow}
       onBookmark={onBookmark}
       onReport={onReport}
+      onEdit={onEdit}
       onDelete={onDelete}
       onOpenReel={onOpenReel}
     />

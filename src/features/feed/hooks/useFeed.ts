@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { feedService } from '../services/feedService';
 import { useAuthStore } from '@/stores/authStore';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   cancelPostQueries,
   snapshotPostCaches,
@@ -49,12 +50,19 @@ export function useFeed() {
       removePostFromCaches(queryClient, postId);
       return { snapshot };
     },
-    onError: (_, postId, context) => {
+    onError: (err, postId, context) => {
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }
+      // Outcome telemetry: a delete that silently rolls back looks exactly like
+      // "the post came back" to the user — make it visible.
+      analytics.capture(ANALYTICS_EVENTS.FEED.POST_DELETE_FAILED, {
+        post_id: postId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     },
     onSuccess: (_, postId) => {
+      analytics.capture(ANALYTICS_EVENTS.FEED.POST_DELETED, { post_id: postId });
       if (currentUserId) {
         queryClient.invalidateQueries({
           queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
@@ -79,7 +87,9 @@ export function useFeed() {
     refresh: () => {
       // Invalidate cache first so refetch always hits the server,
       // even if data is still within staleTime window.
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId) });
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.FEED.INFINITE(currentUserId),
+      });
       // Refresh creator logos + ads too
       queryClient.invalidateQueries({ queryKey: ['creator-logos'] });
       queryClient.invalidateQueries({ queryKey: ['feed-ads'] });

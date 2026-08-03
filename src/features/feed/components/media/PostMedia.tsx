@@ -17,6 +17,7 @@ interface PostMediaProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   /** Tap a video to expand it full-screen (reel viewer). Home feed only. */
   onOpenReel?: () => void;
@@ -39,6 +40,7 @@ export function PostMedia({
   onFollow,
   onBookmark,
   onReport,
+  onEdit,
   onDelete,
   onOpenReel,
 }: PostMediaProps) {
@@ -62,6 +64,7 @@ export function PostMedia({
           onFollow={onFollow}
           onBookmark={onBookmark}
           onReport={onReport}
+          onEdit={onEdit}
           onDelete={onDelete}
         />
       );
@@ -74,6 +77,7 @@ export function PostMedia({
           onFollow={onFollow}
           onBookmark={onBookmark}
           onReport={onReport}
+          onEdit={onEdit}
           onDelete={onDelete}
           onDoubleTap={onDoubleTap}
         />

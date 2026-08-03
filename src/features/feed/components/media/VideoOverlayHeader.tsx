@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ellipsis, Bookmark, Flag, Trash2 } from 'lucide-react-native';
+import { Ellipsis, Bookmark, Flag, Pencil, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/ui/Avatar';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -16,6 +16,7 @@ interface VideoOverlayHeaderProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
 }
 
@@ -34,6 +35,7 @@ export function VideoOverlayHeader({
   onFollow,
   onBookmark,
   onReport,
+  onEdit,
   onDelete,
 }: VideoOverlayHeaderProps) {
   const { t } = useTranslation('feed');
@@ -144,6 +146,22 @@ export function VideoOverlayHeader({
 
         {isOwnPost && (
           <>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                setMenuVisible(false);
+                onEdit?.();
+              }}
+            >
+              <View style={styles.menuIcon}>
+                <Pencil size={24} color="#FFF" strokeWidth={2.25} />
+              </View>
+              <Text style={styles.menuText} maxFontSizeMultiplier={1.2}>
+                {t('post.menuEdit')}
+              </Text>
+            </TouchableOpacity>
             <View style={styles.menuDivider} />
             <TouchableOpacity
               style={styles.menuItem}

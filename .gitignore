@@ -53,3 +53,7 @@ skills-lock.json
 
 # Stale npm lockfile — this project uses pnpm (see pnpm-lock.yaml)
 package-lock.json
+
+# Local EAS build/submit logs (build-*.ipa already ignored above)
+build-*.log
+submit-*.log

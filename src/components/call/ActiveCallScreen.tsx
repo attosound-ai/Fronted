@@ -167,7 +167,10 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
   // projects; deciding for them is wrong, and the old code just spun forever
   // here because the auto-landing skips the CallBanner's project picker).
   if (!activeProjectId) {
-    return <CallProjectChooser />;
+    // onBack so the chooser is not a dead end: without it, picking a project was
+    // the only way off this screen, and a rep who just wanted to talk was stuck
+    // on it for the whole call (David, Aug 3). The call keeps running.
+    return <CallProjectChooser onBack={onBack} />;
   }
 
   // Loading state — shown until the project payload arrives. The call

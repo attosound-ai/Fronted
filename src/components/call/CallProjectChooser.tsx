@@ -27,7 +27,18 @@ import { COLORS } from '@/constants/theme';
  * Deliberately a screen, not a bottom sheet: it is the primary decision at that
  * moment, and a sheet over an empty editor read as a stuck/loading screen.
  */
-export function CallProjectChooser() {
+interface CallProjectChooserProps {
+  /**
+   * Leave the chooser without picking a project (back to the feed, call intact).
+   * Without this the screen was a dead end: choosing a project was the ONLY way
+   * out, so a rep who just wanted to talk was trapped on it for the whole call
+   * (David, Aug 3). The call keeps running — the floating in-call bar stays on
+   * top — so this is "not right now", not "hang up".
+   */
+  onBack?: () => void;
+}
+
+export function CallProjectChooser({ onBack }: CallProjectChooserProps) {
   const { t } = useTranslation(['calls', 'common']);
   const { data: projects, isLoading } = useProjects();
   const createProject = useCreateProject();
@@ -65,6 +76,20 @@ export function CallProjectChooser() {
       {mode === 'list' ? (
         <>
           <View style={styles.header}>
+            {onBack && (
+              <Pressable
+                onPress={() => {
+                  analytics.capture(ANALYTICS_EVENTS.CALL.RECORDER_STATE, {
+                    state: 'chooser_dismissed',
+                  });
+                  onBack();
+                }}
+                style={styles.headerBack}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <ArrowLeft size={24} color="#FFF" strokeWidth={2.25} />
+              </Pressable>
+            )}
             <Text variant="h2" style={styles.title}>
               {t('projectPicker.selectProject')}
             </Text>
@@ -173,6 +198,10 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 8,
     paddingBottom: 16,
+  },
+  headerBack: {
+    alignSelf: 'flex-start',
+    marginBottom: 12,
   },
   title: {
     color: '#FFF',

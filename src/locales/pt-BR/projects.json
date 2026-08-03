@@ -100,7 +100,11 @@
     "lanePanLabel": "Pan",
     "laneMute": "Mudo",
     "laneSolo": "Solo",
-    "laneEditTrackAccessibility": "Editar faixa"
+    "laneEditTrackAccessibility": "Editar faixa",
+    "importPreparing": "Preparando…",
+    "importProcessing": "Processando no servidor…",
+    "importStalled": "A conexão parece lenta…",
+    "importEta": "Faltam cerca de {{time}}"
   },
   "picker": {
     "title": "Meus projetos",

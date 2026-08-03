@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { useCallStore } from '@/stores/callStore';
+import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import type { LocalClip, LaneMeta } from '../types';
 import type { AudioSegment } from '@/types/call';
 import { getTimelineDuration } from '../utils/clipOperations';
@@ -139,6 +140,12 @@ export function useTimelinePlayback({
     if (!player) {
       player = createAudioPlayer(null, { keepAudioSessionActive: true });
       playersRef.current.set(laneIndex, player);
+      // Memory attribution: each lane allocates a native AVAudioPlayer; track how
+      // many exist so a heartbeat spike can be tied to player growth. No-op off-call.
+      void emitTelemetryMarker('lane_player_created', {
+        player_count: playersRef.current.size,
+        lane_index: laneIndex,
+      });
     }
     return player;
   }, []);
@@ -192,16 +199,14 @@ export function useTimelinePlayback({
     [getPlayer, getSegmentUrl]
   );
 
-  // Pre-load players whenever position/clips/segments change while paused.
-  // Safe during a call because players use `keepAudioSessionActive: true`,
-  // so replace()/seekTo()/pause() never deactivate the AVAudioSession.
-  useEffect(() => {
-    if (isPlaying) return;
-    for (const lane of laneIndices.current) {
-      syncLanePlayer(lane, playbackPositionMs);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playbackPositionMs, isPlaying, syncLanePlayer, clips, segments]);
+  // LAZY: do NOT eager-pre-load audio while paused. This used to create a native
+  // player per lane and buffer each clip's source the instant the editor opened
+  // (and on every position/clip change), before any playback — the dominant cost
+  // on open, and pointless for the common in-call case where the rep RECORDS and
+  // never previews. Sources now load only when the user actually plays (the
+  // isPlaying effect below) or as the playhead crosses a clip boundary. The
+  // trade-off is a small first-play load delay for a large memory saving.
+  // (Deliberately no eager syncLanePlayer here.)
 
   // Apply mixer changes (mute/solo/gain) immediately without waiting
   // for the next animation frame or user interaction.
@@ -337,11 +342,22 @@ export function useTimelinePlayback({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
-  // Cleanup players on unmount
+  // Cleanup players on unmount. MUST call remove() (frees the native
+  // AVAudioPlayer), NOT just pause() — pause + clearing the JS Map dropped the JS
+  // reference while the native player and its buffers LEAKED. The editor remounts
+  // on every project update (recording → updatedAt → key change), so each leaked
+  // instance stacked: telemetry showed editor_mount memory climbing 224→811→1302MB
+  // across remounts with 0-1 clips → OOM/jetsam kill (David, Jul 23). remove()
+  // releases the native resources so a remount starts clean.
   useEffect(() => {
     return () => {
       for (const [, player] of playersRef.current) {
-        player.pause();
+        try {
+          player.pause();
+          player.remove();
+        } catch {
+          // Player may already be released; freeing twice is harmless to guard.
+        }
       }
       playersRef.current.clear();
       activeClipIdsRef.current.clear();

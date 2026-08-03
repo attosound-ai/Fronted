@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  Modal,
+  useWindowDimensions,
+} from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallBarVisible, IN_CALL_BAR_HEIGHT } from '@/hooks/useInCallChrome';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
+import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
+import { useCallStore } from '@/stores/callStore';
 import {
   X,
   CloudUpload,
@@ -82,6 +95,9 @@ export function TimelineEditor({
   recordingMode = 'mic',
   topSlot,
 }: TimelineEditorProps) {
+  // When a call is active the global green InCallTopBar floats over this screen;
+  // reserve its height so the editor's own header (close/transport) clears it.
+  const callBarVisible = useCallBarVisible();
   const initialClips = useMemo(() => serverClips.map(serverClipToLocal), [serverClips]);
 
   // Local segments state so we can update after import or orphan resolution
@@ -152,13 +168,147 @@ export function TimelineEditor({
     setLanePan,
   } = useTimeline(initialClips, initialLaneMeta);
 
+  // Memory attribution: bracket the in-call editor so a memory heartbeat between
+  // these markers is attributed to the editor. This screen is the prime suspect
+  // for the OOM/watchdog kill that drops the client's calls (David, Jul 22:
+  // memory 200MB->1.4GB after entering Record Pro during a call). No-op off-call.
+  useEffect(() => {
+    void emitTelemetryMarker('editor_mount', {
+      clip_count: initialClips.length,
+      segment_count: (segments ?? []).length,
+    });
+    return () => {
+      void emitTelemetryMarker('editor_unmount');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Transmit a track into a live call (📡) ──
+  // The editor plays through expo-audio LOCALLY (Twilio-safe) and, before this,
+  // never touched the injection path — so the far party heard NOTHING when the rep
+  // played a track, even though reels/audio posts worked (David, Jul 19: "mi madre
+  // no escucha las pistas"). Reels work by registering nowPlaying; the editor never
+  // did. InjectSource already has kind:'track' (the design intended this) and the
+  // native injector already downloads + plays a remote audio URL, so we just wire
+  // the currently-focused track (selected clip, else the first) as nowPlaying while
+  // in a call. The in-call 📡 button then injects it exactly like a reel.
+  const transmitClip = state.selectedClipId
+    ? state.clips.find((c) => c.id === state.selectedClipId)
+    : state.clips[0];
+  const transmitSeg = transmitClip
+    ? localSegments.find((s) => s.id === transmitClip.segmentId)
+    : undefined;
+  const transmitSource = useMemo(
+    () =>
+      transmitSeg?.downloadUrl
+        ? {
+            kind: 'track' as const,
+            uri: transmitSeg.downloadUrl,
+            isVideo: false,
+            title: transmitSeg.label ?? 'Track',
+            postId: transmitClip?.id,
+          }
+        : null,
+    [transmitSeg?.downloadUrl, transmitSeg?.label, transmitClip?.id]
+  );
+  // Register while a call bar is up so the 📡 button always has this track to push.
+  useRegisterNowPlaying(transmitSource, callBarVisible && !!transmitSource);
+  // FULL transmit-source resolution telemetry (David, Jul 26: "import a track then
+  // transmit it doesn't work"). Before, we only logged the SUCCESS case, so a
+  // failed import→transmit was invisible. Now log the resolution AND the exact
+  // reason it's unavailable — the imported clip is usually there but its segment
+  // hasn't landed in localSegments yet, or that segment carries no downloadUrl —
+  // so we debug with data instead of guessing.
+  const transmitReason = !callBarVisible
+    ? 'not_in_call'
+    : state.clips.length === 0
+      ? 'no_clips'
+      : !transmitClip
+        ? 'no_clip'
+        : !transmitSeg
+          ? 'segment_not_in_local'
+          : !transmitSeg.downloadUrl
+            ? 'no_download_url'
+            : 'ok';
+  const loggedTransmitRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!callBarVisible) return;
+    const key = `${transmitClip?.id ?? 'none'}:${transmitReason}`;
+    if (loggedTransmitRef.current === key) return;
+    loggedTransmitRef.current = key;
+    analytics.capture(ANALYTICS_EVENTS.CALL.TRACK_TRANSMIT_READY, {
+      source_available: !!transmitSource,
+      reason: transmitReason,
+      clip_count: state.clips.length,
+      selected_clip_id: state.selectedClipId ?? null,
+      transmit_clip_id: transmitClip?.id ?? null,
+      segment_id: transmitClip?.segmentId ?? null,
+      segment_found_in_local: !!transmitSeg,
+      has_download_url: !!transmitSeg?.downloadUrl,
+      local_segment_count: localSegments.length,
+    });
+    // transmitReason already encodes clip/segment/url state; keep deps tight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callBarVisible, transmitReason, transmitClip?.id]);
+
+  // While the rep transmits a track into the call (📡), stop the editor's LOCAL
+  // playback. The loudspeaker copy plays OUTSIDE the call's echo canceller, so the
+  // mic would send the mother a second, offset copy on top of the injected one —
+  // the same doubling reels avoid by muting their player during injection. The rep
+  // still hears the track through the injector's echo-cancelled monitor.
+  const isInjecting = useCallStore(
+    (s) => s.injection?.state === 'playing' || s.injection?.state === 'preparing'
+  );
+  useEffect(() => {
+    if (isInjecting && state.isPlaying) {
+      setPlaying(false);
+    }
+    // Only react to the inject transition; using the live isPlaying here would
+    // re-pause the user every render while injecting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInjecting]);
+
+  // Detect the transmit source swapping WHILE an injection is live. Finishing an
+  // in-call recording makes the new take the focused clip, which silently swaps
+  // the registered source out from under the running injection — the injector
+  // keeps playing the OLD file, so the far party stops hearing what the UI
+  // implies (David, Aug 2: after recording, "ella no lo escuchaba").
+  const injectingSourceUriRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isInjecting) {
+      injectingSourceUriRef.current = null;
+      return;
+    }
+    const uri = transmitSource?.uri ?? null;
+    if (injectingSourceUriRef.current === null) {
+      injectingSourceUriRef.current = uri;
+      return;
+    }
+    if (injectingSourceUriRef.current === uri) return;
+    const from = injectingSourceUriRef.current;
+    injectingSourceUriRef.current = uri;
+    analytics.capture(ANALYTICS_EVENTS.CALL.TRANSMIT_SOURCE_SWAPPED, {
+      from_uri: from,
+      to_uri: uri,
+      to_clip_id: transmitClip?.id ?? null,
+      reason: transmitReason,
+      // True = the engine is still transmitting the previous file.
+      still_injecting: true,
+    });
+  }, [isInjecting, transmitSource?.uri, transmitClip?.id, transmitReason]);
+
   const { t } = useTranslation('projects');
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [volumeModalVisible, setVolumeModalVisible] = useState(false);
   const [editingLaneIndex, setEditingLaneIndex] = useState<number | null>(null);
 
-  const { importAudio: rawImportAudio, isImporting } = useImportAudio({
+  const {
+    importAudio: rawImportAudio,
+    isImporting,
+    cancelImport,
+    progress: importProgress,
+  } = useImportAudio({
     projectId,
     activeLaneIndex: state.activeLaneIndex,
     addClip,
@@ -184,6 +334,12 @@ export function TimelineEditor({
   // one is a no-op until its `startRecording` is called, so the
   // resource cost is negligible. The caller picks which one drives the
   // toolbar via the `recordingMode` prop.
+  // Snapshot where the live recording starts on the timeline (the playhead at
+  // record time). Declared before the recording hooks because the Twilio hook
+  // reads it at STOP time to tell the backend where to place the clip.
+  const recordingStartMsRef = useRef(0);
+  const recordingLaneRef = useRef(0);
+
   const micRecording = useRecordAudio({
     projectId,
     activeLaneIndex: state.activeLaneIndex,
@@ -193,6 +349,7 @@ export function TimelineEditor({
     projectId,
     activeLaneIndex: state.activeLaneIndex,
     addClip,
+    getRecordStartMs: () => recordingStartMsRef.current,
   });
   const {
     startRecording: rawStartRecording,
@@ -203,27 +360,28 @@ export function TimelineEditor({
     elapsedMs: recordingElapsedMs,
   } = recordingMode === 'twilioCall' ? twilioRecording : micRecording;
 
-  // Snapshot where the live recording placeholder starts on the
-  // timeline. Computed at start-recording time so the placeholder grows
-  // from that x-position regardless of later edits.
-  const recordingStartMsRef = useRef(0);
-  const recordingLaneRef = useRef(0);
-
   const startRecording = useCallback(async () => {
-    // Place the new clip after the last clip on the active lane so it
-    // doesn't overlap existing audio (same semantics as the server-side
-    // append on uploadAudio).
-    const laneClips = state.clips.filter(
-      (c) => c.laneIndex === state.activeLaneIndex
-    );
-    const lastEnd = laneClips.reduce((max, c) => {
-      const end = c.positionInTimeline + (c.endInSegment - c.startInSegment);
-      return end > max ? end : max;
-    }, 0);
-    recordingStartMsRef.current = lastEnd;
+    // Record AT THE PLAYHEAD — the position the user is listening at — not
+    // appended after the last clip on the lane. Appending is what made a take
+    // sung over an imported track land detached at the end of the timeline, so
+    // the waveform you heard and the waveform you recorded were nowhere near
+    // each other (David, Aug 2: "la pista de grabación se pone al final... uno
+    // confunde bastante las cosas"). Overdubbing at the playhead is what a
+    // multitrack editor is for; overlap on the same lane is the user's call.
+    // The position is also sent to the backend at stop (addSegment), because the
+    // backend is what authoritatively places the clip.
+    recordingStartMsRef.current = Math.max(0, state.playbackPositionMs);
     recordingLaneRef.current = state.activeLaneIndex;
+    analytics.capture(ANALYTICS_EVENTS.CALL.RECORDING_PLACED, {
+      phase: 'start',
+      playhead_ms: Math.round(state.playbackPositionMs),
+      lane_index: state.activeLaneIndex,
+      clip_count: state.clips.length,
+      lane_clip_count: state.clips.filter((c) => c.laneIndex === state.activeLaneIndex)
+        .length,
+    });
     await rawStartRecording();
-  }, [state.clips, state.activeLaneIndex, rawStartRecording]);
+  }, [state.clips, state.activeLaneIndex, state.playbackPositionMs, rawStartRecording]);
 
   const stopRecording = useCallback(async () => {
     await rawStopRecording();
@@ -252,6 +410,32 @@ export function TimelineEditor({
   const totalDuration = getTimelineDuration(state.clips);
   const totalWidth = msToPixels(totalDuration + 5000, state.zoomLevel);
   const tracksAreaHeight = TRACK_HEIGHT * state.laneCount;
+
+  // ── Auto-follow the record head ──
+  // While recording, keep the advancing recording position in view so the user
+  // watches the take grow instead of it sliding off the right edge (David, Jul 19:
+  // "la linea de tiempo, cuando se está grabando, se mueva automaticamente conforme
+  // avanza el track"). We drive the horizontal ScrollView directly rather than
+  // relayout, so it stays smooth. The record head's content-x is the lane-label +
+  // ruler gutter offset plus the elapsed pixels; we park it ~45% from the left so
+  // there's runway ahead of it. animated:false because recordingElapsedMs ticks
+  // frequently and per-tick animations would stutter.
+  const { width: screenWidth } = useWindowDimensions();
+  const hScrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (!isRecording) return;
+    // The record head is the RIGHT edge of the growing placeholder, which starts
+    // at recordingStartMsRef (after the last clip on the lane), not at 0. Earlier
+    // this used only recordingElapsedMs and ignored that start offset, so when the
+    // lane already had clips the scroll trailed the true head and looked stuck
+    // (David, Jul 20: "se atora luego de andar un poco"). Track start + elapsed.
+    const headX =
+      LANE_LABEL_WIDTH +
+      RULER_LEFT_GUTTER +
+      msToPixels(recordingStartMsRef.current + recordingElapsedMs, state.zoomLevel);
+    const target = Math.max(0, headX - screenWidth * 0.45);
+    hScrollRef.current?.scrollTo({ x: target, animated: false });
+  }, [isRecording, recordingElapsedMs, state.zoomLevel, screenWidth]);
 
   // Pinch-to-zoom (.runOnJS(true) avoids worklet serialization warnings)
   const zoomRef = useRef(state.zoomLevel);
@@ -402,17 +586,38 @@ export function TimelineEditor({
       return;
     }
 
+    const timelineDurationMs = getTimelineDuration(state.clips);
+    const t0 = Date.now();
+    // Drive the loading state across the WHOLE flow (save → backend mix →
+    // onPublish), not just onPublish. Before this the button showed no spinner
+    // during the slow backend export, so "Publicar" felt frozen (David, Jul 20).
+    setIsPublishing(true);
+    // Phase accumulators so the terminal event reports where the time went even
+    // when a later phase throws.
+    let saveMs = 0;
+    let exportMs = 0;
+    let publishMs = 0;
+    let fileSizeBytes: number | null = null;
+    // A "started" marker so a hang (no terminal event) is still visible.
+    analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
+      outcome: 'started',
+      clip_count: state.clips.length,
+      timeline_duration_ms: timelineDurationMs,
+    });
     try {
+      const tSave = Date.now();
       await flushSave();
+      saveMs = Date.now() - tSave;
+
+      const tExport = Date.now();
       const result = await projectService.exportProject(projectId);
+      exportMs = Date.now() - tExport;
+      fileSizeBytes = result.fileSizeBytes ?? null;
 
       if (onPublish) {
-        setIsPublishing(true);
-        try {
-          await onPublish(result, getTimelineDuration(state.clips));
-        } finally {
-          setIsPublishing(false);
-        }
+        const tPublish = Date.now();
+        await onPublish(result, timelineDurationMs);
+        publishMs = Date.now() - tPublish;
       } else {
         Alert.alert(
           t('timeline.exportCompleteTitle'),
@@ -422,10 +627,34 @@ export function TimelineEditor({
           [{ text: t('timeline.exportCompleteOk') }]
         );
       }
-    } catch {
+
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
+        outcome: 'succeeded',
+        clip_count: state.clips.length,
+        timeline_duration_ms: timelineDurationMs,
+        save_ms: saveMs,
+        export_ms: exportMs,
+        publish_ms: publishMs,
+        total_ms: Date.now() - t0,
+        file_size_bytes: fileSizeBytes,
+      });
+    } catch (error: unknown) {
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
+        outcome: 'failed',
+        clip_count: state.clips.length,
+        timeline_duration_ms: timelineDurationMs,
+        save_ms: saveMs,
+        export_ms: exportMs,
+        publish_ms: publishMs,
+        total_ms: Date.now() - t0,
+        file_size_bytes: fileSizeBytes,
+        error: error instanceof Error ? error.message : String(error),
+      });
       showToast(t('timeline.errorExportFailed'));
+    } finally {
+      setIsPublishing(false);
     }
-  }, [projectId, state.clips, flushSave, onPublish]);
+  }, [projectId, state.clips, flushSave, onPublish, t]);
 
   const handleClose = useCallback(async () => {
     if (state.isDirty) {
@@ -481,9 +710,13 @@ export function TimelineEditor({
       : false;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Optional caller-injected slot (used by ActiveCallScreen for the
-          in-call control bar) — rendered above the editor's own header. */}
+    <SafeAreaView
+      style={[styles.container, callBarVisible && { paddingTop: IN_CALL_BAR_HEIGHT }]}
+      edges={['top', 'bottom']}
+    >
+      {/* Optional caller-injected slot (kept for non-call hosts like
+          ProjectDetailScreen). In a call, the global InCallTopBar is the header
+          and nothing is injected here (no doubled green bar). */}
       {topSlot}
 
       {/* Header — close button on the left, transport controls (skip
@@ -491,68 +724,78 @@ export function TimelineEditor({
           indicator on the right. The "Timeline Editor" title was
           removed to give the transport controls more space. */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleClose}
-          style={styles.closeButton}
-          activeOpacity={0.5}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <X size={24} color="#FFF" strokeWidth={2.25} />
-        </TouchableOpacity>
+        <GlassSurface radius={20} style={styles.headerGlassBtn}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.closeButton}
+            activeOpacity={0.5}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <X size={24} color="#FFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+        </GlassSurface>
 
         <View style={styles.transport}>
-          <TouchableOpacity
-            onPress={handleSkipToStart}
-            style={styles.transportButton}
-            activeOpacity={0.6}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            accessibilityLabel={t('timeline.skipToStart', 'Skip to start')}
-          >
-            <SkipBack size={20} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
+          <GlassSurface radius={18} style={styles.headerGlassTransport}>
+            <TouchableOpacity
+              onPress={handleSkipToStart}
+              style={styles.transportButton}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={t('timeline.skipToStart', 'Skip to start')}
+            >
+              <SkipBack size={20} color="#FFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+          </GlassSurface>
 
-          <TouchableOpacity
-            onPress={handlePlayPause}
-            style={styles.playButton}
-            activeOpacity={0.7}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          <GlassSurface radius={22} style={styles.headerGlassPlay}>
+            <TouchableOpacity
+              onPress={handlePlayPause}
+              style={styles.playButton}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              {state.isPlaying ? (
+                <Pause size={22} color="#FFF" strokeWidth={2.25} />
+              ) : (
+                <Play size={22} color="#FFF" strokeWidth={2.25} />
+              )}
+            </TouchableOpacity>
+          </GlassSurface>
+
+          <GlassSurface radius={18} style={styles.headerGlassTransport}>
+            <TouchableOpacity
+              onPress={handleSkipToEnd}
+              style={styles.transportButton}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              accessibilityLabel={t('timeline.skipToEnd', 'Skip to end')}
+            >
+              <SkipForward size={20} color="#FFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+          </GlassSurface>
+        </View>
+
+        <GlassSurface radius={16} style={styles.headerGlassSave}>
+          <View
+            style={styles.saveIndicator}
+            accessibilityLabel={
+              isSaving
+                ? t('timeline.saveStatusSaving')
+                : state.isDirty
+                  ? t('timeline.saveStatusUnsaved')
+                  : t('timeline.saveStatusSaved')
+            }
           >
-            {state.isPlaying ? (
-              <Pause size={22} color="#FFF" strokeWidth={2.25} />
+            {isSaving ? (
+              <CloudUpload size={16} color="#888" strokeWidth={2.25} />
+            ) : state.isDirty ? (
+              <Circle size={14} color="#999" strokeWidth={2.25} />
             ) : (
-              <Play size={22} color="#FFF" strokeWidth={2.25} />
+              <CloudCheck size={16} color="#22C55E" strokeWidth={2.25} />
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleSkipToEnd}
-            style={styles.transportButton}
-            activeOpacity={0.6}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            accessibilityLabel={t('timeline.skipToEnd', 'Skip to end')}
-          >
-            <SkipForward size={20} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        </View>
-
-        <View
-          style={styles.saveIndicator}
-          accessibilityLabel={
-            isSaving
-              ? t('timeline.saveStatusSaving')
-              : state.isDirty
-                ? t('timeline.saveStatusUnsaved')
-                : t('timeline.saveStatusSaved')
-          }
-        >
-          {isSaving ? (
-            <CloudUpload size={16} color="#888" strokeWidth={2.25} />
-          ) : state.isDirty ? (
-            <Circle size={14} color="#999" strokeWidth={2.25} />
-          ) : (
-            <CloudCheck size={16} color="#22C55E" strokeWidth={2.25} />
-          )}
-        </View>
+          </View>
+        </GlassSurface>
       </View>
 
       {/* Position + clip count */}
@@ -585,12 +828,12 @@ export function TimelineEditor({
           <View
             style={{
               position: 'relative',
-              minHeight:
-                RULER_HEIGHT + tracksAreaHeight + ADD_TRACK_ROW_HEIGHT + 12,
+              minHeight: RULER_HEIGHT + tracksAreaHeight + ADD_TRACK_ROW_HEIGHT + 12,
             }}
           >
             <GestureDetector gesture={composedGesture}>
               <ScrollView
+                ref={hScrollRef}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{
@@ -682,15 +925,12 @@ export function TimelineEditor({
                               msToPixels(recordingElapsedMs, state.zoomLevel)
                             ),
                             top:
-                              recordingLaneRef.current * TRACK_HEIGHT +
-                              LANE_PADDING / 2,
+                              recordingLaneRef.current * TRACK_HEIGHT + LANE_PADDING / 2,
                             height: TRACK_HEIGHT - LANE_PADDING,
                             backgroundColor: isUploadingRecording
                               ? 'rgba(245, 158, 11, 0.35)'
                               : 'rgba(239, 68, 68, 0.35)',
-                            borderColor: isUploadingRecording
-                              ? '#F59E0B'
-                              : '#EF4444',
+                            borderColor: isUploadingRecording ? '#F59E0B' : '#EF4444',
                           },
                         ]}
                       >
@@ -823,6 +1063,13 @@ export function TimelineEditor({
       <AudioPreparingModal
         visible={isUploadingRecording || isImporting}
         mode={isUploadingRecording ? 'recording' : 'import'}
+        // Cancel only for imports: a recording upload is the user's just-captured
+        // audio and aborting it would lose the take, whereas an import can always
+        // be retried from the file picker.
+        onCancel={isImporting && !isUploadingRecording ? cancelImport : undefined}
+        // Real byte progress for imports; recording uploads stay indeterminate
+        // (they go through a different, un-instrumented path).
+        progress={isUploadingRecording ? null : importProgress}
       />
 
       {/* Lane edit sheet — name + color + delete */}
@@ -933,10 +1180,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playButton: {
+    // Background now comes from the surrounding GlassSurface (liquid glass).
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#222',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -946,6 +1193,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Liquid-glass wrappers for the header buttons (real Liquid Glass on iOS 26+,
+  // translucent blur below). Sized to their child buttons; circular via radius.
+  headerGlassBtn: { borderRadius: 20 },
+  headerGlassTransport: { borderRadius: 18 },
+  headerGlassPlay: { borderRadius: 22 },
+  headerGlassSave: { borderRadius: 16 },
   positionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

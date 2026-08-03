@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { projectService } from '@/lib/api/projectService';
+import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import type { TimelineClip } from '@/types/project';
 
 const DEFAULT_SAMPLES = 100;
@@ -38,6 +39,12 @@ export function usePreloadEditor(clips: TimelineClip[]) {
         loaded++;
         setProgress(loaded / uniqueSegmentIds.length);
       }
+      // Memory attribution: waveform arrays (many segments × samples) are a prime
+      // suspect for the in-call OOM. No-op off a call.
+      void emitTelemetryMarker('waveforms_loaded', {
+        segment_count: uniqueSegmentIds.length,
+        samples: DEFAULT_SAMPLES,
+      });
     } catch {
       // Fallback: individual prefetches if batch fails
       let loaded = 0;

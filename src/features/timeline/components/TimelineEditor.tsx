@@ -44,6 +44,9 @@ import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
 import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
 import { useTwilioCallRecording } from '../hooks/useTwilioCallRecording';
+import { useEngineMixRecording } from '../hooks/useEngineMixRecording';
+import { useFeatureFlag } from '@/lib/analytics';
+
 import { serverClipToLocal, clipToInput } from '../types';
 import { getTimelineDuration } from '../utils/clipOperations';
 import { msToPixels, formatTimelineMs } from '../utils/timelineCalculations';
@@ -52,6 +55,22 @@ import type { LaneMeta } from '../types';
 import type { TimelineClip, LaneMetadata, ExportResult } from '@/types/project';
 import type { AudioSegment } from '@/types/call';
 import { COLORS } from '@/constants/theme';
+
+/**
+ * Route in-call recording through the ENGINE MIXER instead of the server-side
+ * Twilio Media Stream fork. Default OFF.
+ *
+ * The engine path records per channel (mic / remote / app / metronome) with the
+ * app channel off by default, so a take sung over an injected backing track does
+ * NOT contain that track and layers cleanly in the timeline. The Twilio path
+ * cannot do that: it records the uplink as the far party hears it, backing track
+ * included.
+ *
+ * What the engine path GIVES UP, and why this stays flag-gated: the take lives on
+ * the device until it uploads, so an app kill mid-take loses it, whereas the
+ * server-side fork survives that. Flip this off to fall back instantly.
+ */
+export const ENGINE_MIX_RECORDING_FLAG = 'incall_engine_mix_recording';
 
 interface TimelineEditorProps {
   projectId: string;
@@ -351,6 +370,19 @@ export function TimelineEditor({
     addClip,
     getRecordStartMs: () => recordingStartMsRef.current,
   });
+  // Engine-mixer recording: per-channel arm + gain, app audio off by default, so
+  // a take sung over an injected backing track does NOT contain that track and
+  // layers cleanly. Instantiated unconditionally (rules of hooks); inert until
+  // its startRecording is called.
+  const engineMixRecording = useEngineMixRecording({
+    projectId,
+    activeLaneIndex: state.activeLaneIndex,
+    addClip,
+    getRecordStartMs: () => recordingStartMsRef.current,
+  });
+  // Flag-gated: OFF falls back to the proven server-side Twilio fork, which also
+  // survives the app being killed mid-take. See ENGINE_MIX_RECORDING_FLAG.
+  const engineMixEnabled = useFeatureFlag(ENGINE_MIX_RECORDING_FLAG) === true;
   const {
     startRecording: rawStartRecording,
     stopRecording: rawStopRecording,
@@ -358,7 +390,11 @@ export function TimelineEditor({
     isUploading: isUploadingRecording,
     elapsed: recordingElapsed,
     elapsedMs: recordingElapsedMs,
-  } = recordingMode === 'twilioCall' ? twilioRecording : micRecording;
+  } = recordingMode === 'twilioCall'
+    ? engineMixEnabled
+      ? engineMixRecording
+      : twilioRecording
+    : micRecording;
 
   const startRecording = useCallback(async () => {
     // Record AT THE PLAYHEAD — the position the user is listening at — not

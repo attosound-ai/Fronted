@@ -134,6 +134,10 @@ export function InCallTopBar() {
           // this split: render_fail_count > 0 on 24% of transmitting calls.
           render_fail_cannot_do_in_context: diag?.renderFailCannotDoInContext ?? null,
           render_fail_other: diag?.renderFailOther ?? null,
+          // >0 ⇒ an interruption ended, the unit was restarted, and the capture
+          // callbacks never resumed (silent starvation). We force a rebuild when
+          // that happens; this says how often it was needed.
+          resume_starved_count: diag?.resumeStarvedCount ?? null,
           playout_cb_count: diag?.playoutCbCount ?? null,
           // The 3 signals that pinpoint where injection dies:
           record_engine_running: diag?.recordEngineRunning ?? null,

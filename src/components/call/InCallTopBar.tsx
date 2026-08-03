@@ -138,6 +138,11 @@ export function InCallTopBar() {
           // callbacks never resumed (silent starvation). We force a rebuild when
           // that happens; this says how often it was needed.
           resume_starved_count: diag?.resumeStarvedCount ?? null,
+          // >0 ⇒ the recording consumer gave up waiting for late mic samples and
+          // let the far party drive the file clock, which shifts the two channels
+          // apart for the rest of the take. The signal behind "my voice doesn't
+          // line up with the track".
+          mic_starved_fallbacks: diag?.micStarvedFallbacks ?? null,
           playout_cb_count: diag?.playoutCbCount ?? null,
           // The 3 signals that pinpoint where injection dies:
           record_engine_running: diag?.recordEngineRunning ?? null,

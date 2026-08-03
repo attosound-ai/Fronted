@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193cac8c6668
+index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e96526bfe
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2896 @@
+@@ -0,0 +1,3059 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -501,6 +501,29 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +    uint64_t _dbgInterruptionBeganCount;
 +    uint64_t _dbgRouteRebuildCount;
 +    uint64_t _dbgSetActiveFailCount;
++    /*
++     * ATTO (Aug 3 2026). Resuming from an interruption used to call startAudioUnit
++     * and simply assume it worked. There is a documented iOS failure (18.4-18.7)
++     * where the unit reports running after a phone-call interruption but the
++     * render callbacks never fire again, and our own b88 counters exist because we
++     * hit the same silent-starvation signature (start=1, stop=0, callbacks frozen).
++     * A dead unit here means dead call audio AND a truncated take, with nothing in
++     * telemetry saying so. We now verify the resume actually pumped, and count the
++     * times it did not.
++     */
++    uint64_t _dbgResumeStarvedCount;
++    /*
++     * Consecutive consumer ticks where the mic ring was empty while the mic
++     * channel was armed. Used to wait for late mic samples instead of consuming
++     * remote past them (which desynced the two channels permanently). Reset the
++     * moment mic data arrives.
++     */
++    uint32_t _micStarvedTicks;
++    /*
++     * How many times we gave up waiting and let remote drive anyway. >0 means a
++     * take may have drifted; 0 means every take stayed aligned.
++     */
++    uint64_t _dbgMicStarvedFallbacks;
 +    // ATTO (build 92): session props CACHED at the last ensure/setActive (worker
 +    // thread). mixDiagnostics MUST report these, never live-read AVAudioSession —
 +    // the live read is a sync XPC that deadlocked the MAIN thread against the
@@ -1651,8 +1674,33 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +        AttoRingReset(&_appRing);
 +    }
 +
-+    // The recorded file format: mono float32 at the active engine sample rate.
-+    double sampleRate = [AVAudioSession sharedInstance].sampleRate;
++    /*
++     * The recorded file format: mono float32 at the active ENGINE sample rate.
++     *
++     * This used to read `[AVAudioSession sharedInstance].sampleRate`, which is a
++     * different number and wrong on two counts (Aug 3 2026):
++     *
++     * 1) WRONG RATE. The rings carry samples at the NEGOTIATED engine rate
++     *    (_renderingFormat / _capturingFormat), not the raw session rate, and the
++     *    two can differ — CoreAudio bridges them with its own SRC. Declaring the
++     *    file at the session rate while filling it with engine-rate samples is
++     *    exactly the mismatch that produced the "monster voice" pitch/speed bug
++     *    (b93, see the comment on engineTargetFormat). With session 48k and
++     *    negotiated 24k, a take plays back at double speed and half length.
++     *
++     * 2) LIVE SESSION READ. Synchronously reading an AVAudioSession property on
++     *    whatever thread JS calls in on is the XPC that caused App Hang
++     *    REACT-NATIVE-4N at hang-up; b92 cached the session props and banned live
++     *    reads for that reason. engineTargetFormat is a plain object read.
++     *
++     * KNOWN REMAINING GAP: if the route changes mid-take the engine is rebuilt at
++     * a new rate while this file keeps its original one, so audio after the
++     * rebuild is pitched/timed wrong. The real fix is an AVAudioConverter in the
++     * consumer fed by an atomic "current ring rate"; that is a larger change and
++     * is tracked separately. routeRebuildCount tells us how often a take crossed
++     * a rebuild (0 across all production diagnostics so far).
++     */
++    double sampleRate = [self engineTargetFormat].sampleRate;
 +    if (sampleRate <= 0) sampleRate = (double)kPreferredSampleRate;
 +
 +    AVAudioFormat *fileFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
@@ -1709,6 +1757,10 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +    _dbgRemoteFrames = 0;
 +    _dbgAppFrames = 0;
 +    _dbgTotalFrames = 0;
++    // Per-take alignment counters, so micStarvedFallbacks answers "did THIS take
++    // drift?" rather than "has it ever drifted since launch".
++    _micStarvedTicks = 0;
++    _dbgMicStarvedFallbacks = 0;
 +    _remoteLevelEMA = 0.0f;
 +    _micLevelEMA = 0.0f;
 +    [self.mixLock unlock];
@@ -1849,6 +1901,16 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +        @"teardownAudioUnitCount": @(_dbgTeardownAudioUnitCount),
 +        @"interruptionBeganCount": @(_dbgInterruptionBeganCount),
 +        @"routeRebuildCount": @(_dbgRouteRebuildCount),
++        // >0 ⇒ an interruption ended, we restarted the unit, and the capture
++        // callbacks did NOT resume — the silent-starvation case that leaves the
++        // call dead and any take truncated. We now force a rebuild when it happens;
++        // this counts how often that was needed.
++        @"resumeStarvedCount": @(_dbgResumeStarvedCount),
++        // >0 ⇒ the consumer gave up waiting for late mic samples and let remote
++        // drive the file clock, which can shift mic and remote apart for the rest
++        // of the take. A take recorded while this was incrementing is a take to
++        // distrust when someone says "my voice doesn't line up".
++        @"micStarvedFallbacks": @(_dbgMicStarvedFallbacks),
 +        @"setActiveFailCount": @(_dbgSetActiveFailCount),
 +        // renderFailCount > 0 ⇒ the manual mix render failed and we fell back to
 +        // raw-mic passthrough (the "no te escucho" root: engine couldn't mix, but
@@ -1966,9 +2028,36 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +
 +    size_t micAvail = AttoRingRead(&_micRing, micBuf, kQuantum);
 +    if (micAvail == 0) {
-+        // Nothing captured this tick. If mic is disabled/silent we still want the
-+        // other channels to advance, but without a clock we'd grow the file
-+        // unbounded. Use remote as a fallback clock; else bail this tick.
++        /*
++         * PERMANENT MIC/REMOTE DESYNC — fixed Aug 3 2026.
++         *
++         * The fallback below consumes REMOTE frames without consuming matching
++         * mic frames. If the mic channel is armed, its samples are not missing,
++         * they simply have not arrived yet: the record callback and this consumer
++         * run on different clocks. Advancing remote past mic in that moment shifts
++         * the two channels apart by up to a full quantum (85 ms at 48 kHz) FOR THE
++         * REST OF THE TAKE, and it re-fires on every mic hiccup, accumulating. For
++         * an overdub — the entire reason this path exists — that is fatal: the
++         * voice no longer sits where it was performed.
++         *
++         * So when mic is armed we WAIT instead of stealing remote's frames. The
++         * consumer will be back in a moment with both.
++         *
++         * Bounded, because waiting forever would produce an empty file if the mic
++         * tap genuinely died: after kMaxMicStarvedTicks consecutive starved ticks
++         * we let remote drive so the take still advances, and we COUNT it, because
++         * a take that crossed this is a take to be suspicious of.
++         */
++        if (rec[AttoMixChannelMic]) {
++            static const uint32_t kMaxMicStarvedTicks = 20;
++            if (_micStarvedTicks < kMaxMicStarvedTicks) {
++                _micStarvedTicks++;
++                return;
++            }
++            _dbgMicStarvedFallbacks++;
++        }
++        // Mic is not armed (so it will never produce), or it has been starved long
++        // enough that stalling the file is worse than the drift.
 +        micAvail = AttoRingRead(&_remoteRing, remoteBuf, kQuantum);
 +        if (micAvail == 0) {
 +            return;
@@ -1987,6 +2076,9 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +                           file:file format:fmt];
 +        return;
 +    }
++
++    // Mic delivered: the wait paid off, start the patience budget over.
++    _micStarvedTicks = 0;
 +
 +    size_t frames = micAvail;
 +
@@ -2630,14 +2722,40 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +    }
 +
 +    // === ATTO mixer MIC tap (additive; live path unchanged) ===
-+    // `audioBuffer` is EXACTLY the PCM about to be sent to Twilio (mic, post
-+    // VoiceProcessingIO + any record-engine mix). When a record session is live,
-+    // copy it into the mic ring. memcpy + atomics only — real-time safe.
-+    // `micRing` is NULL when not recording, so this is a no-op otherwise.
-+    if (context->micRing && audioBuffer) {
++    /*
++     * Feed the mic ring from the RAW MIC, never from the outgoing mix.
++     *
++     * THE BUG THIS FIXES (Aug 3 2026). This used to copy `audioBuffer`, which on
++     * the success branch is `mixedAudioBufferList` — the post-mix uplink, i.e. the
++     * microphone PLUS whatever we injected into the call. So the "mic" channel of
++     * every take already contained the backing track the user was singing over,
++     * byte-identical to what the server-side Twilio fork records. Turning the App
++     * channel off did nothing about it, because that flag only gates `_appRing`,
++     * which is a separate tap. The whole point of recording through the mixer —
++     * a clean overdub that layers onto the project instead of doubling the track
++     * — did not work, and could not have.
++     *
++     * `audioBufferList` is what AudioUnitRender just produced: the microphone
++     * after VoiceProcessingIO (so echo-cancelled and noise-suppressed) but BEFORE
++     * the record engine sums the injected music in. That is the signal a take
++     * actually wants.
++     *
++     * This is genuinely clean even on speakerphone: the injected music is also
++     * attached to the PLAYOUT engine, so it is present in the VPIO echo-cancel
++     * reference and the acoustic leakage back through the mic is cancelled.
++     *
++     * Second bug fixed for free: because this no longer follows `audioBuffer`, the
++     * mic channel stops silently switching source mid-take when the manual render
++     * fails (measured at 24% of transmitting calls). The take is now one
++     * consistent signal from start to finish.
++     *
++     * memcpy + atomics only — real-time safe. `micRing` is NULL when not
++     * recording, so this is a no-op otherwise.
++     */
++    if (context->micRing && status == noErr && audioBufferList->mBuffers[0].mData) {
 +        AttoPushInt16AsFloat(context->micRing,
-+                             (const int16_t *)audioBuffer,
-+                             audioBufferSizeInBytes);
++                             (const int16_t *)audioBufferList->mBuffers[0].mData,
++                             audioBufferList->mBuffers[0].mDataByteSize);
 +    }
 +    // === end ATTO mic tap ===
 +
@@ -2903,6 +3021,51 @@ index 0000000000000000000000000000000000000000..136f78107f409c431bc89c47f148193c
 +                    NSLog(@"Interruption ended.");
 +                    self.interrupted = NO;
 +                    [self startAudioUnit];
++                    /*
++                     * VERIFY THE RESUME ACTUALLY PUMPED.
++                     *
++                     * startAudioUnit succeeding does not mean audio is flowing. On
++                     * iOS 18.4-18.7 there is a documented case where, after a
++                     * phone-call interruption, the unit reports running and the
++                     * render callbacks never fire again; our own b88 starvation
++                     * counters exist because we hit that signature. Silently
++                     * assuming success leaves the call dead both ways and any
++                     * in-flight take truncated, with nothing reporting it.
++                     *
++                     * So: snapshot the capture callback count, look again shortly
++                     * after, and if it has not advanced, escalate through the SAME
++                     * proven path a route change uses (clear the cached formats and
++                     * let Twilio drive a rebuild via TVOAudioDeviceFormatChanged)
++                     * rather than sitting in silent starvation.
++                     *
++                     * Bounded by construction: this can only act when audio is
++                     * ALREADY dead, so the worst case of a false positive is one
++                     * rebuild we would have needed anyway. dispatch_after runs off
++                     * the real-time thread.
++                     */
++                    const uint64_t cbAtResume =
++                        self.capturingContext ? self.capturingContext->cbCount : 0;
++                    __weak typeof(self) weakSelf = self;
++                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
++                                   dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++                        __strong typeof(weakSelf) strongSelf = weakSelf;
++                        if (!strongSelf || strongSelf.isInterrupted) return;
++                        if (strongSelf->_audioUnit == NULL) return;
++                        const uint64_t cbNow =
++                            strongSelf.capturingContext ? strongSelf.capturingContext->cbCount : 0;
++                        if (cbNow > cbAtResume) return; // healthy resume, nothing to do
++                        strongSelf->_dbgResumeStarvedCount++;
++                        NSLog(@"[AttoAudioEngineDevice] resume starved (cb frozen at %llu); forcing rebuild",
++                              (unsigned long long)cbNow);
++                        strongSelf->_renderingFormat = nil;
++                        strongSelf->_capturingFormat = nil;
++                        @synchronized(strongSelf) {
++                            TVOAudioDeviceContext ctx = [strongSelf deviceContext];
++                            if (ctx) {
++                                TVOAudioDeviceFormatChanged(ctx);
++                            }
++                        }
++                    });
 +                }
 +            });
 +        }

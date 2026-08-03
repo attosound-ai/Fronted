@@ -51,6 +51,7 @@ import { videoPlaybackToggled } from '@/lib/telemetry/videoTelemetry';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { Avatar } from '@/components/ui/Avatar';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { ThumbsUpIcon } from '@/components/ui/ThumbsUpIcon';
 import { useAuthStore } from '@/stores/authStore';
 import { useReelsFeed } from '../hooks/useReelsFeed';
@@ -192,6 +193,14 @@ function ReelItem({
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
+    // ALWAYS mixWithOthers at CREATION. expo-video's default ('auto') seizes the
+    // AVAudioSession Playback category — output-only, NO microphone. On a VoIP-push
+    // cold launch these reels mount before JS knows a call is incoming, so the
+    // session was stolen from the call: telemetry on the dropped call showed
+    // category=Playback / inPort=none → call_connect_failure (David, Jul 27).
+    // Setting it reactively afterwards (useCallAwareVideoAudio) is too late for that
+    // window. Sound still plays for the user; it just mixes instead of seizing.
+    p.audioMixingMode = 'mixWithOthers';
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
@@ -476,6 +485,14 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
+    // ALWAYS mixWithOthers at CREATION. expo-video's default ('auto') seizes the
+    // AVAudioSession Playback category — output-only, NO microphone. On a VoIP-push
+    // cold launch these reels mount before JS knows a call is incoming, so the
+    // session was stolen from the call: telemetry on the dropped call showed
+    // category=Playback / inPort=none → call_connect_failure (David, Jul 27).
+    // Setting it reactively afterwards (useCallAwareVideoAudio) is too late for that
+    // window. Sound still plays for the user; it just mixes instead of seizing.
+    p.audioMixingMode = 'mixWithOthers';
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
@@ -784,15 +801,21 @@ export function ReelsFeed({
           })}
         />
 
-        {/* Back button — only in pushed-screen (seeded) mode. */}
+        {/* Back button — only in pushed-screen (seeded) mode. Liquid-glass
+            capsule so it matches the app's chrome (navbar / in-call bar). */}
         {onClose && (
-          <TouchableOpacity
-            onPress={onClose}
+          <GlassSurface
+            radius={20}
             style={[styles.viewerBackButton, { top: insets.top + 8 }]}
-            hitSlop={16}
           >
-            <ChevronLeft size={28} color="#FFFFFF" strokeWidth={2.25} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.viewerBackInner}
+              hitSlop={16}
+            >
+              <ChevronLeft size={26} color="#FFFFFF" strokeWidth={2.25} />
+            </TouchableOpacity>
+          </GlassSurface>
         )}
       </View>
 
@@ -829,6 +852,10 @@ const styles = StyleSheet.create({
     zIndex: 20,
     width: 40,
     height: 40,
+  },
+  viewerBackInner: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },

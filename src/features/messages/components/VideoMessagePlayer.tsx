@@ -83,9 +83,16 @@ function VideoViewWrapper({
   useVideoPlayer: any;
   videoUrl: string;
 }) {
-  const player = useVideoPlayer(videoUrl, (p: { loop: boolean }) => {
-    p.loop = false;
-  });
+  const player = useVideoPlayer(
+    videoUrl,
+    (p: { loop: boolean; audioMixingMode: string }) => {
+      p.loop = false;
+      // Never seize the audio session (default 'auto' = Playback, no microphone) —
+      // a chat video must not be able to strip the mic from an incoming/active call.
+      // See VideoMedia for the full rationale.
+      p.audioMixingMode = 'mixWithOthers';
+    }
+  );
 
   // If the adaptive (HLS) source can't be delivered, fall back to optimized MP4.
   // Also reports load-time / error telemetry tagged to the chat surface.
@@ -120,7 +127,11 @@ function VideoViewWrapper({
         loadStartedAt.current = Date.now();
         setTimeout(() => {
           try {
-            player.replace(fallback);
+            // replaceAsync, not replace: Expo documents that on iOS `replace` "loads
+            // the asset data synchronously on the UI thread and can block it for
+            // extended periods of time". Blocking the UI thread during a call setup
+            // window is exactly what we're eliminating.
+            void player.replaceAsync(fallback);
             videoFallbackUsed({ surface: 'chat' });
           } catch {
             // player disposed — ignore

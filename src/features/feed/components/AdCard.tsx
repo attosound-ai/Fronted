@@ -16,8 +16,10 @@ import { VideoPoster } from '@/components/ui/VideoPoster';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import { useIsFocused } from '@react-navigation/native';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
-import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
+import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
+import { cloudinaryHlsUrl, cloudinaryVideoMp4 } from '@/lib/media/cloudinaryUrl';
 import { formatCount } from '@/utils/formatters';
 import type { FeedPost } from '@/types/post';
 import { COLORS } from '@/constants/theme';
@@ -48,26 +50,55 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
+    // Call-aware from creation (see VideoMedia): don't hijack an active call's session.
+    // ALWAYS mixWithOthers — see VideoMedia for the full rationale. Never 'auto'.
+    p.audioMixingMode = 'mixWithOthers';
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
+  // Ads register as nowPlaying too, so the user CAN transmit a sponsored video if
+  // they choose (per David: "los anuncios también deben sonar si eso quiere el
+  // usuario"). The hijack David hit — an ad autoplaying mid-call swapping what was
+  // transmitted — is fixed at the SOURCE: transmit now LOCKS its source at turn-on
+  // (InCallTopBar) instead of following nowPlaying live, so a background autoplay
+  // can't change it. Registering here only makes the ad AVAILABLE to lock onto if
+  // it's what's playing when the user taps 📡.
+  const isFocused = useIsFocused();
+  const injectVideoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
+  useRegisterNowPlaying(
+    injectVideoUrl
+      ? { kind: 'video', uri: injectVideoUrl, isVideo: true, postId: post.id }
+      : null,
+    isVisible && isFocused
+  );
+
   // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback
   // + load/error telemetry tagged to the ad surface.
-  const isReady = useVideoStream(player, videoUrl, isVisible, {
+  // Pass isVisible && isFocused (matching VideoMedia/ReelMedia): useVideoStream
+  // auto-resumes on AppState→active and after the HLS→MP4 fallback. With only
+  // isVisible, a FlatList item stays "visible" while the recorder is pushed over
+  // the feed, so those resume paths would replay the buried ad behind the call
+  // (mixWithOthers → its audio bleeds over the transmitted reel). isFocused gates it.
+  const isReady = useVideoStream(player, videoUrl, isVisible && isFocused, {
     surface: 'ad',
     postId: post.id,
   });
 
   useEffect(() => {
     if (!player) return;
-    if (isVisible) {
+    // isFocused too (matches VideoMedia/ReelMedia): when a screen is PUSHED over
+    // the feed (reel viewer, chat…) FlatList viewability never updates, so the ad
+    // stayed "visible" and KEPT PLAYING under the covered screen. Out of a call
+    // iOS masked it (exclusive audio); in a call everything runs mixWithOthers,
+    // so the buried ad audibly mixed over the reel David was transmitting.
+    if (isVisible && isFocused) {
       player.play();
     } else {
       player.pause();
     }
-  }, [isVisible, player]);
+  }, [isVisible, isFocused, player]);
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {

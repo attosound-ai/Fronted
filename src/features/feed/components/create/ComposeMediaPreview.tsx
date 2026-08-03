@@ -107,6 +107,9 @@ function VideoPreview({
   const player = useVideoPlayer(media.uri, (p) => {
     p.loop = true;
     p.muted = false;
+    // Never seize the audio session (default 'auto' = Playback, no mic) — a call can
+    // arrive while composing. See VideoMedia for the full rationale.
+    p.audioMixingMode = 'mixWithOthers';
   });
   const [isPlaying, setIsPlaying] = useState(false);
 

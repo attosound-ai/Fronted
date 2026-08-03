@@ -92,8 +92,14 @@ export function useVideoStream(
         // Small delay avoids hammering Cloudinary while it derives the asset.
         setTimeout(() => {
           try {
-            player.replace(fallback);
-            if (active) player.play();
+            // replaceAsync, not replace: Expo documents that on iOS `replace` "loads
+            // the asset data synchronously on the UI thread and can block it for
+            // extended periods of time". This fallback fires on video_load_error,
+            // which in the failing cold-launch traces happened 3x right as the call
+            // was connecting — exactly when the UI thread must stay free.
+            void player.replaceAsync(fallback).then(() => {
+              if (active) player.play();
+            });
             if (telemetryRef.current) videoFallbackUsed(telemetryRef.current);
           } catch {
             // player was disposed (cell recycled) — ignore

@@ -27,6 +27,7 @@ interface ReelMediaProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   /** Double tap → like (Instagram-style), with a heart burst. */
   onDoubleTap?: () => void;
@@ -39,6 +40,7 @@ export function ReelMedia({
   onFollow,
   onBookmark,
   onReport,
+  onEdit,
   onDelete,
   onDoubleTap,
 }: ReelMediaProps) {
@@ -62,6 +64,11 @@ export function ReelMedia({
   const player = useVideoPlayer(videoUrl, (p) => {
     p.loop = true;
     p.muted = useVideoSoundStore.getState().isMuted;
+    // Call-aware from creation (see VideoMedia): don't hijack an active call's session.
+    // ALWAYS mixWithOthers — see VideoMedia for the full rationale. 'auto' takes the
+    // Playback category (no mic); on a VoIP-push cold launch the player mounts before
+    // activeCall is known, stealing the session and dropping the call.
+    p.audioMixingMode = 'mixWithOthers';
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
@@ -173,6 +180,7 @@ export function ReelMedia({
         onFollow={onFollow}
         onBookmark={onBookmark}
         onReport={onReport}
+        onEdit={onEdit}
         onDelete={onDelete}
       />
 

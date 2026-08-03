@@ -45,6 +45,7 @@ interface VideoMediaProps {
   onFollow?: (userId: number) => void;
   onBookmark?: () => void;
   onReport?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
 }
 
@@ -58,6 +59,7 @@ export function VideoMedia({
   onFollow,
   onBookmark,
   onReport,
+  onEdit,
   onDelete,
 }: VideoMediaProps) {
   const { contentWidth } = useDeviceLayout();
@@ -89,6 +91,18 @@ export function VideoMedia({
     // Start at the current shared mute state so a freshly-mounted video matches
     // whatever the rest of the feed is doing (the effect below keeps it synced).
     p.muted = useVideoSoundStore.getState().isMuted;
+    // ALWAYS mixWithOthers, never 'auto'. 'auto' puts the AVAudioSession into the
+    // Playback category (output-only, NO microphone). Reading activeCall here was a
+    // race we lost on cold launch: when the app is woken by a VoIP push the players
+    // mount BEFORE JS knows about the call, so activeCall was null, the player took
+    // Playback, and the call came up with no mic → Twilio call_connect_failure and
+    // the call dropped (David, Jul 27: telemetry showed category=Playback,
+    // inPort=none on the dropped call). Apple DTS documents this exact race: if a
+    // library calls setActive before CallKit, the call's audio never works, and it's
+    // most common when the app is "awakened by a VoIP push". mixWithOthers costs the
+    // user nothing here — video still plays with sound, it just coexists instead of
+    // seizing the session.
+    p.audioMixingMode = 'mixWithOthers';
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
@@ -196,6 +210,7 @@ export function VideoMedia({
           onFollow={onFollow}
           onBookmark={onBookmark}
           onReport={onReport}
+          onEdit={onEdit}
           onDelete={onDelete}
         />
       )}

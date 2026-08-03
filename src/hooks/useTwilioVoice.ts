@@ -18,7 +18,17 @@ import {
   telemetryCounters,
   captureCallAudioSnapshot,
   setSpeakerOutput,
+  registerCallStatsSampler,
 } from '@/lib/telemetry';
+// Not re-exported from '@/lib/telemetry', so imported from the module directly, the
+// same way useVoipReportTelemetry does. This is the LIVE AVAudioSession read
+// (category / mode / ports / sample rate) that every session-write record below
+// uses for its before/after pair.
+import {
+  getCallAudioState,
+  resolveRouteChangeReason,
+  formatRouteChangeRing,
+} from '@/lib/telemetry/deviceSnapshot';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
 // which is not yet configured for Android. Importing at module level crashes Android on launch.
@@ -33,6 +43,46 @@ function getTwilio(): TwilioTypes {
 
 const IS_IOS = Platform.OS === 'ios';
 const TOKEN_REFRESH_MS = 50 * 60 * 1000; // Refresh every 50 minutes
+
+// ── Feature gate: connect-time audio-session sequencing ─────────────────────
+// Guards the two BEHAVIOUR changes on the live answer path: (1) serialising the
+// connect-time session work into one in-flight task and dropping the duplicate
+// route override, and (2) letting reclaimAudioSession skip its category rewrite
+// when the session is already healthy. Everything else added alongside them is
+// pure instrumentation and ships ungated. A missing / not-yet-loaded flag reads
+// as `undefined`, so `=== true` means the shipped behaviour is preserved exactly
+// for everyone outside the cohort. Roll out on David's account (210) first;
+// never enable a new call-path flag on 152 / 153 before that.
+const FLAG_CONNECT_SESSION_SEQUENCING = 'call_connect_session_sequencing';
+
+function isConnectSequencingEnabled(): boolean {
+  try {
+    return analytics.isFeatureEnabled(FLAG_CONNECT_SESSION_SEQUENCING) === true;
+  } catch {
+    // PostHog not initialised yet (cold launch answered by CallKit), so treat as off.
+    return false;
+  }
+}
+
+// ── No-call audio-mode restore retry schedule ──────────────────────────────
+// The no-call effect skips its write while something else still owns a capture
+// session, and it only re-runs on a hasAnyCall transition, so a skip that is never
+// retried strands playsInSilentMode for the entire session (this is the app's only
+// global setter of it). Fast retries cover the common case, a teardown that has
+// not finished; the slow ones cover a genuine long recording. Unbounded on
+// purpose: one native read every 10 s while idle is nothing, and the alternative
+// is silent media for anyone with the ring switch on.
+const NO_CALL_RESTORE_FAST_ATTEMPTS = 10;
+const NO_CALL_RESTORE_FAST_MS = 1500;
+const NO_CALL_RESTORE_SLOW_MS = 10_000;
+// Only the first few skips emit a row; after that the retry is silent and the
+// eventual successful write carries the attempt number.
+const NO_CALL_RESTORE_REPORTED_ATTEMPTS = 3;
+
+/** Delay used by the connect sequence; kept as a promise so it can be awaited. */
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // ── Singleton state (module-level) ──
 // Captured at module load — proxies "process started at" to tell a cold launch
@@ -93,6 +143,16 @@ interface CallContextStash {
   disconnectCode: number | null;
   disconnectMessage: string | null;
   cleanHangup: boolean | null;
+  // Invite-time AVAudioSession baseline, filled asynchronously right after the
+  // invite/outbound-start snapshot. THE trigger variable: a call that arrives
+  // while the AirPods are an active A2DP media sink has to switch the headset out
+  // of music mode at the exact instant the call is starting.
+  inviteAudioCategory: string | null;
+  inviteAudioMode: string | null;
+  inviteInputPort: string | null;
+  inviteOutputPort: string | null;
+  inviteSampleRate: number | null;
+  inviteOtherAudioPlaying: boolean | null;
 }
 let callContextStash: CallContextStash | null = null;
 // call_context is emitted at most once per (callSid, trigger); guards the
@@ -227,15 +287,57 @@ async function resolveCallerUsername(identity: string): Promise<void> {
 let callStatsInterval: ReturnType<typeof setInterval> | null = null;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function flattenCallStats(report: any): Record<string, unknown> {
-  const local = report?.localAudioTrackStats?.[0] ?? {};
-  const remote = report?.remoteAudioTrackStats?.[0] ?? {};
-  const ice =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    report?.iceCandidatePairStats?.find((p: any) => p?.activeCandidatePair) ??
-    report?.iceCandidatePairStats?.[0] ??
-    {};
+type StatsBag = Record<string, any>;
+
+interface PickedCallStats {
+  local: StatsBag;
+  remote: StatsBag;
+  ice: StatsBag;
+  reportsLen: number;
+}
+
+/**
+ * THE fix for "every call-quality field has been null since launch".
+ *
+ * `Call.getStats()` is DECLARED as `Promise<RTCStats.StatsReport>`, one object,
+ * in the SDK's TypeScript surface (node_modules/@twilio/voice-react-native-sdk/
+ * src/Call.tsx). The native bridge resolves something else entirely: an NSArray
+ * of per-peer-connection reports (TwilioVoiceReactNative.m `call_getStats` →
+ * `[TwilioVoiceStatsReport jsonWithStatsReportsArray:]`). Reading
+ * `report.localAudioTrackStats[0]` off an ARRAY yields undefined, so all ~20
+ * fields of `call_quality_stats` resolved to null on every call for every user
+ * since the feature shipped. That is exactly why the AirPods no-audio incident
+ * could not be answered ("was the remote audio arriving at all?").
+ *
+ * Both readers of this shape go through here so they can never drift apart again.
+ * Reports are flattened rather than indexed: a call normally has a single peer
+ * connection, but on a reconnect there can be more than one and the tracks may
+ * live on either.
+ */
+function pickTrackStats(report: unknown): PickedCallStats {
+  const reports: StatsBag[] = Array.isArray(report)
+    ? (report as StatsBag[])
+    : report
+      ? [report as StatsBag]
+      : [];
+  const collect = (key: string): StatsBag[] =>
+    reports.flatMap((r) => (Array.isArray(r?.[key]) ? (r[key] as StatsBag[]) : []));
+  const pairs = collect('iceCandidatePairStats');
   return {
+    local: collect('localAudioTrackStats')[0] ?? {},
+    remote: collect('remoteAudioTrackStats')[0] ?? {},
+    ice: pairs.find((p) => p?.activeCandidatePair) ?? pairs[0] ?? {},
+    reportsLen: reports.length,
+  };
+}
+
+function flattenCallStats(report: unknown): Record<string, unknown> {
+  const { local, remote, ice, reportsLen } = pickTrackStats(report);
+  return {
+    // How many per-peer-connection reports the bridge actually handed us. 0 means
+    // the shape changed again (or media never came up); this is the tripwire that
+    // makes the next silent shape change visible instead of null-by-null.
+    reports_len: reportsLen,
     // Outbound — this device's microphone toward the remote party.
     mic_audio_level: local.audioLevel ?? null,
     bytes_sent: local.bytesSent ?? null,
@@ -246,7 +348,12 @@ function flattenCallStats(report: any): Record<string, unknown> {
     out_codec: local.codec ?? null,
     // Inbound — the remote party toward this device.
     remote_audio_level: remote.audioLevel ?? null,
-    bytes_received: remote.bytesRecieved ?? null,
+    // Twilio's own TypeScript type spells this `bytesRecieved` (their typo, see
+    // src/type/RTCStats.ts), but BOTH native layers actually emit `bytesReceived`
+    // (iOS kTwilioVoiceReactNativeBytesReceived, Android CommonConstants
+    // .BytesReceived). Read both spellings; the EMITTED property name stays
+    // `bytes_received` so the 369 historical rows remain comparable.
+    bytes_received: remote.bytesReceived ?? remote.bytesRecieved ?? null,
     packets_received: remote.packetsReceived ?? null,
     in_packets_lost: remote.packetsLost ?? null,
     in_jitter: remote.jitter ?? null,
@@ -260,23 +367,78 @@ function flattenCallStats(report: any): Record<string, unknown> {
   };
 }
 
-async function captureCallStats(reason: string): Promise<void> {
-  if (!activeCallObj) return;
+// Previous inbound sample, so every tick carries the DELTA and not only a running
+// total. This is THE playout-versus-network discriminator: bytes_received climbing
+// while the user hears nothing is a LOCAL render failure, bytes_received flat is a
+// network or signalling failure.
+//
+// Keyed on the call SID, not reset by startCallStatsCapture. The reset used to live
+// in startCallStatsCapture, which only ran from onConnected — and onConnected never
+// fires on the CallKit answer branches. A call answered that way therefore emitted
+// exactly one row, the 'final' one from onDisconnected, and diffed its cumulative
+// bytes against the LAST sample of the PREVIOUS call: a large negative delta that
+// reads as a corrupt value rather than as missing data. Keying on the sid makes
+// that impossible regardless of which path started the sampling.
+let lastBytesReceived: number | null = null;
+let lastBytesReceivedAtMs: number | null = null;
+let lastBytesReceivedCallSid: string | null = null;
+
+async function captureCallStats(reason: string): Promise<Record<string, unknown> | null> {
+  if (!activeCallObj) return null;
   try {
     const report = await activeCallObj.getStats();
     const ac = useCallStore.getState().activeCall;
+    const sid = ac?.callSid ?? null;
+    if (sid !== lastBytesReceivedCallSid) {
+      lastBytesReceivedCallSid = sid;
+      lastBytesReceived = null;
+      lastBytesReceivedAtMs = null;
+    }
+    const flat = flattenCallStats(report);
+    const bytesReceived =
+      typeof flat.bytes_received === 'number' ? flat.bytes_received : null;
+    const nowMs = Date.now();
+    const bytesDelta =
+      bytesReceived != null && lastBytesReceived != null
+        ? bytesReceived - lastBytesReceived
+        : null;
+    const deltaWindowMs =
+      bytesReceived != null && lastBytesReceivedAtMs != null
+        ? nowMs - lastBytesReceivedAtMs
+        : null;
+    if (bytesReceived != null) {
+      lastBytesReceived = bytesReceived;
+      lastBytesReceivedAtMs = nowMs;
+    }
+    const payload = {
+      ...flat,
+      // Null on the first sample of a call (nothing to diff against yet).
+      bytes_received_delta: bytesDelta,
+      bytes_received_delta_ms: deltaWindowMs,
+    };
     analytics.capture('call_quality_stats', {
       reason,
-      call_sid: ac?.callSid ?? null,
+      call_sid: sid,
       call_state: ac?.state ?? null,
       direction: ac?.direction ?? null,
       is_muted: ac?.isMuted ?? null,
-      ...flattenCallStats(report),
+      ...payload,
     });
+    return payload;
   } catch {
     // getStats() can reject before media is flowing; the next tick retries.
+    return null;
   }
 }
+
+/**
+ * Sample the WebRTC stats RIGHT NOW and return them, in addition to emitting the
+ * usual `call_quality_stats` row. Registered with callTelemetry so a user-tapped
+ * audio-problem report carries the byte counters on its own row, at its own
+ * timestamp, instead of being joined to whichever periodic sample happens to be
+ * nearest (a delta that straddles both the failure and the recovery).
+ */
+registerCallStatsSampler((reason: string) => captureCallStats(reason));
 
 /** Twilio audioLevel may arrive as 0..1 or 0..32767; map to a punchy 0..1 value. */
 function normAudioLevel(level: number | null | undefined): number {
@@ -300,8 +462,10 @@ export async function getActiveCallAudioLevels(): Promise<{
   if (!activeCallObj) return { mic: 0, remote: 0 };
   try {
     const report = await activeCallObj.getStats();
-    const local = report?.localAudioTrackStats?.[0] ?? {};
-    const remote = report?.remoteAudioTrackStats?.[0] ?? {};
+    // Same array unwrap as flattenCallStats. Before this the remote channel of
+    // the recording-screen waveform read zeros on every call, because the stats
+    // report is an array and `.remoteAudioTrackStats[0]` on an array is undefined.
+    const { local, remote } = pickTrackStats(report);
     return {
       mic: normAudioLevel(local.audioLevel),
       remote: normAudioLevel(remote.audioLevel),
@@ -311,11 +475,36 @@ export async function getActiveCallAudioLevels(): Promise<{
   }
 }
 
+// Sampling cadence. Every reported audio failure so far has happened inside the
+// first ~15 seconds of a call, and at a flat 10 s cadence a failure at t+7s has to
+// be read off a delta covering t+0 to t+10 (dead) and one covering t+10 to t+20
+// (mostly alive), i.e. averaged across both the failure and the recovery. So sample
+// fast through the window that actually matters and settle down afterwards.
+const STATS_FAST_MS = 2_000;
+const STATS_FAST_WINDOW_MS = 15_000;
+const STATS_SLOW_MS = 10_000;
+
+let callStatsCadenceTimer: ReturnType<typeof setTimeout> | null = null;
+
 function startCallStatsCapture() {
-  stopCallStatsCapture();
-  // Early one-shot (~3s) to catch a dead mic fast, then every 10s.
-  setTimeout(() => void captureCallStats('initial'), 3000);
-  callStatsInterval = setInterval(() => void captureCallStats('tick'), 10_000);
+  // IDEMPOTENT: this is now started from onConnected AND from the CallKit-recovered
+  // answer branches (where onConnected never fires), and on a normal call both can
+  // happen. A second call must not restart the schedule or it would keep pushing
+  // the fast window forward.
+  if (callStatsInterval) return;
+  // t+0 baseline so the first fast tick already carries a real delta. getStats can
+  // reject this early; captureCallStats swallows that and the next tick retries.
+  void captureCallStats('initial');
+  callStatsInterval = setInterval(
+    () => void captureCallStats('tick_fast'),
+    STATS_FAST_MS
+  );
+  callStatsCadenceTimer = setTimeout(() => {
+    callStatsCadenceTimer = null;
+    if (!callStatsInterval) return;
+    clearInterval(callStatsInterval);
+    callStatsInterval = setInterval(() => void captureCallStats('tick'), STATS_SLOW_MS);
+  }, STATS_FAST_WINDOW_MS);
 }
 
 function stopCallStatsCapture() {
@@ -323,6 +512,43 @@ function stopCallStatsCapture() {
     clearInterval(callStatsInterval);
     callStatsInterval = null;
   }
+  if (callStatsCadenceTimer) {
+    clearTimeout(callStatsCadenceTimer);
+    callStatsCadenceTimer = null;
+  }
+}
+
+/**
+ * Everything that must happen ONCE per call the moment it is connected, no matter
+ * which path got us there.
+ *
+ * This exists because the entire playout-versus-network discriminator used to hang
+ * off Twilio's Connected event, and this file documents in three places that
+ * Connected never reaches us on the CallKit answer branches: `recovered_no_invite`,
+ * `recovered_precepted` and `accepted_no_call` all fire after CallKit has already
+ * accepted natively, which is why reassertCallAudioSession() exists at all. On
+ * those branches startCallStatsCapture() was never called, so `call_quality_stats`
+ * never ticked and there was no `call_answer_context` row either — and on
+ * `recovered_no_invite` startCallTelemetry never ran, so there were no
+ * `call_audio_session_changed` rows and no route-change reasons for the WHOLE call.
+ * That is the lock-screen / AirPods-in / phone-in-pocket answer path: exactly the
+ * one the reported incident ran on.
+ *
+ * Every piece is individually idempotent (startCallTelemetry no-ops while active,
+ * startCallStatsCapture no-ops while sampling, captureAnswerContext dedupes on the
+ * call sid), so calling this from both the answer branch and a later Connected is
+ * harmless.
+ */
+function beginConnectedCallTelemetry(reason: string): void {
+  void startCallTelemetry(reason);
+  // WebRTC quality stats (mic/remote audio levels, bytes, loss, MOS, RTT).
+  startCallStatsCapture();
+  // One-shot answer-context row: the invite-time route versus the answer-time
+  // route. The AirPods incident's only pre-answer difference between the good and
+  // the bad call was that the bad one arrived while the AirPods were an active
+  // A2DP media sink, and reconstructing that took grouping raw ticks by call_sid
+  // across five weeks. As first-class booleans it is a one-line cohort.
+  captureAnswerContext();
 }
 
 function bindCallEvents(call: any): () => void {
@@ -330,8 +556,15 @@ function bindCallEvents(call: any): () => void {
   const { setCallState, endCall } = useCallStore.getState();
 
   let removed = false;
+  // Connected must run exactly once per Call object. bindCallEvents now also fires
+  // it synchronously when the call is ALREADY connected at bind time (the CallKit
+  // pre-accepted case), and the SDK can still deliver its own Connected afterwards.
+  // Without this latch the connect-time session writes would be issued twice.
+  let connectedHandled = false;
 
   const onConnected = () => {
+    if (connectedHandled) return;
+    connectedHandled = true;
     console.log(
       '[TwilioVoice] Call connected',
       JSON.stringify({ time: new Date().toISOString() })
@@ -339,9 +572,8 @@ function bindCallEvents(call: any): () => void {
     setCallState('connected');
     // Telemetry begins capturing tick snapshots at this point — pre-connect
     // states are already covered by startCallTelemetry() at invite/outgoing.
-    void startCallTelemetry('call_connected');
-    // WebRTC quality stats (mic/remote audio levels, bytes, loss, MOS, RTT).
-    startCallStatsCapture();
+    // Stats + answer context ride along; see beginConnectedCallTelemetry.
+    beginConnectedCallTelemetry('call_connected');
     // Re-assert PlayAndRecord shortly after connect. If the rep was browsing the
     // feed when the call came in, expo-video had put the AVAudioSession in the
     // Playback category (output-only, NO mic) — build-55 telemetry proved this:
@@ -353,14 +585,29 @@ function bindCallEvents(call: any): () => void {
     // `mixWithOthers` during a call (useCallAwareVideoAudio) so they stop
     // stealing the session going forward; this handles the already-playing case.
     // Delayed so Twilio's own native session setup settles first.
-    setTimeout(() => {
-      void reclaimAudioSession();
-    }, 700);
-    // Force earpiece IMMEDIATELY too (not just at the 700ms reclaim) so the
-    // window where iOS routes a "video" call to Speaker — the client's echo — is
-    // as short as possible. No-op if the user chose speaker.
-    if (useCallStore.getState().activeCall?.isSpeaker !== true) {
-      void setSpeakerOutput(false);
+    //
+    // FLAG `call_connect_session_sequencing`: ON runs the connect-time session
+    // work as one ordered, awaited task (see runConnectSessionSequence). OFF is
+    // the shipped behaviour, unchanged apart from the instrumentation wrapper
+    // around the override. The two writes fire independently, the 700ms reclaim
+    // on a timer and the earpiece override immediately.
+    if (isConnectSequencingEnabled()) {
+      void queueSessionTask(runConnectSessionSequence);
+    } else {
+      setTimeout(() => {
+        void reclaimAudioSession();
+      }, CONNECT_RECLAIM_DELAY_MS);
+      // Force earpiece IMMEDIATELY too (not just at the 700ms reclaim) so the
+      // window where iOS routes a "video" call to Speaker — the client's echo — is
+      // as short as possible. No-op if the user chose speaker.
+      if (useCallStore.getState().activeCall?.isSpeaker !== true) {
+        void runSessionWrite(
+          'connect_early_earpiece',
+          'speaker=false',
+          () => setSpeakerOutput(false),
+          { sequenced: false }
+        );
+      }
     }
     // Consolidated call_context: fire once audio has settled (after the reclaim)
     // so the audio-session snapshot reflects the true in-call state — this is the
@@ -370,8 +617,14 @@ function bindCallEvents(call: any): () => void {
 
   const onConnectFailure = () => {
     activeCallObj = null;
+    stopCallStatsCapture();
     void endCallTelemetry('call_connect_failure');
     endCall();
+    // A connect failure can land AFTER CallKit already activated PlayAndRecord /
+    // VoiceChat, so this path has to restore the normal mode exactly like the
+    // clean disconnect does. It used not to, which left the whole app on the
+    // receiver with the mic indicator lit until some later call ended cleanly.
+    restoreNormalAudioModeAfterCall('connect_failure_restore');
     teardown();
   };
 
@@ -408,8 +661,8 @@ function bindCallEvents(call: any): () => void {
     restoreInjectionDevice();
     void endCallTelemetry('call_disconnected');
     endCall();
-    // Restore normal audio mode after the call ends
-    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    // Restore normal audio mode after the call ends.
+    restoreNormalAudioModeAfterCall('disconnect_restore');
     teardown();
   };
 
@@ -464,6 +717,21 @@ function bindCallEvents(call: any): () => void {
     if (activeCallTeardown === teardown) activeCallTeardown = null;
   };
 
+  // The call may ALREADY be connected by the time we get here: on the CallKit
+  // answer branches the invite is accepted natively and Twilio raises Connected
+  // before any of this is bound, so the listener above would never fire and
+  // onConnected's whole body (stats capture, answer context, the session work)
+  // would be skipped for the entire call. Read the SDK's own state and run it now
+  // if so. The `connectedHandled` latch makes a later real Connected a no-op.
+  try {
+    if (typeof call.getState === 'function' && call.getState() === Call.State.Connected) {
+      onConnected();
+    }
+  } catch {
+    // Older SDK surface or a half-built Call object; the recovered-branch call to
+    // beginConnectedCallTelemetry still covers the telemetry.
+  }
+
   call.on(Call.Event.Connected, onConnected);
   call.on(Call.Event.ConnectFailure, onConnectFailure);
   call.on(Call.Event.Disconnected, onDisconnected);
@@ -486,11 +754,267 @@ function bindCallEvents(call: any): () => void {
   return teardown;
 }
 
+// ── AVAudioSession write instrumentation (`call_session_write`) ─────────────
+// We poll the resulting route triple every 750ms (callTelemetry.watchAudioSession)
+// but we have never recorded the WRITES themselves or their return values. That is
+// why three independent analyses of the AirPods no-audio incident could neither
+// confirm nor exclude the connect-time write storm: the writes were invisible and
+// anything that happened between two polls was invisible with them. Every session
+// mutation in this file now emits one ordered, attributable row with a before/after
+// snapshot. Pure instrumentation: it never changes what a write does, and it must
+// never throw into the call path.
+
+/** `NativeCallAudioState | null` without re-declaring the native shape here. */
+type LiveAudioState = Awaited<ReturnType<typeof getCallAudioState>>;
+
+function sessionStateFields(
+  prefix: 'before' | 'after' | 'observed',
+  s: LiveAudioState
+): Record<string, unknown> {
+  // `liveCategoryOptions` is the RAW AVAudioSession category-option bitmask, and it
+  // is the field that says whether a write silently dropped .allowBluetoothHFP or
+  // added .defaultToSpeaker. It is optional on the native shape (older builds do
+  // not report it), so it reports null rather than blocking the rest of the row.
+  const options = s?.liveCategoryOptions ?? null;
+  return {
+    [`${prefix}_category`]: s?.liveCategory || null,
+    [`${prefix}_mode`]: s?.liveMode || null,
+    [`${prefix}_options`]: options,
+    [`${prefix}_in_port`]: s?.liveInputPort || null,
+    [`${prefix}_out_port`]: s?.liveOutputPort || null,
+    [`${prefix}_rate`]: s && s.liveSampleRate > 0 ? s.liveSampleRate : null,
+    // ATTRIBUTION, and the reason this event was added at all. Without these two
+    // a row can prove that the output port changed across one of our writes but
+    // not WHO changed it: an unchanged route_change_count across the write means
+    // the move was ours, a count that advanced with reason=RouteConfigurationChange
+    // means iOS completed a profile handoff while our write was in flight. They
+    // arrive in the same native object the six fields above are read from, so
+    // they cost nothing.
+    [`${prefix}_route_reason`]: resolveRouteChangeReason(s),
+    [`${prefix}_route_change_count`]: s?.routeChangeCount ?? null,
+  };
+}
+
+function emitSessionWrite(payload: Record<string, unknown>): void {
+  try {
+    const ac = useCallStore.getState().activeCall;
+    analytics.capture(ANALYTICS_EVENTS.CALL.SESSION_WRITE, {
+      call_sid: ac?.callSid ?? null,
+      call_state: ac?.state ?? null,
+      // Which branch produced this row. The flag cohort is only readable here.
+      connect_sequencing_enabled: isConnectSequencingEnabled(),
+      ...payload,
+    });
+  } catch {
+    // Telemetry must never break a call.
+  }
+}
+
+/**
+ * Run one AVAudioSession mutation with a before/after session snapshot around it.
+ * `requested` is a short human-readable description of what we asked for (e.g.
+ * `speaker=false`). Returns the raw write result so callers that need it (the
+ * speaker toggle wants `liveOutputPort`) lose nothing by going through here.
+ */
+async function runSessionWrite<T>(
+  writer: string,
+  requested: string,
+  write: () => Promise<T>,
+  extra?: Record<string, unknown>
+): Promise<{ ok: boolean | null; error: string | null; result: T | null }> {
+  // THE PRE-WRITE SNAPSHOT MUST NOT DELAY THE WRITE.
+  //
+  // `await getCallAudioState()` before issuing the write put a full native
+  // round-trip, resolved through the JS event loop, in front of every mutation —
+  // including `connect_early_earpiece`, whose entire purpose is to land at t+0 so
+  // the window where iOS routes a CallKit hasVideo=YES call to Speaker (the
+  // client's echo) is as short as possible. On a VoIP-push cold launch this app has
+  // measured jsLagPeakMs around 1.3 s in exactly that window, so the override would
+  // have arrived up to a full lag spike late: instrumentation making the thing it
+  // measures worse.
+  //
+  // Both are started in the SAME tick instead. getCallAudioState and
+  // setSpeakerOutput are methods on the same native module (RNDeviceInfo), whose
+  // calls run on one serial method queue in dispatch order, so for route overrides
+  // the snapshot is genuinely taken first. For the expo-audio writes it races the
+  // write by design, which is the correct trade: `after` is the authoritative
+  // reading there anyway.
+  const beforePromise = getCallAudioState();
+  const startedAt = Date.now();
+  let result: T | null = null;
+  let ok: boolean | null = null;
+  let error: string | null = null;
+  try {
+    result = await write();
+    if (result === null) {
+      // A native lever reporting itself unavailable (setSpeakerOutput off-iOS or
+      // without the patched module), neither a success nor a failure. Left as
+      // null so callers never treat "we could not even try" as "applied".
+      ok = null;
+    } else if (typeof result === 'object' && 'ok' in result) {
+      // Natives that report their own outcome ({ok}) are authoritative.
+      ok = (result as { ok: unknown }).ok === true;
+    } else {
+      // Plain void writes: resolving without throwing is the only success signal.
+      ok = true;
+    }
+  } catch (err: unknown) {
+    ok = false;
+    error = err instanceof Error ? err.message : String(err);
+  }
+  const durationMs = Date.now() - startedAt;
+  const [before, after] = await Promise.all([beforePromise, getCallAudioState()]);
+  emitSessionWrite({
+    writer,
+    requested,
+    ok,
+    error,
+    skipped: false,
+    skip_reason: null,
+    duration_ms: durationMs,
+    ...sessionStateFields('before', before),
+    ...sessionStateFields('after', after),
+    ...extra,
+  });
+  return { ok, error, result };
+}
+
+/** Record a write we deliberately did NOT perform, with the state that decided it. */
+function emitSessionWriteSkipped(
+  writer: string,
+  requested: string,
+  skipReason: string,
+  observed: LiveAudioState,
+  extra?: Record<string, unknown>
+): void {
+  emitSessionWrite({
+    writer,
+    requested,
+    ok: null,
+    error: null,
+    skipped: true,
+    skip_reason: skipReason,
+    duration_ms: 0,
+    ...sessionStateFields('before', observed),
+    ...sessionStateFields('after', observed),
+    ...extra,
+  });
+}
+
+/**
+ * Put the audio session back to the app's normal mode after a call ENDS.
+ *
+ * Every terminal path has to do this, not just the clean one. `onDisconnected` was
+ * the only caller, so a call killed by connect-failure, by an invite cancel, by a
+ * reject, by an accept error or by an outbound connect throw left the app sitting
+ * in Twilio's PlayAndRecord / VoiceChat session: every subsequent sound routes to
+ * the receiver instead of the speaker and the orange microphone indicator stays
+ * lit, with no recovery until some LATER call happens to end cleanly. Connect
+ * failure in particular is a recurring event in this app.
+ *
+ * Guarded on the store rather than on any on-disk marker: `atto_audio_enabled` is
+ * a persisted NSUserDefaults boolean written only by CallKit's didActivate /
+ * didDeactivate, it survives process death, and providerDidReset does not clear
+ * it — so it can be true with nothing live and must never be used to decide this.
+ * Fire-and-forget; runSessionWrite swallows its own errors.
+ */
+function restoreNormalAudioModeAfterCall(writer: string): void {
+  void (async () => {
+    if (useCallStore.getState().activeCall !== null) {
+      // Another call is somehow live (or this one has not been cleared yet).
+      // .playback would strip its microphone, so record the decision and stop.
+      emitSessionWriteSkipped(
+        writer,
+        'playsInSilentMode=true',
+        'call_still_live',
+        await getCallAudioState()
+      );
+      return;
+    }
+    await runSessionWrite(writer, 'playsInSilentMode=true', () =>
+      setAudioModeAsync({ playsInSilentMode: true })
+    );
+  })();
+}
+
+/**
+ * A session is "healthy for a call" when it is PlayAndRecord with a real input
+ * port. That pair is the whole definition of "this call has a microphone", and it
+ * is the condition reclaimAudioSession exists to restore. Anything we cannot read
+ * (native unavailable, off-iOS, empty port string) counts as NOT healthy, so the
+ * hijack recovery still runs when in doubt.
+ */
+function isSessionHealthyForCall(s: LiveAudioState): boolean {
+  if (!s) return false;
+  if (s.liveCategory !== 'AVAudioSessionCategoryPlayAndRecord') return false;
+  const inPort = (s.liveInputPort || '').trim();
+  if (!inPort) return false;
+  const lowered = inPort.toLowerCase();
+  return lowered !== 'none' && lowered !== 'unknown';
+}
+
+// ── Serialised connect-time session work (flag-gated) ──────────────────────
+// Today setSpeakerOutput(false) fires at t+0 and ensureAudioRoute calls
+// setSpeakerOutput AGAIN at t+700 from inside reclaimAudioSession, so we issue two
+// to three overrideOutputAudioPort calls plus one setCategory inside a single
+// second with no ordering guarantee. Telemetry says those writes were no-ops on the
+// incident call, but they are genuinely unsequenced and were completely unlogged at
+// the call site, which is why three analyses could neither rule them in nor out.
+// One in-flight chain means every step observes the result of the previous one.
+let sessionTaskChain: Promise<void> = Promise.resolve();
+
+function queueSessionTask(task: () => Promise<void>): Promise<void> {
+  // sessionTaskChain is always a settled-or-caught promise, so it never rejects
+  // and a failing task can never stall everything queued behind it.
+  const next = sessionTaskChain.then(task);
+  sessionTaskChain = next.catch(() => {});
+  return next;
+}
+
+// Preserved verbatim from the shipped behaviour: Twilio's own native session setup
+// needs to settle before we re-assert PlayAndRecord.
+const CONNECT_RECLAIM_DELAY_MS = 700;
+
+/**
+ * The connect-time audio work as ONE ordered task: early earpiece override, then
+ * the 700ms reclaim, with the reclaim's duplicate route override dropped when the
+ * early one already succeeded and the user's speaker intent has not changed since.
+ * Policy is unchanged (same delay, same early-earpiece intent); only the ordering,
+ * the logging and the one redundant override are different.
+ */
+async function runConnectSessionSequence(): Promise<void> {
+  const wantSpeaker = useCallStore.getState().activeCall?.isSpeaker === true;
+  let earlyOverrideOk = false;
+  if (!wantSpeaker) {
+    // Force earpiece IMMEDIATELY (not just at the 700ms reclaim) so the window
+    // where iOS routes a "video" call to Speaker (the client's echo) is as short
+    // as possible. No-op if the user chose speaker.
+    const early = await runSessionWrite(
+      'connect_early_earpiece',
+      'speaker=false',
+      () => setSpeakerOutput(false),
+      { sequenced: true }
+    );
+    earlyOverrideOk = early.ok === true;
+  }
+  await wait(CONNECT_RECLAIM_DELAY_MS);
+  // The user may have tapped speaker during the wait; that toggle already issued
+  // its own override, so we must not fight it with a stale intent.
+  const intentUnchanged =
+    (useCallStore.getState().activeCall?.isSpeaker === true) === wantSpeaker;
+  await reclaimAudioSession({ skipRouteOverride: earlyOverrideOk && intentUnchanged });
+}
+
 /**
  * Re-select the current audio device to force iOS to activate the VoIP audio session.
  * Called when a call first connects to ensure proper audio routing.
+ *
+ * `skipOverride` drops the route override entirely, used by the connect sequence
+ * when the early earpiece override already succeeded and the user's intent has not
+ * changed since, so we stop issuing two or three overrideOutputAudioPort calls
+ * inside one second with no ordering guarantee.
  */
-export async function ensureAudioRoute() {
+export async function ensureAudioRoute(opts?: { skipOverride?: boolean }) {
   try {
     // Force EARPIECE (Receiver) unless the user explicitly chose speaker. iOS
     // defaults VIDEO calls — and ours are CallKit hasVideo=YES for the lock-screen
@@ -500,7 +1024,21 @@ export async function ensureAudioRoute() {
     // the natural route win (Bluetooth headset if present, else the receiver), so
     // it doesn't fight a real headset. Speaker=true keeps the user's choice.
     const userWantsSpeaker = useCallStore.getState().activeCall?.isSpeaker === true;
-    const applied = await setSpeakerOutput(userWantsSpeaker);
+    if (opts?.skipOverride === true) {
+      emitSessionWriteSkipped(
+        'ensure_route_override',
+        `speaker=${userWantsSpeaker}`,
+        'already_applied_by_connect_sequence',
+        await getCallAudioState()
+      );
+      return;
+    }
+    const { result: applied } = await runSessionWrite(
+      'ensure_route_override',
+      `speaker=${userWantsSpeaker}`,
+      () => setSpeakerOutput(userWantsSpeaker),
+      { user_wants_speaker: userWantsSpeaker }
+    );
     // Only trust the native override when it actually SUCCEEDED (ok:true). At the
     // connect instant the session may not be active yet → overrideOutputAudioPort
     // returns {ok:false} (non-null); the old `!= null` check treated that as done
@@ -510,12 +1048,49 @@ export async function ensureAudioRoute() {
     // Fallback (native unavailable OR override didn't take): re-select the device.
     const voice = voiceInstance;
     if (!voice) return;
+    const { AudioDevice } = getTwilio();
     const { audioDevices, selectedDevice } = await voice.getAudioDevices();
     if (selectedDevice) {
-      await selectedDevice.select();
-    } else if (audioDevices.length > 0) {
-      await audioDevices[0].select();
+      await runSessionWrite(
+        'ensure_route_device_select',
+        `device=selected:${selectedDevice.type ?? 'unknown'}`,
+        () => selectedDevice.select(),
+        {
+          device_type: selectedDevice.type ?? null,
+          device_name: selectedDevice.name ?? null,
+          device_count: audioDevices?.length ?? 0,
+          pick_reason: 'sdk_selected_device',
+        }
+      );
+      return;
     }
+    if (!audioDevices || audioDevices.length === 0) return;
+    // Explicit TYPE match, never the positional audioDevices[0]: that index is
+    // whatever order the SDK happened to return, so on a Bluetooth call it could
+    // select the wrong endpoint and nothing about this branch was logged, so we
+    // would never have known. toggleSpeaker already does the type-based lookup;
+    // this path now matches it. When the user asked for speaker we honour that
+    // first; otherwise a real headset wins over the built-in receiver, which is
+    // the same precedence overrideOutputAudioPort:None produces natively.
+    const byType = (t: unknown) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      audioDevices.find((d: any) => d.type === t) ?? null;
+    const preferred = userWantsSpeaker
+      ? (byType(AudioDevice.Type.Speaker) ?? byType(AudioDevice.Type.Bluetooth))
+      : (byType(AudioDevice.Type.Bluetooth) ?? byType(AudioDevice.Type.Earpiece));
+    const target = preferred ?? audioDevices[0];
+    await runSessionWrite(
+      'ensure_route_device_select',
+      `device=${target?.type ?? 'unknown'}`,
+      () => target.select(),
+      {
+        device_type: target?.type ?? null,
+        device_name: target?.name ?? null,
+        device_count: audioDevices.length,
+        user_wants_speaker: userWantsSpeaker,
+        pick_reason: preferred ? 'type_match' : 'no_type_match_first_available',
+      }
+    );
   } catch {
     // Best-effort — don't crash the call
   }
@@ -529,17 +1104,50 @@ export async function ensureAudioRoute() {
  * hold(true)  → Twilio releases the audio session entirely
  * hold(false) → Twilio re-acquires it with PlayAndRecord category
  */
-export async function reclaimAudioSession() {
+export async function reclaimAudioSession(opts?: {
+  skipRouteOverride?: boolean;
+}): Promise<void> {
   // Safety net: re-apply PlayAndRecord + mixWithOthers and re-select device.
   // With keepAudioSessionActive: true on players, this should rarely be needed.
   try {
     console.log('[TwilioVoice] reclaimAudioSession: re-locking audio mode...');
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      allowsRecording: true,
-      interruptionMode: 'mixWithOthers',
-    });
-    await ensureAudioRoute();
+    // Flag-gated: skip the category rewrite when the session is ALREADY what this
+    // function exists to restore. expo-audio's setAudioMode takes the
+    // .playAndRecord branch here and unconditionally inserts .allowBluetoothHFP,
+    // .mixWithOthers and .defaultToSpeaker, applied through the two-argument
+    // setCategory(category, options:) which does NOT carry Twilio's .voiceChat
+    // mode. So on a healthy VoIP session we rewrite category, options and
+    // possibly mode 700ms after answer for no reason at all.
+    //
+    // CONSERVATIVE BY CONSTRUCTION: this function is the shipped fix for the
+    // expo-video Playback hijack (PR #34, b121). We skip ONLY when we can read
+    // the live session AND it is PlayAndRecord AND the input port is real.
+    // Unreadable state, a wrong category, a missing mic: all still rewrite. The
+    // hijack recovery is never weakened.
+    const guardEnabled = isConnectSequencingEnabled();
+    const observed = guardEnabled ? await getCallAudioState() : null;
+    const alreadyHealthy = guardEnabled && isSessionHealthyForCall(observed);
+    if (alreadyHealthy) {
+      emitSessionWriteSkipped(
+        'reclaim_set_audio_mode',
+        'playAndRecord+mixWithOthers',
+        'session_already_playandrecord_with_input',
+        observed
+      );
+    } else {
+      await runSessionWrite(
+        'reclaim_set_audio_mode',
+        'playAndRecord+mixWithOthers',
+        () =>
+          setAudioModeAsync({
+            playsInSilentMode: true,
+            allowsRecording: true,
+            interruptionMode: 'mixWithOthers',
+          }),
+        { guard_enabled: guardEnabled }
+      );
+    }
+    await ensureAudioRoute({ skipOverride: opts?.skipRouteOverride === true });
     console.log('[TwilioVoice] reclaimAudioSession: done');
   } catch (err) {
     console.warn('[TwilioVoice] reclaimAudioSession failed:', err);
@@ -622,6 +1230,38 @@ export function persistAudioInjectionFlag() {
 }
 
 /**
+ * Persist the render-format-recheck cohort gate to NSUserDefaults, where
+ * AttoAudioEngineDevice reads it as `atto_engine_render_format_recheck`.
+ *
+ * That device is the custom audio engine on the PLAYOUT half, and the three
+ * behaviour changes it guards all live on code paths that run inside CallKit's
+ * audio activation, long before PostHog can be asked anything. So the decision
+ * has to already be on disk, exactly like the injection and cold-launch gates
+ * above. Default NO: with the key absent the engine reproduces its shipped
+ * behaviour byte for byte, and only the new counters move.
+ *
+ * The counters themselves are UNGATED, on purpose. `sessionRateFlipCount` and
+ * `routeRebuildDisagreeCount` are what tell us whether the two defects are ever
+ * hit in production, and we need that number from outside the cohort before the
+ * correction is worth enabling anywhere. Roll the flag itself out on David (210)
+ * only, and never on 152 / 153.
+ */
+export function persistEngineRenderFormatRecheckFlag() {
+  if (!IS_IOS) return;
+  try {
+    const flagOn = analytics.isFeatureEnabled('engine_render_format_recheck') === true;
+    // The engine is only ever installed for creators (persistAudioInjectionFlag),
+    // so gate on role here too: nothing else can put this device in the path, and
+    // a widened flag must not change behaviour for anyone whose calls run on
+    // Twilio's stock audio device anyway.
+    const isCreator = useAuthStore.getState().user?.role === 'creator';
+    Settings.set({ atto_engine_render_format_recheck: flagOn && isCreator });
+  } catch {
+    // Settings is iOS-only / native module may be unavailable; ignore.
+  }
+}
+
+/**
  * Emit the ONE consolidated `call_context` row — the "all variables" event David
  * asked for so a failed call self-reports every dimension instead of us
  * interrogating the user:
@@ -634,6 +1274,140 @@ export function persistAudioInjectionFlag() {
  *     — i.e. the direct signal for "there was no sound at all"
  * Fired at connect (audio settled) and at disconnect. Deduped per (sid, trigger).
  */
+// AVAudioSession port names as iOS reports them (AVAudioSessionPortBluetoothA2DP =
+// "BluetoothA2DPOutput", AVAudioSessionPortBluetoothHFP = "BluetoothHFP"). Matched
+// by substring so a future LE/variant name still classifies correctly.
+function isA2dpPort(port: string | null | undefined): boolean {
+  return !!port && port.includes('BluetoothA2DP');
+}
+
+function isHfpPort(port: string | null | undefined): boolean {
+  return !!port && port.includes('BluetoothHFP');
+}
+
+/**
+ * Snapshot the live AVAudioSession at INVITE time into the call-context stash.
+ * Async (native round-trip) and fire-and-forget: the invite path must never wait
+ * on telemetry. Guarded on the call sid so a snapshot that resolves after the next
+ * call has already started can never write into that newer call's stash.
+ */
+async function captureInviteAudioBaseline(callSid: string | null): Promise<void> {
+  try {
+    const s = await getCallAudioState();
+    if (!s) return;
+    const stash = callContextStash;
+    if (!stash || stash.callSid !== callSid) return;
+    stash.inviteAudioCategory = s.liveCategory || null;
+    stash.inviteAudioMode = s.liveMode || null;
+    stash.inviteInputPort = s.liveInputPort || null;
+    stash.inviteOutputPort = s.liveOutputPort || null;
+    stash.inviteSampleRate = s.liveSampleRate > 0 ? s.liveSampleRate : null;
+    stash.inviteOtherAudioPlaying = s.liveOtherAudioPlaying ?? null;
+  } catch {
+    // Best-effort baseline.
+  }
+}
+
+// How long after connect we take the "settled" sample. The Bluetooth A2DP → HFP
+// profile switch does not complete at the connect instant, so a single sample at
+// t+0 would report the switch as not-observed on every call that actually does it.
+const ANSWER_CONTEXT_SETTLE_MS = 1500;
+
+/**
+ * ONE row per call describing the invite→answer audio transition, the established
+ * trigger of the AirPods no-audio incident, as first-class fields instead of
+ * something that has to be reconstructed by grouping raw 750ms ticks by call_sid.
+ *
+ * `answered_from_a2dp` is the trigger itself (the headset was a music sink when the
+ * call arrived). `bt_profile_switch_observed` says whether iOS actually completed
+ * the A2DP→HFP handoff we then depend on. Together they turn "how often does this
+ * happen and what is its real failure rate" into a one-line cohort, which is the
+ * only way to tell whether a future fix moved the number or whether we got lucky
+ * against an ~11 percent base rate.
+ */
+function captureAnswerContext(): void {
+  const s = callContextStash;
+  const sid = s?.callSid ?? useCallStore.getState().activeCall?.callSid ?? null;
+  const dedupeKey = `${sid ?? 'nosid'}:answer_context`;
+  if (callContextEmitted.has(dedupeKey)) return;
+  callContextEmitted.add(dedupeKey);
+
+  const connectAtMs = Date.now();
+  // Read every stash field NOW: the stash object is replaced (not mutated) by the
+  // next call, but taking locals keeps this row internally consistent regardless.
+  const inviteCategory = s?.inviteAudioCategory ?? null;
+  const inviteMode = s?.inviteAudioMode ?? null;
+  const inviteInPort = s?.inviteInputPort ?? null;
+  const inviteOutPort = s?.inviteOutputPort ?? null;
+  const inviteRate = s?.inviteSampleRate ?? null;
+  const inviteOtherPlaying = s?.inviteOtherAudioPlaying ?? null;
+  const inviteAtMs = s?.inviteAtMs ?? null;
+  const answerAtMs = s?.answerAtMs ?? null;
+  const direction = s?.direction ?? null;
+  const answerBranch = s?.answerBranch ?? null;
+  const appStateAtAnswer = s?.appStateAtAnswer ?? null;
+  const callerFrom = s?.callerFrom ?? null;
+
+  void (async () => {
+    try {
+      const atConnect = await getCallAudioState();
+      await wait(ANSWER_CONTEXT_SETTLE_MS);
+      const settled = await getCallAudioState();
+      const answeredFromA2dp = isA2dpPort(inviteOutPort);
+      analytics.capture(ANALYTICS_EVENTS.CALL.ANSWER_CONTEXT, {
+        call_sid: sid,
+        direction,
+        call_type: classifyCallType(callerFrom),
+        answer_branch: answerBranch,
+        app_state_at_answer: appStateAtAnswer,
+        // Which behaviour branch ran, so the cohort is separable in the same query.
+        connect_sequencing_enabled: isConnectSequencingEnabled(),
+        // Invite time: before anything of ours touched the session.
+        invite_category: inviteCategory,
+        invite_mode: inviteMode,
+        invite_input_port: inviteInPort,
+        invite_output_port: inviteOutPort,
+        invite_sample_rate: inviteRate,
+        invite_other_audio_playing: inviteOtherPlaying,
+        // Connect instant.
+        answer_category: atConnect?.liveCategory || null,
+        answer_mode: atConnect?.liveMode || null,
+        answer_input_port: atConnect?.liveInputPort || null,
+        answer_output_port: atConnect?.liveOutputPort || null,
+        answer_sample_rate:
+          atConnect && atConnect.liveSampleRate > 0 ? atConnect.liveSampleRate : null,
+        // After the route has had time to settle (profile switch, CallKit activation).
+        settled_category: settled?.liveCategory || null,
+        settled_input_port: settled?.liveInputPort || null,
+        settled_output_port: settled?.liveOutputPort || null,
+        settled_sample_rate:
+          settled && settled.liveSampleRate > 0 ? settled.liveSampleRate : null,
+        // Timing.
+        ms_invite_to_answer:
+          inviteAtMs != null && answerAtMs != null ? answerAtMs - inviteAtMs : null,
+        ms_answer_to_connect: answerAtMs != null ? connectAtMs - answerAtMs : null,
+        ms_connect_to_settled: Date.now() - connectAtMs,
+        // The route changes that actually fired across the answer, individually,
+        // from the native ring. This window is a burst (CategoryChange as Twilio
+        // takes PlayAndRecord, OldDeviceUnavailable / NewDeviceAvailable /
+        // RouteConfigurationChange as the AirPods leave A2DP for HFP, Override from
+        // our own earpiece force) and a single last-wins reason field can only ever
+        // name one of them. Read from the SETTLED snapshot so the whole burst is in
+        // the ring by then.
+        settled_recent_route_changes: formatRouteChangeRing(settled),
+        settled_route_change_count: settled?.routeChangeCount ?? null,
+        // THE trigger, and whether the handoff it forces actually happened.
+        answered_from_a2dp: answeredFromA2dp,
+        bt_profile_switch_observed:
+          answeredFromA2dp &&
+          (isHfpPort(atConnect?.liveOutputPort) || isHfpPort(settled?.liveOutputPort)),
+      });
+    } catch {
+      // Telemetry must never break a connected call.
+    }
+  })();
+}
+
 function captureCallContext(trigger: 'connected' | 'disconnected') {
   const s = callContextStash;
   const sid = s?.callSid ?? useCallStore.getState().activeCall?.callSid ?? null;
@@ -765,9 +1539,16 @@ export async function acceptIncomingCall() {
       // reclaimAudioSession never runs. Force it here so the session flips to
       // PlayAndRecord (mic) instead of a lingering Playback (mic-less) category.
       reassertCallAudioSession();
+      // Connected already fired natively, so nothing would ever have started the
+      // call telemetry, the WebRTC stats capture or the answer-context row on this
+      // branch. Without them this call produces no call_quality_stats (so
+      // "was their audio arriving?" is unanswerable), no call_answer_context and
+      // no call_audio_session_changed rows at all. See beginConnectedCallTelemetry.
+      beginConnectedCallTelemetry('callkit_recovered_no_invite');
       reportCallAnswered('recovered_no_invite');
     } else {
       endCall();
+      restoreNormalAudioModeAfterCall('accept_no_call_restore');
       reportCallAnswered('no_invite_no_call');
     }
     return;
@@ -797,17 +1578,26 @@ export async function acceptIncomingCall() {
         // so Connected likely fired before we bound onConnected. Reclaim the
         // PlayAndRecord session explicitly or the call stays mic-less both ways.
         reassertCallAudioSession();
+        // Same as recovered_no_invite: Connected fired before we could bind, so
+        // the stats capture and the answer-context row have to start from here.
+        beginConnectedCallTelemetry('callkit_recovered_precepted');
         reportCallAnswered('recovered_precepted');
       } else {
         // No Call object available, but the call is live — transition anyway
         // so the UI doesn't stay stuck. Hangup/mute won't work until we get it.
         setCallState('connected');
         reassertCallAudioSession();
+        // No Call object, so call_quality_stats cannot read anything yet — but the
+        // session watcher and the answer-context row do not need one, and they are
+        // the only record this branch would otherwise leave. The stats capture is
+        // started too so it begins reporting the moment a Call object appears.
+        beginConnectedCallTelemetry('callkit_accepted_no_call');
         reportCallAnswered('accepted_no_call');
       }
     } else {
       console.error('[TwilioVoice] acceptIncomingCall FAILED:', msg);
       endCall();
+      restoreNormalAudioModeAfterCall('accept_error_restore');
       reportCallAnswered('accept_error', { error: msg });
     }
   }
@@ -844,6 +1634,9 @@ export function rejectIncomingCall() {
     pendingInvite = null;
   }
   useCallStore.getState().endCall();
+  // Same as every other terminal path: the ring may already have taken the call
+  // session, and nothing else would ever put it back.
+  restoreNormalAudioModeAfterCall('reject_restore');
 }
 
 // ── ATTO audio injection: device install/restore ───────────────────────────
@@ -1112,7 +1905,12 @@ export async function toggleSpeaker() {
     // works regardless of which audio device (stock vs custom engine) is bound,
     // and — crucially — needs NO ActionSheet, so it can't be blocked by the
     // recording screen's bottom sheets (the client's "no matter what I did").
-    const nativeResult = await setSpeakerOutput(wantSpeaker);
+    const { result: nativeResult } = await runSessionWrite(
+      'speaker_toggle',
+      `speaker=${wantSpeaker}`,
+      () => setSpeakerOutput(wantSpeaker),
+      { user_initiated: true }
+    );
 
     // Belt-and-suspenders: also tell Twilio's AudioDevice so its notion of the
     // selected route stays in sync (harmless if it no-ops). Best-effort.
@@ -1244,7 +2042,16 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
       disconnectCode: null,
       disconnectMessage: null,
       cleanHangup: null,
+      inviteAudioCategory: null,
+      inviteAudioMode: null,
+      inviteInputPort: null,
+      inviteOutputPort: null,
+      inviteSampleRate: null,
+      inviteOtherAudioPlaying: null,
     };
+    // Pre-call audio baseline for call_answer_context (outbound parity: the same
+    // A2DP-media-sink trigger applies when the user places a call while listening).
+    void captureInviteAudioBaseline(callSid);
     bindCallEvents(call);
     router.push('/call');
 
@@ -1259,6 +2066,9 @@ export async function makeVoIPCall(recipientUserId: string, recipientName?: stri
     });
     void endCallTelemetry('outgoing_connect_failed');
     endCall();
+    // voice.connect() can throw after Twilio has already taken the session, so the
+    // failed outbound path needs the same restore as every other terminal path.
+    restoreNormalAudioModeAfterCall('outgoing_failed_restore');
   }
 }
 
@@ -1283,10 +2093,80 @@ export function useTwilioVoice() {
   const hasAnyCall = useCallStore((s) => s.activeCall !== null);
 
   useEffect(() => {
-    if (!hasAnyCall) {
-      console.log('[TwilioVoice] Setting audio mode: Playback (no call)');
-      setAudioModeAsync({ playsInSilentMode: true });
-    }
+    if (hasAnyCall) return;
+    // This used to be a bare, un-awaited setAudioModeAsync, the only one in this
+    // file without a catch (the disconnect restore and reclaimAudioSession are both
+    // guarded). It resolves to category .playback, which STRIPS the microphone, and
+    // it fires on the hasAnyCall→false transition, which can race a session that is
+    // still live during teardown. That race is the proven source of Sentry issue
+    // 7502347202 (OSStatus 561017449, AVAudioSessionErrorInsufficientPriority):
+    // every real event is tagged mechanism=onunhandledrejection and the 2026-07-15
+    // event's final breadcrumb is the console.log immediately above this call.
+    console.log('[TwilioVoice] Setting audio mode: Playback (no call)');
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const attempt = async (n: number): Promise<void> => {
+      const live = await getCallAudioState();
+      if (cancelled) return;
+      // Re-check the store after the native round-trip: a call can have started
+      // again in that window.
+      const callLive = useCallStore.getState().activeCall !== null;
+      // DELIBERATELY NOT `live?.twilioAudioEnabled`. That reads the persisted
+      // NSUserDefaults boolean `atto_audio_enabled`, written only by CallKit's
+      // didActivate / didDeactivate. It survives process death and
+      // providerDidReset does not clear it, so after a call is killed mid-flight
+      // (the documented OOM / watchdog path) it stays true on disk forever. Using
+      // it here meant playsInSilentMode was never set again for the whole next
+      // session: every feed video, audio message and preview silent for anyone
+      // with the ring switch on. A sticky on-disk marker can never prove that a
+      // session is currently owned.
+      const captureSessionLive = isSessionHealthyForCall(live);
+      if (callLive || captureSessionLive) {
+        // Do NOT force .playback onto a session that still has a live capture
+        // path. Either a call is coming back up, or something else in the app
+        // owns a recording session, and taking its microphone away is exactly
+        // the failure mode we are trying to stop causing.
+        //
+        // But a skip cannot be the end of it. This effect only re-runs on a
+        // hasAnyCall transition, and this is the ONLY global setter of
+        // playsInSilentMode in the app, so a single skip would strand the whole
+        // session. Retry instead: fast at first, then slowly, for as long as the
+        // effect stays mounted, so the write lands the moment the session is
+        // genuinely free. Only the first few skips are reported, so a long
+        // recording cannot flood the event stream.
+        if (n <= NO_CALL_RESTORE_REPORTED_ATTEMPTS) {
+          emitSessionWriteSkipped(
+            'no_call_effect',
+            'playsInSilentMode=true',
+            callLive ? 'call_still_live' : 'live_capture_session',
+            live,
+            { attempt: n, will_retry: true }
+          );
+        }
+        retryTimer = setTimeout(
+          () => {
+            void attempt(n + 1);
+          },
+          n < NO_CALL_RESTORE_FAST_ATTEMPTS
+            ? NO_CALL_RESTORE_FAST_MS
+            : NO_CALL_RESTORE_SLOW_MS
+        );
+        return;
+      }
+      await runSessionWrite(
+        'no_call_effect',
+        'playsInSilentMode=true',
+        () => setAudioModeAsync({ playsInSilentMode: true }),
+        { attempt: n }
+      );
+    };
+
+    void attempt(1);
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [hasAnyCall]);
 
   const registerDevice = useCallback(
@@ -1498,7 +2378,17 @@ export function useTwilioVoice() {
           disconnectCode: null,
           disconnectMessage: null,
           cleanHangup: null,
+          inviteAudioCategory: null,
+          inviteAudioMode: null,
+          inviteInputPort: null,
+          inviteOutputPort: null,
+          inviteSampleRate: null,
+          inviteOtherAudioPlaying: null,
         };
+        // Snapshot the session BEFORE we (or CallKit) touch it. This is the one
+        // sample that says whether the headset was already playing media when the
+        // call arrived, the established trigger of the no-audio incident.
+        void captureInviteAudioBaseline(callSid);
       } catch {
         /* telemetry stash is best-effort */
       }
@@ -1542,6 +2432,9 @@ export function useTwilioVoice() {
         pendingInvite = null;
         void endCallTelemetry('invite_cancelled');
         endCall();
+        // CallKit may already have activated the call session for the ring, so a
+        // cancelled invite has to restore the normal mode too.
+        restoreNormalAudioModeAfterCall('invite_cancelled_restore');
         detachInviteHandlers();
       };
 
@@ -1649,6 +2542,10 @@ export function useTwilioVoice() {
         // -init installs the custom engine (not the stock device) — the fix for
         // the clobber that left injected audio inaudible to the far party.
         persistAudioInjectionFlag();
+        // And the render-format-recheck cohort, read by the same device at
+        // activation time. Off by default, so this is a no-op for everyone
+        // outside the cohort.
+        persistEngineRenderFormatRecheckFlag();
 
         // If we were previously registered under a different account,
         // unregister that identity before binding the new one. Without

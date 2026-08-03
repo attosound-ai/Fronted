@@ -31,6 +31,10 @@ import { acquireJsLagMonitor, releaseJsLagMonitor, getJsLagStats } from './jsLag
 import {
   getDeviceSnapshot,
   getCallAudioState,
+  captureCallAudioSnapshot,
+  resolveRouteChangeReason,
+  routeChangeAgeMs,
+  formatRouteChangeRing,
   type DeviceSnapshot,
 } from './deviceSnapshot';
 
@@ -51,6 +55,14 @@ let memHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 let sessionWatchInterval: ReturnType<typeof setInterval> | null = null;
 // Last observed audio-session identity, for change detection.
 let lastSessionKey: string | null = null;
+// Last observed value of the native monotonic route-change counter. A route
+// change that does NOT alter the session identity (RouteConfigurationChange on
+// the same ports is the canonical case, and "iOS reconfigured the route
+// underneath a live session" is precisely the hypothesis class we are hunting)
+// used to produce no event at all: only the 10 s tick's routeChangeCount ever
+// revealed that it had happened, and never why. Tracking it here lets the watcher
+// emit on a count advance even when the key is unchanged.
+let lastRouteChangeCount: number | null = null;
 let appStateSub: { remove(): void } | null = null;
 let callStartedAt: number | null = null;
 let isActive = false;
@@ -59,6 +71,52 @@ let didPauseReplay = false;
 // so each memory sample says WHAT the app was doing (editor mount, waveform load,
 // lane players, capture, inject, video). This is what attributes the GB.
 let lastMarkerName: string | null = null;
+
+// ── Route-transition ring ────────────────────────────────────────────────────
+// The last few audio-session transitions of the CURRENT call, kept in memory so a
+// user-reported audio problem can be stamped with what the route was doing just
+// before the human noticed. Every timestamp in the AirPods investigation had to be
+// inferred from the client's remedial actions; this turns the inference into a
+// fact. Bounded, and cleared when a call STARTS rather than when it ends, so a
+// report tapped moments after hangup still carries the call that just failed while
+// still being impossible to confuse with the next call.
+const ROUTE_HISTORY_MAX = 5;
+
+interface RouteTransition {
+  /** Seconds into the call, so it lines up with call_duration_sec everywhere else. */
+  atCallSec: number;
+  /** Compact rendering of the session identity; null on the baseline observation. */
+  from: string | null;
+  to: string;
+  /** iOS route-change reason, when the native observer has one. */
+  reason: string | null;
+  micLost: boolean;
+}
+
+let routeHistory: RouteTransition[] = [];
+
+/** e.g. "PlayAndRecord/VoiceChat in:BluetoothHFP out:BluetoothHFP @24000". */
+function describeSession(
+  category: string,
+  mode: string,
+  inPort: string,
+  outPort: string,
+  rate: number | string
+): string {
+  const short = (v: string): string => v.replace('AVAudioSessionCategory', '');
+  return `${short(category)}/${mode} in:${inPort} out:${outPort} @${rate}`;
+}
+
+/** One-line rendering for the problem report: "12s A -> B (Override) MIC_LOST". */
+function formatRouteTransition(t: RouteTransition): string {
+  const move = t.from ? `${t.from} -> ${t.to}` : `baseline ${t.to}`;
+  const why = t.reason ? ` (${t.reason})` : '';
+  return `${t.atCallSec}s ${move}${why}${t.micLost ? ' MIC_LOST' : ''}`;
+}
+
+function callDurationSec(): number {
+  return callStartedAt ? Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000)) : 0;
+}
 
 interface TickPayload extends DeviceSnapshot {
   reason: string;
@@ -159,6 +217,8 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
   writeInFlightMarker();
 
   lastSessionKey = null;
+  lastRouteChangeCount = null;
+  routeHistory = [];
   if (sessionWatchInterval) clearInterval(sessionWatchInterval);
   void watchAudioSession();
   sessionWatchInterval = setInterval(() => {
@@ -286,35 +346,194 @@ async function watchAudioSession(): Promise<void> {
   try {
     const s = await getCallAudioState();
     if (!s) return;
-    const key = `${s.liveCategory}|${s.liveInputPort}|${s.liveOutputPort}`;
-    if (key === lastSessionKey) return;
+    // Mode and sample rate are part of the session identity. Without them a
+    // 24000 → 48000 flip on an unchanged route emitted NOTHING, and a sample-rate
+    // mismatch is exactly the class of defect we hunt on the playout side (it is
+    // what the build-93 monster voice was). Same for mode: Twilio's VoiceChat
+    // being replaced by anything else is a real event we were blind to.
+    const key = `${s.liveCategory}|${s.liveMode}|${s.liveInputPort}|${s.liveOutputPort}|${s.liveSampleRate}`;
+    // A route change with an UNCHANGED key is still a route change, and it is the
+    // most interesting kind: it means iOS reconfigured the route underneath a live
+    // session without moving category, mode, ports or rate. Gating purely on the
+    // key made those invisible, so emit whenever the native counter has advanced
+    // even if nothing else moved.
+    const routeCount = s.routeChangeCount ?? null;
+    const countAdvanced =
+      routeCount != null &&
+      lastRouteChangeCount != null &&
+      routeCount > lastRouteChangeCount;
+    if (key === lastSessionKey && !countAdvanced) return;
     const prev = lastSessionKey;
     lastSessionKey = key;
-    // Skip the very first observation (nothing to compare against yet) unless it is
-    // already a mic-less category, which is itself the failure we hunt.
+    const prevRouteCount = lastRouteChangeCount;
+    lastRouteChangeCount = routeCount;
     const micLess = s.liveCategory !== 'AVAudioSessionCategoryPlayAndRecord';
-    if (prev === null && !micLess) return;
-    const [prevCat, prevIn, prevOut] = (prev ?? '||').split('|');
+    const micLost = micLess || !s.liveInputPort || s.liveInputPort === 'none';
+    // The FIRST observation of every call used to be discarded unless it was
+    // already broken. That threw away the one sample that describes the session at
+    // the instant the audio device binds and latches its format, which is the exact
+    // moment the AirPods incident hinged on. It is now always emitted, tagged
+    // baseline=true with every from_* null, so the call always has a t0.
+    const isBaseline = prev === null;
+    const [prevCat, prevMode, prevIn, prevOut, prevRate] = (prev ?? '||||').split('|');
+
+    const to = describeSession(
+      s.liveCategory,
+      s.liveMode,
+      s.liveInputPort,
+      s.liveOutputPort,
+      s.liveSampleRate
+    );
+    const routeReason = resolveRouteChangeReason(s);
+    routeHistory.push({
+      atCallSec: callDurationSec(),
+      from: isBaseline
+        ? null
+        : describeSession(prevCat, prevMode, prevIn, prevOut, prevRate),
+      to,
+      reason: routeReason,
+      micLost,
+    });
+    if (routeHistory.length > ROUTE_HISTORY_MAX) routeHistory.shift();
+
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_SESSION_CHANGED, {
+      // true = first observation of this call, i.e. the state the audio device
+      // bound to rather than a transition away from a known state.
+      baseline: isBaseline,
       from_category: prevCat || null,
       to_category: s.liveCategory,
+      from_mode: prevMode || null,
+      to_mode: s.liveMode,
       from_input_port: prevIn || null,
       to_input_port: s.liveInputPort,
       from_output_port: prevOut || null,
       to_output_port: s.liveOutputPort,
+      from_sample_rate: prevRate ? Number(prevRate) : null,
       // The decisive flag: true means the call currently has NO microphone.
-      mic_lost: micLess || !s.liveInputPort || s.liveInputPort === 'none',
+      mic_lost: micLost,
       sample_rate: s.liveSampleRate ?? null,
       other_audio_playing: s.liveOtherAudioPlaying ?? null,
+      // WHO moved the route. This is the field whose absence made every route
+      // transition in the AirPods incident ambiguous. OldDeviceUnavailable = the
+      // user removed them, NewDeviceAvailable / RouteConfigurationChange = iOS did
+      // it, Override / CategoryChange = we did it. route_change_count rising by
+      // more than 1 between two events means changes we never sampled, and
+      // time_since_route_change_ms says whether this event IS that change or just
+      // the poll that noticed it later.
+      route_change_reason: routeReason,
+      route_change_count: routeCount,
+      // How many route changes happened since the last row we emitted. > 1 means
+      // a burst that the 750 ms poll could only ever see the tail of, which is
+      // why `recent_route_changes` below carries the individual ones.
+      route_changes_since_last:
+        routeCount != null && prevRouteCount != null ? routeCount - prevRouteCount : null,
+      // true = the session identity did NOT move, only the counter did. This is
+      // the "iOS reconfigured the route underneath us" case that used to emit
+      // nothing at all.
+      route_change_only: key === prev,
+      // The individual changes behind the counter, from the native ring: reason,
+      // timestamp and the ports each one moved AWAY from.
+      recent_route_changes: formatRouteChangeRing(s),
+      time_since_route_change_ms: routeChangeAgeMs(s),
+      // Two of the three refuted hypotheses hinged on category options, and
+      // neither side could settle it because we had never recorded them.
+      category_options: s.liveCategoryOptions ?? null,
+      output_volume: s.liveOutputVolume ?? null,
       last_marker: lastMarkerName,
-      call_duration_sec: callStartedAt
-        ? Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000))
-        : 0,
+      call_duration_sec: callDurationSec(),
       call_sid: useCallStore.getState().activeCall?.callSid ?? null,
       call_state: useCallStore.getState().activeCall?.state ?? null,
     });
   } catch {
     // Best-effort; never let telemetry affect a call.
+  }
+}
+
+// ── Call-stats sampler (injected) ───────────────────────────────────────────
+// The WebRTC byte counters live in useTwilioVoice (it owns the Call object), and
+// useTwilioVoice already imports this module, so this module cannot import it back
+// without a cycle. useTwilioVoice registers its sampler at module load instead.
+//
+// WHY reportAudioProblem needs it: the human-stamped "I cannot hear them" is the
+// single most valuable row in this batch, and without the byte counters it still
+// cannot say, AT THAT INSTANT, whether audio was arriving. Joining it to the
+// nearest periodic stats sample means averaging a delta across the failure and the
+// recovery. The report and the counters have to share a timestamp.
+type CallStatsSampler = (reason: string) => Promise<Record<string, unknown> | null>;
+let callStatsSampler: CallStatsSampler | null = null;
+
+/** Register (or clear, with null) the WebRTC stats sampler. Called once at import. */
+export function registerCallStatsSampler(sampler: CallStatsSampler | null): void {
+  callStatsSampler = sampler;
+}
+
+/**
+ * Symptom vocabulary for the in-call "something is wrong with the audio" control.
+ * Kept deliberately small: the point is a one-tap timestamp, not a survey.
+ */
+export type AudioProblemSymptom =
+  | 'cant_hear_them'
+  | 'they_cant_hear_me'
+  | 'echo'
+  | 'other';
+
+/**
+ * Record that the human perceived an audio failure, right now, in a stated
+ * direction.
+ *
+ * This is the only instrument that will ever capture echo (the app has zero echo
+ * measurement of any kind) and the only one that settles direction per incident
+ * without waiting for a phone call with the client. Every timestamp in the AirPods
+ * investigation had to be inferred from remedial actions such as pulling the
+ * AirPods out; one tap replaces all of that inference with a fact, stamped with the
+ * full live audio state and the last few route transitions.
+ *
+ * Safe to call at any time: it never throws, and it still reports when call
+ * telemetry is not active. A tap moments after hangup is exactly the realistic
+ * case, so that report carries telemetry_active=false and the route history of
+ * the call that just ended (the ring is cleared when the NEXT call starts).
+ */
+export async function reportAudioProblem(symptom: AudioProblemSymptom): Promise<void> {
+  try {
+    // One native read, and it already carries the route-change reason, the
+    // category options bitmask and the output volume. Fired CONCURRENTLY with the
+    // WebRTC stats read so both describe the same instant: this event exists to
+    // pin the human's perception to a wall clock, and a snapshot assembled from
+    // two moments 200 ms apart is a worse version of the periodic sampling it is
+    // meant to replace.
+    const [audio, stats] = await Promise.all([
+      captureCallAudioSnapshot(),
+      callStatsSampler
+        ? callStatsSampler('audio_problem').catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    const ac = useCallStore.getState().activeCall;
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_PROBLEM_REPORTED, {
+      symptom,
+      ...audio,
+      // THE direction discriminator, on the same row as the human's tap:
+      // bytes_received climbing while they hear nothing is a LOCAL render
+      // failure, bytes_received flat is a network or signalling failure. null
+      // when there is no live call object to read stats from.
+      ...(stats ?? {}),
+      has_call_stats: stats != null,
+      // Most recent last. Human-readable on purpose: this event is read by a
+      // person triaging one report, not aggregated across thousands.
+      recent_routes: routeHistory.map(formatRouteTransition),
+      recent_routes_count: routeHistory.length,
+      telemetry_active: isActive,
+      last_marker: lastMarkerName,
+      call_duration_sec: callDurationSec(),
+      call_sid: ac?.callSid ?? null,
+      call_state: ac?.state ?? null,
+      call_direction: ac?.direction ?? null,
+    });
+    // Also stamp the moment onto the following memory heartbeats and emit a full
+    // device snapshot under the same name, so the report is findable from either
+    // the tick timeline or the heartbeat timeline. No-ops outside a call.
+    await emitTelemetryMarker(`audio_problem_${symptom}`);
+  } catch {
+    // Best-effort; a failed report must never affect the call.
   }
 }
 
@@ -362,6 +581,7 @@ export async function endCallTelemetry(reason: string = 'call_ended'): Promise<v
   // next launch doesn't misreport it.
   clearInFlightMarker();
   lastSessionKey = null;
+  lastRouteChangeCount = null;
   lastMarkerName = null;
   if (appStateSub) {
     appStateSub.remove();

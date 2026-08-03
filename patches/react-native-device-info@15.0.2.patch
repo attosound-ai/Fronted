@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877e35ba035 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..896631ddea34c47554f15dae42b08f4a05f8bb40 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,9 @@
@@ -12,7 +12,27 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877
  #import <React/RCTUtils.h>
  #import "RNDeviceInfo.h"
  #import "DeviceUID.h"
-@@ -964,6 +966,96 @@ - (unsigned long) getUsedMemory {
+@@ -104,6 +106,19 @@ - (id)init
+                                                  selector:@selector(headphoneBluetoothConnectionDidChange:)
+                                                      name:AVAudioSessionRouteChangeNotification
+                                                    object: [AVAudioSession sharedInstance]];
++        // ATTO telemetry: record WHY the audio route changed. iOS hands us the
++        // reason on every route change and we used to throw it away, which is the
++        // single reason every route transition in the AirPods no-audio incident was
++        // ambiguous: we could not tell "iOS re-routed on its own during the A2DP to
++        // HFP handoff" from "the user pulled the AirPods out" from "our own code
++        // overrode the port". Installed exactly once (init runs once per module
++        // instance) and torn down by the blanket removeObserver:self in dealloc.
++        // The handler writes scalars to NSUserDefaults and NOTHING else. See
++        // -attoRouteChangeDidOccur: for why that constraint is absolute.
++        [[NSNotificationCenter defaultCenter] addObserver:self
++                                                 selector:@selector(attoRouteChangeDidOccur:)
++                                                     name:AVAudioSessionRouteChangeNotification
++                                                   object: [AVAudioSession sharedInstance]];
+         #if !TARGET_OS_VISION
+         [[NSNotificationCenter defaultCenter] addObserver:self
+                                                  selector:@selector(brightnessDidChange:)
+@@ -964,6 +979,239 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -51,6 +71,116 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877
 +}
 +
 +// ── ATTO telemetry ───────────────────────────────────────────────────────
++// Monotonic count of AVAudioSession route changes seen by this process. Seeded
++// once from NSUserDefaults so it keeps climbing across relaunches; it only ever
++// goes up, so a jump of more than 1 between two telemetry ticks means route
++// changes happened inside a window we did not sample.
++static NSInteger attoRouteChangeCount = 0;
++static BOOL attoRouteChangeCountSeeded = NO;
++
++// ── Route-change RING ────────────────────────────────────────────────────
++// One NSUserDefaults slot is last-wins, and the invite-to-answer transition
++// fires several route changes inside a few hundred milliseconds: CategoryChange
++// when Twilio takes PlayAndRecord, RouteConfigurationChange /
++// OldDeviceUnavailable / NewDeviceAvailable as AirPods hand off from A2DP to
++// HFP, and Override from our own setSpeakerOutput. JS polls every 750 ms, so the
++// whole burst collapsed into a single sample carrying whichever reason happened
++// to be written last. routeChangeCount then said "you missed four" without ever
++// saying which four, which is exactly the question the AirPods post-mortem could
++// not answer.
++//
++// So keep the last few, in memory, oldest first. Bounded and tiny; this is a
++// process-lifetime buffer, not a log.
++static const NSUInteger kAttoRouteRingMax = 16;
++static NSMutableArray<NSDictionary *> *attoRouteRing = nil;
++// Guards attoRouteRing only. The notification arrives on AVFoundation's own
++// notification thread, never on an audio render callback, and the critical
++// section is a couple of pointer writes on a 16-element array, so this lock is
++// uncontended and bounded. It is the one lock this handler is allowed to take.
++static NSObject *attoRouteRingLock = nil;
++
++// Both the writer (-attoRouteChangeDidOccur:) and the reader (getCallAudioState)
++// go through this, so neither can ever end up in @synchronized(nil), which is a
++// silent no-op in Objective-C and would leave the ring unguarded.
++static void AttoRouteRingInit(void) {
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        attoRouteRingLock = [NSObject new];
++        attoRouteRing = [NSMutableArray arrayWithCapacity:kAttoRouteRingMax];
++    });
++}
++
++// AVAudioSessionRouteChangeReason -> a stable, queryable string. These are the
++// names the post-mortems are written in: OldDeviceUnavailable = the user
++// physically removed the AirPods, NewDeviceAvailable / RouteConfigurationChange
++// = iOS moved the route itself (that is what an A2DP to HFP handoff looks like),
++// Override / CategoryChange = our own code did it.
++static NSString *AttoRouteChangeReasonName(NSInteger reason) {
++    switch (reason) {
++        case AVAudioSessionRouteChangeReasonUnknown:                   return @"Unknown";
++        case AVAudioSessionRouteChangeReasonNewDeviceAvailable:        return @"NewDeviceAvailable";
++        case AVAudioSessionRouteChangeReasonOldDeviceUnavailable:      return @"OldDeviceUnavailable";
++        case AVAudioSessionRouteChangeReasonCategoryChange:            return @"CategoryChange";
++        case AVAudioSessionRouteChangeReasonOverride:                  return @"Override";
++        case AVAudioSessionRouteChangeReasonWakeFromSleep:             return @"WakeFromSleep";
++        case AVAudioSessionRouteChangeReasonNoSuitableRouteForCategory:return @"NoSuitableRouteForCategory";
++        case AVAudioSessionRouteChangeReasonRouteConfigurationChange:  return @"RouteConfigurationChange";
++        default:                                                       return @"";
++    }
++}
++
++// Route-change recorder, installed from -init. This can fire on AVFoundation's
++// own notification thread WHILE A CALL IS LIVE, so it is deliberately the most
++// boring function in this file: read the reason and the previous route out of
++// userInfo, write three scalars to NSUserDefaults, append one small dictionary
++// to a bounded ring, return. It must never touch the AVAudioSession (no reads,
++// no mutation) and never do work proportional to anything. Getting greedy here
++// would let telemetry perturb call audio, which is the exact opposite of the
++// point.
++//
++// The PREVIOUS route comes from the notification payload
++// (AVAudioSessionRouteChangePreviousRouteKey), so recording it still costs no
++// session access. It is also enough to reconstruct a whole burst: entry N's
++// previous route is the state before change N, and entry N+1's previous route is
++// the state after it.
++- (void)attoRouteChangeDidOccur:(NSNotification *)notification
++{
++    NSNumber *reason = notification.userInfo[AVAudioSessionRouteChangeReasonKey];
++    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++    if (!attoRouteChangeCountSeeded) {
++        attoRouteChangeCount = [ud integerForKey:@"atto_audio_route_change_count"];
++        attoRouteChangeCountSeeded = YES;
++    }
++    attoRouteChangeCount += 1;
++    const NSInteger reasonValue = reason ? reason.integerValue : -1;
++    // -1 means "notification arrived without a reason key", which is itself worth
++    // seeing; it maps to "" on the JS side rather than to a real reason name.
++    [ud setInteger:reasonValue forKey:@"atto_audio_last_route_reason"];
++    // CFAbsoluteTimeGetCurrent + the epoch offset gives epoch seconds with no
++    // NSDate allocation, matching the *_at convention of the other ATTO markers.
++    const double nowEpoch = CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970;
++    [ud setDouble:nowEpoch forKey:@"atto_audio_last_route_reason_at"];
++    [ud setInteger:attoRouteChangeCount forKey:@"atto_audio_route_change_count"];
++
++    AVAudioSessionRouteDescription *prev =
++        notification.userInfo[AVAudioSessionRouteChangePreviousRouteKey];
++    NSDictionary *entry = @{
++        @"reason": AttoRouteChangeReasonName(reasonValue),
++        @"reasonValue": @(reasonValue),
++        @"at": @(nowEpoch),
++        @"count": @(attoRouteChangeCount),
++        @"fromInputPort": (prev.inputs.firstObject.portType ?: @"none"),
++        @"fromOutputPort": (prev.outputs.firstObject.portType ?: @"none"),
++    };
++    AttoRouteRingInit();
++    @synchronized(attoRouteRingLock) {
++        [attoRouteRing addObject:entry];
++        while (attoRouteRing.count > kAttoRouteRingMax) {
++            [attoRouteRing removeObjectAtIndex:0];
++        }
++    }
++}
++
 +// Surfaces the native CallKit audio-session markers (written by the patched
 +// @twilio/voice-react-native-sdk CallKit callbacks) PLUS the LIVE
 +// AVAudioSession state to JS, so `call_telemetry_tick` can prove — with no
@@ -62,6 +192,12 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877
 +    AVAudioSession *s = [AVAudioSession sharedInstance];
 +    NSString *out = s.currentRoute.outputs.firstObject.portType ?: @"none";
 +    NSString *inp = s.currentRoute.inputs.firstObject.portType ?: @"none";
++    // Snapshot (copy) the route ring so JS never holds the live array.
++    AttoRouteRingInit();
++    NSArray<NSDictionary *> *recentRoutes = nil;
++    @synchronized(attoRouteRingLock) {
++        recentRoutes = [attoRouteRing copy];
++    }
 +    resolve(@{
 +        // Native CallKit audio-callback markers (epoch seconds; 0 = never).
 +        @"didActivateAt": @([ud doubleForKey:@"atto_audio_didActivate_at"]),
@@ -76,6 +212,33 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..328412f67633a385cc50717846d8b877
 +        @"liveInputPort": inp,
 +        @"liveSampleRate": @(s.sampleRate),
 +        @"liveOtherAudioPlaying": @(s.isOtherAudioPlaying),
++        // WHO moved the route, and when (written by -attoRouteChangeDidOccur:).
++        // lastRouteChangeAt == 0 means no route change has been observed yet, in
++        // which case lastRouteChangeReason is meaningless and JS nulls it out.
++        @"lastRouteChangeReason": AttoRouteChangeReasonName([ud integerForKey:@"atto_audio_last_route_reason"]),
++        @"lastRouteChangeAt": @([ud doubleForKey:@"atto_audio_last_route_reason_at"]),
++        @"routeChangeCount": @([ud integerForKey:@"atto_audio_route_change_count"]),
++        // The last few route changes, oldest first, each with its reason, its
++        // epoch-seconds timestamp, its position in routeChangeCount and the ports
++        // the route was on BEFORE it. A single lastRouteChangeReason slot is
++        // last-wins, so the answer-instant burst (CategoryChange, the A2DP to HFP
++        // handoff, our own Override) collapsed into one sample and we could only
++        // ever see how many changes we had missed, never which. This decomposes it.
++        @"recentRouteChanges": (recentRoutes ?: @[]),
++        // Session configuration + IO geometry. categoryOptions is the RAW bitmask
++        // (MixWithOthers 1, DuckOthers 2, AllowBluetoothHFP 4, DefaultToSpeaker 8,
++        // AllowBluetoothA2DP 32, AllowAirPlay 64), so a session write that silently
++        // strips HFP or injects DefaultToSpeaker becomes a visible fact instead of
++        // an inference. outputVolume rules out the most embarrassing explanation
++        // for silent AirPods; buffer duration and latency expose a route that
++        // reconfigured underneath a running engine.
++        @"liveCategoryOptions": @((NSInteger)s.categoryOptions),
++        @"liveOutputVolume": @(s.outputVolume),
++        @"liveIOBufferDuration": @(s.IOBufferDuration),
++        @"liveOutputLatency": @(s.outputLatency),
++        @"liveInputLatency": @(s.inputLatency),
++        @"liveOutputChannels": @(s.outputNumberOfChannels),
++        @"liveInputChannels": @(s.inputNumberOfChannels),
 +        // VoIP push-arrival markers (written by AttoVoipBootstrap).
 +        @"voipPushAt": @([ud doubleForKey:@"atto_last_voip_push_at"]),
 +        @"voipPushAppState": @([ud integerForKey:@"atto_last_voip_push_appstate"]),

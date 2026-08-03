@@ -28,7 +28,25 @@ const PROCESS_BOOT_MS = Date.now();
  * RNDeviceInfo.getCallAudioState (see patches/react-native-device-info@*.patch).
  * Lets us PROVE — not infer — whether the audio session activated for a call.
  */
-interface NativeCallAudioState {
+/**
+ * One entry of the native AVAudioSessionRouteChangeNotification ring (see
+ * `-attoRouteChangeDidOccur:` in patches/react-native-device-info@*.patch).
+ * `fromInputPort` / `fromOutputPort` are the ports the route was on BEFORE this
+ * change, read out of the notification payload, so entry N's "from" is the state
+ * before change N and entry N+1's "from" is the state after it.
+ */
+export interface NativeRouteChange {
+  reason: string;
+  reasonValue: number;
+  /** Epoch SECONDS, matching the other native ATTO markers. */
+  at: number;
+  /** This change's position in the monotonic routeChangeCount. */
+  count: number;
+  fromInputPort: string;
+  fromOutputPort: string;
+}
+
+export interface NativeCallAudioState {
   didActivateAt: number;
   didDeactivateAt: number;
   answerActionAt: number;
@@ -42,6 +60,54 @@ interface NativeCallAudioState {
   liveOtherAudioPlaying: boolean;
   voipPushAt: number;
   voipPushAppState: number;
+  /**
+   * Route-change attribution, written by the native
+   * AVAudioSessionRouteChangeNotification observer added in the same patch.
+   * `lastRouteChangeReason` is one of Unknown | NewDeviceAvailable |
+   * OldDeviceUnavailable | CategoryChange | Override | WakeFromSleep |
+   * NoSuitableRouteForCategory | RouteConfigurationChange, and it is the field
+   * that separates "iOS re-routed on its own during the A2DP to HFP handoff"
+   * from "the user pulled the AirPods out" from "our own code did it".
+   * `lastRouteChangeAt` is epoch SECONDS (0 = no route change observed yet, in
+   * which case the reason carries no meaning). `routeChangeCount` is monotonic
+   * across the process, so a jump larger than 1 between two samples means route
+   * changes happened inside a window we did not poll.
+   *
+   * OPTIONAL on purpose: these are absent on any build whose native side
+   * predates the patch, so every read must tolerate undefined.
+   */
+  lastRouteChangeReason?: string;
+  lastRouteChangeAt?: number;
+  routeChangeCount?: number;
+  /**
+   * The last few route changes, oldest first, straight from the native ring.
+   * `lastRouteChangeReason` above is a single last-wins slot, and the
+   * invite-to-answer transition fires several route changes inside a few hundred
+   * milliseconds (CategoryChange as Twilio takes PlayAndRecord, the A2DP to HFP
+   * handoff, our own Override), so at a 750 ms poll the whole burst collapsed into
+   * one sample. `routeChangeCount` could then say we had missed four but never
+   * which four. This decomposes the burst.
+   *
+   * OPTIONAL for the same reason as the fields above: absent on any build whose
+   * native side predates the patch.
+   */
+  recentRouteChanges?: NativeRouteChange[];
+  /**
+   * Session configuration + IO geometry, also new in the same patch and also
+   * optional for the same reason. `liveCategoryOptions` is the RAW
+   * AVAudioSessionCategoryOptions bitmask (MixWithOthers 1, DuckOthers 2,
+   * AllowBluetoothHFP 4, DefaultToSpeaker 8, AllowBluetoothA2DP 32,
+   * AllowAirPlay 64) so a write that strips HFP or injects DefaultToSpeaker is
+   * a visible fact rather than an inference. `liveOutputVolume` rules out the
+   * most embarrassing explanation for silent AirPods.
+   */
+  liveCategoryOptions?: number;
+  liveOutputVolume?: number;
+  liveIOBufferDuration?: number;
+  liveOutputLatency?: number;
+  liveInputLatency?: number;
+  liveOutputChannels?: number;
+  liveInputChannels?: number;
 }
 
 /**
@@ -100,6 +166,56 @@ export async function getCallAudioState(): Promise<NativeCallAudioState | null> 
 }
 
 /**
+ * The native route-change reason is only meaningful once a route change has
+ * actually been observed; before that the underlying NSUserDefaults integer is
+ * 0, which happens to collide with AVAudioSessionRouteChangeReasonUnknown. The
+ * timestamp is the disambiguator, so both readers go through here rather than
+ * each re-deriving the rule and drifting apart.
+ */
+export function resolveRouteChangeReason(
+  a: NativeCallAudioState | null | undefined
+): string | null {
+  if (!a) return null;
+  const at = a.lastRouteChangeAt ?? 0;
+  if (!(at > 0)) return null;
+  return a.lastRouteChangeReason || null;
+}
+
+/**
+ * Milliseconds between the last observed route change and now. Null when no
+ * route change has been observed (or on a build without the native observer).
+ * This is what turns "the route was BluetoothHFP" into "the route BECAME
+ * BluetoothHFP 340 ms ago", which is the difference between a state and an event.
+ */
+export function routeChangeAgeMs(
+  a: NativeCallAudioState | null | undefined
+): number | null {
+  const at = a?.lastRouteChangeAt ?? 0;
+  if (!(at > 0)) return null;
+  return Math.max(0, Math.round(Date.now() - at * 1000));
+}
+
+/**
+ * Render the native route-change ring as an array of short strings, most recent
+ * last: `"7 Override @1754… from in:BluetoothHFP out:BluetoothHFP"`.
+ *
+ * Strings rather than nested objects on purpose. These land on events that a
+ * person reads while triaging ONE report, and PostHog flattens nested objects
+ * into unqueryable JSON blobs anyway. The decomposable numbers we actually
+ * aggregate on (count, reason) already ship as their own top-level properties.
+ */
+export function formatRouteChangeRing(
+  a: NativeCallAudioState | null | undefined
+): string[] {
+  const ring = a?.recentRouteChanges;
+  if (!Array.isArray(ring) || ring.length === 0) return [];
+  return ring.map(
+    (r) =>
+      `${r.count} ${r.reason || 'Unknown'} @${Math.round(r.at)} from in:${r.fromInputPort} out:${r.fromOutputPort}`
+  );
+}
+
+/**
  * Lightweight, flattened audio-session snapshot for attaching to a single
  * telemetry event (e.g. `call_answered`) — WITHOUT the cost of a full
  * collectDeviceSnapshot(). Proves the live AVAudioSession state at the moment a
@@ -124,6 +240,22 @@ export async function captureCallAudioSnapshot(): Promise<Record<string, unknown
     audio_voip_push_at: a && a.voipPushAt > 0 ? a.voipPushAt : null,
     audio_voip_push_app_state:
       a && a.voipPushAt > 0 ? (a.voipPushAppState ?? null) : null,
+    // Who moved the route, and how long ago, at the instant this snapshot was
+    // taken. On an answer snapshot this is what says whether iOS was still
+    // mid-handoff when the call started.
+    audio_route_change_reason: resolveRouteChangeReason(a),
+    audio_route_change_count: a?.routeChangeCount ?? null,
+    audio_time_since_route_change_ms: routeChangeAgeMs(a),
+    // The burst, decomposed. `audio_route_change_reason` is last-wins and can only
+    // ever name one of the several changes that fire around an answer.
+    audio_recent_route_changes: formatRouteChangeRing(a),
+    audio_live_category_options: a?.liveCategoryOptions ?? null,
+    audio_live_output_volume: a?.liveOutputVolume ?? null,
+    audio_live_io_buffer_duration: a?.liveIOBufferDuration ?? null,
+    audio_live_output_latency: a?.liveOutputLatency ?? null,
+    audio_live_input_latency: a?.liveInputLatency ?? null,
+    audio_live_output_channels: a?.liveOutputChannels ?? null,
+    audio_live_input_channels: a?.liveInputChannels ?? null,
   };
 }
 
@@ -218,6 +350,28 @@ export interface DeviceSnapshot {
   /** epoch secs the native VoIP push last arrived + its app-state raw value. */
   audioVoipPushAt: number | null;
   audioVoipPushAppState: number | null;
+
+  // ── Route-change attribution (iOS, native observer) ──
+  // iOS reports WHY the route changed and we used to discard it, which is why
+  // every route transition in the AirPods no-audio incident was ambiguous.
+  // OldDeviceUnavailable = the user removed the AirPods; NewDeviceAvailable /
+  // RouteConfigurationChange = iOS moved it (the A2DP to HFP handoff);
+  // Override / CategoryChange = our own code moved it.
+  audioRouteChangeReason: string | null;
+  /** Monotonic per-process count; a jump > 1 between ticks means unsampled changes. */
+  audioRouteChangeCount: number | null;
+  audioTimeSinceRouteChangeMs: number | null;
+
+  // ── Session configuration + IO geometry (iOS) ──
+  /** RAW AVAudioSessionCategoryOptions bitmask (AllowBluetoothHFP = 4, DefaultToSpeaker = 8). */
+  audioLiveCategoryOptions: number | null;
+  /** 0..1. Rules out the most embarrassing explanation for silent AirPods. */
+  audioLiveOutputVolume: number | null;
+  audioLiveIOBufferDuration: number | null;
+  audioLiveOutputLatency: number | null;
+  audioLiveInputLatency: number | null;
+  audioLiveOutputChannels: number | null;
+  audioLiveInputChannels: number | null;
 
   // ── Static identity (cached after first call) ─
   deviceModel: string | null;
@@ -390,6 +544,16 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     audioVoipPushAt: aTs(a?.voipPushAt),
     audioVoipPushAppState:
       aTs(a?.voipPushAt) != null ? (a?.voipPushAppState ?? null) : null,
+    audioRouteChangeReason: resolveRouteChangeReason(a),
+    audioRouteChangeCount: a?.routeChangeCount ?? null,
+    audioTimeSinceRouteChangeMs: routeChangeAgeMs(a),
+    audioLiveCategoryOptions: a?.liveCategoryOptions ?? null,
+    audioLiveOutputVolume: a?.liveOutputVolume ?? null,
+    audioLiveIOBufferDuration: a?.liveIOBufferDuration ?? null,
+    audioLiveOutputLatency: a?.liveOutputLatency ?? null,
+    audioLiveInputLatency: a?.liveInputLatency ?? null,
+    audioLiveOutputChannels: a?.liveOutputChannels ?? null,
+    audioLiveInputChannels: a?.liveInputChannels ?? null,
     ...staticInfo,
   };
 }

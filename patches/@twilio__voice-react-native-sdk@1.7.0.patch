@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e96526bfe
+index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22e234af15
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3059 @@
+@@ -0,0 +1,3519 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -400,6 +400,46 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +static int kOutputBus = 0;
 +static int kInputBus = 1;
 +
++/*
++ * ATTO (Aug 3 2026) — cohort flag for the render/format recheck work.
++ *
++ * This file has no access to PostHog, so JS mirrors the flag into NSUserDefaults
++ * (react-native `Settings.set`) exactly the way `atto_audio_injection_enabled`
++ * gates the custom-device install in TwilioVoiceReactNative.m. Absent key reads
++ * as NO, so every BEHAVIOUR change guarded by it is off by default and only the
++ * counters ship to everyone.
++ */
++static NSString * const kAttoRenderFormatRecheckKey = @"atto_engine_render_format_recheck";
++
++/*
++ * Number of slots in the per-reason route-change histogram. Indexed directly by
++ * AVAudioSessionRouteChangeReason, whose largest value is
++ * AVAudioSessionRouteChangeReasonRouteConfigurationChange == 8. An enum constant
++ * rather than a `static const`, because this is used as an ivar array bound and C
++ * needs a compile-time constant there.
++ */
++enum { kAttoRouteChangeReasonCount = 9 };
++
++/*
++ * ATTO (Aug 3 2026) — how many post-activation format re-aligns one call is
++ * allowed to trigger.
++ *
++ * A re-align clears the cached formats and calls TVOAudioDeviceFormatChanged,
++ * which per TVOAudioDevice.h makes the media engine stop and then restart the
++ * renderer and/or the capturer. Those restarts run through startRendering: /
++ * startCapturing:, which call the re-align again, so the allowance has to be
++ * bounded by something the cycle itself cannot reset. It is keyed on the
++ * TVOAudioDeviceContext pointer (see _formatRealignContext): the context is
++ * stable for the lifetime of a call and only changes when the media engine hands
++ * us a new one, i.e. on a genuinely new call.
++ *
++ * Two rather than one: an A2DP-to-HFP answer can legitimately settle in two
++ * steps (activation, then the profile handoff completing), and a second
++ * correction is worth an audible gap. A third would mean we are chasing our own
++ * change, which is exactly the runaway this bound exists to prevent.
++ */
++static const uint8_t kAttoMaxFormatRealignsPerCall = 2;
++
 +// This is the maximum slice size for VoiceProcessingIO (as observed in the field). We will double check at initialization time.
 +static size_t kMaximumFramesPerBuffer = 3072;
 +
@@ -553,6 +593,56 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    float _remoteLevelEMA;
 +    float _micLevelEMA;
 +
++    /*
++     * ATTO (Aug 3 2026) ROUTE / FORMAT FORENSICS — added after the AirPods
++     * incident, where the client answered a call while his AirPods were already
++     * playing media and could not hear the other party at all. Nothing crashed and
++     * nothing errored: the whole failure window was uninstrumented, and every
++     * route transition in it was ambiguous because we read the reason iOS gives us
++     * and threw it away.
++     *
++     *   _pendingFormatRecheck            a route change arrived while _audioUnit was
++     *                                    NULL (teardown/rebuild window) and could not
++     *                                    be processed. Consumed by the next start
++     *                                    hook instead of being dropped forever.
++     *   _formatRealignContext            the TVOAudioDeviceContext the allowance
++     *                                    below belongs to. The media engine keeps one
++     *                                    context per call, so a change of pointer is
++     *                                    the only reliable "a new call started" edge
++     *                                    available inside this file.
++     *   _formatRealignCountForContext    how many re-aligns that context has already
++     *                                    triggered, bounded by
++     *                                    kAttoMaxFormatRealignsPerCall so a
++     *                                    pathological route cannot make us chase our
++     *                                    own format change in a loop.
++     *   _dbgRouteChangeDroppedCount      how often the above actually happened.
++     *                                    routeRebuildCount cannot see these at all.
++     *   _dbgRouteChangeRecheckedCount    how often a start hook consumed that debt.
++     *   _dbgRouteRebuildDisagreeCount    how often the old comparand (_renderingFormat)
++     *                                    and the correct one (_enginesBuiltFormat)
++     *                                    disagreed about whether to rebuild.
++     *   _dbgSessionRateFlipCount         how often the live session format differed
++     *                                    from the one Twilio had already latched.
++     *   _dbgFormatRealignScheduledCount  how often we acted on that (cohort only).
++     *   _dbgLastRouteReason / ...At      the reason of the most recent route change
++     *                                    and when it happened (epoch seconds).
++     *   _dbgRouteReasonCounts            histogram indexed by the reason itself.
++     *   _dbgRouteChangeNotifyCount       every notification, including the ones the
++     *                                    switch in handleRouteChange: ignores.
++     */
++    BOOL _pendingFormatRecheck;
++    TVOAudioDeviceContext _formatRealignContext;
++    uint8_t _formatRealignCountForContext;
++    uint64_t _dbgRouteChangeDroppedCount;
++    uint64_t _dbgRouteChangeRecheckedCount;
++    uint64_t _dbgRouteRebuildDisagreeCount;
++    uint64_t _dbgSessionRateFlipCount;
++    uint64_t _dbgFormatRealignScheduledCount;
++    NSInteger _dbgLastRouteReason;
++    double _dbgLastRouteReasonAt;
++    uint64_t _dbgRouteChangeNotifyCount;
++    uint64_t _dbgRouteReasonCounts[kAttoRouteChangeReasonCount];
++
 +    // Metronome phase, advanced by the consumer in file-sample units.
 +    double _metronomeSampleRate;     // file sample rate (consumer format)
 +    uint64_t _metronomeSamplesPerBeat;
@@ -613,6 +703,10 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        _metronomeOn = NO;
 +        _metronomeBpm = 90;
 +        _ringsAllocated = NO;
++
++        // -1 means "no route change observed yet", which is a different fact from
++        // AVAudioSessionRouteChangeReasonUnknown (0). Everything else zero-inits.
++        _dbgLastRouteReason = -1;
 +
 +        /*
 +         * Initialize rendering and capturing context. The deviceContext will be be filled in when startRendering or
@@ -772,11 +866,21 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 + * one -> playout rendered slow/deep. Engines MUST match the negotiated format.
 + */
 +- (TVOAudioFormat *)engineTargetFormat {
-+    if (_renderingFormat != nil) {
-+        return _renderingFormat;
++    /*
++     * ATTO (Aug 3 2026): read the two cached formats under the device lock.
++     * This method is called from the media engine's worker thread (the rebuild
++     * block in handleValidRouteChange) as well as from the start hooks, while
++     * handleValidRouteChange and the interruption-resume escalation both assign
++     * nil to those ARC strong ivars. Returning a strong reference taken without
++     * the lock can retain an object that is already deallocating. @synchronized
++     * is recursive, so callers that already hold it pay nothing.
++     */
++    TVOAudioFormat *latched = nil;
++    @synchronized(self) {
++        latched = _renderingFormat ?: _capturingFormat;
 +    }
-+    if (_capturingFormat != nil) {
-+        return _capturingFormat;
++    if (latched != nil) {
++        return latched;
 +    }
 +    return [[self class] activeFormat];
 +}
@@ -827,6 +931,148 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +          live, _enginesBuiltFormat);
 +    [self teardownAudioEngine];
 +    [self setupAudioEngine]; // rebuilds both, updates _enginesBuiltFormat, re-arms mixer/tap
++}
++
++/*
++ * ATTO (Aug 3 2026): is the render/format recheck cohort flag on for this user?
++ *
++ * Read live (never cached) so the flag can be flipped from JS without relaunching
++ * the app, and read only from non-real-time threads — NSUserDefaults is a
++ * memory-backed read after first access, but it is still not RT safe and must
++ * never be touched from a render or record callback.
++ */
++- (BOOL)renderFormatRecheckEnabled {
++    return [[NSUserDefaults standardUserDefaults] boolForKey:kAttoRenderFormatRecheckKey];
++}
++
++/*
++ * ATTO (Aug 3 2026): consume the "a route change was dropped" debt left by
++ * handleValidRouteChange when it ran with no AudioUnit. Returns YES exactly once
++ * per dropped batch. Always clears the flag, even when the cohort flag is off, so
++ * it can never go stale and fire against an unrelated call later.
++ */
++- (BOOL)consumePendingFormatRecheck {
++    BOOL pending;
++    @synchronized(self) {
++        pending = _pendingFormatRecheck;
++        _pendingFormatRecheck = NO;
++    }
++    if (pending) {
++        _dbgRouteChangeRecheckedCount++;
++    }
++    return pending;
++}
++
++/*
++ * ATTO (Aug 3 2026) — POST-ACTIVATION FORMAT RE-ALIGNMENT.
++ *
++ * Twilio queries renderFormat/captureFormat BEFORE this device has forced the
++ * session to PlayAndRecord/VoiceChat and activated it: that happens later, inside
++ * ensureEngineFormatForActiveSession, which startRendering:/startCapturing: call
++ * afterwards. On a call answered while the AirPods are already playing media the
++ * pre-activation rate (A2DP, 48000) and the post-activation rate (HFP, 24000) are
++ * different, so the formats Twilio latched describe a session that no longer
++ * exists. The same gap opens when a route change is delivered while the AudioUnit
++ * is NULL, which handleValidRouteChange used to discard outright.
++ *
++ * WHAT WE DELIBERATELY DO NOT DO: re-latch _renderingFormat in place and carry on.
++ * Twilio's media engine is already producing samples at the format it queried; if
++ * we quietly moved our side underneath it the far party's voice would play at the
++ * wrong rate for as long as the two disagreed. That is precisely the build-93
++ * "monster voice", and it is the one outcome this whole area must never produce
++ * again.
++ *
++ * Instead we reuse the correction the route-change path has shipped with since day
++ * one, off the current thread: clear the cached formats and let
++ * TVOAudioDeviceFormatChanged drive the media engine through stop -> re-query ->
++ * start. The switch is then atomic from the media engine's point of view, and the
++ * following startRendering:/startCapturing: rebuilds the engines and the AudioUnit
++ * at one consistent rate through the existing, proven path. Deferring it by a beat
++ * also keeps us from re-entering the media engine from inside its own start hook.
++ *
++ * Detection and the counters are UNCONDITIONAL: measuring this is the entire point,
++ * and it is what the incident lacked. Acting on it is gated on the cohort flag and
++ * bounded to kAttoMaxFormatRealignsPerCall per device context, so it can neither
++ * loop nor reach anyone else.
++ */
++- (void)realignFormatsIfSessionRateFlipped:(NSString *)reason {
++    TVOAudioFormat *activeFormat = [[self class] activeFormat];
++
++    /*
++     * SNAPSHOT THE LATCHED FORMAT UNDER THE DEVICE LOCK.
++     *
++     * _renderingFormat / _capturingFormat are ARC strong ivars, and they are
++     * assigned nil from at least two other threads: handleValidRouteChange (the
++     * media engine's worker) and the dispatch_after block below (a global queue).
++     * Reading a strong ivar into a local emits an objc_retain, so an unlocked read
++     * racing one of those releases can retain an object that is already
++     * deallocating. That is the REACT-NATIVE-4C / REACT-NATIVE-4Q crash family,
++     * both of which shipped from this file, and this method is reached from
++     * startAudioUnit which does NOT already hold the lock. @synchronized(self) is
++     * recursive, so taking it here is free on the paths that do.
++     */
++    TVOAudioFormat *latched = nil;
++    @synchronized(self) {
++        latched = _renderingFormat ?: _capturingFormat;
++    }
++    if (latched == nil || [activeFormat isEqual:latched]) {
++        return; // nothing latched yet, or the two already agree
++    }
++
++    _dbgSessionRateFlipCount++;
++    NSLog(@"[AttoAudioEngine] session format flipped after activation (%@): active %@ vs latched %@",
++          reason, activeFormat, latched);
++
++    if (![self renderFormatRecheckEnabled]) {
++        return; // measurement only outside the cohort
++    }
++
++    /*
++     * BOUND THE RE-ALIGN TO THE CALL, NOT TO THE START HOOK.
++     *
++     * A re-align drives the media engine through stopRendering + stopCapturing and
++     * then startRendering: + startCapturing:, and those start hooks call straight
++     * back into here. Anything the stop hooks could reset would therefore be reset
++     * by the very cycle it caused, which is not a bound at all. The device context
++     * is the one identity that survives that cycle unchanged and still changes when
++     * a genuinely new call binds, so the allowance hangs off it.
++     */
++    @synchronized(self) {
++        TVOAudioDeviceContext ctx = [self deviceContext];
++        if (_formatRealignContext != ctx) {
++            _formatRealignContext = ctx;
++            _formatRealignCountForContext = 0;
++        }
++        if (_formatRealignCountForContext >= kAttoMaxFormatRealignsPerCall) {
++            return; // never chase our own format change
++        }
++        _formatRealignCountForContext++;
++    }
++    _dbgFormatRealignScheduledCount++;
++
++    /*
++     * Same shape as the interruption-resume escalation below: a short hop onto a
++     * global queue so we are off the media engine's start hook, then the format
++     * clear + notify under the device's own lock, with the context re-read (it can
++     * disappear if the call ends in the meantime).
++     */
++    __weak typeof(self) weakSelf = self;
++    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
++                   dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++        __strong typeof(weakSelf) strongSelf = weakSelf;
++        if (!strongSelf || strongSelf.isInterrupted) {
++            return;
++        }
++        @synchronized(strongSelf) {
++            TVOAudioDeviceContext ctx = [strongSelf deviceContext];
++            if (ctx == NULL) {
++                return; // call gone; the next call starts from a clean slate anyway
++            }
++            strongSelf->_renderingFormat = nil;
++            strongSelf->_capturingFormat = nil;
++            TVOAudioDeviceFormatChanged(ctx);
++        }
++    });
 +}
 +
 +// AVAudioSession config block. The SDK's CallKit hooks call device.block() at the
@@ -1861,6 +2107,28 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    uint64_t recCb = self.capturingContext ? self.capturingContext->cbCount : 0;
 +    uint64_t playCb = self.renderingContext ? self.renderingContext->cbCount : 0;
 +    uint64_t renderFail = self.capturingContext ? self.capturingContext->renderFailCount : 0;
++
++    // ATTO (Aug 3 2026): route-change reason histogram, indexed by the reason value
++    // itself so the array position IS the AVAudioSessionRouteChangeReason:
++    //   0 Unknown, 1 NewDeviceAvailable, 2 OldDeviceUnavailable, 3 CategoryChange,
++    //   4 Override, 5 (unused), 6 WakeFromSleep, 7 NoSuitableRouteForCategory,
++    //   8 RouteConfigurationChange.
++    NSMutableArray<NSNumber *> *routeReasonCounts =
++        [NSMutableArray arrayWithCapacity:(NSUInteger)kAttoRouteChangeReasonCount];
++    for (NSUInteger i = 0; i < (NSUInteger)kAttoRouteChangeReasonCount; i++) {
++        [routeReasonCounts addObject:@(_dbgRouteReasonCounts[i])];
++    }
++
++    // ATTO (Aug 3 2026): read the negotiated formats under the device lock, like
++    // every other reader now does. This method runs on the JS thread while the
++    // media engine's threads can be nilling those ivars.
++    double renderingFormatRate = 0.0;
++    double capturingFormatRate = 0.0;
++    @synchronized(self) {
++        renderingFormatRate = _renderingFormat ? _renderingFormat.sampleRate : 0.0;
++        capturingFormatRate = _capturingFormat ? _capturingFormat.sampleRate : 0.0;
++    }
++
 +    return @{
 +        @"micFrames": @(_dbgMicFrames),
 +        @"remoteFrames": @(_dbgRemoteFrames),
@@ -1888,8 +2156,8 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        @"enginesBuiltRate": @(_enginesBuiltFormat ? _enginesBuiltFormat.sampleRate : 0),
 +        // Negotiated (Twilio-facing) rates — the engines MUST match these. A
 +        // mismatch here = wrong-speed audio (monster/chipmunk).
-+        @"renderingFormatRate": @(_renderingFormat ? _renderingFormat.sampleRate : 0),
-+        @"capturingFormatRate": @(_capturingFormat ? _capturingFormat.sampleRate : 0),
++        @"renderingFormatRate": @(renderingFormatRate),
++        @"capturingFormatRate": @(capturingFormatRate),
 +        // ATTO (build 83): did Twilio even drive the device's start hooks this call?
 +        // startCapturingCount>0 + recordCbCount==0 ⇒ device bound but AudioUnit not
 +        // pumping (session/format). startCapturingCount==0 ⇒ device not bound at all.
@@ -1901,6 +2169,37 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        @"teardownAudioUnitCount": @(_dbgTeardownAudioUnitCount),
 +        @"interruptionBeganCount": @(_dbgInterruptionBeganCount),
 +        @"routeRebuildCount": @(_dbgRouteRebuildCount),
++        /*
++         * ATTO (Aug 3 2026) ROUTE FORENSICS. All pure instrumentation, all shipped
++         * to everyone. lastRouteReason is the field that separates "iOS re-routed
++         * during the Bluetooth handoff" from "the user pulled the AirPods out" from
++         * "our own app moved it"; routeReasonCounts gives the same split over the
++         * whole call. lastRouteReason is -1 until a route change is observed, which
++         * is a different fact from reason 0 (Unknown).
++         */
++        @"routeReasonCounts": routeReasonCounts,
++        @"lastRouteReason": @(_dbgLastRouteReason),
++        @"lastRouteReasonAt": @(_dbgLastRouteReasonAt),
++        @"routeChangeNotifyCount": @(_dbgRouteChangeNotifyCount),
++        // >0 ⇒ route changes arrived while the AudioUnit was NULL (the teardown and
++        // rebuild window) and used to be discarded outright. routeRebuildCount is
++        // structurally blind to these: it only counts the successful path.
++        @"routeChangeDroppedCount": @(_dbgRouteChangeDroppedCount),
++        // How many of those were picked up again by a later start hook.
++        @"routeChangeRecheckedCount": @(_dbgRouteChangeRecheckedCount),
++        // >0 ⇒ the old rebuild comparand (_renderingFormat, which the media engine
++        // re-latches out from under us) and the correct one (_enginesBuiltFormat)
++        // disagreed about whether the engines needed rebuilding. This measures the
++        // size of the hole before the gated fix is widened past the dev cohort.
++        @"routeRebuildDisagreeCount": @(_dbgRouteRebuildDisagreeCount),
++        // >0 ⇒ activating the call session moved the sample rate AFTER Twilio had
++        // already latched a render/capture format, i.e. the A2DP-to-HFP answer
++        // signature. Counted for everyone; only acted on for the cohort.
++        @"sessionRateFlipCount": @(_dbgSessionRateFlipCount),
++        @"formatRealignScheduledCount": @(_dbgFormatRealignScheduledCount),
++        // Which side of the cohort flag this call ran on, so the counters above can
++        // be read without guessing.
++        @"renderFormatRecheckEnabled": @([self renderFormatRecheckEnabled] ? 1 : 0),
 +        // >0 ⇒ an interruption ended, we restarted the unit, and the capture
 +        // callbacks did NOT resume — the silent-starvation case that leaves the
 +        // call dead and any take truncated. We now force a rebuild when it happens;
@@ -2381,9 +2680,23 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    @synchronized(self) {
 +        _dbgStartRenderingCount++; // telemetry: proves Twilio is driving this device
 +
++        // ATTO (Aug 3 2026): pay off any route change that was dropped while the
++        // AudioUnit was NULL (see handleValidRouteChange). We are about to
++        // re-activate the session, so this is the right place to take a fresh look
++        // at the format instead of staying pinned to whatever was latched before
++        // the route moved.
++        const BOOL pendingRecheck = [self consumePendingFormatRecheck];
++
 +        // ATTO (build 82): align the manual-render engine format to the LIVE call
 +        // rate before wiring the AudioUnit (see ensureEngineFormatForActiveSession).
 +        [self ensureEngineFormatForActiveSession];
++
++        // ATTO (Aug 3 2026): ensureEngineFormatForActiveSession is what ACTIVATES
++        // the session, so the live rate can only be trusted after it has run. If it
++        // no longer matches what Twilio latched when it queried renderFormat, say so
++        // (always) and correct it (cohort only).
++        [self realignFormatsIfSessionRateFlipped:
++            (pendingRecheck ? @"startRendering+droppedRouteChange" : @"startRendering")];
 +
 +        /*
 +         * In this example, the app always publishes an audio track. So we will start the audio unit from the capturer
@@ -2450,6 +2763,17 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        }
 +
 +        self.renderingContext->deviceContext = NULL;
++
++        /*
++         * ATTO (Aug 3 2026): the format-re-align allowance is deliberately NOT reset
++         * here. A re-align is what makes the media engine stop and restart both
++         * halves (TVOAudioDevice.h documents that TVOAudioDeviceFormatChanged causes
++         * exactly this stop -> start cycle), so resetting on a stop would hand the
++         * following start hook a fresh allowance and let one route flip cycle the
++         * AudioUnit and both engines indefinitely — a hard audio dropout each time,
++         * which is the very symptom this work exists to remove. The allowance is
++         * keyed on the device context instead; see realignFormatsIfSessionRateFlipped.
++         */
 +    }
 +
 +    return YES;
@@ -2492,10 +2816,20 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    @synchronized (self) {
 +        _dbgStartCapturingCount++; // telemetry: proves Twilio is driving this device
 +
++        // ATTO (Aug 3 2026): consume a route change that was dropped while the
++        // AudioUnit was NULL (see handleValidRouteChange), so it stops vanishing.
++        const BOOL pendingRecheck = [self consumePendingFormatRecheck];
++
 +        // ATTO (build 82): align the manual-render engine format to the LIVE call
 +        // rate BEFORE wiring the AudioUnit, or a frozen -init format kills two-way
 +        // audio and can crash. No-op when already aligned.
 +        [self ensureEngineFormatForActiveSession];
++
++        // ATTO (Aug 3 2026): the session is only activated inside the call above, so
++        // compare the live format against Twilio's latched one now. Counted always,
++        // corrected only for the cohort flag.
++        [self realignFormatsIfSessionRateFlipped:
++            (pendingRecheck ? @"startCapturing+droppedRouteChange" : @"startCapturing")];
 +
 +        // Restart the audio unit if the audio graph is already setup and if we publish an audio track.
 +        // ATTO (build 92): tear down ANY existing unit, regardless of _enabled.
@@ -2559,6 +2893,10 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        }
 +
 +        self.capturingContext->deviceContext = NULL;
++
++        // ATTO (Aug 3 2026): mirror of stopRendering — no re-align reset here either.
++        // See the note there for why a stop hook is the one place that must never
++        // re-arm it.
 +    }
 +
 +    return YES;
@@ -2961,6 +3299,18 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +        NSLog(@"Could not start the audio unit!");
 +        return NO;
 +    }
++    /*
++     * ATTO (Aug 3 2026): a route change that landed while _audioUnit was NULL was
++     * discarded by handleValidRouteChange. There is a unit again now, so this is the
++     * first moment the debt can be paid. startRendering:/startCapturing: consume it
++     * before they get here, so in practice this only fires on the paths that restart
++     * the unit WITHOUT going through a start hook: setEnabled:YES at CallKit
++     * didActivate, interruption-ended, and media-services-restored. Those are exactly
++     * the moments a Bluetooth profile handoff tends to fire route changes.
++     */
++    if ([self consumePendingFormatRecheck]) {
++        [self realignFormatsIfSessionRateFlipped:@"startAudioUnit+droppedRouteChange"];
++    }
 +    return YES;
 +}
 +
@@ -3057,9 +3407,13 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +                        strongSelf->_dbgResumeStarvedCount++;
 +                        NSLog(@"[AttoAudioEngineDevice] resume starved (cb frozen at %llu); forcing rebuild",
 +                              (unsigned long long)cbNow);
-+                        strongSelf->_renderingFormat = nil;
-+                        strongSelf->_capturingFormat = nil;
++                        // ATTO (Aug 3 2026): clear the formats INSIDE the lock, like
++                        // every other writer of these ARC strong ivars now does. They
++                        // are read (and therefore retained) from the media engine's
++                        // threads, so an unlocked release here can race a retain.
 +                        @synchronized(strongSelf) {
++                            strongSelf->_renderingFormat = nil;
++                            strongSelf->_capturingFormat = nil;
 +                            TVOAudioDeviceContext ctx = [strongSelf deviceContext];
 +                            if (ctx) {
 +                                TVOAudioDeviceFormatChanged(ctx);
@@ -3092,6 +3446,30 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    // Check if the sample rate, or channels changed and trigger a format change if it did.
 +    AVAudioSessionRouteChangeReason reason = [notification.userInfo[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
 +
++    /*
++     * ATTO (Aug 3 2026) — KEEP THE REASON. This is pure instrumentation and ships to
++     * everyone.
++     *
++     * iOS tells us WHY the route moved and, until now, this method read that value
++     * and dropped it. That single field is the difference between "iOS re-routed on
++     * its own during the A2DP to HFP handoff" (NewDeviceAvailable,
++     * RouteConfigurationChange), "the user physically pulled the AirPods out"
++     * (OldDeviceUnavailable) and "our own app did it" (CategoryChange, Override).
++     * Without it every route transition in the AirPods incident was ambiguous, and
++     * the timeline had to be reconstructed from the client's remedial actions.
++     *
++     * Plain scalar writes under the device's existing lock, on the notification
++     * thread. Nothing here is reachable from a render or record callback.
++     */
++    @synchronized(self) {
++        _dbgRouteChangeNotifyCount++;
++        _dbgLastRouteReason = (NSInteger)reason;
++        _dbgLastRouteReasonAt = [[NSDate date] timeIntervalSince1970];
++        if ((NSUInteger)reason < (NSUInteger)kAttoRouteChangeReasonCount) {
++            _dbgRouteReasonCounts[(NSUInteger)reason]++;
++        }
++    }
++
 +    switch (reason) {
 +        case AVAudioSessionRouteChangeReasonUnknown:
 +        case AVAudioSessionRouteChangeReasonNewDeviceAvailable:
@@ -3123,6 +3501,26 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    if (self.isInterrupted) {
 +        return;
 +    } else if (_audioUnit == NULL) {
++        /*
++         * ATTO (Aug 3 2026) — DO NOT DROP THIS ON THE FLOOR.
++         *
++         * The AudioUnit is NULL for the whole teardown-and-rebuild window, which is
++         * exactly the window in which a Bluetooth profile handoff or a CallKit
++         * activation fires route changes. Returning here discarded that change
++         * permanently: the engines stayed built at the old rate and nothing existed
++         * that would ever correct them, and routeRebuildCount (which only counts the
++         * successful path) could not even show it had happened.
++         *
++         * Remember the debt instead. The next start hook, or the next successful
++         * AudioOutputUnitStart, consumes it and takes a fresh look at the format.
++         * Both writes are plain scalars under the device lock, and neither is
++         * reachable from a render or record callback.
++         */
++        @synchronized(self) {
++            _pendingFormatRecheck = YES;
++            _dbgRouteChangeDroppedCount++;
++        }
++        NSLog(@"[AttoAudioEngine] route change while the AudioUnit was NULL; deferring the format recheck");
 +        return;
 +    }
 +
@@ -3131,19 +3529,40 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +    // Determine if the format actually changed. We only care about sample rate and number of channels.
 +    TVOAudioFormat *activeFormat = [[self class] activeFormat];
 +
++    // ATTO (Aug 3 2026): snapshot the two cached formats under the device lock
++    // before comparing them. Same reason as everywhere else in this file now: they
++    // are ARC strong ivars written from other threads, so reading them raw races a
++    // release. The comparison itself is unchanged.
++    TVOAudioFormat *cachedRendering = nil;
++    TVOAudioFormat *cachedCapturing = nil;
++    @synchronized(self) {
++        cachedRendering = _renderingFormat;
++        cachedCapturing = _capturingFormat;
++    }
++
 +    // Notify Voice SDK about the format change
-+    if (![activeFormat isEqual:_renderingFormat] ||
-+        ![activeFormat isEqual:_capturingFormat]) {
++    if (![activeFormat isEqual:cachedRendering] ||
++        ![activeFormat isEqual:cachedCapturing]) {
 +
 +        _restartAudioUnit = YES;
 +
 +        NSLog(@"Format changed, restarting with %@", activeFormat);
 +
-+        // Signal a change by clearing our cached format, and allowing TVOAudioDevice to drive the process.
-+        _renderingFormat = nil;
-+        _capturingFormat = nil;
-+
 +        @synchronized(self) {
++            /*
++             * ATTO (Aug 3 2026): these two nils used to sit OUTSIDE this block, two
++             * lines above it. They are releases of ARC strong ivars, performed on the
++             * media engine's worker thread, and every other reader of those ivars
++             * (-engineTargetFormat, -realignFormatsIfSessionRateFlipped, -renderFormat,
++             * -captureFormat) retains them from a different thread. An unlocked
++             * release racing a retain is a use-after-free, which is the shape of both
++             * crashes this file has already shipped. Moving them inside the lock the
++             * next line already takes costs nothing and closes the writer side for
++             * every reader in the file.
++             */
++            _renderingFormat = nil;
++            _capturingFormat = nil;
++
 +            TVOAudioDeviceContext context = [self deviceContext];
 +            if (context) {
 +                TVOAudioDeviceFormatChanged(context);
@@ -3151,7 +3570,48 @@ index 0000000000000000000000000000000000000000..417e63c9b4a799f7858c580c4684436e
 +                TVOAudioDeviceExecuteWorkerBlock(context, ^{
 +                    // Restart the AVAudioEngine with new format
 +                    TVOAudioFormat *activeFormat = [[self class] activeFormat];
-+                    if (![activeFormat isEqual:self->_renderingFormat]) {
++
++                    /*
++                     * ATTO (Aug 3 2026) — COMPARE AGAINST WHAT THE ENGINES WERE
++                     * ACTUALLY BUILT WITH.
++                     *
++                     * _renderingFormat is nilled a few lines above and then
++                     * TVOAudioDeviceFormatChanged makes the media engine re-query
++                     * renderFormat, which re-latches _renderingFormat to the NEW
++                     * format (see -renderFormat). This worker block runs afterwards,
++                     * so by the time it executes activeFormat can already equal
++                     * _renderingFormat and the rebuild below is skipped while the
++                     * engines are still frozen at the old rate.
++                     *
++                     * The right question is not "does the session differ from the
++                     * format Twilio just re-queried", it is "does the format the
++                     * engines WOULD be built with differ from the one they ARE built
++                     * with". That is exactly the comparison
++                     * ensureEngineFormatForActiveSession makes, and reusing it also
++                     * keeps this from churning: comparing raw activeFormat against
++                     * _enginesBuiltFormat would rebuild on every route change
++                     * whenever the hardware rate legitimately differs from the
++                     * negotiated one, and rebuild to the same format each time.
++                     *
++                     * Gated: with the cohort flag off this behaves exactly as it has
++                     * shipped. The disagreement counter is NOT gated, so we can
++                     * measure how often the old comparand was wrong before widening.
++                     */
++                    TVOAudioFormat *engineTarget = [self engineTargetFormat];
++                    TVOAudioFormat *reLatched = nil;
++                    @synchronized(self) {
++                        reLatched = self->_renderingFormat;
++                    }
++                    const BOOL oldWantsRebuild = ![activeFormat isEqual:reLatched];
++                    const BOOL newWantsRebuild =
++                        (self->_enginesBuiltFormat == nil) || ![engineTarget isEqual:self->_enginesBuiltFormat];
++                    if (oldWantsRebuild != newWantsRebuild) {
++                        self->_dbgRouteRebuildDisagreeCount++;
++                    }
++
++                    const BOOL shouldRebuild =
++                        [self renderFormatRecheckEnabled] ? newWantsRebuild : oldWantsRebuild;
++                    if (shouldRebuild) {
 +                        self->_dbgRouteRebuildCount++; // telemetry: a route change rebuilt mid-call
 +                        [self teardownAudioEngine];
 +                        [self setupAudioEngine];

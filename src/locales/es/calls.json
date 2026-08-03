@@ -40,6 +40,14 @@
     "recBadge": "REC",
     "micPermissionRequired": "Se requiere permiso del micrófono para grabar."
   },
+  "audioProblem": {
+    "title": "Problema de audio",
+    "hint": "¿Qué está pasando ahora mismo?",
+    "cantHearThem": "No los escucho",
+    "theyCantHearMe": "No me escuchan",
+    "echo": "Eco",
+    "confirmed": "Anotado. La llamada sigue."
+  },
   "banner": {
     "tapToRecord": "Toque para grabar",
     "callInProgress": "Llamada en curso",

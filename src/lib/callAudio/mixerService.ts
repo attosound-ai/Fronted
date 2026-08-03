@@ -22,12 +22,21 @@ function trace(action: string, data?: Record<string, unknown>): void {
   Sentry.addBreadcrumb({ category: 'mixer', level: 'info', message: action, data });
 }
 
+/**
+ * Shape of the native `mixDiagnostics` dictionary. Almost every entry is a plain
+ * counter, but `routeReasonCounts` is an ARRAY of 9 integers indexed by the raw
+ * AVAudioSessionRouteChangeReason value, so the value type has to admit number[]
+ * as well. Keep it that way: typing this `Record<string, number>` silently lies
+ * about that one key and would make any consumer treat a histogram as a scalar.
+ */
+type MixDiagnostics = Record<string, number | number[]>;
+
 interface NativeMixer {
   setMixerChannel?: (channel: string, gain: number, record: boolean) => void;
   setMetronome?: (enabled: boolean, bpm: number) => void;
   startMixRecording?: () => Promise<string | null>;
   stopMixRecording?: () => Promise<string | null>;
-  getMixDiagnostics?: () => Promise<Record<string, number> | null>;
+  getMixDiagnostics?: () => Promise<MixDiagnostics | null>;
   getMixLevels?: () => Promise<{ remote: number; mic: number } | null>;
 }
 
@@ -83,7 +92,7 @@ export const mixerService = {
    * actually captured each channel (remoteFrames≈0 ⇒ engine never got the other
    * party). null off iOS or before the native mixer ships.
    */
-  async getMixDiagnostics(): Promise<Record<string, number> | null> {
+  async getMixDiagnostics(): Promise<MixDiagnostics | null> {
     try {
       return (await nativeMixer()?.getMixDiagnostics?.()) ?? null;
     } catch {

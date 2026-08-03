@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Radio,
   Square,
+  TriangleAlert,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -26,6 +27,7 @@ import { preloadCallSounds } from '@/lib/sound/callSounds';
 import { haptic } from '@/lib/haptics/hapticService';
 import { openKeypad } from './DtmfKeypadHost';
 import { openMixer } from './MixerHost';
+import { openAudioProblemReport } from './AudioProblemHost';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { mixerService } from '@/lib/callAudio/mixerService';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
@@ -167,6 +169,39 @@ export function InCallTopBar() {
           teardown_audio_unit_count: diag?.teardownAudioUnitCount ?? null,
           interruption_began_count: diag?.interruptionBeganCount ?? null,
           route_rebuild_count: diag?.routeRebuildCount ?? null,
+          // Aug 3 2026: route + format attribution on the RENDER half, added
+          // alongside the engine-side fixes for the AirPods no-audio incident.
+          // route_reason_counts is an ARRAY of 9 counters indexed by the raw
+          // AVAudioSessionRouteChangeReason (0 Unknown, 1 NewDeviceAvailable,
+          // 2 OldDeviceUnavailable, 3 CategoryChange, 4 Override, 6 WakeFromSleep,
+          // 7 NoSuitableRouteForCategory, 8 RouteConfigurationChange); the engine
+          // read that reason on every notification and threw it away, so even with
+          // the engine in the path we could not say WHY it rebuilt.
+          route_reason_counts: diag?.routeReasonCounts ?? null,
+          last_route_reason: diag?.lastRouteReason ?? null,
+          last_route_reason_at: diag?.lastRouteReasonAt ?? null,
+          // Every notification, INCLUDING the ones the engine's switch ignores.
+          route_change_notify_count: diag?.routeChangeNotifyCount ?? null,
+          // >0 ⇒ route changes arrived while the AudioUnit was NULL (the whole
+          // teardown-and-rebuild window) and used to be discarded forever, leaving
+          // the render engine built at a stale rate with no correction path.
+          // recheck_count says how many of those a later start hook picked back up.
+          route_change_dropped_count: diag?.routeChangeDroppedCount ?? null,
+          route_change_rechecked_count: diag?.routeChangeRecheckedCount ?? null,
+          // >0 ⇒ the old comparand (_renderingFormat, re-latched underneath us) and
+          // the correct one (_enginesBuiltFormat) disagreed, i.e. a rebuild the
+          // shipped code was silently skipping. This is the measurement that says
+          // whether that hole was ever actually hit in production.
+          route_rebuild_disagree_count: diag?.routeRebuildDisagreeCount ?? null,
+          // >0 ⇒ activating the session MOVED the sample rate after Twilio had
+          // already latched a format. That is the A2DP-to-HFP answer signature
+          // (48000 latched, 24000 after activation). realign_scheduled_count is how
+          // often we acted on it, which only ever happens inside the cohort.
+          session_rate_flip_count: diag?.sessionRateFlipCount ?? null,
+          format_realign_scheduled_count: diag?.formatRealignScheduledCount ?? null,
+          // Which side of `engine_render_format_recheck` this call ran on, so the
+          // two cohorts are separable in one query.
+          render_format_recheck_enabled: diag?.renderFormatRecheckEnabled ?? null,
           set_active_fail_count: diag?.setActiveFailCount ?? null,
           mic_frames: diag?.micFrames ?? null,
           remote_frames: diag?.remoteFrames ?? null,
@@ -278,6 +313,23 @@ export function InCallTopBar() {
         <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity style={styles.glassBtnInner} onPress={openKeypad}>
             <Grid3x3 size={20} color="#FFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+        </GlassSurface>
+
+        {/* Report an audio problem the moment it happens. Deliberately as quiet as
+            the other controls (same glass pill, no colour, no label), since it is
+            a diagnostic and not an alarm, but always present because the value
+            is the timestamp: telling us afterwards is what we already had. Opens a
+            three-option sheet; the tap itself is the measurement. */}
+        <GlassSurface radius={21} style={styles.glassBtn}>
+          <TouchableOpacity
+            style={styles.glassBtnInner}
+            onPress={() => {
+              void haptic('selection');
+              openAudioProblemReport();
+            }}
+          >
+            <TriangleAlert size={19} color="#FFF" strokeWidth={2.25} />
           </TouchableOpacity>
         </GlassSurface>
 

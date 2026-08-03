@@ -202,6 +202,35 @@ export const ANALYTICS_EVENTS = {
     // its from→to transition, so "who took the audio session, and when" is never a
     // guess again. See project_video_session_hijack_drops_calls.
     AUDIO_SESSION_CHANGED: 'call_audio_session_changed',
+    // Every AVAudioSession MUTATION this app performs during a call, as an ordered
+    // attributable fact: `writer` (which call site), `requested` (what we asked
+    // for), `ok`, `error`, `skipped` + `skip_reason`, `duration_ms`, and a
+    // before_*/after_* pair of category, mode, options, input port, output port and
+    // sample rate. AUDIO_SESSION_CHANGED polls the RESULT every 750ms but never saw
+    // the writes themselves or their return values, which is why three independent
+    // analyses of the AirPods no-audio incident could neither confirm nor exclude
+    // the connect-time write storm. Also closes the sub-750ms transient blind spot.
+    SESSION_WRITE: 'call_session_write',
+    // ONE row per call describing the invite→answer audio transition. Carries the
+    // invite-time route/category/rate (before anything of ours touched the session),
+    // the same at the connect instant and again once settled, ms_invite_to_answer,
+    // and the two booleans that matter: `answered_from_a2dp` (the headset was an
+    // active media sink when the call arrived, the established trigger) and
+    // `bt_profile_switch_observed` (iOS actually completed the A2DP→HFP handoff).
+    // Reconstructing that signature previously took grouping raw ticks by call_sid
+    // across five weeks; as a cohort it is a one-line query, which is the only way
+    // to tell whether a fix moved the number against an ~11 percent base rate.
+    ANSWER_CONTEXT: 'call_answer_context',
+    // The HUMAN says the audio is wrong, right now, in a stated direction:
+    // symptom = cant_hear_them | they_cant_hear_me | echo | other, stamped with
+    // the full live audio state and the last five route transitions of the call.
+    // Every timestamp in the AirPods investigation had to be inferred from the
+    // client's remedial actions (pulling the AirPods out); one tap replaces that
+    // inference with a fact. It is also the ONLY instrument that will ever capture
+    // echo, for which the app has zero measurement of any kind. Emitted from
+    // reportAudioProblem in lib/telemetry/callTelemetry.ts, which also stamps a
+    // matching `audio_problem_<symptom>` marker onto the following heartbeats.
+    AUDIO_PROBLEM_REPORTED: 'call_audio_problem_reported',
     // iOS didReceiveMemoryWarning fired (native), surfaced on next foreground.
     // Fires BEFORE jetsam, so it is the earliest warning of the OOM path.
     MEMORY_WARNING: 'call_memory_warning',

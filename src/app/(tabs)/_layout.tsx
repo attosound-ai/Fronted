@@ -17,6 +17,7 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import {
   persistColdLaunchCallKitFlag,
   persistAudioInjectionFlag,
+  persistEngineRenderFormatRecheckFlag,
 } from '@/hooks/useTwilioVoice';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
@@ -80,6 +81,10 @@ export default function TabsLayout() {
     // on disk before Twilio registration instantiates that module. See
     // persistAudioInjectionFlag / project_injection_device_not_pumped.
     persistAudioInjectionFlag();
+    // Same again for the engine's render-format-recheck cohort. The engine reads
+    // it during CallKit's audio activation, where PostHog cannot be consulted, so
+    // the decision has to be on disk before the first call of the session.
+    persistEngineRenderFormatRecheckFlag();
   }, [isAuthenticated]);
 
   useEffect(() => {

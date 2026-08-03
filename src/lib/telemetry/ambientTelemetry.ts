@@ -26,7 +26,7 @@ import * as Sentry from '@sentry/react-native';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { isCallTelemetryActive } from './callTelemetry';
-import { getDeviceSnapshot } from './deviceSnapshot';
+import { getCallAudioState, getDeviceSnapshot } from './deviceSnapshot';
 import { acquireJsLagMonitor, releaseJsLagMonitor } from './jsLag';
 
 const TICK_MS = 30_000;
@@ -75,6 +75,16 @@ export function startAmbientTelemetry(): void {
   started = true;
   startedAt = Date.now();
   acquireJsLagMonitor();
+
+  // Force the native RNDeviceInfo module to exist NOW. Its -init is what installs
+  // the AVAudioSessionRouteChangeNotification observer that records WHY the audio
+  // route changed, and RNDeviceInfo is a lazily-instantiated legacy module: until
+  // JS touches it, no route change is counted. Reading the module happens to
+  // instantiate it already, but relying on proxy semantics for a telemetry
+  // guarantee is exactly how the route-reason blind spot survived this long, so
+  // this makes it an explicit, ordered fact at boot instead. Result discarded; the
+  // side effect is the point, and getCallAudioState never rejects.
+  void getCallAudioState();
 
   // Baseline snapshot on boot.
   void emitAmbientTick('app_started');

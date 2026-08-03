@@ -40,6 +40,14 @@
     "recBadge": "REC",
     "micPermissionRequired": "Microphone permission is required to record."
   },
+  "audioProblem": {
+    "title": "Audio problem",
+    "hint": "What is happening right now?",
+    "cantHearThem": "I cannot hear them",
+    "theyCantHearMe": "They cannot hear me",
+    "echo": "Echo",
+    "confirmed": "Noted. The call keeps running."
+  },
   "banner": {
     "tapToRecord": "Tap to Record",
     "callInProgress": "Call in progress",

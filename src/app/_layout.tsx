@@ -48,6 +48,7 @@ import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
 import { CallAudioInjectionHost } from '@/components/call/CallAudioInjectionHost';
 import { MixerHost } from '@/components/call/MixerHost';
+import { AudioProblemHost } from '@/components/call/AudioProblemHost';
 import {
   probeResume,
   markAppBackgrounded,
@@ -349,6 +350,7 @@ function RootLayout() {
                       <DtmfKeypadHost />
                       <CallAudioInjectionHost />
                       <MixerHost />
+                      <AudioProblemHost />
                       <Stack
                         screenOptions={{
                           headerShown: true,

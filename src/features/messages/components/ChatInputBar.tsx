@@ -10,7 +10,6 @@ import {
   type TextInput as TextInputType,
 } from 'react-native';
 import { SendHorizontal } from 'lucide-react-native';
-import { PostHogMaskView } from 'posthog-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { COLORS, SPACING } from '@/constants/theme';
@@ -108,7 +107,7 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPadding }]}>
-      <PostHogMaskView style={styles.inputWrapper}>
+      <View style={styles.inputWrapper}>
         <View style={styles.inputContainer}>
           <TextInput
             ref={inputRef}
@@ -133,7 +132,7 @@ export function ChatInputBar({ onSend, isSending, onTyping }: ChatInputBarProps)
             </Text>
           )}
         </View>
-      </PostHogMaskView>
+      </View>
       <TouchableOpacity
         onPress={handleSend}
         disabled={!canSend}

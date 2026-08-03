@@ -44,7 +44,6 @@ import type {
   SendProps,
 } from 'react-native-gifted-chat';
 import { SendHorizontal, Check, CheckCheck, Clock, X, Pencil } from 'lucide-react-native';
-import { PostHogMaskView } from 'posthog-react-native';
 import { Platform } from 'react-native';
 
 const ContextMenuView =
@@ -619,7 +618,7 @@ export function ChatScreen({
       }
 
       return (
-        <PostHogMaskView>
+        <View>
           <ContextMenuView
             menuConfig={{ menuTitle: '', menuItems }}
             shouldWaitForMenuToHide={false}
@@ -716,7 +715,7 @@ export function ChatScreen({
               )}
             </View>
           </ContextMenuView>
-        </PostHogMaskView>
+        </View>
       );
     },
     [userId, toggleReaction, handleMenuAction, t, renderMessageText, renderTime]
@@ -784,7 +783,7 @@ export function ChatScreen({
           </View>
         )}
         <View style={styles.inputToolbarCapsule}>
-          <PostHogMaskView style={styles.composerWrapper}>
+          <View style={styles.composerWrapper}>
             <Composer
               {...(props as any)}
               textInputStyle={styles.composerInput}
@@ -803,7 +802,7 @@ export function ChatScreen({
                 maxFontSizeMultiplier: 1.0,
               }}
             />
-          </PostHogMaskView>
+          </View>
           <Send {...props} containerStyle={styles.sendContainer}>
             <View style={[styles.sendButton, !hasText && styles.sendButtonDisabled]}>
               <SendHorizontal

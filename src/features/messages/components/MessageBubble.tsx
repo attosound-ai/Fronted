@@ -2,7 +2,6 @@ import { memo } from 'react';
 import { View, StyleSheet, Dimensions, Text as RNText } from 'react-native';
 import Animated, { withSpring, withTiming, Easing } from 'react-native-reanimated';
 import { CheckCheck, Check, Clock, AlertCircle } from 'lucide-react-native';
-import { PostHogMaskView } from 'posthog-react-native';
 import { COLORS, SPACING } from '@/constants/theme';
 import { formatRelativeTime } from '@/utils/formatters';
 import type { ChatMessage } from '../types';
@@ -77,28 +76,26 @@ function MessageBubbleInner({ message, isOwn, isNew }: MessageBubbleProps) {
   const isSending = message.status === 'sending';
 
   const bubble = (
-    <PostHogMaskView>
-      <View
-        style={[
-          styles.bubble,
-          isOwn ? styles.bubbleOwn : styles.bubbleOther,
-          isSending && styles.bubbleSending,
-        ]}
+    <View
+      style={[
+        styles.bubble,
+        isOwn ? styles.bubbleOwn : styles.bubbleOther,
+        isSending && styles.bubbleSending,
+      ]}
+    >
+      <RNText
+        style={[styles.content, isOwn && styles.contentOwn]}
+        allowFontScaling={false}
       >
-        <RNText
-          style={[styles.content, isOwn && styles.contentOwn]}
-          allowFontScaling={false}
-        >
-          {message.content}
+        {message.content}
+      </RNText>
+      <View style={styles.meta}>
+        <RNText style={[styles.time, isOwn && styles.timeOwn]} allowFontScaling={false}>
+          {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
         </RNText>
-        <View style={styles.meta}>
-          <RNText style={[styles.time, isOwn && styles.timeOwn]} allowFontScaling={false}>
-            {message.createdAt ? formatRelativeTime(message.createdAt) : ''}
-          </RNText>
-          {isOwn && <StatusIcon message={message} />}
-        </View>
+        {isOwn && <StatusIcon message={message} />}
       </View>
-    </PostHogMaskView>
+    </View>
   );
 
   // Telegram-style slide-up animation for newly sent own messages

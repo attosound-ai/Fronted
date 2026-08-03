@@ -56,11 +56,13 @@ function ConversationItemInner({
       <View style={styles.content}>
         <View style={styles.topRow}>
           <View style={styles.nameRow}>
+            {/* NO adjustsFontSizeToFit in recycled list rows — on New Arch it
+                mis-measures during recycling and collapses the text (same bug as
+                the feed PostHeader username). Tail ellipsis instead. */}
             <Text
               variant="h3"
               numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
+              ellipsizeMode="tail"
               maxFontSizeMultiplier={1.0}
               style={styles.name}
             >

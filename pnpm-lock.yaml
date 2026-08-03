@@ -14,7 +14,7 @@ patchedDependencies:
     hash: 5b5bb9cf6db7a1933700d00c52db460e81defbb261e2c1ac56c1986d7178a66d
     path: patches/@howincodes__expo-dynamic-app-icon.patch
   '@twilio/voice-react-native-sdk@1.7.0':
-    hash: 5bf0786fb170e137106fa7be671e9c329656ec3bd5b56f5cc5c42a875157dc78
+    hash: a0693bdcc9b90c04b6191bcdeeafa28c83519ca3b4f4e5e4b5e821cd070230dd
     path: patches/@twilio__voice-react-native-sdk@1.7.0.patch
   react-native-device-info@15.0.2:
     hash: dd9b721115a506da9e86af1bb0e8f5c7940f9f1d0c0e7ad10d596a6b3a54fb57
@@ -65,7 +65,7 @@ importers:
         version: 5.96.2(@tanstack/react-query@5.96.2(react@19.2.0))(react@19.2.0)
       '@twilio/voice-react-native-sdk':
         specifier: 1.7.0
-        version: 1.7.0(patch_hash=5bf0786fb170e137106fa7be671e9c329656ec3bd5b56f5cc5c42a875157dc78)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 1.7.0(patch_hash=a0693bdcc9b90c04b6191bcdeeafa28c83519ca3b4f4e5e4b5e821cd070230dd)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       axios:
         specifier: 1.13.4
         version: 1.13.4
@@ -6771,7 +6771,7 @@ snapshots:
 
   '@twilio/voice-errors@1.8.0': {}
 
-  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=5bf0786fb170e137106fa7be671e9c329656ec3bd5b56f5cc5c42a875157dc78)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
+  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=a0693bdcc9b90c04b6191bcdeeafa28c83519ca3b4f4e5e4b5e821cd070230dd)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@twilio/voice-errors': 1.8.0
       eventemitter3: 4.0.7

@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df665eda292
+index 0000000000000000000000000000000000000000..b97c45a05fd9c95effaf1c1c9d94ef37c5745aea
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,2798 @@
+@@ -0,0 +1,2882 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -364,6 +364,36 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +    // and we fell back to raw-mic passthrough. >0 means the engine couldn't mix on
 +    // this call (the "no te escucho" root); exposed via mixDiagnostics.
 +    uint64_t renderFailCount;
++    /*
++     * ATTO telemetry (Aug 2 2026). Two additions, both because production data
++     * showed we could not answer the only question that matters: "did the far
++     * party actually receive the injected audio?"
++     *
++     * 1) renderFailCount conflated two very different failures. Split them:
++     *    CannotDoInCurrentContext means something wrote a node property while the
++     *    engine was rendering (a UI-thread graph mutation) — recoverable, and the
++     *    thing that would make a live fader drag cut the far party's music.
++     *    Everything else means the engine genuinely could not mix (wrong format,
++     *    mid-rebuild), which is the "no te escucho" class.
++     *
++     * 2) injectFramesToCapture: frames written to Twilio WHILE an injection was
++     *    active. This is the counter we never had. `app_frames` does NOT prove
++     *    this — it only advances inside the mix-recording consumer, so it reads 0
++     *    unless startMixRecording is live, and a comment elsewhere in this file
++     *    wrongly claimed otherwise. Real diagnostics showed renderFailCount > 0 on
++     *    24% of transmitting calls, i.e. the far party was hearing raw mic with no
++     *    injected audio, and nothing in our telemetry said so.
++     */
++    uint64_t renderFailCannotDoInContext;
++    uint64_t renderFailOther;
++    uint64_t injectFramesToCapture;
++    /*
++     * Set from the main thread when an injection starts/stops; read (never written)
++     * on the render thread. Aligned 32-bit access is atomic on ARM, and a stale
++     * read costs at most one callback of mis-attribution — acceptable for a
++     * counter, and far cheaper than a lock on the RT path.
++     */
++    int32_t injectActive;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -1114,6 +1144,10 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +    // Update injection state before scheduling so render-time/gain reads are consistent.
 +    self.fileGain = gain;
 +    self.monitorEnabled = monitor;
++    // Mark injection live so the RT capture callback can count the frames that
++    // actually reach Twilio (injectFramesToCapture) — the only direct evidence
++    // that the far party received the injected audio.
++    if (self.capturingContext) { self.capturingContext->injectActive = 1; }
 +
 +    // Duration in milliseconds from the SOURCE file (sample-rate accurate).
 +    double sourceSampleRate = file.processingFormat.sampleRate;
@@ -1187,6 +1221,8 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +
 +- (void)stopFile {
 +    [self stopStatusTimer];
++    // Injection is over: stop attributing captured frames to it.
++    if (self.capturingContext) { self.capturingContext->injectActive = 0; }
 +
 +    dispatch_block_t work = ^{
 +        if (self.recordFilePlayer.isPlaying) {
@@ -1743,8 +1779,15 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 + * after stopMixRecording (the consumer is already torn down, counters stable).
 + *   remoteFrames ≈ 0 ⇒ engine never received the other party (recording is one
 + *     sided AND two-way call audio is broken AND inject→capture won't reach them)
-+ *   appFrames ≈ 0 during a transmit ⇒ injected audio never entered the mix
 + *   totalFrames == 0 ⇒ the mix captured nothing at all
++ *
++ * CORRECTION (Aug 2 2026): this comment used to claim "appFrames ≈ 0 during a
++ * transmit ⇒ injected audio never entered the mix". That is WRONG and it sent an
++ * investigation down the wrong path. `_dbgAppFrames` only advances inside the
++ * mix-recording consumer, so it reads 0 whenever startMixRecording is not live —
++ * which is almost always. It says nothing about whether injected audio reached
++ * the far party. Use `injectFramesToCapture` for that; it counts frames handed to
++ * Twilio while an injection was active.
 + */
 +- (NSDictionary *)mixDiagnostics {
 +    double sr = _metronomeSampleRate > 0 ? _metronomeSampleRate : (double)kPreferredSampleRate;
@@ -1797,6 +1840,23 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +        // raw-mic passthrough (the "no te escucho" root: engine couldn't mix, but
 +        // two-way audio survives via the guard). Cumulative since device install.
 +        @"renderFailCount": @(renderFail),
++        // Split cause (Aug 2 2026). cannotDoInContext ⇒ a node property was written
++        // while the engine rendered (a graph mutation from a non-RT thread). That is
++        // the failure a LIVE fader/mute control would cause, so this counter is the
++        // gate on whether live mixing is safe here. `other` is the genuine
++        // can't-mix class (wrong format, mid-rebuild) that produces dead audio.
++        @"renderFailCannotDoInContext":
++            @(self.capturingContext ? self.capturingContext->renderFailCannotDoInContext : 0),
++        @"renderFailOther":
++            @(self.capturingContext ? self.capturingContext->renderFailOther : 0),
++        // THE far-party proof: frames actually written to Twilio while an injection
++        // was active. 0 while transmitting ⇒ the far party received nothing, no
++        // matter what the UI or the player state says. This is what `appFrames` was
++        // wrongly believed to mean.
++        @"injectFramesToCapture":
++            @(self.capturingContext ? self.capturingContext->injectFramesToCapture : 0),
++        @"injectActive":
++            @(self.capturingContext ? self.capturingContext->injectActive : 0),
 +        // Live injection diagnosis (why an injected reel may not reach the far
 +        // party): recordEngineRunning==0 ⇒ scheduleFile's record path (the remote-
 +        // facing one) never scheduled; recordPlayerPlaying==0 ⇒ the injected file
@@ -2062,6 +2122,9 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +
 +- (void)handlePlaybackEnded {
 +    [self stopStatusTimer];
++    // Natural end of the injected file: stop attributing captured frames to it,
++    // so injectFramesToCapture reflects the transmit window and nothing else.
++    if (self.capturingContext) { self.capturingContext->injectActive = 0; }
 +    [self reportStatus:self.currentDurationMs duration:self.currentDurationMs ended:YES];
 +}
 +
@@ -2116,10 +2179,16 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +    if (musicSampleRate <= 0) {
 +        musicSampleRate = (double)kPreferredSampleRate;
 +    }
-+    // Stereo float is what effect units expect; the mixer downmixes to the mono
-+    // render layout. Building the format with the int ASBD was the crash.
++    // MONO, not stereo. The main mixer downmixes to the mono render layout anyway,
++    // so every buffer converted through this graph was carrying a second channel
++    // that got summed away immediately — doubling the memory and the conversion
++    // work of every injected buffer for no audible difference. The call uplink is
++    // mono end to end, so there is nothing a stereo stage could preserve.
++    // The FLOAT part is load-bearing and must not change: connecting these
++    // float-only nodes with Twilio's 16-bit INT format is what crashed builds
++    // 64-66 (Sentry REACT-NATIVE-4C).
 +    AVAudioFormat *format =
-+        [[AVAudioFormat alloc] initStandardFormatWithSampleRate:musicSampleRate channels:2];
++        [[AVAudioFormat alloc] initStandardFormatWithSampleRate:musicSampleRate channels:1];
 +
 +    @try {
 +        player = [[AVAudioPlayerNode alloc] init];
@@ -2512,6 +2581,12 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +        // Mix rendered OK — send the mixed (mic [+ injected]) buffer as before.
 +        audioBuffer = (int8_t *)mixedAudioBufferList->mBuffers[0].mData;
 +        audioBufferSizeInBytes = mixedAudioBufferList->mBuffers[0].mDataByteSize;
++        // The counter we never had: frames that actually reached Twilio while an
++        // injection was live. Distinguishes "we scheduled it" from "the far party
++        // received it" — the exact gap behind "she couldn't hear the track".
++        if (context->injectActive) {
++            context->injectFramesToCapture += numFrames;
++        }
 +    } else {
 +        // SILENCE GUARD (mother test: "no te escucho", dead BOTH ways from a
 +        // CallKit/background answer): the manual mix render (or the mic
@@ -2527,6 +2602,15 @@ index 0000000000000000000000000000000000000000..7abbaad280a7f6fb60a0aaf7061c8df6
 +        // which can xrun the very fallback that must keep the call intelligible. The
 +        // counter (read on the main thread in mixDiagnostics) is the signal instead.
 +        context->renderFailCount++;
++        // Split the cause. CannotDoInCurrentContext = a node property was written
++        // while rendering (graph mutated from a non-RT thread); anything else = the
++        // engine genuinely could not mix. Only the second is the dead-audio class,
++        // and only the first tells us a live control surface is unsafe here.
++        if (ret == AVAudioEngineManualRenderingStatusCannotDoInCurrentContext) {
++            context->renderFailCannotDoInContext++;
++        } else {
++            context->renderFailOther++;
++        }
 +        audioBuffer = (status == noErr) ? (int8_t *)audioBufferList->mBuffers[0].mData : NULL;
 +        audioBufferSizeInBytes = audioBufferList->mBuffers[0].mDataByteSize;
 +    }

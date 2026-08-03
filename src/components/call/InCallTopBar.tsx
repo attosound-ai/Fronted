@@ -119,6 +119,21 @@ export function InCallTopBar() {
           diag_trigger: trigger,
           record_cb_count: diag?.recordCbCount ?? null,
           render_fail_count: diag?.renderFailCount ?? null,
+          // Aug 2 2026 — the two counters production was missing.
+          // inject_frames_to_capture is THE far-party proof: frames actually
+          // handed to Twilio while an injection was live. 0 during a transmit
+          // means she received nothing, regardless of what the UI shows.
+          // (app_frames was wrongly believed to mean this; it only moves while a
+          // mix RECORDING is running, so it reads 0 almost always.)
+          inject_frames_to_capture: diag?.injectFramesToCapture ?? null,
+          inject_active: diag?.injectActive ?? null,
+          // Split render failures. cannot_do_in_context = a node property was
+          // written while the engine rendered — the failure a LIVE fader would
+          // cause, so this gates whether live mixing is viable. `other` is the
+          // genuine can't-mix class that produces dead audio. Baseline before
+          // this split: render_fail_count > 0 on 24% of transmitting calls.
+          render_fail_cannot_do_in_context: diag?.renderFailCannotDoInContext ?? null,
+          render_fail_other: diag?.renderFailOther ?? null,
           playout_cb_count: diag?.playoutCbCount ?? null,
           // The 3 signals that pinpoint where injection dies:
           record_engine_running: diag?.recordEngineRunning ?? null,

@@ -119,5 +119,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 20,
     fontFamily: 'Archivo_600SemiBold',
+    // The patched Archivo has EXTENDED descenders (-210→-420, see
+    // project_archivo_font_patch). Without an explicit lineHeight the line box is
+    // ~1.2×fontSize and clips the tail of descenders (the "g" in "suicideking"
+    // was cut off — client feedback). 32 (1.6×) leaves clear room below the
+    // baseline. includeFontPadding keeps Android from clipping it too.
+    lineHeight: 32,
+    includeFontPadding: true,
+    textAlignVertical: 'center',
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,12 +14,14 @@ import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
 import { useAccountStore } from '@/stores/accountStore';
+import { getTokenUserId } from '@/lib/auth/jwt';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { useAuthStore } from '@/stores/authStore';
 import { haptic } from '@/lib/haptics/hapticService';
 import { COLORS } from '@/constants/theme';
+import { cleanPasswordInput } from '@/utils/passwordInput';
 
 type Step = 'identifier' | 'password' | '2fa';
 
@@ -28,7 +30,11 @@ export default function LoginScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const isAddMode = mode === 'add';
   const addAccount = useAccountStore((s) => s.addAccount);
-  const switchToAccount = useAccountStore((s) => s.switchToAccount);
+
+  // Re-entrancy latch: keyboard "done" + button press (or a double tap) can
+  // both fire the submit within the same frame, before isAuthenticating
+  // re-renders the disabled state — observed as double POST /auth/login.
+  const submittingRef = useRef(false);
 
   const [step, setStep] = useState<Step>('identifier');
   const [identifier, setIdentifier] = useState('');
@@ -68,6 +74,7 @@ export default function LoginScreen() {
   }, [identifier, clearError, t, goToStep]);
 
   const handleLogin = useCallback(async () => {
+    if (submittingRef.current) return;
     setPasswordError('');
     clearError();
     if (password.length < 8) {
@@ -76,10 +83,19 @@ export default function LoginScreen() {
       return;
     }
 
+    submittingRef.current = true;
     try {
       if (isAddMode) {
+        // Preserve the current account in the switcher before the new login
+        // replaces the global session — but only when its tokens really
+        // belong to it; persisting a desynced user/token pair poisons the
+        // per-account cache.
         const prev = useAuthStore.getState();
-        if (prev.user && prev.tokens) {
+        if (
+          prev.user &&
+          prev.tokens &&
+          getTokenUserId(prev.tokens.accessToken) === Number(prev.user.id)
+        ) {
           await addAccount({ user: prev.user, tokens: prev.tokens });
         }
       }
@@ -88,39 +104,34 @@ export default function LoginScreen() {
 
       if (!useAuthStore.getState().pending2FA) {
         await haptic('light');
-        if (isAddMode) {
-          const { user: newUser, tokens: newTokens } = useAuthStore.getState();
-          if (newUser && newTokens) {
-            await addAccount({ user: newUser, tokens: newTokens });
-            await switchToAccount(newUser.id);
-          }
-        }
+        // login() already persisted and activated the new account
+        // (registerActiveSession). No switchToAccount here: switching to
+        // the account we already are is a self-switch the backend rejects.
         router.replace('/(tabs)');
       } else {
         goToStep('2fa');
       }
     } catch {
       haptic('error');
+    } finally {
+      submittingRef.current = false;
     }
-  }, [
-    password,
-    identifier,
-    login,
-    clearError,
-    t,
-    goToStep,
-    isAddMode,
-    addAccount,
-    switchToAccount,
-  ]);
+  }, [password, identifier, login, clearError, t, goToStep, isAddMode, addAccount]);
 
   const handleVerify2FA = useCallback(async () => {
     if (otpCode.length !== 6) return;
+    if (submittingRef.current) return;
     clearError();
+    submittingRef.current = true;
     try {
       if (isAddMode) {
+        // Same guarded preservation as handleLogin — see comment there.
         const prev = useAuthStore.getState();
-        if (prev.user && prev.tokens) {
+        if (
+          prev.user &&
+          prev.tokens &&
+          getTokenUserId(prev.tokens.accessToken) === Number(prev.user.id)
+        ) {
           await addAccount({ user: prev.user, tokens: prev.tokens });
         }
       }
@@ -128,22 +139,25 @@ export default function LoginScreen() {
       await verify2FALogin(otpCode);
       await haptic('light');
 
-      if (isAddMode) {
-        const { user: newUser, tokens: newTokens } = useAuthStore.getState();
-        if (newUser && newTokens) {
-          await addAccount({ user: newUser, tokens: newTokens });
-          await switchToAccount(newUser.id);
-        }
-      }
+      // verify2FALogin() already activated the new account — see handleLogin.
       router.replace('/(tabs)');
     } catch {
       haptic('error');
+    } finally {
+      submittingRef.current = false;
     }
-  }, [otpCode, verify2FALogin, clearError, isAddMode, addAccount, switchToAccount]);
+  }, [otpCode, verify2FALogin, clearError, isAddMode, addAccount]);
 
   const handleBack = useCallback(() => {
     clearError();
     if (step === 'identifier') {
+      // Adding an account from the switcher: the session is still alive —
+      // go back INTO the app instead of stranding the user on the logged-out
+      // welcome screen (which reads as "it logged me out completely").
+      if (isAddMode && router.canGoBack()) {
+        router.back();
+        return;
+      }
       router.replace('/(auth)/welcome');
     } else if (step === 'password') {
       setPasswordError('');
@@ -153,7 +167,7 @@ export default function LoginScreen() {
       clearPending2FA();
       goToStep('password');
     }
-  }, [step, clearError, clearPending2FA, goToStep]);
+  }, [step, clearError, clearPending2FA, goToStep, isAddMode]);
 
   const stepTitle = {
     identifier: t('login.identifierTitle'),
@@ -232,12 +246,17 @@ export default function LoginScreen() {
               placeholder={t('login.passwordPlaceholder')}
               value={password}
               onChangeText={(v: string) => {
-                setPassword(v);
+                // Same invisible-space strip as registration: stored passwords never
+                // contain whitespace (stripped at create), so a QuickType trailing
+                // space here would only cause a mystery "wrong password".
+                setPassword(cleanPasswordInput(v, 'login_password'));
                 setPasswordError('');
                 clearError();
               }}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="password"
               textContentType="password"
               autoFocus

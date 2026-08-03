@@ -22,6 +22,25 @@ export function isValidPassword(password: string): boolean {
 }
 
 /**
+ * Sanitiza el input de un campo de contraseña: elimina espacios (incl. no-break)
+ * y caracteres de ancho cero.
+ *
+ * POR QUÉ: el teclado de iOS mete un ESPACIO FINAL invisible al aceptar una
+ * sugerencia del QuickType / autofill de Contraseñas. Resultado real (cliente,
+ * build 89): ambos campos MUESTRAN "Felipemartinez1" pero uno era
+ * "Felipemartinez1 " → "Las contraseñas no coinciden" sin diferencia visible.
+ * Peor aún en login: la misma inyección da "contraseña incorrecta" inexplicable.
+ * Las contraseñas de esta app no permiten espacios (isStrongPassword exige
+ * letras+números), así que eliminar todo whitespace es seguro y mata la clase
+ * entera del bug. Aplicar en el onChangeText de TODO campo de contraseña.
+ */
+export function sanitizePasswordInput(value: string): string {
+  // \s = todo whitespace (espacio, nbsp, tab); U+200B-U+200D = zero-width
+  // space/joiners; U+FEFF = BOM/zero-width no-break space.
+  return value.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+}
+
+/**
  * Valida que la contraseña sea fuerte
  */
 export function isStrongPassword(password: string): boolean {

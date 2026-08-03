@@ -1,6 +1,10 @@
 import { create } from 'zustand';
+import { AxiosError } from 'axios';
 import { authService } from '@/lib/api/authService';
 import { authStorage } from '@/lib/auth/storage';
+import { getSessionEpoch, bumpSessionEpoch } from '@/lib/auth/sessionEpoch';
+import { getTokenUserId } from '@/lib/auth/jwt';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   getAccountIds,
   setAccountIds,
@@ -22,6 +26,19 @@ export interface AccountEntry {
   tokens: TokenPair;
 }
 
+/**
+ * The backend's "forbidden: accounts are not linked" rejection. Reaching it
+ * from the switcher means either the link is truly gone, or — the Aug 1 2026
+ * incident — our own identity drifted (UI says account A, token is account
+ * B, so the switch became a self-switch the server rightly refuses).
+ */
+function isNotLinkedError(error: unknown): boolean {
+  if (!(error instanceof AxiosError)) return false;
+  if (error.response?.status !== 403) return false;
+  const body = error.response?.data as { error?: string } | undefined;
+  return typeof body?.error === 'string' && body.error.includes('not linked');
+}
+
 interface AccountState {
   accounts: AccountEntry[];
   activeAccountId: number | null;
@@ -31,7 +48,12 @@ interface AccountState {
 interface AccountActions {
   addAccount: (entry: AccountEntry) => Promise<void>;
   setActive: (userId: number) => Promise<void>;
-  switchToAccount: (userId: number) => Promise<void>;
+  /**
+   * `allowHealRetry` (default true) permits ONE identity reconciliation +
+   * retry when the backend answers 403 "accounts are not linked" — the
+   * signature of a UI/token identity desync, not of a user mistake.
+   */
+  switchToAccount: (userId: number, allowHealRetry?: boolean) => Promise<void>;
   /**
    * System-initiated switch in response to an incoming call invite whose
    * TargetUserId differs from activeAccountId. Bypasses the
@@ -69,6 +91,9 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     tokens: TokenPair,
     prevActiveId: number | null
   ) => {
+    // Ownership changes NOW: any in-flight initialize/refresh result from
+    // the previous identity becomes stale and must discard itself.
+    bumpSessionEpoch();
     pauseRequests();
     clearRefreshQueue();
 
@@ -154,10 +179,20 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
      * Optimistic, non-blocking design (Instagram-style):
      *  Phase A — Synchronous swap (~50ms): write cached tokens, update state, end animation
      *  Phase B — Fire-and-forget: getMe, fetchSubscription, WebSocket reconnect in parallel
-     *  Phase C — Error handling: if Phase A fails, rollback
+     *  Phase C — Error handling: if Phase A fails, reconcile identity (403
+     *            not-linked) and retry once, else rollback
      */
-    switchToAccount: async (userId: number) => {
+    switchToAccount: async (userId: number, allowHealRetry: boolean = true) => {
       const { accounts, activeAccountId } = get();
+
+      // No-op when the target is already the authenticated account. The
+      // backend treats a self-switch as "accounts are not linked" (403), so
+      // reaching it with userId === current would fail pointlessly.
+      const { useAuthStore: authStorePreflight } = await import('./authStore');
+      const currentId = authStorePreflight.getState().user?.id ?? activeAccountId;
+      if (currentId !== null && Number(currentId) === Number(userId)) {
+        return;
+      }
 
       // Preflight: do not allow switching while a call is active.
       // Tearing down the Twilio + CallKit + audio session mid-conversation
@@ -173,7 +208,7 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       // Save rollback state
       const prevToken = await authStorage.getToken();
       const prevRefreshToken = await authStorage.getRefreshToken();
-      const prevUser = await authStorage.getUser();
+      const prevUser = await authStorage.getUser<User>();
       const prevActiveId = activeAccountId;
 
       // Trigger flip animation optimistically using cached user info
@@ -221,7 +256,10 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         try {
           await useSubscriptionStore.getState().fetchSubscription();
         } catch {
-          // Non-fatal; the empty/cleared store will resolve to defaults.
+          // Non-fatal. fetchSubscription self-retries (bounded backoff) and never
+          // rejects; a persistent failure leaves the plan UNRESOLVED ("—", NOT free
+          // — a cleared store does not default to free), and the tabs/profile
+          // self-heal effects (keyed on activeAccountId / focus) re-drive it.
         }
 
         // End animation NOW — user sees the new account with the right plan
@@ -256,8 +294,34 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
 
         return; // Skip finally's endFlip — already called above
       } catch (error) {
-        // ── Phase C: Rollback ──
+        // ── Phase C: reconcile-or-rollback ──
+        if (isNotLinkedError(error) && allowHealRetry) {
+          // The server refused the link. If our own identity drifted (UI
+          // user ≠ token subject), the request was really a self-switch —
+          // reconcile against the server, then retry the switch ONCE with
+          // a coherent identity.
+          //
+          // Unblock the request pipe FIRST: reconcile runs getMe through
+          // apiClient, which would queue forever if a pause leaked from a
+          // partial Phase A (deadlock). Resuming when not paused is a no-op.
+          resumeRequests();
+          const { useAuthStore } = await import('./authStore');
+          const healed = await useAuthStore
+            .getState()
+            .reconcileServerIdentity('switch_not_linked');
+          if (healed) {
+            useAccountSwitchAnimationStore.getState().endFlip();
+            if (Number(healed.id) === Number(userId)) {
+              // The heal itself landed us on the requested account.
+              return;
+            }
+            return get().switchToAccount(userId, false);
+          }
+        }
+
+        // Rollback: restore the previous identity wholesale.
         console.warn('[AccountSwitch] Failed, rolling back:', error);
+        bumpSessionEpoch();
         if (prevToken) await authStorage.setToken(prevToken);
         if (prevRefreshToken) await authStorage.setRefreshToken(prevRefreshToken);
         if (prevUser) {
@@ -363,102 +427,143 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     /**
      * Hydrate accounts from SecureStore on app start.
      * Called from authStore.initialize() after the user session is confirmed.
+     *
+     * The whole pass is epoch-checked: if the session changes hands while
+     * this runs (login, switch, PushKit auto-switch), the computed list
+     * belongs to the previous identity and the pass restarts from scratch
+     * instead of applying stale results.
      */
     loadAccounts: async () => {
-      const ids = await getAccountIds();
-      const seen = new Set<number>();
-      const uniqueIds: number[] = [];
-      for (const id of ids) {
-        const numId = Number(id);
-        if (!seen.has(numId)) {
-          seen.add(numId);
-          uniqueIds.push(numId);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const epochAtStart = getSessionEpoch();
+
+        const ids = await getAccountIds();
+        const seen = new Set<number>();
+        const uniqueIds: number[] = [];
+        for (const id of ids) {
+          const numId = Number(id);
+          if (!seen.has(numId)) {
+            seen.add(numId);
+            uniqueIds.push(numId);
+          }
         }
-      }
 
-      // Parallel SecureStore reads — all accounts at once
-      const raw = await Promise.all(
-        uniqueIds.map(async (id) => {
-          const [tokens, user] = await Promise.all([
-            getAccountTokens(id),
-            getAccountUser(id),
-          ]);
-          return { id, tokens, user };
-        })
-      );
+        // Parallel SecureStore reads — all accounts at once
+        const raw = await Promise.all(
+          uniqueIds.map(async (id) => {
+            const [tokens, user] = await Promise.all([
+              getAccountTokens(id),
+              getAccountUser(id),
+            ]);
+            return { id, tokens, user };
+          })
+        );
 
-      const entries: AccountEntry[] = [];
-      for (const { id, tokens, user } of raw) {
-        if (tokens && user && user.id) {
-          entries.push({ user, tokens });
-        } else {
-          await clearAccount(id);
+        const entries: AccountEntry[] = [];
+        for (const { id, tokens, user } of raw) {
+          if (tokens && user && user.id) {
+            entries.push({ user, tokens });
+          } else {
+            await clearAccount(id);
+          }
         }
-      }
 
-      // Deduplicate by user.id (in case of type mismatches in storage)
-      const uniqueEntries: AccountEntry[] = [];
-      const seenUserIds = new Set<number>();
-      for (const entry of entries) {
-        const uid = Number(entry.user.id);
-        if (!seenUserIds.has(uid)) {
-          seenUserIds.add(uid);
-          uniqueEntries.push(entry);
-        } else {
-          // Duplicate — clean from storage
-          await clearAccount(entry.user.id);
+        // Deduplicate by user.id (in case of type mismatches in storage)
+        const uniqueEntries: AccountEntry[] = [];
+        const seenUserIds = new Set<number>();
+        for (const entry of entries) {
+          const uid = Number(entry.user.id);
+          if (!seenUserIds.has(uid)) {
+            seenUserIds.add(uid);
+            uniqueEntries.push(entry);
+          } else {
+            // Duplicate — clean from storage
+            await clearAccount(entry.user.id);
+          }
         }
-      }
 
-      // Validate: only keep the current user + their linked accounts.
-      // This purges ghost accounts from previous DB wipes.
-      const { useAuthStore } = await import('./authStore');
-      const currentUser = useAuthStore.getState().user;
-      let validEntries = uniqueEntries;
+        // Validate: only keep the authenticated user + their linked accounts.
+        // This purges ghost accounts from previous DB wipes.
+        //
+        // The purge anchor is the TOKEN's subject, never the UI user: the
+        // linked-accounts response describes whoever the Authorization
+        // header authenticated as. On Aug 1 2026 the two diverged and the
+        // UI-anchored purge deleted a real account from SecureStore. If
+        // they disagree, we skip the purge entirely and self-heal instead.
+        const { useAuthStore } = await import('./authStore');
+        const currentUser = useAuthStore.getState().user;
+        let validEntries = uniqueEntries;
 
-      if (currentUser) {
-        try {
-          const linkedUsers = await authService.getLinkedAccounts();
-          const validIds = new Set<number>([
-            currentUser.id,
-            ...linkedUsers.map((u: { id: number }) => u.id),
-          ]);
-          validEntries = uniqueEntries.filter((e) => validIds.has(Number(e.user.id)));
+        if (currentUser) {
+          const accessToken = await authStorage.getToken();
+          const tokenUserId = getTokenUserId(accessToken);
+          const identityCoherent =
+            tokenUserId !== null && Number(currentUser.id) === tokenUserId;
 
-          // Clean invalid entries from storage
-          for (const entry of uniqueEntries) {
-            if (!validIds.has(Number(entry.user.id))) {
-              await clearAccount(entry.user.id);
+          if (tokenUserId !== null && !identityCoherent) {
+            analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_DETECTED, {
+              source: 'load_accounts',
+              ui_user_id: currentUser.id,
+              token_user_id: tokenUserId,
+            });
+            void useAuthStore.getState().reconcileServerIdentity('load_accounts_desync');
+          } else if (identityCoherent) {
+            try {
+              const linkedUsers = await authService.getLinkedAccounts();
+              if (getSessionEpoch() !== epochAtStart) continue; // stale — redo
+              const validIds = new Set<number>([
+                tokenUserId,
+                ...linkedUsers.map((u: { id: number }) => Number(u.id)),
+              ]);
+              const ghosts = uniqueEntries.filter(
+                (e) => !validIds.has(Number(e.user.id))
+              );
+              validEntries = uniqueEntries.filter((e) => validIds.has(Number(e.user.id)));
+
+              // Clean invalid entries from storage
+              for (const ghost of ghosts) {
+                await clearAccount(ghost.user.id);
+              }
+              if (ghosts.length > 0) {
+                analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
+                  anchor_user_id: tokenUserId,
+                  purged_user_ids: ghosts.map((g) => g.user.id),
+                });
+              }
+            } catch {
+              // If linked accounts API fails, keep all entries (don't purge blindly)
             }
           }
-        } catch {
-          // If linked accounts API fails, keep all entries (don't purge blindly)
+          // tokenUserId === null (unreadable token) → keep all entries.
         }
-      }
 
-      // Sync storage with cleaned list
-      await setAccountIds(validEntries.map((e) => e.user.id));
+        if (getSessionEpoch() !== epochAtStart) continue; // stale — redo
 
-      let activeId = await getActiveAccountId();
-      // Reconcile with the authenticated session. The authStore user is the
-      // source of truth for "who is logged in right now"; a stale or mismatched
-      // activeAccountId in SecureStore must yield to it.
-      //
-      // CRITICAL: re-read the user here instead of using the `currentUser`
-      // captured at the top of this function. `loadAccounts` runs
-      // concurrently with `authStore.initialize()` during cold-launch, and
-      // a `switchToAccountForIncomingCall` triggered by a PushKit invite
-      // can update `authStore.user` and `setActiveAccountId` (SecureStore)
-      // in between the original `currentUser` read and this reconciliation.
-      // Using the stale value reverted the just-completed auto-switch and
-      // left the Voice SDK + active session in inconsistent states (Bug
-      // #12: brief unregister-of-new + register-of-old after cold-launch).
-      const latestUser = useAuthStore.getState().user;
-      if (latestUser && activeId !== latestUser.id) {
-        activeId = latestUser.id;
-        await setActiveAccountId(activeId);
+        // Sync storage with cleaned list
+        await setAccountIds(validEntries.map((e) => e.user.id));
+
+        let activeId = await getActiveAccountId();
+        // Reconcile with the authenticated session. The authStore user is the
+        // source of truth for "who is logged in right now"; a stale or mismatched
+        // activeAccountId in SecureStore must yield to it.
+        //
+        // CRITICAL: re-read the user here instead of using the `currentUser`
+        // captured at the top of this function. `loadAccounts` runs
+        // concurrently with `authStore.initialize()` during cold-launch, and
+        // a `switchToAccountForIncomingCall` triggered by a PushKit invite
+        // can update `authStore.user` and `setActiveAccountId` (SecureStore)
+        // in between the original `currentUser` read and this reconciliation.
+        // Using the stale value reverted the just-completed auto-switch and
+        // left the Voice SDK + active session in inconsistent states (Bug
+        // #12: brief unregister-of-new + register-of-old after cold-launch).
+        const latestUser = useAuthStore.getState().user;
+        if (latestUser && activeId !== latestUser.id) {
+          activeId = latestUser.id;
+          await setActiveAccountId(activeId);
+        }
+        set({ accounts: validEntries, activeAccountId: activeId });
+        return;
       }
-      set({ accounts: validEntries, activeAccountId: activeId });
     },
 
     clearAll: async () => {

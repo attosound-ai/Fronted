@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { View, TextInput, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { PostHogMaskView } from 'posthog-react-native';
 
 import { Text } from './Text';
 import { getCountryByDial } from '@/utils/countryCodes';
@@ -36,30 +35,28 @@ export function PhoneInput({
         </Text>
       )}
 
-      <PostHogMaskView>
-        <View
-          style={[
-            styles.inputRow,
-            isFocused && styles.focused,
-            error && styles.errorBorder,
-          ]}
-        >
-          <Text style={styles.prefix} maxFontSizeMultiplier={1.0}>
-            {prefix}
-          </Text>
-          <TextInput
-            style={styles.input}
-            value={phoneNumber}
-            onChangeText={onPhoneNumberChange}
-            keyboardType="phone-pad"
-            placeholder={t('phoneInput.placeholder')}
-            placeholderTextColor="#666666"
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            maxFontSizeMultiplier={1.0}
-          />
-        </View>
-      </PostHogMaskView>
+      <View
+        style={[
+          styles.inputRow,
+          isFocused && styles.focused,
+          error && styles.errorBorder,
+        ]}
+      >
+        <Text style={styles.prefix} maxFontSizeMultiplier={1.0}>
+          {prefix}
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={phoneNumber}
+          onChangeText={onPhoneNumberChange}
+          keyboardType="phone-pad"
+          placeholder={t('phoneInput.placeholder')}
+          placeholderTextColor="#666666"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          maxFontSizeMultiplier={1.0}
+        />
+      </View>
 
       {error && (
         <Text variant="small" style={styles.error}>

@@ -6,6 +6,7 @@ import axios, {
 } from 'axios';
 import { API_CONFIG } from '@/constants/config';
 import { authStorage } from '@/lib/auth/storage';
+import { getSessionEpoch } from '@/lib/auth/sessionEpoch';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 // ── Request-body sanitisation ────────────────────────────────────
@@ -282,8 +283,70 @@ function markClientOutdated(): void {
   if (_isOutdated) return;
   _isOutdated = true;
   _outdatedListeners.forEach((cb) => {
-    try { cb(); } catch { /* swallow */ }
+    try {
+      cb();
+    } catch {
+      /* swallow */
+    }
   });
+}
+
+// ── Transient-failure retry ──
+//
+// Railway's edge proxy intermittently answers "Application failed to respond"
+// (502) for requests that NEVER REACH Kong — proven Aug 2 2026 by correlating
+// client-observed 502s against Kong's access log, which showed zero 5xx while
+// serving every request in the same windows. Timeouts on a mobile radio are
+// the same class of problem. Neither is a verdict about the request, so the
+// correct answer is to retry it rather than surface an error to the user.
+//
+// Bounded and deliberately conservative:
+//  - idempotent methods only (GET/HEAD/OPTIONS), unless a call site opts in
+//    via `retryOnTransient: true` — a retried POST could double-charge or
+//    double-post;
+//  - transient conditions only: no response at all (network drop / timeout)
+//    or 502/503/504. A 4xx is a verdict and is never retried;
+//  - 2 attempts max with exponential backoff + full jitter, so a wave of
+//    cold-start failures doesn't resynchronise into a thundering herd.
+const MAX_TRANSIENT_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 300;
+const IDEMPOTENT_METHODS = new Set(['get', 'head', 'options']);
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /**
+     * Opt a non-idempotent request (POST/PATCH/DELETE) into transient-failure
+     * retries. Only set this when the endpoint is safe to run twice — either
+     * naturally idempotent or protected by an idempotency key server-side.
+     */
+    retryOnTransient?: boolean;
+  }
+}
+
+type RetryableConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+  _transientRetryCount?: number;
+  retryOnTransient?: boolean;
+};
+
+function isTransientFailure(error: AxiosError): boolean {
+  if (error.code === 'ERR_CANCELED') return false; // caller aborted on purpose
+  const status = error.response?.status;
+  if (status === undefined) return true; // network error / timeout — no verdict
+  return status === 502 || status === 503 || status === 504;
+}
+
+function shouldRetryTransient(error: AxiosError, config: RetryableConfig | undefined) {
+  if (!config) return false;
+  if ((config._transientRetryCount ?? 0) >= MAX_TRANSIENT_RETRIES) return false;
+  const method = config.method?.toLowerCase() ?? 'get';
+  if (!IDEMPOTENT_METHODS.has(method) && !config.retryOnTransient) return false;
+  return isTransientFailure(error);
+}
+
+/** Exponential backoff with FULL jitter (random in [0, base * 2^n]). */
+function backoffDelayMs(attempt: number): number {
+  return Math.random() * RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
 }
 
 apiClient.interceptors.response.use(
@@ -296,9 +359,7 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const originalRequest = error.config as RetryableConfig;
 
     // Track failed requests with full context (sensitive fields redacted)
     const props = buildRequestProperties(
@@ -321,9 +382,34 @@ apiClient.interceptors.response.use(
     // the signup. Surface as-is so the caller can show the right message.
     if (error.response?.status === 403) {
       const body = error.response?.data as { error?: string } | undefined;
-      if (typeof body?.error === 'string' && body.error.startsWith('insufficient_scope')) {
+      if (
+        typeof body?.error === 'string' &&
+        body.error.startsWith('insufficient_scope')
+      ) {
         return Promise.reject(error);
       }
+    }
+
+    // Transient platform/network failure: back off and retry rather than
+    // failing the screen. Re-issuing through apiClient() means the request
+    // interceptor runs again, so it picks up a fresh token and honours an
+    // in-progress account-switch pause.
+    if (shouldRetryTransient(error, originalRequest)) {
+      const attempt = (originalRequest._transientRetryCount ?? 0) + 1;
+      originalRequest._transientRetryCount = attempt;
+      const delayMs = backoffDelayMs(attempt);
+      analytics.capture(ANALYTICS_EVENTS.NETWORK.REQUEST_RETRIED, {
+        url: originalRequest.url,
+        method: originalRequest.method?.toUpperCase(),
+        attempt,
+        delay_ms: Math.round(delayMs),
+        status: error.response?.status,
+        error_code: error.code,
+        is_timeout: error.code === 'ECONNABORTED',
+        is_network_error: error.message === 'Network Error',
+      });
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return apiClient(originalRequest);
     }
 
     // Only handle 401, only once per request
@@ -374,6 +460,11 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
     isRefreshing = true;
 
+    // Capture before refreshing: if the session changes hands while the
+    // refresh is in flight (account switch, login), a null result belongs
+    // to the PREVIOUS identity and must not expire the new session.
+    const epochBeforeRefresh = getSessionEpoch();
+
     try {
       // Dynamic import to break circular: client → authStore → authService → client
       const { useAuthStore } = await import('@/stores/authStore');
@@ -387,12 +478,20 @@ apiClient.interceptors.response.use(
         processQueue(new Error('Refresh failed'), null);
         // Expire session explicitly — refreshTokens() no longer does this
         // as a side effect, so the interceptor is the right place to decide.
-        if (useAuthStore.getState().isAuthenticated) {
+        // null now means DEFINITIVE rejection (or a stale, already-replaced
+        // session); only the former may expire, hence the epoch check.
+        if (
+          getSessionEpoch() === epochBeforeRefresh &&
+          useAuthStore.getState().isAuthenticated
+        ) {
           useAuthStore.getState().expireSession('interceptor_refresh_failed');
         }
         return Promise.reject(error);
       }
     } catch (refreshError) {
+      // Transient refresh failure (network/timeout/5xx): reject the original
+      // request but KEEP the session — an unreachable backend proves nothing
+      // about the credentials.
       processQueue(refreshError, null);
       return Promise.reject(refreshError);
     } finally {

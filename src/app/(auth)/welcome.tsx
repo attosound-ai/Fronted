@@ -1,11 +1,12 @@
 import { Image, StyleSheet, View } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/Button';
 import { COLORS } from '@/constants/theme';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAuthStore } from '@/stores/authStore';
 
 /**
  * Welcome screen.
@@ -25,6 +26,15 @@ import { haptic } from '@/lib/haptics/hapticService';
  */
 export default function WelcomeScreen() {
   const { t } = useTranslation('auth');
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  // Belt-and-suspenders for the (auth)/_layout bounce: a logged-in user must
+  // never sit on the logged-out welcome screen (Aug 1: stranded here after
+  // backing out of add-account login, read as "it logged me out completely").
+  if (!isLoading && isAuthenticated) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   return (
     <View style={styles.container}>

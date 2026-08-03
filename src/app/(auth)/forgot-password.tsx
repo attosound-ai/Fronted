@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/Input';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { authService } from '@/lib/api/authService';
 import { isStrongPassword } from '@/utils/validators';
+import { cleanPasswordInput } from '@/utils/passwordInput';
 import { COLORS } from '@/constants/theme';
 
 type Step = 'email' | 'otp' | 'password';
@@ -270,11 +271,13 @@ export default function ForgotPasswordScreen() {
           label={t('forgotPassword.newPasswordLabel')}
           value={password}
           onChangeText={(v: string) => {
-            setPassword(v);
+            setPassword(cleanPasswordInput(v, 'forgot_password'));
             setPasswordError('');
           }}
           secureTextEntry={!showPassword}
           autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
           autoComplete="password-new"
           textContentType="newPassword"
           passwordRules="minlength: 8; required: lower; required: upper; required: digit;"
@@ -298,11 +301,13 @@ export default function ForgotPasswordScreen() {
           label={t('forgotPassword.confirmPasswordLabel')}
           value={confirmPassword}
           onChangeText={(v: string) => {
-            setConfirmPassword(v);
+            setConfirmPassword(cleanPasswordInput(v, 'forgot_confirm'));
             setConfirmError('');
           }}
           secureTextEntry={!showConfirmPassword}
           autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
           autoComplete="password-new"
           textContentType="newPassword"
           error={confirmError}

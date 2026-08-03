@@ -4,8 +4,11 @@ import * as Sentry from '@sentry/react-native';
 import i18n from '@/lib/i18n';
 import { authService } from '@/lib/api/authService';
 import { authStorage, migrateKeychainAccessibility } from '@/lib/auth/storage';
+import { getSessionEpoch, bumpSessionEpoch } from '@/lib/auth/sessionEpoch';
+import { getTokenUserId } from '@/lib/auth/jwt';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { getErrorMessage } from '@/utils/formatters';
+import { queryClient } from '@/lib/queryClient';
 import { useSubscriptionStore } from './subscriptionStore';
 import type {
   User,
@@ -45,6 +48,12 @@ interface AuthActions {
   updateProfile: (data: UpdateProfileDTO) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokens: () => Promise<TokenPair | null>;
+  /**
+   * Ask the server who the current tokens belong to; if that disagrees with
+   * the UI user, rebuild the session around the server's answer. Returns the
+   * healed user, or null when identities already agree / nothing was proven.
+   */
+  reconcileServerIdentity: (reason: string) => Promise<User | null>;
   expireSession: (reason: string) => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
@@ -73,14 +82,78 @@ async function registerActiveSession(user: User, tokens: TokenPair): Promise<voi
   await accountStore.setActive(user.id);
 }
 
+/**
+ * A credential rejection the server actually stands behind (4xx auth codes),
+ * as opposed to a transient failure (timeout, network, 5xx) that proves
+ * nothing about the session. Sessions may only be expired on the former;
+ * failing open on the latter is what keeps backend outages from logging
+ * users out.
+ */
+function isDefinitiveAuthRejection(error: unknown): boolean {
+  if (!(error instanceof AxiosError)) return false;
+  const status = error.response?.status;
+  return status === 400 || status === 401 || status === 403;
+}
+
+// Single-flight guards. Concurrent callers share one in-flight promise so a
+// cold start (initialize + interceptor 401s) performs exactly one refresh,
+// and parallel desync observers trigger exactly one reconciliation.
+let refreshInFlight: { epoch: number; promise: Promise<TokenPair | null> } | null = null;
+let reconcileInFlight: Promise<User | null> | null = null;
+
+/**
+ * Make the SERVER's answer for the current tokens the active identity.
+ *
+ * Used when the UI user and the token subject are proven to disagree. The
+ * tokens are what actually authenticate every request (and the Phoenix
+ * socket), so the token side wins and UI/state/storage are rebuilt around
+ * it. All caches that could mix both identities are cleared.
+ */
+async function adoptServerIdentity(me: User, reason: string): Promise<void> {
+  bumpSessionEpoch();
+  const accessToken = await authStorage.getToken();
+  const refreshToken = await authStorage.getRefreshToken();
+  if (!accessToken || !refreshToken) return;
+  const tokens: TokenPair = { accessToken, refreshToken, expiresIn: 0 };
+
+  await authStorage.setUser(me);
+  await registerActiveSession(me, tokens);
+  useAuthStore.setState({ user: me, tokens, isAuthenticated: true, isLoading: false });
+
+  queryClient.clear();
+  useSubscriptionStore.getState().clear();
+  void useSubscriptionStore.getState().fetchSubscription();
+
+  analytics.identify(me);
+  Sentry.setUser({
+    id: String(me.id),
+    email: me.email,
+    name: me.username,
+    username: me.username,
+  });
+  analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_HEALED, {
+    reason,
+    healed_user_id: me.id,
+  });
+}
+
 export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   ...initialState,
 
   /**
    * Restore session from SecureStore on app start.
    * Validates stored tokens with GET /auth/me.
+   *
+   * Every write below is guarded by the session epoch captured at entry: if
+   * a login/switch/logout takes ownership while this restore's network calls
+   * are in flight, the late results are DISCARDED, never applied. A delayed
+   * getMe() once resolved ~16s late (backend outage) and overwrote a
+   * just-switched session's user without its tokens, splitting UI identity
+   * from request identity for the rest of the day.
    */
   initialize: async () => {
+    const epochAtStart = getSessionEpoch();
+    const isStale = () => getSessionEpoch() !== epochAtStart;
     try {
       set({ isLoading: true, error: null });
 
@@ -95,14 +168,23 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       const storedUser = await authStorage.getUser<User>();
 
       if (!accessToken || !refreshToken) {
-        set({ ...initialState, isLoading: false });
+        if (storedUser) {
+          // Stored user without tokens is a keychain failure, not a normal
+          // logged-out boot — make it visible instead of silently landing
+          // the user on the welcome screen.
+          analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_MISSING_TOKENS, {
+            has_access_token: Boolean(accessToken),
+            has_refresh_token: Boolean(refreshToken),
+          });
+        }
+        if (!isStale()) set({ ...initialState, isLoading: false });
         return;
       }
 
       const tokens: TokenPair = { accessToken, refreshToken, expiresIn: 0 };
 
       // Optimistically show stored user for instant UI
-      if (storedUser) {
+      if (storedUser && !isStale()) {
         set({ user: storedUser, tokens, isAuthenticated: true, isLoading: false });
       }
 
@@ -113,6 +195,22 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           useSubscriptionStore.getState().fetchSubscription(),
           useAccountStore.getState().loadAccounts(),
         ]);
+        if (isStale()) return;
+
+        if (storedUser && Number(freshUser.id) !== Number(storedUser.id)) {
+          // Stored user and stored tokens belong to DIFFERENT accounts
+          // (persisted desync). getMe answered for the tokens' account —
+          // adopt that identity wholesale.
+          analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_DETECTED, {
+            source: 'initialize',
+            ui_user_id: storedUser.id,
+            server_user_id: freshUser.id,
+          });
+          await adoptServerIdentity(freshUser, 'initialize_mismatch');
+          analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
+          return;
+        }
+
         await authStorage.setUser(freshUser);
         set({ user: freshUser, isAuthenticated: true, isLoading: false });
         analytics.identify(freshUser);
@@ -123,23 +221,83 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
           username: freshUser.username,
         });
         analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORED);
-      } catch {
-        // Token expired — try refresh
-        const newTokens = await get().refreshTokens();
+      } catch (validationError: unknown) {
+        if (isStale()) return;
+
+        if (!isDefinitiveAuthRejection(validationError)) {
+          // Backend unreachable or degraded (timeout, 502, network). The
+          // stored session is not proven invalid — keep it and re-validate
+          // lazily via the interceptor. A backend outage must never log
+          // users out.
+          analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORE_DEFERRED, {
+            phase: 'getme',
+            status:
+              validationError instanceof AxiosError
+                ? validationError.response?.status
+                : undefined,
+            error_code:
+              validationError instanceof AxiosError ? validationError.code : undefined,
+          });
+          set({ isLoading: false });
+          return;
+        }
+
+        // Token rejected — try refresh
+        let newTokens: TokenPair | null = null;
+        try {
+          newTokens = await get().refreshTokens();
+        } catch {
+          // Transient refresh failure — same fail-open policy as above.
+          if (!isStale()) {
+            analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORE_DEFERRED, {
+              phase: 'refresh',
+            });
+            set({ isLoading: false });
+          }
+          return;
+        }
+        if (isStale()) return;
+
         if (newTokens) {
           try {
             const freshUser = await authService.getMe();
+            if (isStale()) return;
+            if (storedUser && Number(freshUser.id) !== Number(storedUser.id)) {
+              analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_DETECTED, {
+                source: 'initialize_after_refresh',
+                ui_user_id: storedUser.id,
+                server_user_id: freshUser.id,
+              });
+              await adoptServerIdentity(freshUser, 'initialize_mismatch_after_refresh');
+              return;
+            }
             await authStorage.setUser(freshUser);
             set({ user: freshUser, isAuthenticated: true, isLoading: false });
-          } catch {
-            await get().expireSession('init_getme_after_refresh');
+          } catch (getMeError: unknown) {
+            if (isStale()) return;
+            if (isDefinitiveAuthRejection(getMeError)) {
+              await get().expireSession('init_getme_after_refresh');
+            } else {
+              analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_RESTORE_DEFERRED, {
+                phase: 'getme_after_refresh',
+              });
+              set({ isLoading: false });
+            }
           }
         } else {
           await get().expireSession('init_refresh_failed');
         }
       }
     } catch {
+      if (isStale()) return;
       await get().expireSession('init_unexpected_error');
+    } finally {
+      // Release the loading gate on EVERY exit path. The stale early-returns
+      // above skip their `set` calls by design, and a PushKit auto-switch can
+      // take ownership before the first one runs — without this, the app
+      // would sit on the splash/loading screen forever. The router keys off
+      // isLoading, so leaking it true is a hang, not a cosmetic issue.
+      if (get().isLoading) set({ isLoading: false });
     }
   },
 
@@ -164,6 +322,9 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       const { user, tokens } = result as { user: User; tokens: TokenPair };
 
+      // New identity takes ownership — invalidate in-flight restores/refreshes
+      // BEFORE the first credential write so none of them can interleave.
+      bumpSessionEpoch();
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
@@ -199,6 +360,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
 
       const { user, tokens } = await authService.register(data);
 
+      bumpSessionEpoch();
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
@@ -247,6 +409,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   ) => {
     set({ isAuthenticating: true, error: null });
     try {
+      bumpSessionEpoch();
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);
@@ -297,6 +460,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
   },
 
   logout: async () => {
+    bumpSessionEpoch();
     try {
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGOUT);
       await authService.logout();
@@ -312,41 +476,118 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     }
   },
 
+  /**
+   * Refresh the active session's tokens.
+   *
+   * Contract (callers depend on all three outcomes):
+   *  - resolves TokenPair — refreshed and persisted;
+   *  - resolves null     — the refresh token was DEFINITIVELY rejected, or
+   *                        the session changed hands mid-refresh (stale);
+   *  - throws            — transient failure (network/timeout/5xx); proves
+   *                        nothing, the session must NOT be expired for it.
+   *
+   * Single-flight: concurrent callers (cold-start 401 wall + initialize)
+   * share one network call. Keyed by epoch so a post-switch caller never
+   * joins a refresh that belongs to the previous account.
+   */
   refreshTokens: async (): Promise<TokenPair | null> => {
-    try {
+    const epochAtStart = getSessionEpoch();
+    if (refreshInFlight && refreshInFlight.epoch === epochAtStart) {
+      return refreshInFlight.promise;
+    }
+
+    const promise = (async (): Promise<TokenPair | null> => {
       const currentRefreshToken = await authStorage.getRefreshToken();
       if (!currentRefreshToken) return null;
 
-      const newTokens = await authService.refreshToken(currentRefreshToken);
+      let newTokens: TokenPair;
+      try {
+        newTokens = await authService.refreshToken(currentRefreshToken);
+      } catch (error: unknown) {
+        const status = error instanceof AxiosError ? error.response?.status : undefined;
+        analytics.capture(ANALYTICS_EVENTS.AUTH.TOKEN_REFRESH_FAILED, {
+          status,
+          is_auth_error: status === 401 || status === 403,
+          is_network_error:
+            error instanceof AxiosError && error.message === 'Network Error',
+          error_code: error instanceof AxiosError ? error.code : undefined,
+        });
+        // Do NOT clear the session here — callers (initialize, interceptor)
+        // decide whether to expire the session based on context.
+        if (isDefinitiveAuthRejection(error)) return null;
+        throw error;
+      }
+
+      if (getSessionEpoch() !== epochAtStart) {
+        // The session changed hands while the refresh was in flight (switch,
+        // login, logout). These tokens belong to the PREVIOUS identity —
+        // persisting them would clobber the new session's tokens.
+        analytics.capture(ANALYTICS_EVENTS.AUTH.REFRESH_DISCARDED_STALE, {});
+        return null;
+      }
 
       await authStorage.setToken(newTokens.accessToken);
       await authStorage.setRefreshToken(newTokens.refreshToken);
 
       set({ tokens: newTokens });
 
-      // Keep accountStore tokens in sync so cached entries stay fresh
-      const activeId = useAccountStore.getState().activeAccountId;
+      // Keep accountStore tokens in sync so cached entries stay fresh — but
+      // only when the token's subject and the UI user agree. Mirroring
+      // across a desync poisons one account's stored entry with the other
+      // account's tokens.
       const currentUser = get().user;
-      if (activeId && currentUser) {
+      const tokenUserId = getTokenUserId(newTokens.accessToken);
+      if (currentUser && tokenUserId !== null && Number(currentUser.id) === tokenUserId) {
         useAccountStore.getState().addAccount({ user: currentUser, tokens: newTokens });
+      } else if (currentUser && tokenUserId !== null) {
+        analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_DETECTED, {
+          source: 'refresh_mirror',
+          ui_user_id: currentUser.id,
+          token_user_id: tokenUserId,
+        });
+        void get().reconcileServerIdentity('refresh_mirror_mismatch');
       }
 
       analytics.capture(ANALYTICS_EVENTS.AUTH.TOKEN_REFRESHED);
       return newTokens;
-    } catch (error: unknown) {
-      const status = error instanceof AxiosError ? error.response?.status : undefined;
-      const isAuthError = status === 401 || status === 403;
-      analytics.capture(ANALYTICS_EVENTS.AUTH.TOKEN_REFRESH_FAILED, {
-        status,
-        is_auth_error: isAuthError,
-        is_network_error:
-          error instanceof AxiosError && error.message === 'Network Error',
-        error_code: error instanceof AxiosError ? error.code : undefined,
+    })();
+
+    refreshInFlight = { epoch: epochAtStart, promise };
+    promise
+      .catch(() => undefined)
+      .finally(() => {
+        if (refreshInFlight?.promise === promise) refreshInFlight = null;
       });
-      // Do NOT clear the session here — callers (initialize, interceptor)
-      // decide whether to expire the session based on context.
-      return null;
-    }
+    return promise;
+  },
+
+  reconcileServerIdentity: async (reason: string): Promise<User | null> => {
+    if (reconcileInFlight) return reconcileInFlight;
+    reconcileInFlight = (async (): Promise<User | null> => {
+      try {
+        const epochAtStart = getSessionEpoch();
+        // getMe answers for the token actually attached to the request —
+        // that IS the identity every other API call runs as.
+        const me = await authService.getMe();
+        if (getSessionEpoch() !== epochAtStart) return null; // ownership moved
+        const current = get().user;
+        if (!current || Number(current.id) === Number(me.id)) return null; // coherent
+        analytics.capture(ANALYTICS_EVENTS.AUTH.IDENTITY_DESYNC_DETECTED, {
+          source: 'reconcile',
+          reason,
+          ui_user_id: current.id,
+          server_user_id: me.id,
+        });
+        await adoptServerIdentity(me, reason);
+        return me;
+      } catch {
+        // Network failure — nothing proven, change nothing.
+        return null;
+      } finally {
+        reconcileInFlight = null;
+      }
+    })();
+    return reconcileInFlight;
   },
 
   /**
@@ -355,6 +596,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
    * definitively fails — never as a side effect of refreshTokens().
    */
   expireSession: async (reason: string) => {
+    bumpSessionEpoch();
     analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_EXPIRED, { reason });
     analytics.reset();
     Sentry.setUser(null);
@@ -374,6 +616,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         code,
       });
 
+      bumpSessionEpoch();
       await authStorage.setToken(tokens.accessToken);
       await authStorage.setRefreshToken(tokens.refreshToken);
       await authStorage.setUser(user);

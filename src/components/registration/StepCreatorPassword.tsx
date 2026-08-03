@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
+import { cleanPasswordInput } from '@/utils/passwordInput';
 import { haptic } from '@/lib/haptics/hapticService';
 import { COLORS } from '@/constants/theme';
 
@@ -93,13 +94,21 @@ export function StepCreatorPassword({
             <TextInput
               value={state.creatorPassword}
               onChangeText={(v) =>
-                dispatch({ type: 'UPDATE_FIELD', field: 'creatorPassword', value: v })
+                dispatch({
+                  type: 'UPDATE_FIELD',
+                  field: 'creatorPassword',
+                  // Strip iOS QuickType's invisible trailing space / zero-width
+                  // chars (visually-identical passwords "didn't match").
+                  value: cleanPasswordInput(v, 'creator_password'),
+                })
               }
               placeholder={t('creatorAccountSetup.passwordPlaceholder')}
               placeholderTextColor="#666666"
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="password-new"
               textContentType="newPassword"
               passwordRules="minlength: 8; required: lower; required: upper; required: digit;"
@@ -154,7 +163,7 @@ export function StepCreatorPassword({
                 dispatch({
                   type: 'UPDATE_FIELD',
                   field: 'creatorConfirmPassword',
-                  value: v,
+                  value: cleanPasswordInput(v, 'creator_confirm'),
                 })
               }
               placeholder={t('creatorAccountSetup.confirmPlaceholder')}
@@ -162,6 +171,8 @@ export function StepCreatorPassword({
               style={[styles.textInput, { flex: 1 }]}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="password-new"
               textContentType="newPassword"
               maxFontSizeMultiplier={1.0}

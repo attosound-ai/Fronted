@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Text, Button, Input, Checkbox } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
+import { cleanPasswordInput } from '@/utils/passwordInput';
 import { haptic } from '@/lib/haptics/hapticService';
 import { COLORS } from '@/constants/theme';
 
@@ -106,12 +107,17 @@ export function StepCredentials({
               label={t('credentials.passwordLabel')}
               value={state.password}
               onChangeText={(value: string) => {
-                dispatch({ type: 'UPDATE_FIELD', field: 'password', value });
+                // Strip iOS QuickType's invisible trailing space / zero-width chars
+                // — they made visually-identical passwords "not match" (client bug).
+                const clean = cleanPasswordInput(value, 'register_password');
+                dispatch({ type: 'UPDATE_FIELD', field: 'password', value: clean });
                 setErrors((prev) => ({ ...prev, password: '' }));
               }}
               placeholder={t('credentials.passwordPlaceholder')}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="new-password"
               textContentType="newPassword"
               error={errors.password}
@@ -161,12 +167,14 @@ export function StepCredentials({
               label={t('credentials.confirmLabel')}
               value={confirmPassword}
               onChangeText={(value: string) => {
-                setConfirmPassword(value);
+                setConfirmPassword(cleanPasswordInput(value, 'register_confirm'));
                 setErrors((prev) => ({ ...prev, confirmPassword: '' }));
               }}
               placeholder={t('credentials.confirmPlaceholder')}
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
               autoComplete="new-password"
               textContentType="newPassword"
               error={

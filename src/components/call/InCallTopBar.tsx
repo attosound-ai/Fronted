@@ -12,7 +12,6 @@ import {
   SlidersHorizontal,
   Radio,
   Square,
-  TriangleAlert,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -27,7 +26,6 @@ import { preloadCallSounds } from '@/lib/sound/callSounds';
 import { haptic } from '@/lib/haptics/hapticService';
 import { openKeypad } from './DtmfKeypadHost';
 import { openMixer } from './MixerHost';
-import { openAudioProblemReport } from './AudioProblemHost';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { mixerService } from '@/lib/callAudio/mixerService';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
@@ -316,22 +314,12 @@ export function InCallTopBar() {
           </TouchableOpacity>
         </GlassSurface>
 
-        {/* Report an audio problem the moment it happens. Deliberately as quiet as
-            the other controls (same glass pill, no colour, no label), since it is
-            a diagnostic and not an alarm, but always present because the value
-            is the timestamp: telling us afterwards is what we already had. Opens a
-            three-option sheet; the tap itself is the measurement. */}
-        <GlassSurface radius={21} style={styles.glassBtn}>
-          <TouchableOpacity
-            style={styles.glassBtnInner}
-            onPress={() => {
-              void haptic('selection');
-              openAudioProblemReport();
-            }}
-          >
-            <TriangleAlert size={19} color="#FFF" strokeWidth={2.25} />
-          </TouchableOpacity>
-        </GlassSurface>
+        {/* The audio-problem report button lived here for exactly one build (136)
+            and was removed at David's direction (Aug 3): the passive telemetry
+            (per-second stats, route reasons, session writes) proved sufficient to
+            diagnose incidents without asking the user to self-report, and every
+            slot in this bar is contested. The sheet + reportAudioProblem plumbing
+            stay (AudioProblemHost), dormant, for a future entry point elsewhere. */}
 
         {/* Transmit the app's currently-playing audio INTO the call (flag-gated).
             Red Square while transmitting; the Radio dims when nothing has played. */}

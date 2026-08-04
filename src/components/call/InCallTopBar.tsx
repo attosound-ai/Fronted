@@ -144,6 +144,10 @@ export function InCallTopBar() {
           // line up with the track".
           mic_starved_fallbacks: diag?.micStarvedFallbacks ?? null,
           playout_cb_count: diag?.playoutCbCount ?? null,
+          // stopFile forensics (Aug 3 ghost tail): a lag in the SECONDS while
+          // inject frames kept climbing = the stop sat behind a busy main thread.
+          stop_file_calls: diag?.stopFileCalls ?? null,
+          last_stop_file_lag_ms: diag?.lastStopFileLagMs ?? null,
           // The 3 signals that pinpoint where injection dies:
           record_engine_running: diag?.recordEngineRunning ?? null,
           record_player_playing: diag?.recordPlayerPlaying ?? null,

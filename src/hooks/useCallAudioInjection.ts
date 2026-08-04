@@ -103,11 +103,17 @@ export function useCallAudioInjection() {
   }, []);
 
   const stop = useCallback(async (reason: InjectReason = 'user_stopped') => {
+    const t0 = Date.now();
     await getAudioInjector().stop(reason);
     const call = useCallStore.getState().activeCall;
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_STOPPED, {
       call_sid: call?.callSid ?? null,
       reason,
+      // How long the native stop took to resolve. The Aug 3 ghost test showed
+      // injected frames still flowing ~2s after this event landed; this number
+      // separates "the bridge call sat in a busy queue" from "the stop ran
+      // instantly and something re-scheduled afterwards".
+      stop_await_ms: Date.now() - t0,
     });
   }, []);
 

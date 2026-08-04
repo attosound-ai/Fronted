@@ -41,6 +41,7 @@ import { LaneEditSheet } from './LaneEditSheet';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { useTimeline } from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
+import { getAudioInjector } from '@/lib/callAudio/createAudioInjector';
 import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
 import { useTwilioCallRecording } from '../hooks/useTwilioCallRecording';
@@ -583,6 +584,15 @@ export function TimelineEditor({
     if (state.isPlaying) {
       setPlaying(false);
     } else {
+      // ONE audio at a time. Transmitting a track pauses local playback and the
+      // engine's monitor takes over as what the user hears (anti-echo, b114).
+      // Un-pausing the timeline on top of that live monitor played BOTH copies
+      // at once (David, Aug 3: "si lo despauso suena doble"). Local play is an
+      // explicit takeover: stop the injection, then play locally.
+      const injection = useCallStore.getState().injection;
+      if (injection?.state === 'playing' || injection?.state === 'preparing') {
+        void getAudioInjector().stop('user_stopped');
+      }
       if (state.playbackPositionMs >= totalDuration && totalDuration > 0) {
         setPlaybackPosition(0);
       }

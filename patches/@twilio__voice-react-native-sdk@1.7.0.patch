@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22e234af15
+index 0000000000000000000000000000000000000000..37051e0e39481bf84f9127c4baac66e2f2e51bad
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3519 @@
+@@ -0,0 +1,3563 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -636,6 +636,13 @@ index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22
 +    uint64_t _dbgRouteChangeDroppedCount;
 +    uint64_t _dbgRouteChangeRecheckedCount;
 +    uint64_t _dbgRouteRebuildDisagreeCount;
++    // stopFile forensics (Aug 3 ghost-audio test: injected frames kept flowing
++    // ~2s after the JS stop event landed). Calls counts every stopFile entry;
++    // LagMs is how long its main-queue player-stop block waited to actually run,
++    // which is the direct measurement of "the stop sat behind a busy main
++    // thread". Read together with injectFramesToCapture's plateau time.
++    uint64_t _dbgStopFileCalls;
++    double   _dbgLastStopFileLagMs;
 +    uint64_t _dbgSessionRateFlipCount;
 +    uint64_t _dbgFormatRealignScheduledCount;
 +    NSInteger _dbgLastRouteReason;
@@ -682,7 +689,16 @@ index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22
 +        _channelGain[AttoMixChannelRemote]    = 0.9f;
 +        _channelGain[AttoMixChannelApp]       = 0.8f;
 +        _channelGain[AttoMixChannelMetronome] = 0.6f;
-+        _channelRecord[AttoMixChannelMic]       = YES;
++        /*
++         * The app-side MIC also defaults out of the recorded mix (David, Aug 3):
++         * the flagship take is the FAR party performing while the rep holds the
++         * phone, so the rep's mic would only add room noise and breath. Must stay
++         * in sync with DEFAULT_CHANNELS in mixerStore.ts; belt-and-braces, since
++         * useEngineMixRecording pushes the store to this device before every take
++         * arms (syncAllChannels) precisely so these two tables can never disagree
++         * at the moment that matters.
++         */
++        _channelRecord[AttoMixChannelMic]       = NO;
 +        _channelRecord[AttoMixChannelRemote]    = YES;
 +        /*
 +         * App audio defaults to NOT being recorded (David, Aug 3).
@@ -1504,15 +1520,38 @@ index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22
 +
 +- (void)stopFile {
 +    [self stopStatusTimer];
++    _dbgStopFileCalls++;
 +    // Injection is over: stop attributing captured frames to it.
 +    if (self.capturingContext) { self.capturingContext->injectActive = 0; }
 +
++    /*
++     * AUDIBLE KILL, SYNCHRONOUS (Aug 3). The player-stop below is dispatched to
++     * the main queue, and during in-call editor use the main thread can lag for
++     * SECONDS (jsLagPeakMs 1.3s measured; the ghost test showed injected frames
++     * flowing ~2s past the stop). Until that block runs, both players keep
++     * feeding the graph: the far party keeps receiving the track and the rep
++     * keeps hearing the monitor, i.e. "I turned it off and it kept sounding".
++     * `volume` is an AVAudioMixing parameter applied by the mixer, safe to set
++     * from any thread, so zero both players HERE and let the deferred stop do
++     * the structural cleanup whenever the main queue gets to it.
++     */
++    self.recordFilePlayer.volume = 0.0f;
++    self.playoutFilePlayer.volume = 0.0f;
++
++    CFTimeInterval stopRequestedAt = CACurrentMediaTime();
++    __weak typeof(self) weakSelf = self;
 +    dispatch_block_t work = ^{
-+        if (self.recordFilePlayer.isPlaying) {
-+            [self.recordFilePlayer stop];
++        __strong typeof(weakSelf) strongSelf = weakSelf;
++        if (!strongSelf) { return; }
++        // How long this block sat behind the main thread — the direct
++        // measurement of the ghost tail's length.
++        strongSelf->_dbgLastStopFileLagMs =
++            (CACurrentMediaTime() - stopRequestedAt) * 1000.0;
++        if (strongSelf.recordFilePlayer.isPlaying) {
++            [strongSelf.recordFilePlayer stop];
 +        }
-+        if (self.playoutFilePlayer.isPlaying) {
-+            [self.playoutFilePlayer stop];
++        if (strongSelf.playoutFilePlayer.isPlaying) {
++            [strongSelf.playoutFilePlayer stop];
 +        }
 +    };
 +
@@ -2158,6 +2197,11 @@ index 0000000000000000000000000000000000000000..72512e02195dc1f61b9c7a5af8578a22
 +        // mismatch here = wrong-speed audio (monster/chipmunk).
 +        @"renderingFormatRate": @(renderingFormatRate),
 +        @"capturingFormatRate": @(capturingFormatRate),
++        // stopFile forensics (Aug 3 ghost tail): how many stops ran, and how long
++        // the last one's player-stop block waited behind the main thread. A lag
++        // in the seconds while injectFramesToCapture kept climbing = the ghost.
++        @"stopFileCalls": @(_dbgStopFileCalls),
++        @"lastStopFileLagMs": @(_dbgLastStopFileLagMs),
 +        // ATTO (build 83): did Twilio even drive the device's start hooks this call?
 +        // startCapturingCount>0 + recordCbCount==0 ⇒ device bound but AudioUnit not
 +        // pumping (session/format). startCapturingCount==0 ⇒ device not bound at all.

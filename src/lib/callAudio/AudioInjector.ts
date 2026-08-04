@@ -53,7 +53,11 @@ export type InjectReason =
   | 'not_supported'
   | 'engine_unavailable'
   // Caller lacks the creator + active-subscription entitlement to inject.
-  | 'not_permitted';
+  | 'not_permitted'
+  // A stop() (or a newer start()) arrived while this start() was still in its
+  // async prepare, so it deliberately never scheduled. Not an error: the user
+  // changed their mind faster than the download/extract finished.
+  | 'superseded';
 
 /** Result of an imperative action. Adapters NEVER throw to callers — they
  *  resolve `{ ok: false, reason }` so the UI can react without try/catch. */

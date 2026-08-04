@@ -44,6 +44,17 @@ function getNativeModule(): NativeInjectionModule | null {
 export class NativeAudioInjector extends NullAudioInjector implements AudioInjector {
   private native = getNativeModule();
   private emitterSub: { remove: () => void } | null = null;
+  /**
+   * Generation token that makes stop() authoritative over any in-flight start().
+   * start() spends SECONDS in prepare (download + audio extraction + the native
+   * file read/convert), and it had no cancellation: a stop issued during that
+   * window stopped nothing (nothing was playing yet) and the late prepare then
+   * scheduled anyway — the "I turned it off but it started sounding" ghost from
+   * David's Aug 3 test. Every stop() bumps the generation; start() re-checks it
+   * after every await and aborts (or un-schedules) when superseded. A newer
+   * start() also bumps it, so rapid re-taps can never stack two schedules.
+   */
+  private generation = 0;
 
   constructor() {
     super();
@@ -116,8 +127,16 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
 
   override async start(source: InjectSource): Promise<InjectResult> {
     if (!this.native) return { ok: false, reason: 'not_supported' };
+    // Claim a fresh generation: this start supersedes anything in flight, and
+    // any later stop() supersedes THIS.
+    const gen = ++this.generation;
     this.emit({ state: 'preparing', source, reason: null });
     const localPath = await this.resolveLocalPath(source);
+    if (gen !== this.generation) {
+      // A stop (or newer start) arrived while we were downloading/extracting.
+      // Nothing was scheduled yet, so there is nothing to undo — just don't.
+      return { ok: false, reason: 'superseded' };
+    }
     if (!localPath) {
       this.emit({ state: 'error', reason: 'prepare_failed' });
       return { ok: false, reason: 'prepare_failed' };
@@ -128,6 +147,18 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
         this.snapshot.monitor,
         this.snapshot.volume
       );
+      if (gen !== this.generation) {
+        // Superseded DURING the native schedule: the engine may now be playing a
+        // file the user already stopped. Kill it before anyone hears it.
+        if (ok) {
+          try {
+            await this.native.stopInjectedAudio();
+          } catch {
+            // best-effort; the stop that superseded us also issued its own
+          }
+        }
+        return { ok: false, reason: 'superseded' };
+      }
       if (!ok) {
         this.emit({ state: 'error', reason: 'engine_error' });
         return { ok: false, reason: 'engine_error' };
@@ -147,6 +178,9 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
 
   override async stop(reason: InjectReason): Promise<void> {
     if (!this.native) return;
+    // Invalidate any in-flight start() FIRST, so a prepare that finishes after
+    // this line cannot schedule audio the user just stopped.
+    this.generation++;
     try {
       await this.native.stopInjectedAudio();
     } catch {

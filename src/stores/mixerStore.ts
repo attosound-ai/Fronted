@@ -62,11 +62,10 @@ const DEFAULT_CHANNELS: Record<MixerChannel, ChannelState> = {
   // the phone), so the rep's mic would add room noise and breath to an otherwise
   // clean take. Anyone recording themselves flips it on in the mixer.
   //
-  // NOTE the native init in AttoAudioEngineDevice.m still says mic=YES; that is
-  // harmless because useEngineMixRecording pushes this store to the engine right
-  // before every take arms (syncAllChannels), so the store is the single source
-  // of truth at the only moment it matters. Flip the native default to NO the
-  // next time that file is touched.
+  // The native init in AttoAudioEngineDevice.m mirrors this (mic=NO). Even so,
+  // useEngineMixRecording pushes this store to the engine right before every
+  // take arms (syncAllChannels), so the store is the single source of truth at
+  // the only moment it matters and the two tables can never silently disagree.
   mic: { gain: 0.9, record: false },
   remote: { gain: 0.9, record: true },
   // App audio defaults to NOT being recorded, and this MUST stay in sync with the

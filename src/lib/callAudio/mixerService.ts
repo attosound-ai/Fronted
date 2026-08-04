@@ -66,6 +66,23 @@ export const mixerService = {
     }
   },
 
+  /**
+   * Push EVERY channel's state to the native bus in one pass. Called right
+   * before a take arms so the store (what the mixer sheet shows) is the single
+   * source of truth for what gets recorded. Without this, a take armed before
+   * the user ever opened the sheet ran on the ENGINE's compiled-in defaults,
+   * and the two default tables (mixerStore vs AttoAudioEngineDevice -init)
+   * could silently disagree — which is exactly how "app audio defaults OFF"
+   * shipped defeated once already.
+   */
+  syncAllChannels(
+    channels: Record<MixerChannel, { gain: number; record: boolean }>
+  ): void {
+    for (const ch of Object.keys(channels) as MixerChannel[]) {
+      this.setChannel(ch, channels[ch].gain, channels[ch].record);
+    }
+  },
+
   /** Start the client-side multitrack record; resolves the local file path or null. */
   async startMixRecording(): Promise<string | null> {
     trace('startMixRecording');

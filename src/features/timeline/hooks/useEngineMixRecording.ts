@@ -101,6 +101,11 @@ export function useEngineMixRecording({
     armingRef.current = true;
     const t0 = Date.now();
     try {
+      // The store is the single source of truth for what this take records.
+      // Push it whole to the engine BEFORE arming, so a user who never opened
+      // the mixer sheet still records with the store's defaults (mic OFF,
+      // remote ON, app OFF) rather than whatever the native init compiled in.
+      mixerService.syncAllChannels(useMixerStore.getState().channels);
       const path = await mixerService.startMixRecording();
       if (!path) {
         // Native unavailable or the engine is not Twilio's active device.

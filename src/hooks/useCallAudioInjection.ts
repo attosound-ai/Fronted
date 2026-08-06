@@ -13,6 +13,34 @@ import type {
   InjectSource,
   InjectReason,
 } from '@/lib/callAudio/AudioInjector';
+import { showToast } from '@/components/ui/Toast';
+import i18n from '@/lib/i18n';
+import { getConnectivity } from '@/lib/net/connectivity';
+
+/**
+ * Turn an injection failure into the clearest possible one-line toast. A timeout
+ * or a bare download failure is disambiguated by a live connectivity check, so an
+ * offline user is told they are offline (not a vague "couldn't send"), while a
+ * weak-signal user is told to tap again (the track may have finished caching in
+ * the background and the retry will be instant). `superseded` shows nothing: the
+ * user cancelled it themselves.
+ */
+async function showInjectFailureToast(reason?: InjectReason): Promise<void> {
+  if (reason === 'superseded' || reason === 'not_permitted') return;
+  if (reason === 'prepare_timeout' || reason === 'prepare_failed') {
+    const conn = await getConnectivity();
+    if (!conn.online) {
+      showToast(i18n.t('calls:transmit.offline'));
+    } else if (reason === 'prepare_timeout' || conn.weak) {
+      showToast(i18n.t('calls:transmit.weakSignal'));
+    } else {
+      showToast(i18n.t('calls:transmit.failed'));
+    }
+    return;
+  }
+  // engine_error, not_connected, no_active_call, not_supported: a plain failure.
+  showToast(i18n.t('calls:transmit.failed'));
+}
 
 /**
  * useCallAudioInjection — the thin orchestration boundary the UI consumes to
@@ -44,6 +72,9 @@ export function useCallAudioInjection() {
   const isConnected = callState === 'connected';
   const canInject = flagEnabled && isConnected && isCreator && hasActiveSub;
   const isInjecting = injection?.state === 'playing' || injection?.state === 'preparing';
+  // Preparing = downloading/decoding, before any audio is scheduled. The button
+  // shows a spinner in this window so a slow prepare never reads as a dead tap.
+  const isPreparing = injection?.state === 'preparing';
 
   const isTrackInjecting = useCallback(
     (uri: string) => isInjecting && injection?.source?.uri === uri,
@@ -98,6 +129,10 @@ export function useCallAudioInjection() {
         ...ctx,
         reason: result.reason ?? null,
       });
+      // NEVER fail silently. The user tapped a button and heard nothing; tell
+      // them why, and which failures are worth retrying. `superseded` is the one
+      // case with no toast: the user themselves cancelled it by tapping off.
+      await showInjectFailureToast(result.reason);
     }
     return result;
   }, []);
@@ -117,5 +152,13 @@ export function useCallAudioInjection() {
     });
   }, []);
 
-  return { canInject, isInjecting, isTrackInjecting, inject, stop, injection };
+  return {
+    canInject,
+    isInjecting,
+    isPreparing,
+    isTrackInjecting,
+    inject,
+    stop,
+    injection,
+  };
 }

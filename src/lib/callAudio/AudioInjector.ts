@@ -49,6 +49,10 @@ export type InjectReason =
   | 'no_active_call'
   | 'not_connected'
   | 'prepare_failed'
+  // The prepare download timed out — distinct from prepare_failed so the UI can
+  // say "weak signal, tap to retry" (the file may arrive for the retry) rather
+  // than a flat "couldn't prepare".
+  | 'prepare_timeout'
   | 'engine_error'
   | 'not_supported'
   | 'engine_unavailable'
@@ -99,6 +103,15 @@ export const IDLE_SNAPSHOT: InjectionSnapshot = {
 export interface AudioInjector {
   /** Cheap synchronous capability check (e.g. native module present + iOS). */
   isSupported(): boolean;
+  /**
+   * Warm the cache for `source` WITHOUT playing it, so a later start() is
+   * instant. Called when the editor opens in a call: the track downloads ahead
+   * of the first antenna tap instead of during it, which is what made the button
+   * "not work instantly" on poor service (David, Aug 5). Best-effort and silent:
+   * it never emits user-facing state, and a failure here just means start() will
+   * do the download itself (and surface any error then).
+   */
+  prefetch(source: InjectSource): Promise<void>;
   /** Begin injecting `source` into the (already connected) call. */
   start(source: InjectSource): Promise<InjectResult>;
   /** Stop injecting. Idempotent — safe to call when nothing is playing. */

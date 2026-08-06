@@ -7,6 +7,8 @@ import {
   type InjectSource,
 } from './AudioInjector';
 import { NullAudioInjector } from './NullAudioInjector';
+import { withTimeout, TimeoutError } from '@/lib/net/connectivity';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 /**
  * NativeAudioInjector — path A adapter over the custom iOS AVAudioEngine
@@ -88,41 +90,138 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
     return this.native != null;
   }
 
-  /**
-   * Remote URLs are downloaded to a local file (the engine only plays local
-   * files). VIDEO sources (reels / video posts / video messages) are then run
-   * through the native audio extractor, since the engine plays audio files, not
-   * video containers — this is what lets ANY app audio, video included, transmit.
-   */
-  private async resolveLocalPath(source: InjectSource): Promise<string | null> {
-    let localPath: string | null = null;
-    if (source.uri.startsWith('file://') || source.uri.startsWith('/')) {
-      localPath = source.uri;
-    } else {
-      try {
-        const ext = source.isVideo ? 'mp4' : 'm4a';
-        const target =
-          FileSystem.cacheDirectory +
-          `inject-${source.kind}-${hashUri(source.uri)}.${ext}`;
-        const info = await FileSystem.getInfoAsync(target);
-        localPath = info.exists
-          ? target
-          : (await FileSystem.downloadAsync(source.uri, target)).uri;
-      } catch {
-        return null;
-      }
-    }
-    if (!localPath) return null;
+  /** Deterministic cache path for a remote source (same URL → same file). */
+  private cachePathFor(source: InjectSource): string {
+    const ext = source.isVideo ? 'mp4' : 'm4a';
+    return (
+      FileSystem.cacheDirectory + `inject-${source.kind}-${hashUri(source.uri)}.${ext}`
+    );
+  }
 
-    // Video → extract its audio track to an .m4a the engine can play.
+  /**
+   * Resolve a source to a local, engine-playable file, returning a STRUCTURED
+   * outcome so start() can tell the user exactly what went wrong instead of a
+   * bare null. On poor service the download was the silent stall (David, Aug 5),
+   * so it is bounded by a timeout and every phase is measured.
+   */
+  private async resolveLocalPath(
+    source: InjectSource,
+    opts: { timeoutMs: number }
+  ): Promise<{
+    path: string | null;
+    cached: boolean;
+    downloadMs: number;
+    timedOut: boolean;
+    failure: 'none' | 'download' | 'extract';
+  }> {
+    const t0 = Date.now();
+    // Already local (imported file): no network involved.
+    if (source.uri.startsWith('file://') || source.uri.startsWith('/')) {
+      return this.maybeExtract(source, source.uri, {
+        cached: true,
+        downloadMs: 0,
+        timedOut: false,
+      });
+    }
+
+    const target = this.cachePathFor(source);
+    // Cache hit: the prefetch (or an earlier tap) already fetched it. Instant.
+    try {
+      const info = await FileSystem.getInfoAsync(target);
+      if (info.exists && (info.size ?? 0) > 0) {
+        return this.maybeExtract(source, target, {
+          cached: true,
+          downloadMs: 0,
+          timedOut: false,
+        });
+      }
+    } catch {
+      // getInfoAsync failing is not fatal; fall through to download.
+    }
+
+    // Cold: download, bounded so a dead connection cannot hang the caller. The
+    // native download may keep running into cache (useful: the retry tap hits it
+    // warm), but WE stop waiting and report the timeout.
+    try {
+      const res = await withTimeout(
+        FileSystem.downloadAsync(source.uri, target),
+        opts.timeoutMs
+      );
+      return this.maybeExtract(source, res.uri, {
+        cached: false,
+        downloadMs: Date.now() - t0,
+        timedOut: false,
+      });
+    } catch (error: unknown) {
+      return {
+        path: null,
+        cached: false,
+        downloadMs: Date.now() - t0,
+        timedOut: error instanceof TimeoutError,
+        failure: 'download',
+      };
+    }
+  }
+
+  /**
+   * Video → extract its audio track to an .m4a the engine can play (the engine
+   * plays audio files, not video containers). Audio sources pass straight
+   * through. Shared tail of resolveLocalPath.
+   */
+  private async maybeExtract(
+    source: InjectSource,
+    localPath: string,
+    meta: { cached: boolean; downloadMs: number; timedOut: boolean }
+  ): Promise<{
+    path: string | null;
+    cached: boolean;
+    downloadMs: number;
+    timedOut: boolean;
+    failure: 'none' | 'download' | 'extract';
+  }> {
     if (source.isVideo && this.native?.extractAudioTrack) {
       try {
-        return await this.native.extractAudioTrack(localPath);
+        const extracted = await this.native.extractAudioTrack(localPath);
+        return { path: extracted, ...meta, failure: 'none' };
       } catch {
-        return null;
+        return { path: null, ...meta, failure: 'extract' };
       }
     }
-    return localPath;
+    return { path: localPath, ...meta, failure: 'none' };
+  }
+
+  /**
+   * Warm the cache without playing. Best-effort, generous timeout (this runs in
+   * the background the moment the editor opens, so it can afford to wait); a
+   * failure is swallowed because start() will retry and surface any error then.
+   */
+  override async prefetch(source: InjectSource): Promise<void> {
+    if (!this.native) return;
+    if (source.uri.startsWith('file://') || source.uri.startsWith('/')) return;
+    const target = this.cachePathFor(source);
+    const t0 = Date.now();
+    try {
+      const info = await FileSystem.getInfoAsync(target);
+      if (info.exists && (info.size ?? 0) > 0) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_PREFETCH, {
+          outcome: 'already_cached',
+          source_kind: source.kind,
+        });
+        return;
+      }
+      await withTimeout(FileSystem.downloadAsync(source.uri, target), 30_000);
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_PREFETCH, {
+        outcome: 'downloaded',
+        source_kind: source.kind,
+        download_ms: Date.now() - t0,
+      });
+    } catch (error: unknown) {
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_PREFETCH, {
+        outcome: error instanceof TimeoutError ? 'timed_out' : 'failed',
+        source_kind: source.kind,
+        download_ms: Date.now() - t0,
+      });
+    }
   }
 
   override async start(source: InjectSource): Promise<InjectResult> {
@@ -131,16 +230,38 @@ export class NativeAudioInjector extends NullAudioInjector implements AudioInjec
     // any later stop() supersedes THIS.
     const gen = ++this.generation;
     this.emit({ state: 'preparing', source, reason: null });
-    const localPath = await this.resolveLocalPath(source);
+    // On a live tap the user is waiting, so the wait is short (the prefetch on
+    // editor-open should already have this warm). 12s is long enough for a small
+    // track on a slow-but-alive link, short enough that a dead link reports back
+    // while the user is still looking at the button.
+    const t0 = Date.now();
+    const resolved = await this.resolveLocalPath(source, { timeoutMs: 12_000 });
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_PREPARE, {
+      source_kind: source.kind,
+      is_video: source.isVideo ?? false,
+      cached: resolved.cached,
+      prepare_ms: Date.now() - t0,
+      download_ms: resolved.downloadMs,
+      timed_out: resolved.timedOut,
+      failure: resolved.failure,
+      ok: !!resolved.path,
+    });
     if (gen !== this.generation) {
       // A stop (or newer start) arrived while we were downloading/extracting.
       // Nothing was scheduled yet, so there is nothing to undo — just don't.
       return { ok: false, reason: 'superseded' };
     }
-    if (!localPath) {
-      this.emit({ state: 'error', reason: 'prepare_failed' });
-      return { ok: false, reason: 'prepare_failed' };
+    if (!resolved.path) {
+      // Distinct reasons so the UI can say the RIGHT thing: a timeout is "weak
+      // signal, try again" (the file may even arrive for the retry), a genuine
+      // failure is "couldn't prepare".
+      const reason: InjectReason = resolved.timedOut
+        ? 'prepare_timeout'
+        : 'prepare_failed';
+      this.emit({ state: 'error', reason });
+      return { ok: false, reason };
     }
+    const localPath = resolved.path;
     try {
       const ok = await this.native.playInjectedAudio(
         localPath,

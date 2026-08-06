@@ -139,5 +139,17 @@
     "title": "Actualizar ATTO SOUND",
     "body": "Esta versión de la app ya no es compatible. Actualiza desde la tienda para seguir usando ATTO SOUND.",
     "cta": "Abrir la tienda"
+  },
+  "net": {
+    "weakConnection": "Señal débil",
+    "offline": "Estás sin conexión. {{action}} necesita internet.",
+    "weakSignal": "Señal débil. {{action}} no se completó.",
+    "serverError": "Problema del servidor. {{action}} falló. Intenta en un momento.",
+    "genericFailure": "{{action}} falló. Inténtalo de nuevo.",
+    "actions": {
+      "savingRecording": "Guardar tu grabación",
+      "publishing": "Publicar",
+      "saving": "Guardar"
+    }
   }
 }

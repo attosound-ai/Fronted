@@ -284,6 +284,16 @@ export const ANALYTICS_EVENTS = {
     AUDIO_INJECT_STOPPED: 'call_audio_inject_stopped',
     AUDIO_INJECT_FAILED: 'call_audio_inject_failed',
     AUDIO_INJECT_STATE_CHANGED: 'call_audio_inject_state_changed',
+    // The prepare phase (download + optional audio extract) that runs BEFORE any
+    // audio can be scheduled. This was the silent stall on poor service (David,
+    // Aug 5): the antenna looked dead while a track downloaded over a dead link.
+    // `cached` true = instant (prefetch warmed it); `timed_out` true = the
+    // download blew the live-tap budget. prepare_ms/download_ms quantify it.
+    AUDIO_INJECT_PREPARE: 'call_audio_inject_prepare',
+    // Background cache-warm fired when the editor opens in a call, so the first
+    // antenna tap is instant instead of waiting on a download. outcome:
+    // already_cached | downloaded | timed_out | failed.
+    AUDIO_INJECT_PREFETCH: 'call_audio_inject_prefetch',
     // Native audio-DEVICE swap result — THE critical signal for the "silent
     // injection" bug (device fails to install => rep hears monitor, remote hears
     // nothing). `outcome`: installed | install_returned_false | install_threw |

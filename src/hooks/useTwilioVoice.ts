@@ -556,6 +556,8 @@ function bindCallEvents(call: any): () => void {
   const { setCallState, endCall } = useCallStore.getState();
 
   let removed = false;
+  // Debounce timer for clearing the "Weak signal" chip after warnings subside.
+  let qualityClearTimer: ReturnType<typeof setTimeout> | null = null;
   // Connected must run exactly once per Call object. bindCallEvents now also fires
   // it synchronously when the call is ALREADY connected at bind time (the CallKit
   // pre-accepted case), and the SDK can still deliver its own Connected afterwards.
@@ -672,16 +674,40 @@ function bindCallEvents(call: any): () => void {
   // SDK-detected quality warnings (high-jitter, high packet loss, low MOS, ...).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const onQualityWarnings = (current: any, previous: any) => {
+    const currentWarnings = Array.isArray(current) ? current : [];
     analytics.capture('call_quality_warning', {
       call_sid: useCallStore.getState().activeCall?.callSid ?? null,
-      current_warnings: Array.isArray(current) ? current : [],
+      current_warnings: currentWarnings,
       previous_warnings: Array.isArray(previous) ? previous : [],
     });
+    // Drive the "Weak signal" chip. Only the network-facing warnings count; a
+    // constant-audio-input-level warning is about the mic, not the connection.
+    const NETWORK_WARNINGS = ['high-jitter', 'high-packet-loss', 'high-rtt', 'low-mos'];
+    const networkBad = currentWarnings.some((w: string) => NETWORK_WARNINGS.includes(w));
+    if (networkBad) {
+      if (qualityClearTimer) {
+        clearTimeout(qualityClearTimer);
+        qualityClearTimer = null;
+      }
+      useCallStore.getState().setNetworkWeak(true);
+    } else {
+      // Hold the chip ~4s after warnings clear so a flapping connection does not
+      // strobe it on and off.
+      if (qualityClearTimer) clearTimeout(qualityClearTimer);
+      qualityClearTimer = setTimeout(() => {
+        useCallStore.getState().setNetworkWeak(false);
+        qualityClearTimer = null;
+      }, 4000);
+    }
   };
 
   const teardown = () => {
     if (removed) return;
     removed = true;
+    if (qualityClearTimer) {
+      clearTimeout(qualityClearTimer);
+      qualityClearTimer = null;
+    }
     try {
       call.off(Call.Event.Connected, onConnected);
     } catch {

@@ -139,5 +139,17 @@
     "title": "Update ATTO SOUND",
     "body": "This version of the app is no longer supported. Update from the store to keep using ATTO SOUND.",
     "cta": "Open the store"
+  },
+  "net": {
+    "weakConnection": "Weak signal",
+    "offline": "You're offline. {{action}} needs a connection.",
+    "weakSignal": "Weak signal. {{action}} didn't go through.",
+    "serverError": "Server problem. {{action}} failed. Try again shortly.",
+    "genericFailure": "{{action}} failed. Please try again.",
+    "actions": {
+      "savingRecording": "Saving your recording",
+      "publishing": "Publishing",
+      "saving": "Saving"
+    }
   }
 }

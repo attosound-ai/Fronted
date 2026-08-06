@@ -89,5 +89,13 @@
     "app": "Audio del app",
     "metronome": "Metrónomo",
     "bpm": "BPM"
-  }
+  },
+  "transmit": {
+    "offline": "Estás sin conexión. Conéctate para enviar música a la llamada.",
+    "weakSignal": "Señal débil. La pista no cargó. Toca otra vez para reintentar.",
+    "failed": "No se pudo enviar eso a la llamada.",
+    "preparing": "Cargando pista...",
+    "noTrack": "Abre un proyecto con una pista primero."
+  },
+  "recordingSavedOffline": "Señal débil. Tu grabación quedó guardada en este teléfono y se subirá al reconectar."
 }

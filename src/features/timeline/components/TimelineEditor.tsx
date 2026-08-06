@@ -42,6 +42,7 @@ import { AudioPreparingModal } from './AudioPreparingModal';
 import { useTimeline } from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
 import { getAudioInjector } from '@/lib/callAudio/createAudioInjector';
+import { showNetFailureToast } from '@/components/ui/netToast';
 import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
 import { useTwilioCallRecording } from '../hooks/useTwilioCallRecording';
@@ -237,6 +238,19 @@ export function TimelineEditor({
   );
   // Register while a call bar is up so the 📡 button always has this track to push.
   useRegisterNowPlaying(transmitSource, callBarVisible && !!transmitSource);
+
+  // PRE-FETCH the track the instant the editor is up in a call, so the first
+  // antenna tap is INSTANT instead of waiting on a download. On poor service that
+  // download was the silent stall behind "the satellite button doesn't work
+  // instantly" (David, Aug 5): the file now arrives in the background, ahead of
+  // the tap. Best-effort and silent; start() still handles + reports a cold miss.
+  const prefetchedUriRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!callBarVisible || !transmitSource?.uri) return;
+    if (prefetchedUriRef.current === transmitSource.uri) return;
+    prefetchedUriRef.current = transmitSource.uri;
+    void getAudioInjector().prefetch(transmitSource);
+  }, [callBarVisible, transmitSource?.uri]);
   // FULL transmit-source resolution telemetry (David, Jul 26: "import a track then
   // transmit it doesn't work"). Before, we only logged the SUCCESS case, so a
   // failed import→transmit was invisible. Now log the resolution AND the exact
@@ -628,6 +642,8 @@ export function TimelineEditor({
   currentClipsRef.current = state.clips;
   const currentLaneMetaRef = useRef(state.laneMeta);
   currentLaneMetaRef.current = state.laneMeta;
+  // So a failing autosave notifies once per streak, not on every 2s retry.
+  const autosaveFailedNotifiedRef = useRef(false);
 
   useEffect(() => {
     if (!state.isDirty || isSaving) return;
@@ -653,8 +669,20 @@ export function TimelineEditor({
         ) {
           markClean();
         }
-      } catch {
-        showToast(t('timeline.errorAutosaveFailed'));
+        // Recovered: allow the next failure streak to notify again.
+        autosaveFailedNotifiedRef.current = false;
+      } catch (error: unknown) {
+        // This effect already retries every ~2s while isDirty stays true (the
+        // isSaving dep re-runs it), so the save self-heals when signal returns.
+        // Notify ONCE per failure streak instead of on every retry, and make the
+        // message network-aware so a weak-signal user knows the edit is not lost.
+        if (!autosaveFailedNotifiedRef.current) {
+          autosaveFailedNotifiedRef.current = true;
+          void showNetFailureToast(
+            error,
+            t('common:net.actions.saving', { defaultValue: 'Saving' })
+          );
+        }
       } finally {
         savingRef.current = false;
         setIsSaving(false);

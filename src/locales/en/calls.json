@@ -89,5 +89,13 @@
     "app": "App audio",
     "metronome": "Metronome",
     "bpm": "BPM"
-  }
+  },
+  "transmit": {
+    "offline": "You're offline. Connect to send music into the call.",
+    "weakSignal": "Weak signal. The track didn't load. Tap again to retry.",
+    "failed": "Couldn't send that into the call.",
+    "preparing": "Loading track...",
+    "noTrack": "Open a project with a track first."
+  },
+  "recordingSavedOffline": "Weak signal. Your recording is saved on this phone and will upload when you reconnect."
 }

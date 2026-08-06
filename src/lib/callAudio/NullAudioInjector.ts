@@ -28,6 +28,10 @@ export class NullAudioInjector implements AudioInjector {
     return false;
   }
 
+  async prefetch(_source: InjectSource): Promise<void> {
+    // no-op: nothing to warm when injection is unavailable
+  }
+
   async start(_source: InjectSource): Promise<InjectResult> {
     return { ok: false, reason: this.unavailableReason };
   }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Radio,
   Square,
+  SignalLow,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -43,6 +44,7 @@ function formatElapsed(seconds: number): string {
 export function InCallTopBar() {
   const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
+  const networkWeak = useCallStore((s) => s.networkWeak);
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const [elapsed, setElapsed] = useState(0);
@@ -50,7 +52,7 @@ export function InCallTopBar() {
   const mixerEnabled = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
   // General "transmit app audio into the call" control: injects whatever the
   // user last played in the feed/reels (nowPlaying), not a specific post.
-  const { canInject, isInjecting, inject, stop } = useCallAudioInjection();
+  const { canInject, isInjecting, isPreparing, inject, stop } = useCallAudioInjection();
   const nowPlaying = useNowPlayingStore((s) => s.track);
 
   // Transmit is a MODE: tap 📡 → push the audio the user is playing RIGHT NOW into
@@ -89,7 +91,23 @@ export function InCallTopBar() {
   // Inject the LOCKED source (captured at turn-on). Depends on the locked source,
   // NOT nowPlaying, so background autoplay can never swap what's transmitted.
   useEffect(() => {
-    if (transmitMode && lockedSource) void inject(lockedSource);
+    if (!transmitMode || !lockedSource) return;
+    let cancelled = false;
+    void inject(lockedSource).then((result) => {
+      // If prepare/engine failed, drop the mode back to OFF so the button returns
+      // to Radio instead of showing a false red "transmitting" square. The toast
+      // from inject() already told the user why; a clean tap retries (instant now
+      // that the track has cached). 'superseded' means the user turned it off
+      // themselves mid-prepare, so leave their choice alone.
+      if (cancelled) return;
+      if (!result.ok && result.reason !== 'superseded') {
+        setTransmitMode(false);
+        setLockedSource(null);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [transmitMode, lockedSource?.uri, inject]);
 
   // Stop the moment the user turns the mode off.
@@ -286,6 +304,18 @@ export function InCallTopBar() {
           <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
         </View>
 
+        {/* Weak-signal chip: tells the user a rough call is their connection, not
+            the app (Anthony, Aug 5: "not 100% sure it might be on my end"). Driven
+            by Twilio's own quality warnings; held ~4s past clear to avoid strobing. */}
+        {networkWeak ? (
+          <View style={styles.weakChip}>
+            <SignalLow size={13} color="#FCD34D" strokeWidth={2.5} />
+            <Text style={styles.weakChipText}>
+              {t('common:net.weakConnection', { defaultValue: 'Weak signal' })}
+            </Text>
+          </View>
+        ) : null}
+
         <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity
             style={[styles.glassBtnInner, activeCall?.isMuted && styles.glassBtnActive]}
@@ -326,14 +356,18 @@ export function InCallTopBar() {
             stay (AudioProblemHost), dormant, for a future entry point elsewhere. */}
 
         {/* Transmit the app's currently-playing audio INTO the call (flag-gated).
-            Red Square while transmitting; the Radio dims when nothing has played. */}
+            Spinner while the track is PREPARING (downloading/decoding) so a slow
+            prepare on poor service never looks dead (David, Aug 5); red Square
+            while transmitting; Radio otherwise. */}
         {canInject ? (
           <GlassSurface radius={21} style={styles.glassBtn}>
             <TouchableOpacity
               style={[styles.glassBtnInner, transmitMode && styles.glassBtnActive]}
               onPress={onTransmit}
             >
-              {transmitMode ? (
+              {isPreparing ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : transmitMode ? (
                 <Square size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
               ) : (
                 <Radio size={20} color="#FFF" strokeWidth={2.25} />
@@ -409,6 +443,20 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#FFF',
+  },
+  weakChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 11,
+    backgroundColor: 'rgba(252, 211, 77, 0.15)',
+  },
+  weakChipText: {
+    color: '#FCD34D',
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 11,
   },
   timer: {
     color: '#FFF',

@@ -8,6 +8,8 @@ import { useMixerStore } from '@/stores/mixerStore';
 import { mixerService } from '@/lib/callAudio/mixerService';
 import { projectService } from '@/lib/api/projectService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { showNetFailureToast } from '@/components/ui/netToast';
+import i18n from '@/lib/i18n';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import {
   toTelephonyWav,
@@ -254,7 +256,9 @@ export function useEngineMixRecording({
         error: msg,
         duration_ms: takeMs,
       });
-      showToast(t('toasts.recordingFailed', 'Recording failed') + `: ${msg}`);
+      // Network-aware: an offline/weak upload says so (and that the take is not
+      // lost), instead of a bare "Recording failed".
+      void showNetFailureToast(error, i18n.t('common:net.actions.savingRecording'));
     } finally {
       setIsUploading(false);
       armingRef.current = false;

@@ -89,5 +89,13 @@
     "app": "Áudio do app",
     "metronome": "Metrônomo",
     "bpm": "BPM"
-  }
+  },
+  "transmit": {
+    "offline": "Você está sem conexão. Conecte-se para enviar música na chamada.",
+    "weakSignal": "Sinal fraco. A faixa não carregou. Toque de novo para tentar.",
+    "failed": "Não foi possível enviar isso na chamada.",
+    "preparing": "Carregando faixa...",
+    "noTrack": "Abra um projeto com uma faixa primeiro."
+  },
+  "recordingSavedOffline": "Sinal fraco. Sua gravação foi salva neste telefone e será enviada quando reconectar."
 }

@@ -16,6 +16,11 @@ interface CallStoreState {
   // null when nothing is being injected. Cleared on endCall so a hang-up can
   // never strand a playing engine in the UI.
   injection: InjectionSnapshot | null;
+  // True when Twilio is reporting network-quality warnings (high jitter / packet
+  // loss / RTT / low MOS). Drives the "Weak signal" chip so a user attributes
+  // cutouts to their connection, not the app (Anthony, Aug 5: "not 100% sure it
+  // might be on my end"). Reset per call; held briefly after warnings clear.
+  networkWeak: boolean;
 }
 
 interface CallStoreActions {
@@ -33,6 +38,7 @@ interface CallStoreActions {
   showKeypad: () => void;
   hideKeypad: () => void;
   setInjection: (snapshot: InjectionSnapshot | null) => void;
+  setNetworkWeak: (weak: boolean) => void;
   endCall: () => void;
 }
 
@@ -43,6 +49,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   registrationError: null,
   keypadVisible: false,
   injection: null,
+  networkWeak: false,
 
   setRegistered: (registered, error = null) =>
     set({ isRegistered: registered, registrationError: error }),
@@ -151,11 +158,14 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
 
   setInjection: (snapshot) => set({ injection: snapshot }),
 
+  setNetworkWeak: (weak) => set({ networkWeak: weak }),
+
   endCall: () =>
     set({
       activeCall: null,
       activeProjectId: null,
       keypadVisible: false,
       injection: null,
+      networkWeak: false,
     }),
 }));

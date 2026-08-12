@@ -304,18 +304,6 @@ export function InCallTopBar() {
           <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
         </View>
 
-        {/* Weak-signal chip: tells the user a rough call is their connection, not
-            the app (Anthony, Aug 5: "not 100% sure it might be on my end"). Driven
-            by Twilio's own quality warnings; held ~4s past clear to avoid strobing. */}
-        {networkWeak ? (
-          <View style={styles.weakChip}>
-            <SignalLow size={13} color="#FCD34D" strokeWidth={2.5} />
-            <Text style={styles.weakChipText}>
-              {t('common:net.weakConnection', { defaultValue: 'Weak signal' })}
-            </Text>
-          </View>
-        ) : null}
-
         <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity
             style={[styles.glassBtnInner, activeCall?.isMuted && styles.glassBtnActive]}
@@ -396,6 +384,21 @@ export function InCallTopBar() {
           </TouchableOpacity>
         </GlassSurface>
       </View>
+
+      {/* Weak-signal indicator: its OWN thin row below the controls, so it never
+          competes with the button layout (David, Aug 11: as a sibling in the
+          space-between row it crowded everything). Tells the user a rough call is
+          their connection, not the app. Driven by Twilio's quality warnings. */}
+      {networkWeak ? (
+        <View style={styles.weakRow}>
+          <View style={styles.weakChip}>
+            <SignalLow size={12} color="#FCD34D" strokeWidth={2.5} />
+            <Text style={styles.weakChipText}>
+              {t('common:net.weakConnection', { defaultValue: 'Weak signal' })}
+            </Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -444,11 +447,17 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#FFF',
   },
+  weakRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: -2,
+    paddingBottom: 6,
+  },
   weakChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 11,
     backgroundColor: 'rgba(252, 211, 77, 0.15)',

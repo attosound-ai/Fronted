@@ -294,6 +294,18 @@ export const ANALYTICS_EVENTS = {
     // antenna tap is instant instead of waiting on a download. outcome:
     // already_cached | downloaded | timed_out | failed.
     AUDIO_INJECT_PREFETCH: 'call_audio_inject_prefetch',
+    // CHIPMUNKS HUNTER. The single 6s diag snapshot misses the pitched-audio
+    // TRANSIENT in the first seconds of a call (Aug 11: chipmunks was inferred,
+    // never caught). enginesBuiltRate != sessionSampleRate is the exact signature.
+    // Sampled every 1s for the first 12s; MISMATCH fires the instant it appears
+    // (with all rates + elapsed_ms), SUMMARY fires once at the end (only when the
+    // custom engine was actually in the path) with how many seconds were misaligned.
+    ENGINE_RATE_MISMATCH: 'call_engine_rate_mismatch',
+    ENGINE_RATE_SUMMARY: 'call_engine_rate_summary',
+    // Why a connected creator did NOT auto-land on the recorder (fell to the feed
+    // instead). reason: not_creator | no_entitlement | sub_unresolved. Closes the
+    // "editor opens to feed, not the recording suite" blind spot (Anthony, Aug 11).
+    LANDING_SKIPPED: 'call_landing_skipped',
     // Native audio-DEVICE swap result — THE critical signal for the "silent
     // injection" bug (device fails to install => rep hears monitor, remote hears
     // nothing). `outcome`: installed | install_returned_false | install_threw |

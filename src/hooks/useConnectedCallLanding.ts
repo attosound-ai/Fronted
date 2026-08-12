@@ -64,6 +64,16 @@ export function useConnectedCallLanding(): void {
 
   const landedForSid = useRef<string | null>(null);
   const fetchedForSid = useRef<string | null>(null);
+  // Emit ONE landing-skip row per (call, reason) so a creator who lands on the
+  // feed instead of the recorder self-reports WHICH gate stopped it, instead of
+  // us guessing (Anthony, Aug 11: "opens to the feed, not the recording suite").
+  const loggedSkipRef = useRef<string | null>(null);
+  const logSkip = (sid: string, reason: string) => {
+    const key = `${sid}:${reason}`;
+    if (loggedSkipRef.current === key) return;
+    loggedSkipRef.current = key;
+    analytics.capture(ANALYTICS_EVENTS.CALL.LANDING_SKIPPED, { call_sid: sid, reason });
+  };
 
   // App foreground/active is not a reactive store — bump state on transitions so
   // the effect re-evaluates the instant the user unlocks back into the app.
@@ -84,10 +94,16 @@ export function useConnectedCallLanding(): void {
       landedForSid.current = callSid;
       return;
     }
-    if (role !== 'creator') return; // recorder is a creator surface
+    if (role !== 'creator') {
+      logSkip(callSid, 'not_creator'); // recorder is a creator surface
+      return;
+    }
 
     // "active subscription": true → go; false → never; null → resolve it first.
-    if (recordUpload === false) return;
+    if (recordUpload === false) {
+      logSkip(callSid, 'no_entitlement');
+      return;
+    }
     if (recordUpload === null) {
       if (fetchedForSid.current !== callSid) {
         fetchedForSid.current = callSid;
@@ -99,7 +115,10 @@ export function useConnectedCallLanding(): void {
       // strand the creator forever — land them optimistically; the recorder
       // tolerates an unresolved sub, and a creator answering a call should reach
       // it rather than be stuck on the feed because a request timed out.
-      if (!lastFetchFailed) return;
+      if (!lastFetchFailed) {
+        logSkip(callSid, 'sub_unresolved');
+        return;
+      }
     }
 
     // recordUpload === true, OR a creator whose sub fetch failed transiently.

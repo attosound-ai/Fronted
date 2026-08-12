@@ -261,6 +261,74 @@ export function InCallTopBar() {
     return () => clearTimeout(id);
   }, [activeCall?.state, captureDiag]);
 
+  // CHIPMUNKS HUNTER (Aug 11). The pitched-audio bug is a TRANSIENT in the first
+  // few seconds — the engine builds at a stale rate before the realign corrects it
+  // — and the single 6s snapshot above misses it, so it has only ever been
+  // inferred, never caught. Sample the engine vs session rate every second for the
+  // first 12s. enginesBuiltRate != sessionSampleRate is the exact chipmunks
+  // signature; fire the instant it appears. The end-summary fires only when the
+  // custom engine was actually pumping, so plain (no-injection) calls stay quiet.
+  useEffect(() => {
+    if (!isCallConnected(activeCall?.state)) return;
+    const sid = activeCall?.callSid ?? null;
+    const startedAt = Date.now();
+    let firstMismatchReported = false;
+    let mismatchSamples = 0;
+    let engineWasActive = false;
+    let worst: { built: number; session: number; rendering: number } | null = null;
+
+    const id = setInterval(() => {
+      void (async () => {
+        const d = await mixerService.getMixDiagnostics();
+        if (!d) return;
+        const built = Number(d.enginesBuiltRate ?? 0);
+        const session = Number(d.sessionSampleRate ?? 0);
+        const rendering = Number(d.renderingFormatRate ?? 0);
+        const active =
+          Number(d.recordCbCount ?? 0) > 0 || Number(d.playoutCbCount ?? 0) > 0;
+        if (active) engineWasActive = true;
+        const mismatch =
+          active &&
+          built > 0 &&
+          session > 0 &&
+          (built !== session || (rendering > 0 && rendering !== session));
+        if (mismatch) {
+          mismatchSamples += 1;
+          worst = { built, session, rendering };
+          if (!firstMismatchReported) {
+            firstMismatchReported = true;
+            analytics.capture(ANALYTICS_EVENTS.CALL.ENGINE_RATE_MISMATCH, {
+              call_sid: sid,
+              elapsed_ms: Date.now() - startedAt,
+              engines_built_rate: built,
+              session_sample_rate: session,
+              rendering_format_rate: rendering,
+              capturing_format_rate: Number(d.capturingFormatRate ?? 0),
+            });
+          }
+        }
+      })();
+    }, 1000);
+
+    const stop = setTimeout(() => {
+      clearInterval(id);
+      if (!engineWasActive) return; // plain call, nothing to report
+      analytics.capture(ANALYTICS_EVENTS.CALL.ENGINE_RATE_SUMMARY, {
+        call_sid: sid,
+        mismatch_samples: mismatchSamples,
+        clean: mismatchSamples === 0,
+        worst_built_rate: worst?.built ?? null,
+        worst_session_rate: worst?.session ?? null,
+        worst_rendering_rate: worst?.rendering ?? null,
+      });
+    }, 12000);
+
+    return () => {
+      clearInterval(id);
+      clearTimeout(stop);
+    };
+  }, [activeCall?.state, activeCall?.callSid]);
+
   const isConnected = isCallConnected(activeCall?.state);
 
   // Warm the DTMF + end-call players the moment a call is live, so the first

@@ -65,7 +65,7 @@ const PROPERTY_INJECT =
   'var reactNativeFactory: RCTReactNativeFactory?\n\n  var attoVoipBootstrap: AttoVoipBootstrap?\n';
 
 const INIT_BLOCK = [
-  "    // Bring up the VoIP PushKit registry before anything else so the push",
+  '    // Bring up the VoIP PushKit registry before anything else so the push',
   '    // delegate is alive from launch: it caches the device token (re-emitting',
   "    // it to Twilio's RN module once that module subscribes), forwards incoming",
   '    // pushes, and — on a flag-gated cold launch — reports to CallKit itself so',
@@ -114,10 +114,16 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   private static let incomingPushReceived = "incomingPushReceived"
   private static let incomingPushPayloadKey = "incomingPushPayload"
 
-  // Cold-launch feature flag (per-account, set by JS via NSUserDefaults). When
-  // OFF, the incoming-push path is byte-identical to the historical behaviour —
-  // the client is never exposed to the new native-report branch until validated.
-  private static let coldFlagKey = "atto_coldlaunch_callkit_enabled"
+  // Cold-launch protection is now ALWAYS ON by default (Aug 13). It was gated
+  // behind an OPT-IN flag that sat off for a month, so every cold-launch VoIP
+  // push crashed the app (iOS "never posted an incoming call"), and the fix
+  // could not even self-activate: the flag was read from disk, but disk is only
+  // written on a successful launch — the exact thing a crash-loop prevents. A
+  // fatal-crash guard must never depend on a prior launch or a remote flag. So
+  // the safe native-report branch is the DEFAULT, and this key is only an
+  // emergency OPT-OUT (default false ⇒ protection on) for the rare case the
+  // native path itself ever misbehaves on some device.
+  private static let coldKillKey = "atto_coldlaunch_callkit_disabled"
   // Written by this bootstrap while a bootstrap-owned cold call is live; read by
   // the patched Twilio module's -init so it does NOT swap the audio device
   // mid-call (the SDK forbids that). Cleared on disconnect.
@@ -142,8 +148,16 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   private var coldAudioDevice: TwilioVoice.DefaultAudioDevice?
   private var pendingPushCompletion: (() -> Void)?
   private var reportedThisPush = false
+  // Guards so a VoIP push is completed EXACTLY once and NEVER left unhandled: an
+  // unhandled push is redelivered by iOS on the next launch and can jam the app
+  // on the splash (the Aug 13 "won't open"). completePush() is idempotent; a hard
+  // deadline forces it if every other path failed to.
+  private var pushCompleted = false
+  private var hardDeadlineWork: DispatchWorkItem?
 
-  private var coldEnabled: Bool { UserDefaults.standard.bool(forKey: AttoVoipBootstrap.coldFlagKey) }
+  // OPT-OUT: protection is on unless something explicitly disabled it. An unset
+  // key reads false ⇒ enabled, so a fresh install with no launch is still safe.
+  private var coldDisabled: Bool { UserDefaults.standard.bool(forKey: AttoVoipBootstrap.coldKillKey) }
 
   func start() {
     let registry = PKPushRegistry(queue: .main)
@@ -238,23 +252,34 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     let now = Date().timeIntervalSince1970
     UserDefaults.standard.set(now, forKey: "atto_last_voip_push_at")
     UserDefaults.standard.set(state, forKey: "atto_last_voip_push_appstate")
-    NSLog("[AttoVoip] VoIP push received appState=\\(state) moduleAlive=\\(moduleAlive) coldEnabled=\\(coldEnabled) at=\\(now)")
+    NSLog("[AttoVoip] VoIP push received appState=\\(state) moduleAlive=\\(moduleAlive) coldDisabled=\\(coldDisabled) at=\\(now)")
 
-    // WARM / foreground / warm-background (module alive) OR feature OFF → the
-    // proven, byte-identical path: post the notification (an alive module reports
-    // synchronously) and re-post idempotently until CallKit shows the call.
-    if !coldEnabled || moduleAlive {
-      deliverIncomingPush(payload.dictionaryPayload, attempt: 0, completion: completion)
+    // GUARANTEE completion within the window, whatever happens below. A push left
+    // unhandled is redelivered by iOS and can jam the next launch — that was the
+    // Aug 13 "app won't open". Route ALL completion through completePush() (fires
+    // once) and arm a hard backstop that force-completes if every path failed.
+    pendingPushCompletion = completion
+    pushCompleted = false
+    reportedThisPush = false
+    let deadline = DispatchWorkItem { [weak self] in self?.forceCompletePush(reason: "hard_deadline") }
+    hardDeadlineWork = deadline
+    // 14s: after the warm path's own 12s retry ceiling, before iOS's kill — so it
+    // only ever fires on a genuine hang, never preempting a healthy report.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 14.0, execute: deadline)
+
+    // WARM / module alive, OR protection explicitly disabled → the proven path:
+    // post the notification (an alive module reports synchronously) and re-post
+    // idempotently until CallKit shows the call.
+    if coldDisabled || moduleAlive {
+      deliverIncomingPush(payload.dictionaryPayload, attempt: 0)
       return
     }
 
-    // TRUE COLD LAUNCH + feature ON: the module can't report in time. Decode the
-    // push ourselves (synchronous per the TwilioVoice header) and report on our
-    // own provider inside the push window. We CONSUME the push (do not post to the
-    // module) so it never double-decodes/double-reports.
+    // TRUE COLD LAUNCH (default): the module can't report in time. Decode the push
+    // ourselves (synchronous per the TwilioVoice header) and report on our own
+    // provider inside the window. We CONSUME the push (do not post to the module)
+    // so it never double-decodes/double-reports.
     mark("cold_push")
-    pendingPushCompletion = completion
-    reportedThisPush = false
     let recognized = TwilioVoiceSDK.handleNotification(
       payload: payload.dictionaryPayload, delegate: self, delegateQueue: nil, callMessageDelegate: nil)
     // handleNotification is synchronous: callInviteReceived/cancelled already ran.
@@ -266,11 +291,41 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     }
   }
 
-  private func releasePendingCompletion() {
+  // Idempotent completion — cancels the backstop and fires the PushKit completion
+  // exactly once, no matter how many paths race to it.
+  private func completePush() {
+    hardDeadlineWork?.cancel()
+    hardDeadlineWork = nil
+    guard !pushCompleted else { return }
+    pushCompleted = true
     if let c = pendingPushCompletion {
       pendingPushCompletion = nil
       c()
     }
+  }
+
+  // Last-resort backstop. If nothing was ever reported to CallKit, report a
+  // short-lived placeholder FIRST (completing without a report is itself a kill),
+  // then complete. Records the forced outcome for the next-launch telemetry.
+  private func forceCompletePush(reason: String) {
+    guard !pushCompleted else { return }
+    recordReportOutcome("forced_\\(reason)", attempt: -1)
+    if !reportedThisPush && !callKitHasLiveCall() {
+      let uuid = UUID()
+      let update = CXCallUpdate()
+      update.remoteHandle = CXHandle(type: .generic, value: "Incoming call")
+      update.hasVideo = false
+      coldProvider?.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
+          self?.coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+        }
+      }
+    }
+    completePush()
+  }
+
+  private func releasePendingCompletion() {
+    completePush()
   }
 
   private func reportPlaceholderAndComplete() {
@@ -284,6 +339,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         self?.coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
       }
     }
+    recordReportOutcome("cold_placeholder", attempt: 0)
     releasePendingCompletion()
   }
 
@@ -298,6 +354,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
       if let error = error { NSLog("[AttoColdCallKit] report failed: \\(error)") }
     }
     reportedThisPush = true
+    recordReportOutcome("cold_reported", attempt: 0)
     mark("cold_report")
     releasePendingCompletion()
   }
@@ -362,10 +419,10 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_last_voip_report_at")
   }
 
-  private func deliverIncomingPush(_ payload: [AnyHashable: Any], attempt: Int, completion: @escaping () -> Void) {
+  private func deliverIncomingPush(_ payload: [AnyHashable: Any], attempt: Int) {
     if callKitHasLiveCall() {
       recordReportOutcome("reported", attempt: attempt)
-      completion()
+      completePush()
       return
     }
 
@@ -378,19 +435,19 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
     if callKitHasLiveCall() {
       recordReportOutcome("reported", attempt: attempt)
-      completion()
+      completePush()
       return
     }
 
     if attempt >= AttoVoipBootstrap.maxDeliverAttempts {
       NSLog("[AttoVoip] VoIP push: CallKit never reported after \\(attempt) re-posts; releasing")
       recordReportOutcome("gave_up", attempt: attempt)
-      completion()
+      completePush()
       return
     }
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-      self?.deliverIncomingPush(payload, attempt: attempt + 1, completion: completion)
+      self?.deliverIncomingPush(payload, attempt: attempt + 1)
     }
   }
 

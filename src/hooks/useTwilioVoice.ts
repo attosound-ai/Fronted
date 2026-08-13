@@ -1206,20 +1206,21 @@ async function recoverCallFromSDK(): Promise<any | null> {
  * so it's fire-and-forget). See ANALYTICS_EVENTS.CALL.ANSWERED.
  */
 /**
- * Persist the cold-launch CallKit gate to NSUserDefaults so the native
- * AttoVoipBootstrap can read it at PUSH time (a cold launch has no PostHog
- * runtime — the decision must already be on disk). Gated on its OWN PostHog flag
- * `coldlaunch_callkit_enabled`, DECOUPLED from `audio_injection` so the cold path
- * can be validated WITHOUT the injection engine (whose mid-call audio-device swap
- * is a separate crash source). Safe to call repeatedly; iOS-only no-op elsewhere.
- * Called at app launch (reliable — see (tabs)/_layout.tsx) and on Twilio
- * (re)registration (belt-and-suspenders).
+ * Persist the cold-launch CallKit EMERGENCY KILL-SWITCH to NSUserDefaults.
+ *
+ * The cold-launch crash protection is now ALWAYS ON by default in native code
+ * (Aug 13): it must never depend on a flag or a prior launch, because the crash
+ * it prevents is exactly what stops the app from launching to read a flag. So
+ * this no longer ENABLES anything — it only writes an OPT-OUT that a kill flag
+ * can set if the native path itself ever misbehaves on some device. Default: the
+ * flag is off, we write `disabled = false`, protection stays on. Safe to call
+ * repeatedly; iOS-only no-op elsewhere.
  */
 export function persistColdLaunchCallKitFlag() {
   if (!IS_IOS) return;
   try {
-    const enabled = analytics.isFeatureEnabled('coldlaunch_callkit_enabled') === true;
-    Settings.set({ atto_coldlaunch_callkit_enabled: enabled });
+    const disabled = analytics.isFeatureEnabled('coldlaunch_callkit_kill') === true;
+    Settings.set({ atto_coldlaunch_callkit_disabled: disabled });
   } catch {
     // Settings is iOS-only / native module may be unavailable; ignore.
   }

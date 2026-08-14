@@ -4152,7 +4152,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc502
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162aa87816cb 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..222e4062d93f4f63d49146dbbc78cc57c78a9a5b 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
 @@ -11,6 +11,7 @@
@@ -4173,7 +4173,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162a
  
  @import TwilioVoice;
  
-@@ -90,14 +94,56 @@ - (instancetype)init {
+@@ -90,14 +94,74 @@ - (instancetype)init {
          NSString *reactNativeSdkVersion = kTwilioVoiceReactNativeReactNativeVoiceSDKVer;
          setenv("com.twilio.voice.env.sdk.version", [reactNativeSdkVersion UTF8String], 1);
  
@@ -4225,6 +4225,24 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162a
          [self initializeCallKit];
          [self initializeAudioDeviceList];
 +
++        // ATTO (build 146): cold-call handoff. A call the AttoVoipBootstrap answered
++        // natively (cold launch) lives only in ITS maps; this module's callMap is
++        // empty, so voice.getCalls() returns nothing and JS renders zero in-call UI.
++        // Subscribe BEFORE posting DidInit below: the bootstrap responds to DidInit
++        // by synchronously posting AttoColdCallHandoff with its live call(s), so by
++        // the time -init returns, callMap already holds them. AttoColdCallEvent then
++        // forwards the bootstrap-delegate lifecycle (disconnect etc.) to JS.
++        [[NSUserDefaults standardUserDefaults] setDouble:[[NSDate date] timeIntervalSince1970]
++                                                  forKey:@"atto_coldcallkit_cold_module_init_at"];
++        [[NSNotificationCenter defaultCenter] addObserver:self
++                                                 selector:@selector(attoAdoptColdCalls:)
++                                                     name:@"AttoColdCallHandoff"
++                                                   object:nil];
++        [[NSNotificationCenter defaultCenter] addObserver:self
++                                                 selector:@selector(attoColdCallEvent:)
++                                                     name:@"AttoColdCallEvent"
++                                                   object:nil];
++
 +        // ATTO (patch, additive): tell AttoVoipBootstrap the Twilio RN module is now
 +        // alive, so it routes incoming pushes through the module (warm path) instead
 +        // of the native cold-launch report branch. No behaviour change.
@@ -4232,7 +4250,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162a
      }
  
      return self;
-@@ -142,6 +188,38 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
+@@ -142,6 +206,128 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
      return sTwilioAudioDevice;
  }
  
@@ -4266,6 +4284,96 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c702830c8468023f4938d1cfed5f162a
 +        sTwilioAudioDevice = (TVODefaultAudioDevice *)sAttoSavedAudioDevice;
 +        TwilioVoiceSDK.audioDevice = sAttoSavedAudioDevice;
 +    }
++}
++
++// ── ATTO cold-call handoff (build 146) ─────────────────────────────────────
++// Adopt calls the AttoVoipBootstrap answered natively (cold launch) into THIS
++// module's maps so voice.getCalls() sees them and JS can render the in-call UI.
++// Posted synchronously by the bootstrap in response to AttoTwilioModuleDidInit.
++- (void)attoAdoptColdCalls:(NSNotification *)notification {
++    NSDictionary *calls = notification.userInfo[@"calls"];
++    NSDictionary *invites = notification.userInfo[@"invites"];
++    NSDictionary *connectedAt = notification.userInfo[@"connectedAt"];
++    if (![calls isKindOfClass:[NSDictionary class]] || calls.count == 0) { return; }
++    void (^adopt)(void) = ^{
++        NSUInteger adopted = 0;
++        for (NSString *uuidKey in calls) {
++            TVOCall *call = calls[uuidKey];
++            if (![call isKindOfClass:[TVOCall class]]) { continue; }
++            // Key by the call's own canonical (uppercase) UUID string — the same
++            // key every module lookup (mute/DTMF/disconnect/getCalls) uses.
++            NSString *key = call.uuid ? call.uuid.UUIDString : [uuidKey uppercaseString];
++            self.callMap[key] = call;
++            id invite = [invites isKindOfClass:[NSDictionary class]] ? invites[uuidKey] : nil;
++            if ([invite isKindOfClass:[TVOCallInvite class]]) {
++                // Gives callInfo its customParameters (the @username display).
++                self.callInviteMap[key] = invite;
++            }
++            id ts = [connectedAt isKindOfClass:[NSDictionary class]] ? connectedAt[uuidKey] : nil;
++            if ([ts isKindOfClass:[NSString class]]) {
++                // Feeds initialConnectedTimestamp so JS shows the real duration.
++                self.callConnectMap[key] = ts;
++            }
++            adopted += 1;
++        }
++        NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++        [ud setDouble:[[NSDate date] timeIntervalSince1970] forKey:@"atto_coldcallkit_cold_handoff_adopted_at"];
++        [ud setInteger:(NSInteger)adopted forKey:@"atto_cold_handoff_adopted_count"];
++        NSLog(@"[ATTO] adopted %lu cold call(s) into callMap", (unsigned long)adopted);
++    };
++    if ([NSThread isMainThread]) { adopt(); } else { dispatch_sync(dispatch_get_main_queue(), adopt); }
++}
++
++// Forwarded lifecycle of a bootstrap-delegate cold call. Re-emits the standard
++// scopeCall events so JS behaves exactly as for a module-answered call, and
++// mirrors callDisconnected:'s map cleanup on terminal events. The CallKit
++// reporting side is NOT duplicated here — the bootstrap owns its provider and
++// already reported the end.
++- (void)attoColdCallEvent:(NSNotification *)notification {
++    NSString *type = notification.userInfo[@"type"];
++    NSString *uuidKey = notification.userInfo[@"uuid"];
++    if (![type isKindOfClass:[NSString class]] || ![uuidKey isKindOfClass:[NSString class]]) { return; }
++    NSNumber *errorCode = notification.userInfo[@"errorCode"];
++    NSString *errorMessage = notification.userInfo[@"errorMessage"];
++    void (^handle)(void) = ^{
++        NSString *key = [uuidKey uppercaseString];
++        TVOCall *call = self.callMap[key];
++        if (!call) { return; } // not an adopted call (warm path) or already cleaned up
++        NSString *eventType = nil;
++        BOOL terminal = NO;
++        if ([type isEqualToString:@"connected"]) {
++            eventType = kTwilioVoiceReactNativeCallEventConnected;
++            NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
++            fmt.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZZZZZ";
++            self.callConnectMap[key] = [fmt stringFromDate:[NSDate date]];
++        } else if ([type isEqualToString:@"disconnected"]) {
++            eventType = kTwilioVoiceReactNativeCallEventDisconnected; terminal = YES;
++        } else if ([type isEqualToString:@"connectFailure"]) {
++            eventType = kTwilioVoiceReactNativeCallEventConnectFailure; terminal = YES;
++        } else if ([type isEqualToString:@"reconnecting"]) {
++            eventType = kTwilioVoiceReactNativeCallEventReconnecting;
++        } else if ([type isEqualToString:@"reconnected"]) {
++            eventType = kTwilioVoiceReactNativeCallEventReconnected;
++        } else {
++            return;
++        }
++        NSMutableDictionary *body = [@{kTwilioVoiceReactNativeVoiceEventType: eventType,
++                                       kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]} mutableCopy];
++        if (errorCode != nil) {
++            body[kTwilioVoiceReactNativeVoiceErrorKeyError] =
++                @{kTwilioVoiceReactNativeVoiceErrorKeyCode: errorCode,
++                  kTwilioVoiceReactNativeVoiceErrorKeyMessage: errorMessage ?: @""};
++        }
++        [self sendEventWithName:kTwilioVoiceReactNativeScopeCall body:body];
++        if (terminal) {
++            [self.callMap removeObjectForKey:key];
++            [self.callConnectMap removeObjectForKey:key];
++            [self.callInviteMap removeObjectForKey:key];
++            [[NSUserDefaults standardUserDefaults] setDouble:[[NSDate date] timeIntervalSince1970]
++                                                      forKey:@"atto_coldcallkit_cold_disconnect_forwarded_at"];
++        }
++    };
++    if ([NSThread isMainThread]) { handle(); } else { dispatch_async(dispatch_get_main_queue(), handle); }
 +}
 +
  - (void)handleRouteChange:(NSNotification *)notification {

@@ -26,6 +26,19 @@ interface CallStoreState {
 interface CallStoreActions {
   setRegistered: (registered: boolean, error?: string | null) => void;
   setIncomingCall: (callSid: string, fromNumber: string) => void;
+  /**
+   * Hydrate the store from a call that ALREADY exists in the native SDK — the
+   * cold-launch case where CallKit answered before JS booted. setIncomingCall
+   * never ran (its CallInvite event fired into a dead process), so without this
+   * the store's activeCall stays null and setCallState is a no-op: zero in-call
+   * UI over a live, audible call (David's b145 FASE 1A). Direction is 'inbound'
+   * by construction (only incoming calls can be CallKit-answered).
+   */
+  setRecoveredCall: (
+    callSid: string,
+    fromNumber: string,
+    connectedAt: Date | null
+  ) => void;
   setCallerUsername: (username: string) => void;
   setOutgoingCall: (callSid: string, recipientId: string, recipientName?: string) => void;
   setCallState: (state: ActiveCallState) => void;
@@ -67,6 +80,22 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
         isCapturing: false,
         activeStreamSid: null,
         connectedAt: null,
+      },
+    }),
+
+  setRecoveredCall: (callSid, fromNumber, connectedAt) =>
+    set({
+      activeCall: {
+        callSid,
+        fromNumber,
+        direction: 'inbound',
+        state: 'connected',
+        isMuted: false,
+        isOnHold: false,
+        isSpeaker: false,
+        isCapturing: false,
+        activeStreamSid: null,
+        connectedAt: connectedAt ?? new Date(),
       },
     }),
 

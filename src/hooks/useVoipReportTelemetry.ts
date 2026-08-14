@@ -93,6 +93,24 @@ export function useVoipReportTelemetry(): void {
             s.voipReportAt && s.voipReportAt >= pushAt
               ? Math.round((s.voipReportAt - pushAt) * 1000)
               : null,
+          // COLD-CALL funnel (build 146): every native step of a cold-launch call
+          // as a delta from the push. A null marks exactly where the chain broke:
+          // decode failed / never answered / accept failed / module never woke /
+          // handoff never posted / module never adopted. cold_handoff_delta
+          // (posted vs adopted counts) > 0 means calls were LOST in the handoff.
+          cold_invite_decoded_ms: since(s.coldInviteDecodedAt ?? null),
+          cold_answer_action_ms: since(s.coldAnswerActionAt ?? null),
+          cold_accept_ms: since(s.coldAcceptAt ?? null),
+          cold_connected_ms: since(s.coldConnectedAt ?? null),
+          cold_module_init_ms: since(s.coldModuleInitAt ?? null),
+          cold_handoff_posted_ms: since(s.coldHandoffPostedAt ?? null),
+          cold_handoff_adopted_ms: since(s.coldHandoffAdoptedAt ?? null),
+          cold_handoff_posted_count: s.coldHandoffPostedCount ?? null,
+          cold_handoff_adopted_count: s.coldHandoffAdoptedCount ?? null,
+          cold_disconnect_forwarded_ms: since(s.coldDisconnectForwardedAt ?? null),
+          // Join key to call_* events (same Twilio CallSid) and to the Sentry
+          // cold_callkit breadcrumbs of any crash in this window.
+          cold_call_sid: s.coldLastCallSid || null,
         });
       } catch {
         // Best-effort telemetry; never affect the call path.

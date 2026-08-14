@@ -80,6 +80,25 @@ export interface NativeCallAudioState {
   voipReportAttempt?: number;
   voipReportAt?: number;
   /**
+   * COLD-CALL funnel markers (build 146): the full native chain of a cold-launch
+   * call as epoch-seconds stamps (0 = never). invite decoded → answer action →
+   * accept → connected → RN module init → handoff posted/adopted → disconnect
+   * forwarded. `coldLastCallSid` is the Twilio CallSid, the join key to the
+   * call_* events and Sentry breadcrumbs. All optional: absent on builds whose
+   * native side predates this patch.
+   */
+  coldInviteDecodedAt?: number;
+  coldAnswerActionAt?: number;
+  coldAcceptAt?: number;
+  coldConnectedAt?: number;
+  coldModuleInitAt?: number;
+  coldHandoffPostedAt?: number;
+  coldHandoffPostedCount?: number;
+  coldHandoffAdoptedAt?: number;
+  coldHandoffAdoptedCount?: number;
+  coldDisconnectForwardedAt?: number;
+  coldLastCallSid?: string;
+  /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.
    * `lastRouteChangeReason` is one of Unknown | NewDeviceAvailable |

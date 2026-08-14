@@ -58,7 +58,7 @@ const { withAppDelegate } = require('@expo/config-plugins');
 
 const IMPORT_ANCHOR = 'import ReactAppDependencyProvider\n';
 const IMPORT_INJECT =
-  'import ReactAppDependencyProvider\nimport PushKit\nimport UIKit\nimport CallKit\nimport AVFoundation\nimport TwilioVoice\n';
+  'import ReactAppDependencyProvider\nimport PushKit\nimport UIKit\nimport CallKit\nimport AVFoundation\nimport TwilioVoice\n#if canImport(Sentry)\nimport Sentry\n#endif\n';
 
 const PROPERTY_ANCHOR = 'var reactNativeFactory: RCTReactNativeFactory?\n';
 const PROPERTY_INJECT =
@@ -145,6 +145,9 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   private var coldProvider: CXProvider?
   private var heldInvites: [String: TwilioVoice.CallInvite] = [:]
   private var heldCalls: [String: TwilioVoice.Call] = [:]
+  // Per-call connect time, handed to the RN module at adoption so JS shows the
+  // real call duration (feeds the module's callConnectMap / initialConnectedTimestamp).
+  private var heldCallConnectedAt: [String: Date] = [:]
   // Protocol type (not DefaultAudioDevice) so it can ALSO hold the audio-INJECTION
   // engine's custom TVOAudioDevice when injection is on — see the accept handler.
   private var coldAudioDevice: TwilioVoice.AudioDevice?
@@ -203,6 +206,44 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   @objc private func moduleDidInit() {
     moduleAlive = true
     NSLog("[AttoVoip] Twilio RN module alive")
+    // COLD-CALL HANDOFF (build 146). A call answered on the cold path lives only
+    // in OUR heldCalls; the RN module's callMap is empty, so voice.getCalls()
+    // returns nothing and JS renders ZERO in-call UI (no green header, no keypad,
+    // no landing) — exactly what David hit on the b145 FASE 1A test. The patched
+    // module subscribes to AttoColdCallHandoff BEFORE posting DidInit, and this
+    // post is synchronous, so by the time -init returns the module's maps hold
+    // the live call and the first JS getCalls() sees it.
+    if !heldCalls.isEmpty {
+      let fmt = ISO8601DateFormatter()
+      var connectedAtISO: [String: String] = [:]
+      for (k, d) in heldCallConnectedAt { connectedAtISO[k] = fmt.string(from: d) }
+      var invitesForCalls: [String: TwilioVoice.CallInvite] = [:]
+      for (k, _) in heldCalls { if let inv = heldInvites[k] { invitesForCalls[k] = inv } }
+      NotificationCenter.default.post(
+        name: Notification.Name("AttoColdCallHandoff"), object: nil,
+        userInfo: [
+          "calls": heldCalls,
+          "invites": invitesForCalls,
+          "connectedAt": connectedAtISO,
+        ])
+      UserDefaults.standard.set(heldCalls.count, forKey: "atto_cold_handoff_posted_count")
+      mark("cold_handoff_posted")
+    }
+  }
+
+  // Forward a cold call's lifecycle to the RN module (which re-emits it to JS as
+  // its standard scopeCall events). The bootstrap stays the TVOCall delegate —
+  // the delegate is fixed at accept — so without this bridge JS would never learn
+  // the far end hung up and the in-call UI would stay stuck on a dead call.
+  private func postColdCallEvent(_ type: String, call: TwilioVoice.Call, error: Error? = nil) {
+    var info: [String: Any] = ["type": type]
+    if let u = call.uuid?.uuidString { info["uuid"] = u }
+    if let e = error as NSError? {
+      info["errorCode"] = e.code
+      info["errorMessage"] = e.localizedDescription
+    }
+    NotificationCenter.default.post(
+      name: Notification.Name("AttoColdCallEvent"), object: nil, userInfo: info)
   }
 
   @objc private func reemitTick() {
@@ -232,10 +273,18 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   // Native cold-launch telemetry: stamp a marker + timestamp into UserDefaults so
   // the next foreground can ship it to PostHog (and it shows in Console via NSLog).
+  // Each marker is ALSO a Sentry breadcrumb: the native Sentry SDK is armed before
+  // PushKit (withSentryNativeInit), so if anything in this path crashes, the crash
+  // event carries the exact step sequence — no more black-box cold crashes.
   private func mark(_ event: String) {
     let ud = UserDefaults.standard
     ud.set(Date().timeIntervalSince1970, forKey: "atto_coldcallkit_\\(event)_at")
     NSLog("[AttoColdCallKit] \\(event)")
+    #if canImport(Sentry)
+    let crumb = Breadcrumb(level: .info, category: "cold_callkit")
+    crumb.message = event
+    SentrySDK.addBreadcrumb(crumb)
+    #endif
   }
 
   // MARK: - PKPushRegistryDelegate
@@ -395,6 +444,10 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func callInviteReceived(callInvite: TwilioVoice.CallInvite) {
     inviteDecodedThisPush = true
+    // Correlation key: the SAME CallSid PostHog's call_* events carry. Stamped
+    // here (native, pre-JS) so the next launch's telemetry and any Sentry crash
+    // in this window can be joined to the exact Twilio call.
+    UserDefaults.standard.set(callInvite.callSid, forKey: "atto_last_cold_call_sid")
     mark("cold_report")
     let update = buildUpdate(for: callInvite)
     if let uuid = coldReportUUID {
@@ -561,6 +614,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     }
     let call = invite.accept(options: options, delegate: self)
     heldCalls[action.callUUID.uuidString] = call
+    mark("cold_accept")
     action.fulfill()
   }
 
@@ -600,21 +654,39 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func callDidConnect(call: TwilioVoice.Call) {
     mark("cold_connected")
+    if let uuid = call.uuid?.uuidString { heldCallConnectedAt[uuid] = Date() }
+    postColdCallEvent("connected", call: call)
   }
 
   func callDidDisconnect(call: TwilioVoice.Call, error: Error?) {
+    postColdCallEvent("disconnected", call: call, error: error)
     finishColdCall(call)
   }
 
   func callDidFailToConnect(call: TwilioVoice.Call, error: Error) {
     NSLog("[AttoColdCallKit] cold call failed to connect: \\(error)")
+    postColdCallEvent("connectFailure", call: call, error: error)
     finishColdCall(call)
+  }
+
+  func callIsReconnecting(call: TwilioVoice.Call, error: Error) {
+    mark("cold_reconnecting")
+    postColdCallEvent("reconnecting", call: call, error: error)
+  }
+
+  func callDidReconnect(call: TwilioVoice.Call) {
+    mark("cold_reconnected")
+    postColdCallEvent("reconnected", call: call)
   }
 
   private func finishColdCall(_ call: TwilioVoice.Call) {
     mark("cold_disconnected")
     coldProvider?.reportCall(with: call.uuid ?? UUID(), endedAt: nil, reason: .remoteEnded)
-    if let uuid = call.uuid?.uuidString { heldCalls.removeValue(forKey: uuid) }
+    if let uuid = call.uuid?.uuidString {
+      heldCalls.removeValue(forKey: uuid)
+      heldInvites.removeValue(forKey: uuid)
+      heldCallConnectedAt.removeValue(forKey: uuid)
+    }
     setColdAudioEnabled(false)
     UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
   }

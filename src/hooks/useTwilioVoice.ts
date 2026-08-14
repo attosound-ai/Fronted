@@ -1195,6 +1195,66 @@ async function recoverCallFromSDK(): Promise<any | null> {
   return null;
 }
 
+// One adoption per call, across every probe trigger (boot + foreground).
+const adoptedColdCallSids = new Set<string>();
+
+/**
+ * COLD-CALL ADOPTION (build 146). On a cold launch, CallKit answers the call in
+ * the NATIVE AttoVoipBootstrap before JS exists: the CallInvite event fired into
+ * a dead process, so setIncomingCall never ran, the store's activeCall is null,
+ * and the app renders as if there were no call at all — over a live, audible one
+ * (David's b145 FASE 1A). The native side now hands the call into the module's
+ * callMap at module init, so getCalls() CAN see it; this probe closes the last
+ * gap by hydrating the JS state from that native truth.
+ *
+ * Called from the setup effect (boot) and on every foreground transition, and
+ * deduped per callSid so a warm call or an already-adopted call is untouched.
+ */
+async function adoptNativeColdCall(trigger: string): Promise<void> {
+  try {
+    if (useCallStore.getState().activeCall) return; // JS already tracks a call
+    const recovered = await recoverCallFromSDK();
+    if (!recovered) return;
+    const sid: string = recovered.getSid?.() || '';
+    if (!sid || adoptedColdCallSids.has(sid)) return;
+    adoptedColdCallSids.add(sid);
+    const from: string = recovered.getFrom?.() || 'Unknown';
+    let connectedAt: Date | null = null;
+    try {
+      const ts = recovered.getInitialConnectedTimestamp?.();
+      if (ts) connectedAt = new Date(ts);
+    } catch {
+      // Older SDK surface; store falls back to "now".
+    }
+    activeCallObj = recovered;
+    pendingInvite = null;
+    // Creates the store's activeCall (state 'connected', direction 'inbound') —
+    // this is what makes InCallTopBar render, DtmfKeypadHost auto-open (the
+    // Securus press-1 path) and useConnectedCallLanding navigate.
+    useCallStore.getState().setRecoveredCall(sid, from, connectedAt);
+    bindCallEvents(recovered);
+    // Session + telemetry, mirroring the recovered branches of acceptIncomingCall:
+    // Connected fired natively long before JS existed, so nothing else starts these.
+    reassertCallAudioSession();
+    beginConnectedCallTelemetry('cold_adopted');
+    reportCallAnswered('cold_adopted', { trigger });
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_CALL_ADOPTED, {
+      trigger,
+      call_sid: sid,
+      call_type: classifyCallType(from),
+      ms_since_js_start: Date.now() - MODULE_LOAD_MS,
+    });
+  } catch (error: unknown) {
+    // The probe must never break app startup; the funnel markers still tell us
+    // how far the native side got if this ever fails.
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_CALL_ADOPTED, {
+      trigger,
+      failed: true,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ── Standalone actions (importable from anywhere) ──
 
 /**
@@ -2530,6 +2590,16 @@ export function useTwilioVoice() {
 
     voice.on(Voice.Event.CallInvite, onCallInvite);
 
+    // Cold-call adoption probes. By this point getVoice() has instantiated the
+    // native module, whose -init synchronously adopted any bootstrap-answered
+    // call into its callMap — so a boot probe right now already finds it. The
+    // foreground probe covers the locked-answer case (answered on the lock
+    // screen, app foregrounded later).
+    void adoptNativeColdCall('boot_probe');
+    const coldProbeSub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void adoptNativeColdCall('foreground_probe');
+    });
+
     const setup = async () => {
       try {
         if (!pushKitReady) {
@@ -2607,6 +2677,7 @@ export function useTwilioVoice() {
       // will no longer match `currentRegistrationGen` and it'll bail.
       currentRegistrationGen++;
       clearInterval(refreshInterval);
+      coldProbeSub.remove();
       voice.off(Voice.Event.CallInvite, onCallInvite);
       // Fire-and-forget; do not block React unmount on a network round-trip.
       void unregisterCurrent();

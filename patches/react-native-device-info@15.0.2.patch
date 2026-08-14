@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..15d1de6c80cf6be9fdc453ba11139155673e4920 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..ba0b4e6a82443041ab07143de6511733ea47546e 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,9 @@
@@ -32,7 +32,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..15d1de6c80cf6be9fdc453ba11139155
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +979,248 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +979,265 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -251,6 +251,23 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..15d1de6c80cf6be9fdc453ba11139155
 +        @"voipReportOutcome": ([ud stringForKey:@"atto_last_voip_report_outcome"] ?: @""),
 +        @"voipReportAttempt": @([ud integerForKey:@"atto_last_voip_report_attempt"]),
 +        @"voipReportAt": @([ud doubleForKey:@"atto_last_voip_report_at"]),
++        // COLD-CALL funnel markers (build 146) — the full native chain of a
++        // cold-launch call, each an epoch-seconds stamp (0 = never): invite
++        // decoded -> answered -> accepted -> connected -> RN module born ->
++        // handoff posted/adopted -> disconnect forwarded to JS. Together with
++        // voipReport* these make every cold call's path fully reconstructable
++        // from PostHog, and coldLastCallSid joins it to the Twilio call.
++        @"coldInviteDecodedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_report_at"]),
++        @"coldAnswerActionAt": @([ud doubleForKey:@"atto_coldcallkit_cold_answerAction_at"]),
++        @"coldAcceptAt": @([ud doubleForKey:@"atto_coldcallkit_cold_accept_at"]),
++        @"coldConnectedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_connected_at"]),
++        @"coldModuleInitAt": @([ud doubleForKey:@"atto_coldcallkit_cold_module_init_at"]),
++        @"coldHandoffPostedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_handoff_posted_at"]),
++        @"coldHandoffPostedCount": @([ud integerForKey:@"atto_cold_handoff_posted_count"]),
++        @"coldHandoffAdoptedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_handoff_adopted_at"]),
++        @"coldHandoffAdoptedCount": @([ud integerForKey:@"atto_cold_handoff_adopted_count"]),
++        @"coldDisconnectForwardedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_disconnect_forwarded_at"]),
++        @"coldLastCallSid": ([ud stringForKey:@"atto_last_cold_call_sid"] ?: @""),
 +    });
 +}
 +

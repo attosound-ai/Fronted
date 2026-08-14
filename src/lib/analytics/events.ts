@@ -254,6 +254,14 @@ export const ANALYTICS_EVENTS = {
     // calls (build-98 telemetry proved: no "1" → Securus drops at ~60s; "1" →
     // call connects). Each scheduled attempt reports {attempt, delay_ms, sent}.
     SECURUS_AUTO_ACCEPT: 'call_securus_auto_accept',
+    // JS adopted a call that was answered NATIVELY on a cold launch (the
+    // AttoVoipBootstrap answered before JS existed; the handoff put it in the
+    // module's callMap and this event records JS hydrating from it). trigger =
+    // boot_probe | foreground_probe; failed:true carries the error when the
+    // probe itself blew up. Missing event after a cold answer = the JS gap of
+    // b145 FASE 1A regressed — check the coldHandoff* native markers to see
+    // which side broke.
+    COLD_CALL_ADOPTED: 'call_cold_call_adopted',
     // The REAL Twilio disconnect reason (was a blind spot — we logged a generic
     // string for every end). clean_hangup=true → a party hung up; error_code set
     // → abnormal drop (53xxx = media/network/audio-session, 31xxx = signaling).

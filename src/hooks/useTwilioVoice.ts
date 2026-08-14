@@ -1938,6 +1938,10 @@ export async function sendCallDigits(digits: string): Promise<boolean> {
     analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_SENT, {
       digits,
       send_latency_ms: latency,
+      // Join key. Was MISSING (Aug 14): call_dtmf_sent rows could not be joined
+      // to their call, so a per-call "was the 1 delivered?" query silently
+      // returned zero and misdiagnosed working calls as no-DTMF drops.
+      call_sid: useCallStore.getState().activeCall?.callSid ?? null,
     });
     return true;
   } catch (err: unknown) {

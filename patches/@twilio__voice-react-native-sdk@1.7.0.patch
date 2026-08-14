@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..37051e0e39481bf84f9127c4baac66e2f2e51bad
+index 0000000000000000000000000000000000000000..acd447e74f443a1ee6e504a8fbc01e389857f4da
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3563 @@
+@@ -0,0 +1,3581 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -925,7 +925,17 @@ index 0000000000000000000000000000000000000000..37051e0e39481bf84f9127c4baac66e2
 +        NSError *serr = nil;
 +        [session setPreferredSampleRate:kPreferredSampleRate error:&serr];
 +        [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:&serr];
-+        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&serr];
++        // ATTO (build 145) — AIRPODS ECHO ROOT CAUSE. The bare
++        // setCategory:error: variant RESETS categoryOptions to 0, stripping
++        // AllowBluetoothHFP mid-call. iOS then evicts the BluetoothHFP route, the
++        // route bounces BT->Speaker->BT (observed as the options 0<->13 flip-flop +
++        // route dance in call_audio_session_changed), and during each bounce the
++        // far end's voice transiently plays through the SPEAKER while AEC
++        // reconverges = the echo the client hears ONLY with AirPods in. Preserve
++        // whatever options are already set and guarantee HFP stays allowed.
++        AVAudioSessionCategoryOptions attoOpts1 =
++            session.categoryOptions | AVAudioSessionCategoryOptionAllowBluetooth;
++        [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:attoOpts1 error:&serr];
 +        [session setMode:AVAudioSessionModeVoiceChat error:&serr];
 +        if (![session setActive:YES error:&serr]) {
 +            _dbgSetActiveFailCount++; // telemetry: setActive rejected (CallKit owns session?)
@@ -1114,7 +1124,11 @@ index 0000000000000000000000000000000000000000..37051e0e39481bf84f9127c4baac66e2
 +        NSError *err = nil;
 +        [session setPreferredSampleRate:kPreferredSampleRate error:&err];
 +        [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:&err];
-+        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&err];
++        // ATTO (build 145): options-preserving setCategory — bare variant strips
++        // AllowBluetoothHFP and evicts AirPods mid-call (echo). See site 1 comment.
++        AVAudioSessionCategoryOptions attoOpts2 =
++            session.categoryOptions | AVAudioSessionCategoryOptionAllowBluetooth;
++        [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:attoOpts2 error:&err];
 +        [session setMode:AVAudioSessionModeVoiceChat error:&err];
 +        if (![session setActive:YES error:&err]) {
 +            NSLog(@"[AttoAudioEngine] block setActive failed: %@", err);
@@ -3203,7 +3217,11 @@ index 0000000000000000000000000000000000000000..37051e0e39481bf84f9127c4baac66e2
 +        NSLog(@"Error setting IOBuffer duration: %@", error);
 +    }
 +
-+    if (![session setCategory:AVAudioSessionCategoryPlayAndRecord error:&error]) {
++    // ATTO (build 145): options-preserving setCategory — bare variant strips
++    // AllowBluetoothHFP and evicts AirPods mid-call (echo). See ensureEngineFormat.
++    AVAudioSessionCategoryOptions attoOpts3 =
++        session.categoryOptions | AVAudioSessionCategoryOptionAllowBluetooth;
++    if (![session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:attoOpts3 error:&error]) {
 +        NSLog(@"Error setting session category: %@", error);
 +    }
 +

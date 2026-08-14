@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..896631ddea34c47554f15dae42b08f4a05f8bb40 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..15d1de6c80cf6be9fdc453ba11139155673e4920 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,9 @@
@@ -32,7 +32,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..896631ddea34c47554f15dae42b08f4a
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +979,239 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +979,248 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -242,6 +242,15 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..896631ddea34c47554f15dae42b08f4a
 +        // VoIP push-arrival markers (written by AttoVoipBootstrap).
 +        @"voipPushAt": @([ud doubleForKey:@"atto_last_voip_push_at"]),
 +        @"voipPushAppState": @([ud integerForKey:@"atto_last_voip_push_appstate"]),
++        // VoIP report OUTCOME markers (written by AttoVoipBootstrap when it reports
++        // — or fails to report — the call to CallKit). This is the funnel that tells
++        // us whether the cold-launch crash fix actually worked: reportPath says
++        // which branch we took (warm/cold), reportOutcome says what happened
++        // (cold_reported / warm_pending / forced_hard_deadline / cold_report_error).
++        @"voipReportPath": ([ud stringForKey:@"atto_last_voip_report_path"] ?: @""),
++        @"voipReportOutcome": ([ud stringForKey:@"atto_last_voip_report_outcome"] ?: @""),
++        @"voipReportAttempt": @([ud integerForKey:@"atto_last_voip_report_attempt"]),
++        @"voipReportAt": @([ud doubleForKey:@"atto_last_voip_report_at"]),
 +    });
 +}
 +

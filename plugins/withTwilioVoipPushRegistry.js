@@ -145,7 +145,9 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   private var coldProvider: CXProvider?
   private var heldInvites: [String: TwilioVoice.CallInvite] = [:]
   private var heldCalls: [String: TwilioVoice.Call] = [:]
-  private var coldAudioDevice: TwilioVoice.DefaultAudioDevice?
+  // Protocol type (not DefaultAudioDevice) so it can ALSO hold the audio-INJECTION
+  // engine's custom TVOAudioDevice when injection is on — see the accept handler.
+  private var coldAudioDevice: TwilioVoice.AudioDevice?
   private var pendingPushCompletion: (() -> Void)?
   private var reportedThisPush = false
   // Guards so a VoIP push is completed EXACTLY once and NEVER left unhandled: an
@@ -154,6 +156,11 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   // deadline forces it if every other path failed to.
   private var pushCompleted = false
   private var hardDeadlineWork: DispatchWorkItem?
+  // The UUID we reported to CallKit for THIS push (a placeholder reported
+  // immediately, then updated in place when the invite decodes). Accept + cancel
+  // reference this so CallKit only ever sees ONE call per push.
+  private var coldReportUUID: UUID?
+  private var inviteDecodedThisPush = false
 
   // OPT-OUT: protection is on unless something explicitly disabled it. An unset
   // key reads false ⇒ enabled, so a fresh install with no launch is still safe.
@@ -248,47 +255,103 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   ) {
     guard type == .voIP else { completion(); return }
 
-    let state = UIApplication.shared.applicationState.rawValue
+    let stateRaw = UIApplication.shared.applicationState.rawValue
+    let appActive = UIApplication.shared.applicationState == .active
     let now = Date().timeIntervalSince1970
     UserDefaults.standard.set(now, forKey: "atto_last_voip_push_at")
-    UserDefaults.standard.set(state, forKey: "atto_last_voip_push_appstate")
-    NSLog("[AttoVoip] VoIP push received appState=\\(state) moduleAlive=\\(moduleAlive) coldDisabled=\\(coldDisabled) at=\\(now)")
+    UserDefaults.standard.set(stateRaw, forKey: "atto_last_voip_push_appstate")
+    NSLog("[AttoVoip] VoIP push appState=\\(stateRaw) active=\\(appActive) moduleAlive=\\(moduleAlive) coldDisabled=\\(coldDisabled)")
 
-    // GUARANTEE completion within the window, whatever happens below. A push left
-    // unhandled is redelivered by iOS and can jam the next launch — that was the
-    // Aug 13 "app won't open". Route ALL completion through completePush() (fires
-    // once) and arm a hard backstop that force-completes if every path failed.
+    // GUARANTEE completion exactly once, and never leave a push unhandled (an
+    // unhandled push is redelivered by iOS and can jam the next launch).
     pendingPushCompletion = completion
     pushCompleted = false
     reportedThisPush = false
-    let deadline = DispatchWorkItem { [weak self] in self?.forceCompletePush(reason: "hard_deadline") }
-    hardDeadlineWork = deadline
-    // 14s: after the warm path's own 12s retry ceiling, before iOS's kill — so it
-    // only ever fires on a genuine hang, never preempting a healthy report.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 14.0, execute: deadline)
+    inviteDecodedThisPush = false
+    coldReportUUID = nil
 
-    // WARM / module alive, OR protection explicitly disabled → the proven path:
-    // post the notification (an alive module reports synchronously) and re-post
-    // idempotently until CallKit shows the call.
-    if coldDisabled || moduleAlive {
+    // Only a FOREGROUND-ACTIVE app can be trusted to report through the RN module
+    // in time (and keep full in-app call controls). In ANY other state —
+    // background, suspended, terminated — the module may be frozen and its report
+    // would miss iOS's window: that is the crash. moduleAlive was the old, stale
+    // signal that mis-routed a suspended-background wake into the warm path and
+    // crashed anyway (Aug 13, build 141). applicationState is the real-time truth.
+    if coldDisabled || (moduleAlive && appActive) {
+      // This path posts to the RN module and re-posts up to ~12s while it boots
+      // (only really needed when coldDisabled forces a true cold launch through
+      // here). The backstop must sit just AFTER that ceiling so it never preempts
+      // a legitimate late report.
+      armHardDeadline(seconds: 13.0)
+      recordReportOutcome("warm_pending", attempt: 0)
+      UserDefaults.standard.set("warm", forKey: "atto_last_voip_report_path")
       deliverIncomingPush(payload.dictionaryPayload, attempt: 0)
       return
     }
 
-    // TRUE COLD LAUNCH (default): the module can't report in time. Decode the push
-    // ourselves (synchronous per the TwilioVoice header) and report on our own
-    // provider inside the window. We CONSUME the push (do not post to the module)
-    // so it never double-decodes/double-reports.
+    // Cold path reports to CallKit synchronously below (completion fires in well
+    // under a second), so a SHORT backstop is right — it must fire before iOS's
+    // ~5s kill, and only ever on a true hang.
+    armHardDeadline(seconds: 4.0)
+
+    // BULLETPROOF cold path: report a placeholder to CallKit RIGHT NOW, before any
+    // decode, and complete INSIDE the report handler (Apple requires the report to
+    // be registered before completion() returns — my first fix completed OUTSIDE
+    // it and still crashed). The real caller name fills in a beat later when the
+    // invite decodes. Nothing below can get us killed.
+    UserDefaults.standard.set("cold", forKey: "atto_last_voip_report_path")
     mark("cold_push")
+    let uuid = UUID()
+    coldReportUUID = uuid
+    let placeholder = CXCallUpdate()
+    placeholder.remoteHandle = CXHandle(type: .generic, value: "Incoming call")
+    placeholder.hasVideo = false
+    coldProvider?.reportNewIncomingCall(with: uuid, update: placeholder) { [weak self] error in
+      guard let self = self else { return }
+      self.recordReportOutcome(error == nil ? "cold_reported" : "cold_report_error", attempt: 0)
+      if let error = error { NSLog("[AttoColdCallKit] report failed: \\(error)") }
+      self.completePush()
+    }
+    reportedThisPush = true
+
+    // Now decode. callInviteReceived UPDATES this same call with the real caller
+    // (one call in CallKit, not two); cancelled ends it.
     let recognized = TwilioVoiceSDK.handleNotification(
       payload: payload.dictionaryPayload, delegate: self, delegateQueue: nil, callMessageDelegate: nil)
-    // handleNotification is synchronous: callInviteReceived/cancelled already ran.
-    if !reportedThisPush {
-      // No invite reported (cancel, non-Twilio, or decode failure). We STILL must
-      // report+complete or iOS kills us. Report a short-lived placeholder.
-      NSLog("[AttoColdCallKit] no invite reported (recognized=\\(recognized)) — placeholder + complete")
-      reportPlaceholderAndComplete()
+    if !inviteDecodedThisPush {
+      NSLog("[AttoColdCallKit] no invite decoded yet (recognized=\\(recognized)); placeholder stands, auto-ends if it stays empty")
+      DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
+        guard let self = self, !self.inviteDecodedThisPush, let u = self.coldReportUUID, u == uuid else { return }
+        self.coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+      }
     }
+  }
+
+  // Enable/disable the cold call's audio device to start/stop RTP. It may be a
+  // DefaultAudioDevice (injection off) or the injection engine's custom
+  // TVOAudioDevice (injection on) — both expose the ObjC enabled property. Use
+  // the typed path when we can, else a guarded ObjC/KVC set, so we never assume the
+  // concrete type (and never crash if a device somehow lacks the setter).
+  private func setColdAudioEnabled(_ on: Bool) {
+    if let d = coldAudioDevice as? TwilioVoice.DefaultAudioDevice {
+      d.isEnabled = on
+      return
+    }
+    // Injection's custom device (or any other TVOAudioDevice): set its ObjC
+    // enabled property via KVC, guarded by responds(to:) so it can never throw an
+    // unrecognized-selector exception. TVOAudioDevice objects are NSObjects.
+    if let obj = coldAudioDevice as? NSObject, obj.responds(to: Selector("setEnabled:")) {
+      obj.setValue(on, forKey: "enabled")
+    }
+  }
+
+  // Arm the force-complete backstop. If nothing ever calls completePush() (every
+  // report path silently failed), this fires so the PushKit handler still
+  // completes — completing WITHOUT a reported call is itself a kill, so
+  // forceCompletePush reports a short-lived placeholder first.
+  private func armHardDeadline(seconds: Double) {
+    let deadline = DispatchWorkItem { [weak self] in self?.forceCompletePush(reason: "hard_deadline") }
+    hardDeadlineWork = deadline
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: deadline)
   }
 
   // Idempotent completion — cancels the backstop and fires the PushKit completion
@@ -328,49 +391,53 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     completePush()
   }
 
-  private func reportPlaceholderAndComplete() {
-    let uuid = UUID()
-    let update = CXCallUpdate()
-    update.remoteHandle = CXHandle(type: .generic, value: "Incoming call")
-    update.hasVideo = false
-    coldProvider?.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
-      // End the phantom shortly so it can't linger if the push was spurious.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
-        self?.coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
-      }
-    }
-    recordReportOutcome("cold_placeholder", attempt: 0)
-    releasePendingCompletion()
-  }
-
   // MARK: - TwilioVoice.NotificationDelegate (cold-launch decode)
 
   func callInviteReceived(callInvite: TwilioVoice.CallInvite) {
-    heldInvites[callInvite.uuid.uuidString] = callInvite
+    inviteDecodedThisPush = true
+    mark("cold_report")
     let update = buildUpdate(for: callInvite)
-    // Report on OUR provider with the SDK's real invite UUID (same UUID we later
-    // accept with → CallKit shows exactly one call, answerable natively).
-    coldProvider?.reportNewIncomingCall(with: callInvite.uuid, update: update) { error in
-      if let error = error { NSLog("[AttoColdCallKit] report failed: \\(error)") }
+    if let uuid = coldReportUUID {
+      // We ALREADY showed a placeholder call for this push. Fill it in with the
+      // real caller name IN PLACE (reportCall(with:updated:)) — CallKit keeps
+      // showing exactly ONE call, keyed by the UUID accept/end already reference.
+      heldInvites[uuid.uuidString] = callInvite
+      coldProvider?.reportCall(with: uuid, updated: update)
+    } else {
+      // No placeholder (e.g. warm path fell through) — report fresh and adopt the
+      // SDK's own invite UUID as the call identity.
+      coldReportUUID = callInvite.uuid
+      heldInvites[callInvite.uuid.uuidString] = callInvite
+      coldProvider?.reportNewIncomingCall(with: callInvite.uuid, update: update) { error in
+        if let error = error { NSLog("[AttoColdCallKit] report failed: \\(error)") }
+      }
     }
     reportedThisPush = true
     recordReportOutcome("cold_reported", attempt: 0)
-    mark("cold_report")
-    releasePendingCompletion()
+    completePush()
   }
 
   func cancelledCallInviteReceived(cancelledCallInvite: TwilioVoice.CancelledCallInvite, error: Error) {
     mark("cold_cancelled")
-    // End the matching CallKit call (match by callSid — cancel has no uuid).
+    inviteDecodedThisPush = true
+    // End the matching CallKit call. The invite may be keyed under the placeholder
+    // UUID (updated in place) or its own UUID; match by callSid covers both.
+    var ended = false
     for (uuidString, invite) in heldInvites where invite.callSid == cancelledCallInvite.callSid {
       if let uuid = UUID(uuidString: uuidString) {
         coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+        ended = true
       }
       heldInvites.removeValue(forKey: uuidString)
     }
+    // Cancel arrived before the invite decoded → no held invite yet. End the
+    // placeholder we reported so it can't linger on screen.
+    if !ended, let uuid = coldReportUUID {
+      coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+    }
     UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
     // A cancel push must still complete the PushKit handler.
-    releasePendingCompletion()
+    completePush()
   }
 
   private func buildUpdate(for callInvite: TwilioVoice.CallInvite) -> CXCallUpdate {
@@ -454,17 +521,18 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   // MARK: - CXProviderDelegate (cold-launch answer/end/audio)
 
   func providerDidReset(_ provider: CXProvider) {
-    coldAudioDevice?.isEnabled = false
+    setColdAudioEnabled(false)
   }
 
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
-    // Enabling the TwilioVoice.DefaultAudioDevice is the ONLY thing that starts RTP.
-    coldAudioDevice?.isEnabled = true
+    // Enabling the audio device is the ONLY thing that starts RTP — works for both
+    // the DefaultAudioDevice (injection off) and the injection engine's device.
+    setColdAudioEnabled(true)
     mark("cold_didActivate")
   }
 
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
-    coldAudioDevice?.isEnabled = false
+    setColdAudioEnabled(false)
     mark("cold_didDeactivate")
   }
 
@@ -473,17 +541,23 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     guard let invite = heldInvites[action.callUUID.uuidString] else {
       action.fail(); return
     }
-    // The RN module hasn't run -init, so no TVOAudioDevice is registered with the
-    // SDK yet. Register a default one BEFORE accepting so the call has RTP (use the
-    // same factory the SDK uses). The patched module -init will adopt this device
-    // instead of swapping it mid-call.
-    let device = TwilioVoice.DefaultAudioDevice()
-    coldAudioDevice = device
-    TwilioVoiceSDK.audioDevice = device
+    // Give the call an RTP audio device WITHOUT ever re-assigning it. The SDK's
+    // TwilioVoiceSDK.audioDevice is non-optional and already holds a usable device:
+    // the SDK's own DefaultAudioDevice on a true cold launch (injection off), or the
+    // audio-INJECTION engine's custom TVOAudioDevice (AttoAudioEngineDevice) when
+    // injection is on. RE-ASSIGNING it after a media stack exists — which injection
+    // builds at launch — throws TVOAudioDeviceMustBeSetBeforeMediaStackSetup, an
+    // ObjC NSException that CANNOT be caught from Swift → a HARD CRASH (the client's
+    // repeated b141 crash: Sentry REACT-NATIVE-4J, user 153 suicideking, injection
+    // on). So NEVER set it here — adopt whatever is installed and just drive it via
+    // setColdAudioEnabled on didActivate.
+    coldAudioDevice = TwilioVoiceSDK.audioDevice
     UserDefaults.standard.set(true, forKey: AttoVoipBootstrap.coldCallLiveKey)
 
+    // Adopt CallKit's UUID (== coldReportUUID, the one on screen) as the Twilio
+    // Call identity so end/disconnect/report all reference the same call.
     let options = TwilioVoice.AcceptOptions(callInvite: invite) { builder in
-      builder.uuid = invite.uuid
+      builder.uuid = action.callUUID
     }
     let call = invite.accept(options: options, delegate: self)
     heldCalls[action.callUUID.uuidString] = call
@@ -541,7 +615,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     mark("cold_disconnected")
     coldProvider?.reportCall(with: call.uuid ?? UUID(), endedAt: nil, reason: .remoteEnded)
     if let uuid = call.uuid?.uuidString { heldCalls.removeValue(forKey: uuid) }
-    coldAudioDevice?.isEnabled = false
+    setColdAudioEnabled(false)
     UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
   }
 

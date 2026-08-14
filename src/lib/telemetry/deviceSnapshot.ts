@@ -61,6 +61,25 @@ export interface NativeCallAudioState {
   voipPushAt: number;
   voipPushAppState: number;
   /**
+   * VoIP report OUTCOME markers, written by AttoVoipBootstrap when it reports (or
+   * fails to report) the incoming call to CallKit. This is the funnel that proves
+   * whether the cold-launch crash fix works end to end:
+   *  - `voipReportPath`   — which branch we took: "warm" (foreground-active,
+   *    reported through the RN module) or "cold" (we reported a placeholder
+   *    ourselves because the app was background/suspended/terminated).
+   *  - `voipReportOutcome`— what happened: cold_reported | warm_pending |
+   *    cold_report_error | forced_hard_deadline | gave_up | reported.
+   *  - `voipReportAttempt`— re-post attempt index (warm path), -1 on a forced
+   *    completion.
+   *  - `voipReportAt`     — epoch seconds of the outcome (0 = none yet).
+   *
+   * OPTIONAL: absent on any build whose native side predates this patch.
+   */
+  voipReportPath?: string;
+  voipReportOutcome?: string;
+  voipReportAttempt?: number;
+  voipReportAt?: number;
+  /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.
    * `lastRouteChangeReason` is one of Unknown | NewDeviceAvailable |

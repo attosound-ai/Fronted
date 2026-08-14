@@ -9,6 +9,7 @@ import { getTokenUserId } from '@/lib/auth/jwt';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { getErrorMessage } from '@/utils/formatters';
 import { queryClient } from '@/lib/queryClient';
+import { persistSentryUserForNative } from '@/lib/telemetry/sentryNativeUser';
 import { useSubscriptionStore } from './subscriptionStore';
 import type {
   User,
@@ -655,3 +656,17 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     analytics.identify(user);
   },
 }));
+
+// Mirror the signed-in identity into native NSUserDefaults so the native Sentry
+// SDK can attribute a pre-JS cold-launch crash (the PushKit/CallKit window) to a
+// user. Every identity path in this store — login, session restore, account
+// switch, logout — ends in a `user` mutation, so one subscription covers them
+// all (including `setUser`, which does not call Sentry.setUser directly). Deduped
+// on the id so an unrelated state change does not re-write NSUserDefaults.
+let lastMirroredSentryUserId: string | null = null;
+useAuthStore.subscribe((state) => {
+  const id = state.user ? String(state.user.id) : null;
+  if (id === lastMirroredSentryUserId) return;
+  lastMirroredSentryUserId = id;
+  persistSentryUserForNative(id, state.user?.username ?? null);
+});

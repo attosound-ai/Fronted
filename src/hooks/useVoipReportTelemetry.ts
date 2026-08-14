@@ -80,6 +80,19 @@ export function useVoipReportTelemetry(): void {
           answered_without_audio: answerAt != null && activateAt == null,
           live_category: s.liveCategory ?? null,
           live_input_port: s.liveInputPort ?? null,
+          // The report funnel: did we take the warm or the COLD path, and did the
+          // report to CallKit succeed? This is what tells us the cold-launch crash
+          // fix (build 142) actually held — a "cold" path with "cold_reported" and
+          // no crash on the next launch is the proof. A "warm" path on a
+          // background push (push_app_state != 0) would be the old, crashing bug.
+          report_path: s.voipReportPath || null,
+          report_outcome: s.voipReportOutcome || null,
+          report_attempt:
+            typeof s.voipReportAttempt === 'number' ? s.voipReportAttempt : null,
+          report_to_outcome_ms:
+            s.voipReportAt && s.voipReportAt >= pushAt
+              ? Math.round((s.voipReportAt - pushAt) * 1000)
+              : null,
         });
       } catch {
         // Best-effort telemetry; never affect the call path.

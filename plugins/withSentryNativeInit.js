@@ -49,6 +49,17 @@ const IOS_BLOCK = `    // SENTRY_NATIVE_INIT (withSentryNativeInit plugin) — a
         options.sessionReplay.maskedViewClasses = [svg]
       }
     }
+    // Attribute pre-JS cold-launch crashes to a user. JS mirrors the signed-in
+    // identity into NSUserDefaults on every launch (persistSentryUserForNative);
+    // we read it back here, BEFORE React Native runs, so a crash in the PushKit /
+    // CallKit launch window is no longer an anonymous event. Cleared on logout.
+    let attoSentryUid = UserDefaults.standard.string(forKey: "atto_sentry_user_id") ?? ""
+    if !attoSentryUid.isEmpty {
+      let u = Sentry.User(userId: attoSentryUid)
+      let uname = UserDefaults.standard.string(forKey: "atto_sentry_username") ?? ""
+      if !uname.isEmpty { u.username = uname }
+      SentrySDK.setUser(u)
+    }
 `;
 
 function withIosSentryNativeInit(config) {

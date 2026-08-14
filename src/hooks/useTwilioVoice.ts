@@ -2598,8 +2598,14 @@ export function useTwilioVoice() {
     // native module, whose -init synchronously adopted any bootstrap-answered
     // call into its callMap — so a boot probe right now already finds it. The
     // foreground probe covers the locked-answer case (answered on the lock
-    // screen, app foregrounded later).
+    // screen, app foregrounded later). The timed retries (b147) cover ordering
+    // races — a handoff that lands moments after the boot probe (e.g. the
+    // connect-time self-heal path) with no foreground transition to re-trigger
+    // it. All probes dedup per callSid, so retries are free when nothing is
+    // there and harmless when adoption already happened.
     void adoptNativeColdCall('boot_probe');
+    const probeRetry3s = setTimeout(() => void adoptNativeColdCall('retry_3s'), 3000);
+    const probeRetry10s = setTimeout(() => void adoptNativeColdCall('retry_10s'), 10000);
     const coldProbeSub = AppState.addEventListener('change', (s) => {
       if (s === 'active') void adoptNativeColdCall('foreground_probe');
     });
@@ -2681,6 +2687,8 @@ export function useTwilioVoice() {
       // will no longer match `currentRegistrationGen` and it'll bail.
       currentRegistrationGen++;
       clearInterval(refreshInterval);
+      clearTimeout(probeRetry3s);
+      clearTimeout(probeRetry10s);
       coldProbeSub.remove();
       voice.off(Voice.Event.CallInvite, onCallInvite);
       // Fire-and-forget; do not block React unmount on a network round-trip.

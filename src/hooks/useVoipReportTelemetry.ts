@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -6,8 +6,18 @@ import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
 import { reportUnreportedCallDeath } from '@/lib/telemetry/callTelemetry';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 
-/** Dedup key so one VoIP push is reported once, even across app launches. */
+/**
+ * Dedup key PREFIX so one VoIP push is reported once PER PHASE, even across app
+ * launches. Two phases (b147): 'immediate' fires as soon as JS mounts — valuable
+ * because it survives even if the app dies seconds later — but on a cold launch
+ * it runs BEFORE the Twilio module inits, so module/handoff markers read as
+ * null/stale. 'settled' re-reads the markers ~12s later, when the whole chain
+ * (module init → handoff → adoption) has had time to complete. The b146 test was
+ * diagnosed half-blind because the single immediate emission nulled everything
+ * that hadn't happened yet and the dedup swallowed the corrected values forever.
+ */
 const LAST_REPORTED_PUSH_KEY = 'atto_last_reported_voip_push_at';
+const SETTLED_DELAY_MS = 12_000;
 
 /**
  * Surface the NATIVE CallKit/PushKit funnel to PostHog.
@@ -32,8 +42,6 @@ const LAST_REPORTED_PUSH_KEY = 'atto_last_reported_voip_push_at';
  * documented cross-platform API — instead of the same broken NSUserDefaults path.
  */
 export function useVoipReportTelemetry(): void {
-  const lastPushAtRef = useRef<number | null>(null);
-
   useEffect(() => {
     // Runs on every platform: if a call was in flight when the process died, this
     // is where that silent death finally gets reported.
@@ -41,23 +49,20 @@ export function useVoipReportTelemetry(): void {
 
     if (Platform.OS !== 'ios') return;
 
-    const emitPushFunnelIfNew = async () => {
+    const emitPushFunnelIfNew = async (phase: 'immediate' | 'settled') => {
       try {
         const s = await getCallAudioState();
         if (!s) return;
         const pushAt = s.voipPushAt;
         if (!pushAt || pushAt <= 0) return;
 
-        // Dedup within the session AND across launches (the interesting pushes are
-        // exactly the ones where the app was killed and relaunched).
-        if (lastPushAtRef.current === pushAt) return;
-        const persisted = mmkvStorage.getString(LAST_REPORTED_PUSH_KEY);
-        if (persisted === String(pushAt)) {
-          lastPushAtRef.current = pushAt;
-          return;
-        }
-        lastPushAtRef.current = pushAt;
-        mmkvStorage.setString(LAST_REPORTED_PUSH_KEY, String(pushAt));
+        // Dedup per (push, phase), within the session AND across launches (the
+        // interesting pushes are exactly the ones where the app was killed and
+        // relaunched).
+        const dedupKey = `${LAST_REPORTED_PUSH_KEY}:${phase}`;
+        const dedupVal = String(pushAt);
+        if (mmkvStorage.getString(dedupKey) === dedupVal) return;
+        mmkvStorage.setString(dedupKey, dedupVal);
 
         const answerAt = s.answerActionAt > 0 ? s.answerActionAt : null;
         const activateAt = s.didActivateAt > 0 ? s.didActivateAt : null;
@@ -66,6 +71,12 @@ export function useVoipReportTelemetry(): void {
           t != null && t >= pushAt ? Math.round((t - pushAt) * 1000) : null;
 
         analytics.capture(ANALYTICS_EVENTS.CALL.VOIP_PUSH_OUTCOME, {
+          // 'immediate' = at JS mount (survives an early death, but cold markers
+          // that happen later read null). 'settled' = +12s re-read, the complete
+          // picture. Query rule: prefer phase='settled' rows; fall back to
+          // immediate only when settled never arrived (app died in between —
+          // itself a finding).
+          phase,
           // Native UIApplicationState at push arrival (0=active,1=inactive,2=bg).
           push_app_state: s.voipPushAppState ?? null,
           // The chain. A null here is the finding: it says how far we got.
@@ -108,6 +119,14 @@ export function useVoipReportTelemetry(): void {
           cold_handoff_posted_count: s.coldHandoffPostedCount ?? null,
           cold_handoff_adopted_count: s.coldHandoffAdoptedCount ?? null,
           cold_disconnect_forwarded_ms: since(s.coldDisconnectForwardedAt ?? null),
+          // Per-step answer-handler markers (b147): pin the exact divergence line
+          // of the b146 answer-handler death, and report the self-heal/orphan.
+          cold_answer_guard_ok_ms: since(s.coldAnswerGuardOkAt ?? null),
+          cold_answer_guard_failed_ms: since(s.coldAnswerGuardFailedAt ?? null),
+          cold_accept_begin_ms: since(s.coldAcceptBeginAt ?? null),
+          cold_action_timeout_ms: since(s.coldActionTimeoutAt ?? null),
+          cold_recovered_at_connect_ms: since(s.coldRecoveredAtConnectAt ?? null),
+          cold_orphan_ms: since(s.coldOrphanAt ?? null),
           // Join key to call_* events (same Twilio CallSid) and to the Sentry
           // cold_callkit breadcrumbs of any crash in this window.
           cold_call_sid: s.coldLastCallSid || null,
@@ -117,9 +136,18 @@ export function useVoipReportTelemetry(): void {
       }
     };
 
-    void emitPushFunnelIfNew();
+    let settledTimer: ReturnType<typeof setTimeout> | null = null;
+    const emitBothPhases = () => {
+      void emitPushFunnelIfNew('immediate');
+      if (settledTimer) clearTimeout(settledTimer);
+      settledTimer = setTimeout(() => {
+        void emitPushFunnelIfNew('settled');
+      }, SETTLED_DELAY_MS);
+    };
+
+    emitBothPhases();
     const stateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void emitPushFunnelIfNew();
+      if (state === 'active') emitBothPhases();
     });
 
     // iOS memory warning via RN's own event (the NSUserDefaults path never worked).
@@ -131,6 +159,7 @@ export function useVoipReportTelemetry(): void {
     });
 
     return () => {
+      if (settledTimer) clearTimeout(settledTimer);
       stateSub.remove();
       memSub.remove();
     };

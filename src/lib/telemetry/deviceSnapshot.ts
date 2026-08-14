@@ -99,6 +99,18 @@ export interface NativeCallAudioState {
   coldDisconnectForwardedAt?: number;
   coldLastCallSid?: string;
   /**
+   * Per-step answer-handler markers (b147): guard passed/failed, accept begun,
+   * CXAction timeout, connect-time self-heal, and the orphan detector (module up
+   * + live CallKit call + nothing to hand off). Together they pin the exact line
+   * where the b146 answer-handler death occurred and whether the self-heal ran.
+   */
+  coldAnswerGuardOkAt?: number;
+  coldAnswerGuardFailedAt?: number;
+  coldAcceptBeginAt?: number;
+  coldActionTimeoutAt?: number;
+  coldRecoveredAtConnectAt?: number;
+  coldOrphanAt?: number;
+  /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.
    * `lastRouteChangeReason` is one of Unknown | NewDeviceAvailable |

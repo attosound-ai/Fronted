@@ -206,13 +206,19 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   @objc private func moduleDidInit() {
     moduleAlive = true
     NSLog("[AttoVoip] Twilio RN module alive")
-    // COLD-CALL HANDOFF (build 146). A call answered on the cold path lives only
-    // in OUR heldCalls; the RN module's callMap is empty, so voice.getCalls()
-    // returns nothing and JS renders ZERO in-call UI (no green header, no keypad,
-    // no landing) — exactly what David hit on the b145 FASE 1A test. The patched
-    // module subscribes to AttoColdCallHandoff BEFORE posting DidInit, and this
-    // post is synchronous, so by the time -init returns the module's maps hold
-    // the live call and the first JS getCalls() sees it.
+    moduleDidInitHandoff()
+  }
+
+  // COLD-CALL HANDOFF (build 146). A call answered on the cold path lives only
+  // in OUR heldCalls; the RN module's callMap is empty, so voice.getCalls()
+  // returns nothing and JS renders ZERO in-call UI (no green header, no keypad,
+  // no landing) — exactly what David hit on the b145 FASE 1A test. The patched
+  // module subscribes to AttoColdCallHandoff BEFORE posting DidInit, and this
+  // post is synchronous, so by the time -init returns the module's maps hold
+  // the live call and the first JS getCalls() sees it. Extracted (b147) so the
+  // callDidConnect SELF-HEAL can re-run it when a call is recovered after the
+  // module already booted.
+  private func moduleDidInitHandoff() {
     if !heldCalls.isEmpty {
       let fmt = ISO8601DateFormatter()
       var connectedAtISO: [String: String] = [:]
@@ -228,6 +234,13 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         ])
       UserDefaults.standard.set(heldCalls.count, forKey: "atto_cold_handoff_posted_count")
       mark("cold_handoff_posted")
+    } else if callKitHasLiveCall() {
+      // ORPHAN DETECTOR (b147): the module is up and CallKit shows a live call,
+      // but we hold nothing to hand off — the exact b146 signature (answer
+      // handler died before registering the call). The connect self-heal should
+      // make this unreachable; if it ever stamps, the accept path is still dying
+      // AND the call never connected through our delegate.
+      mark("cold_handoff_empty_but_call_live")
     }
   }
 
@@ -592,8 +605,14 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
     mark("cold_answerAction")
     guard let invite = heldInvites[action.callUUID.uuidString] else {
+      // Per-step markers (b147): the b146 field data showed cold_answerAction and
+      // cold_connected stamped but cold_accept NOT — the handler diverged
+      // somewhere in between and heldCalls stayed empty, killing the handoff.
+      // These markers turn the next occurrence into an exact line number.
+      mark("cold_answer_guard_failed")
       action.fail(); return
     }
+    mark("cold_answer_guard_ok")
     // Give the call an RTP audio device WITHOUT ever re-assigning it. The SDK's
     // TwilioVoiceSDK.audioDevice is non-optional and already holds a usable device:
     // the SDK's own DefaultAudioDevice on a true cold launch (injection off), or the
@@ -612,9 +631,20 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     let options = TwilioVoice.AcceptOptions(callInvite: invite) { builder in
       builder.uuid = action.callUUID
     }
+    mark("cold_accept_begin")
     let call = invite.accept(options: options, delegate: self)
     heldCalls[action.callUUID.uuidString] = call
     mark("cold_accept")
+    action.fulfill()
+  }
+
+  // Observability for the CallKit action machinery itself: if a handler dies
+  // mid-flight (e.g. an ObjC exception inside the SDK swallowed by CallKit's
+  // transaction machinery), the unfulfilled action times out HERE — which is
+  // otherwise invisible and leaves the answer half-done.
+  func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
+    mark("cold_action_timeout")
+    NSLog("[AttoColdCallKit] CXAction timed out: \\(type(of: action))")
     action.fulfill()
   }
 
@@ -654,7 +684,26 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func callDidConnect(call: TwilioVoice.Call) {
     mark("cold_connected")
-    if let uuid = call.uuid?.uuidString { heldCallConnectedAt[uuid] = Date() }
+    if let uuid = call.uuid?.uuidString {
+      heldCallConnectedAt[uuid] = Date()
+      // SELF-HEAL (b147). On David's b146 test the answer handler died between
+      // invite.accept and the heldCalls assignment (cold_accept never stamped),
+      // so heldCalls stayed EMPTY and the module handoff had nothing to post —
+      // zero in-call UI over a live call. This delegate callback carries the
+      // live TVOCall itself, so re-register it here: the handoff (and everything
+      // downstream — getCalls, JS adoption, UI) no longer depends on the accept
+      // line having survived. Idempotent when accept completed normally.
+      if heldCalls[uuid] == nil {
+        heldCalls[uuid] = call
+        mark("cold_call_recovered_at_connect")
+        // If the RN module was ALREADY up when this fired (accept-path death on a
+        // warm-ish boot), the handoff moment (moduleDidInit) has passed — post it
+        // NOW so the module still adopts the call.
+        if moduleAlive {
+          moduleDidInitHandoff()
+        }
+      }
+    }
     postColdCallEvent("connected", call: call)
   }
 

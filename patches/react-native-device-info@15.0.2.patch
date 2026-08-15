@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..fc49e9a81601ce6b6bc4f5e3e14220ffaf8c24cd 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..0d5a3f95d39f087ba08d8a8bcb471ea1b3cc2bf5 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,10 @@
@@ -33,7 +33,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..fc49e9a81601ce6b6bc4f5e3e14220ff
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,323 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,329 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -279,6 +279,12 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..fc49e9a81601ce6b6bc4f5e3e14220ff
 +        @"coldActionTimeoutAt": @([ud doubleForKey:@"atto_coldcallkit_cold_action_timeout_at"]),
 +        @"coldRecoveredAtConnectAt": @([ud doubleForKey:@"atto_coldcallkit_cold_call_recovered_at_connect_at"]),
 +        @"coldOrphanAt": @([ud doubleForKey:@"atto_coldcallkit_cold_handoff_empty_but_call_live_at"]),
++        // Engine preinstall at push (b152): whether the injection engine made it
++        // into the cold call's audio path BEFORE the media stack was created.
++        // preinstall_failed on a cold call = transmit will not work in that call.
++        @"coldEnginePreinstalledAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_preinstalled_at"]),
++        @"coldEngineAlreadyInstalledAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_already_installed_at"]),
++        @"coldEnginePreinstallFailedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_preinstall_failed_at"]),
 +    });
 +}
 +

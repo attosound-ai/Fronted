@@ -127,6 +127,12 @@ export function useVoipReportTelemetry(): void {
           cold_action_timeout_ms: since(s.coldActionTimeoutAt ?? null),
           cold_recovered_at_connect_ms: since(s.coldRecoveredAtConnectAt ?? null),
           cold_orphan_ms: since(s.coldOrphanAt ?? null),
+          // Injection engine in the cold call's audio path (b152): preinstalled
+          // at push / already there / failed. All-null with injection enabled on
+          // a cold call = transmit CANNOT work in that call.
+          cold_engine_preinstalled_ms: since(s.coldEnginePreinstalledAt ?? null),
+          cold_engine_already_ms: since(s.coldEngineAlreadyInstalledAt ?? null),
+          cold_engine_preinstall_failed_ms: since(s.coldEnginePreinstallFailedAt ?? null),
           // Join key to call_* events (same Twilio CallSid) and to the Sentry
           // cold_callkit breadcrumbs of any crash in this window.
           cold_call_sid: s.coldLastCallSid || null,

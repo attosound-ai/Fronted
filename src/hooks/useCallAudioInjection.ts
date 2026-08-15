@@ -26,19 +26,34 @@ import { getConnectivity } from '@/lib/net/connectivity';
  * user cancelled it themselves.
  */
 async function showInjectFailureToast(reason?: InjectReason): Promise<void> {
+  // Every user-visible transmit failure lands a row (b152): the Aug 15 cold-call
+  // "Couldn't send that into the call" left NOTHING queryable and the diagnosis
+  // had to come from device-install snapshots. The toast IS the user's
+  // experience — it must never be telemetry-silent.
+  const toastShown = (toast: string) => {
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_FAILED, {
+      outcome: 'toast_shown',
+      toast,
+      reason: reason ?? 'unknown',
+    });
+  };
   if (reason === 'superseded' || reason === 'not_permitted') return;
   if (reason === 'prepare_timeout' || reason === 'prepare_failed') {
     const conn = await getConnectivity();
     if (!conn.online) {
+      toastShown('offline');
       showToast(i18n.t('calls:transmit.offline'));
     } else if (reason === 'prepare_timeout' || conn.weak) {
+      toastShown('weak_signal');
       showToast(i18n.t('calls:transmit.weakSignal'));
     } else {
+      toastShown('failed');
       showToast(i18n.t('calls:transmit.failed'));
     }
     return;
   }
   // engine_error, not_connected, no_active_call, not_supported: a plain failure.
+  toastShown('failed');
   showToast(i18n.t('calls:transmit.failed'));
 }
 

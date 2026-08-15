@@ -383,6 +383,31 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     }
     reportedThisPush = true
 
+    // ENGINE PREINSTALL (b152). On a cold answer the media stack is created AT
+    // ACCEPT with whatever audio device is installed at that instant, and WebRTC
+    // forbids swapping it afterwards — so the injection engine could NEVER enter
+    // a cold call's audio path (telemetry: install_returned_false at every cold
+    // window; the transmit button then fails with "Couldn't send that into the
+    // call"). This is the ONE moment where installing it is guaranteed safe on a
+    // fresh process: before any decode/accept, no media stack exists. Gated on
+    // the SAME persisted flag the module's -init reads; done via the module's
+    // @try/@catch'd ObjC class method so a throw can never reach Swift (the b141
+    // crash class); success judged by reading the installed device's class back.
+    if UserDefaults.standard.bool(forKey: "atto_audio_injection_enabled") {
+      let beforeCls = String(describing: type(of: TwilioVoiceSDK.audioDevice))
+      if beforeCls == "AttoAudioEngineDevice" {
+        mark("cold_engine_already_installed")
+      } else if let engCls = NSClassFromString("AttoAudioEngineDevice") as? NSObject.Type,
+                let modCls = NSClassFromString("TwilioVoiceReactNative") as? NSObject.Type,
+                let dev = engCls.perform(NSSelectorFromString("sharedDevice"))?.takeUnretainedValue() {
+        _ = modCls.perform(NSSelectorFromString("attoSetAudioDevice:"), with: dev)
+        let afterCls = String(describing: type(of: TwilioVoiceSDK.audioDevice))
+        mark(afterCls == "AttoAudioEngineDevice" ? "cold_engine_preinstalled" : "cold_engine_preinstall_failed")
+      } else {
+        mark("cold_engine_preinstall_unavailable")
+      }
+    }
+
     // Now decode. callInviteReceived UPDATES this same call with the real caller
     // (one call in CallKit, not two); cancelled ends it.
     let recognized = TwilioVoiceSDK.handleNotification(

@@ -110,6 +110,11 @@ export interface NativeCallAudioState {
   coldActionTimeoutAt?: number;
   coldRecoveredAtConnectAt?: number;
   coldOrphanAt?: number;
+  /** Engine preinstall at push (b152): was the injection engine put into the
+   *  cold call's audio path before the media stack existed? */
+  coldEnginePreinstalledAt?: number;
+  coldEngineAlreadyInstalledAt?: number;
+  coldEnginePreinstallFailedAt?: number;
   /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.

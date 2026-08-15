@@ -394,14 +394,15 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // @try/@catch'd ObjC class method so a throw can never reach Swift (the b141
     // crash class); success judged by reading the installed device's class back.
     if UserDefaults.standard.bool(forKey: "atto_audio_injection_enabled") {
-      let beforeCls = String(describing: type(of: TwilioVoiceSDK.audioDevice))
+      // Swift.type: the handler parameter named type (PKPushType) shadows type(of:).
+      let beforeCls = String(describing: Swift.type(of: TwilioVoiceSDK.audioDevice))
       if beforeCls == "AttoAudioEngineDevice" {
         mark("cold_engine_already_installed")
       } else if let engCls = NSClassFromString("AttoAudioEngineDevice") as? NSObject.Type,
                 let modCls = NSClassFromString("TwilioVoiceReactNative") as? NSObject.Type,
                 let dev = engCls.perform(NSSelectorFromString("sharedDevice"))?.takeUnretainedValue() {
         _ = modCls.perform(NSSelectorFromString("attoSetAudioDevice:"), with: dev)
-        let afterCls = String(describing: type(of: TwilioVoiceSDK.audioDevice))
+        let afterCls = String(describing: Swift.type(of: TwilioVoiceSDK.audioDevice))
         mark(afterCls == "AttoAudioEngineDevice" ? "cold_engine_preinstalled" : "cold_engine_preinstall_failed")
       } else {
         mark("cold_engine_preinstall_unavailable")

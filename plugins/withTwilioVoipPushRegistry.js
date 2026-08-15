@@ -182,7 +182,14 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     let config = CXProviderConfiguration()
     config.maximumCallGroups = 1
     config.maximumCallsPerCallGroup = 1
-    config.supportsVideo = false
+    // VIDEO-CALL trick, ported from the warm path's b97 module patch (b150): an
+    // audio-only CallKit call CANNOT self-foreground the app after a locked
+    // answer — marking the call as video (supportsVideo here + hasVideo on every
+    // CXCallUpdate) is the Apple-DTS-sanctioned way to make iOS launch ATTO into
+    // the foreground on unlock, which is what guarantees the recorder landing a
+    // window to fire in (David's b149 Intento B: 13s call, never foregrounded,
+    // landing correctly waited on blocked_not_active and the call ended first).
+    config.supportsVideo = true
     config.supportedHandleTypes = [.generic, .phoneNumber]
     let provider = CXProvider(configuration: config)
     provider.setDelegate(self, queue: nil)
@@ -367,7 +374,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     coldReportUUID = uuid
     let placeholder = CXCallUpdate()
     placeholder.remoteHandle = CXHandle(type: .generic, value: "Incoming call")
-    placeholder.hasVideo = false
+    placeholder.hasVideo = true // video-call trick: see supportsVideo note above
     coldProvider?.reportNewIncomingCall(with: uuid, update: placeholder) { [weak self] error in
       guard let self = self else { return }
       self.recordReportOutcome(error == nil ? "cold_reported" : "cold_report_error", attempt: 0)
@@ -440,7 +447,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
       let uuid = UUID()
       let update = CXCallUpdate()
       update.remoteHandle = CXHandle(type: .generic, value: "Incoming call")
-      update.hasVideo = false
+      update.hasVideo = true // video-call trick: see supportsVideo note above
       coldProvider?.reportNewIncomingCall(with: uuid, update: update) { [weak self] _ in
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
           self?.coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
@@ -526,7 +533,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     update.supportsHolding = true
     update.supportsGrouping = false
     update.supportsUngrouping = false
-    update.hasVideo = false
+    update.hasVideo = true // video-call trick: see supportsVideo note above
     return update
   }
 

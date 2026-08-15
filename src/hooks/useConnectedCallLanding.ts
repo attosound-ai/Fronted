@@ -18,23 +18,28 @@ import { isOnCallScreen, isCallConnected } from '@/hooks/useInCallChrome';
  */
 export const INCALL_EDITOR_AUTOLOAD_FLAG = 'incall_editor_autoload';
 
+/** Re-evaluate every 1.5s while a connected call hasn't landed, for up to 60s. */
+const TICK_MS = 1500;
+const MAX_TICKS = 40;
+
 /**
  * useConnectedCallLanding — bring the RECORDER to the foreground for an eligible
  * creator whenever a call is active, no matter HOW the call was answered. Mounted
  * once in (tabs)/_layout so it's alive for every entry path.
  *
- * THE hard case (David, Jul 2026): the phone is LOCKED / screen off (or the app
- * was killed), the call is answered from the native CallKit lock-screen UI, and
- * the user then UNLOCKS while still on the call. iOS does not let any app
- * foreground itself — the ONLY sanctioned trigger is marking the call as a
- * "video" call, which makes iOS launch us into the foreground on unlock (see the
- * hasVideo/supportsVideo patch in TwilioVoiceReactNative+CallKit.m). This hook is
- * the JS half: the instant we ARE foregrounded during an active call, land the
- * eligible user on the recorder — cleanly, with no feed flash.
+ * REWRITTEN (b149) after David's b148 Intento B: the call was adopted while the
+ * phone was LOCKED (app background), the landing effect hit a SILENT gate, and
+ * after unlock nothing re-evaluated — the creator stayed on the feed with no
+ * telemetry saying why. Two structural fixes:
  *
- * Fires on BOTH triggers so every path is covered:
- *   1. call transitions to connected (answered in-app / warm)
- *   2. app returns to the foreground while a call is connected (the unlock case)
+ *  1. A bounded TICKER re-evaluates every 1.5s while a connected call hasn't
+ *     landed. Landing no longer depends on the reactive re-render of any
+ *     third-party hook (PostHog flag loading, router readiness, AppState timing,
+ *     subscription resolution) happening to fire in the right order — any
+ *     transient gate clears on a later tick.
+ *  2. EVERY gate emits a call_landing_skipped row (deduped per call+reason), so
+ *     "it did not land" is always answerable from PostHog, never a guess. A
+ *     final gave_up row reports the blocking gate if the 60s budget runs out.
  *
  * Eligibility (David's scope: "creadores con subscripción activa"):
  *   role === 'creator'  AND  record_upload entitlement === true.
@@ -59,20 +64,26 @@ export function useConnectedCallLanding(): void {
   const pathname = usePathname();
   const navReady = useRootNavigationState()?.key != null;
 
-  // Default OFF → no auto-open of the memory-heavy editor (see flag doc above).
-  const autoLandEnabled = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
+  // Reactive flag read, PLUS an imperative read inside the evaluator below: on a
+  // background cold launch the reactive hook can be stale/unloaded at mount and
+  // its re-render is not guaranteed to arrive — the ticker + imperative read are.
+  const autoLandFlagReactive = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
 
   const landedForSid = useRef<string | null>(null);
   const fetchedForSid = useRef<string | null>(null);
-  // Emit ONE landing-skip row per (call, reason) so a creator who lands on the
-  // feed instead of the recorder self-reports WHICH gate stopped it, instead of
-  // us guessing (Anthony, Aug 11: "opens to the feed, not the recording suite").
-  const loggedSkipRef = useRef<string | null>(null);
-  const logSkip = (sid: string, reason: string) => {
+  // One landing-skip row per (call, reason) — a Set, not a last-wins slot, so two
+  // alternating reasons can't re-emit each other forever.
+  const loggedSkips = useRef<Set<string>>(new Set());
+  const logSkip = (sid: string, reason: string, extra?: Record<string, unknown>) => {
     const key = `${sid}:${reason}`;
-    if (loggedSkipRef.current === key) return;
-    loggedSkipRef.current = key;
-    analytics.capture(ANALYTICS_EVENTS.CALL.LANDING_SKIPPED, { call_sid: sid, reason });
+    if (loggedSkips.current.has(key)) return;
+    loggedSkips.current.add(key);
+    analytics.capture(ANALYTICS_EVENTS.CALL.LANDING_SKIPPED, {
+      call_sid: sid,
+      reason,
+      app_state: AppState.currentState,
+      ...extra,
+    });
   };
 
   // App foreground/active is not a reactive store — bump state on transitions so
@@ -83,19 +94,65 @@ export function useConnectedCallLanding(): void {
     return () => sub.remove();
   }, []);
 
+  // TICKER: while a connected call hasn't landed, bump `tick` so the evaluator
+  // below re-runs on a clock, independent of any reactive dependency firing.
+  const [tick, setTick] = useState(0);
+  const ticksForSid = useRef<{ sid: string; n: number } | null>(null);
   useEffect(() => {
     if (!isCallConnected(callState) || !callSid) return;
-    // Relief: without the flag we never auto-open the editor (OOM mitigation).
-    if (!autoLandEnabled) return;
-    if (!appActive || !navReady) return; // only act once we're actually foregrounded
     if (landedForSid.current === callSid) return;
+    const interval = setInterval(() => {
+      const t = ticksForSid.current;
+      ticksForSid.current =
+        t && t.sid === callSid ? { sid: callSid, n: t.n + 1 } : { sid: callSid, n: 1 };
+      if (ticksForSid.current.n > MAX_TICKS) {
+        clearInterval(interval);
+        return;
+      }
+      setTick((v) => v + 1);
+    }, TICK_MS);
+    return () => clearInterval(interval);
+  }, [callState, callSid]);
+
+  useEffect(() => {
+    if (!isCallConnected(callState) || !callSid) return;
+    if (landedForSid.current === callSid) return;
+    const tickN = ticksForSid.current?.sid === callSid ? ticksForSid.current.n : 0;
+    // Report the blocking gate WITHOUT spamming: after ~4.5s of blockage emit ONE
+    // blocked_<reason> row (so even a short call tells us its first real blocker),
+    // and if the 60s budget runs out, ONE gave_up_<reason> naming the final one.
+    const blockedBy = (reason: string, extra?: Record<string, unknown>) => {
+      if (tickN >= 3) logSkip(callSid, `blocked_${reason}`, { ...extra, ticks: tickN });
+      if (tickN >= MAX_TICKS)
+        logSkip(callSid, `gave_up_${reason}`, { ...extra, ticks: tickN });
+    };
+
+    // Relief: without the flag we never auto-open the editor (OOM mitigation).
+    // Imperative read beats a stale reactive value; either source unlocks.
+    const autoLand =
+      autoLandFlagReactive ||
+      analytics.isFeatureEnabled(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
+    if (!autoLand) {
+      blockedBy('flag_off');
+      return;
+    }
+    if (!appActive) {
+      blockedBy('not_active');
+      return; // only act once we're actually foregrounded
+    }
+    if (!navReady) {
+      blockedBy('nav_not_ready');
+      return;
+    }
     // /call owns its own hand-off; the recorder means we already landed.
     if (isOnCallScreen(pathname) || pathname.includes('/recording')) {
       landedForSid.current = callSid;
+      logSkip(callSid, 'already_on_target', { pathname });
       return;
     }
     if (role !== 'creator') {
-      logSkip(callSid, 'not_creator'); // recorder is a creator surface
+      // Definitive for this call (role does not change mid-call).
+      logSkip(callSid, 'not_creator', { role: role ?? null });
       return;
     }
 
@@ -110,13 +167,11 @@ export function useConnectedCallLanding(): void {
         void useSubscriptionStore.getState().fetchSubscription();
         return;
       }
-      // Already fetched for this call. Still loading → wait for the reactive
-      // re-run. But if the fetch FAILED (transient network on cold launch), don't
-      // strand the creator forever — land them optimistically; the recorder
-      // tolerates an unresolved sub, and a creator answering a call should reach
-      // it rather than be stuck on the feed because a request timed out.
+      // Already fetched for this call. Still loading → the ticker re-checks. If
+      // the fetch FAILED (transient network on cold launch), don't strand the
+      // creator — land optimistically; the recorder tolerates an unresolved sub.
       if (!lastFetchFailed) {
-        logSkip(callSid, 'sub_unresolved');
+        blockedBy('sub_unresolved');
         return;
       }
     }
@@ -129,6 +184,7 @@ export function useConnectedCallLanding(): void {
       entitlement_record_upload: recordUpload,
       fetch_failed: recordUpload === null,
       app_state: AppState.currentState,
+      ticks_to_land: tickN,
     });
     router.replace('/(tabs)/recording');
   }, [
@@ -140,6 +196,7 @@ export function useConnectedCallLanding(): void {
     appActive,
     navReady,
     pathname,
-    autoLandEnabled,
+    autoLandFlagReactive,
+    tick,
   ]);
 }

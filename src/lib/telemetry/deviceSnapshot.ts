@@ -181,6 +181,7 @@ const RNDeviceInfoNative = (
         liveOutputPort: string;
         error: string;
       }>;
+      showAudioRoutePicker?: () => Promise<{ ok: boolean; reason?: string }>;
     };
   }
 ).RNDeviceInfo;
@@ -200,6 +201,26 @@ export async function setSpeakerOutput(
     if (!RNDeviceInfoNative?.setSpeakerOutput) return null;
     const r = await RNDeviceInfoNative.setSpeakerOutput(enable);
     return { ok: r.ok, liveOutputPort: r.liveOutputPort };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Present the SYSTEM audio route picker (AVRoutePickerView) — the popup listing
+ * AirPods / iPhone / Speaker. Native-layer presentation, so it cannot be blocked
+ * by JS sheets (what killed the old ActionSheet picker in b98). Returns ok:false
+ * with a reason when the native trigger could not fire, so the caller can fall
+ * back to the direct speaker toggle — a tap must never be a no-op.
+ */
+export async function showAudioRoutePicker(): Promise<{
+  ok: boolean;
+  reason?: string;
+} | null> {
+  if (Platform.OS !== 'ios') return null;
+  try {
+    if (!RNDeviceInfoNative?.showAudioRoutePicker) return null;
+    return await RNDeviceInfoNative.showAudioRoutePicker();
   } catch {
     return null;
   }

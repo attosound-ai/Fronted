@@ -28,6 +28,7 @@ import {
   getCallAudioState,
   resolveRouteChangeReason,
   formatRouteChangeRing,
+  showAudioRoutePicker,
 } from '@/lib/telemetry/deviceSnapshot';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
@@ -1983,6 +1984,44 @@ export async function toggleSpeaker() {
   };
 
   try {
+    // ROUTE PICKER branch (b151). With a Bluetooth device connected there are 3+
+    // possible outputs and a binary override just FIGHTS iOS: telemetry showed
+    // the Override to Speaker snapped back to BluetoothHFP in under a second
+    // (David, AirPods test). Present the SYSTEM route picker instead
+    // (AVRoutePickerView) — native-layer presentation, immune to the JS
+    // sheet-stacking that killed the old ActionSheet picker in b98. Detection is
+    // the same rule the old picker used: Twilio's device list has >2 entries
+    // only when an external (Bluetooth) route exists. Every failure falls
+    // through to the direct toggle — a tap is never a no-op.
+    if (Platform.OS === 'ios') {
+      try {
+        const voice = voiceInstance;
+        const { audioDevices } = voice
+          ? await voice.getAudioDevices()
+          : { audioDevices: null };
+        if (audioDevices && audioDevices.length > 2) {
+          const shown = await showAudioRoutePicker();
+          if (shown?.ok) {
+            finish({
+              outcome: 'picker_shown',
+              device_count: audioDevices.length,
+            });
+            return;
+          }
+          // Native picker unavailable (no_button_subview on a future iOS, etc.)
+          // → record it and fall through to the direct toggle.
+          analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+            want_speaker: wantSpeaker,
+            outcome: 'picker_fallback',
+            picker_reason: shown?.reason ?? 'unavailable',
+            device_count: audioDevices.length,
+          });
+        }
+      } catch {
+        /* device enumeration failed — the direct toggle below still works */
+      }
+    }
+
     // Record the user's choice in the store FIRST, before any await. The connect
     // reclaim (ensureAudioRoute) reads activeCall.isSpeaker to decide whether to
     // force earpiece; if we set it only AFTER the native+Twilio awaits (~50-200ms),

@@ -1,18 +1,19 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..1072d550a3696c804582a3a5435438f814dc7254 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..fc49e9a81601ce6b6bc4f5e3e14220ffaf8c24cd 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
-@@ -10,7 +10,9 @@
+@@ -10,7 +10,10 @@
  #include <arpa/inet.h>
  #import <mach/mach.h>
  #import <mach-o/arch.h>
 +#import <os/proc.h>
  #import <CoreLocation/CoreLocation.h>
 +#import <AVFoundation/AVFoundation.h>
++#import <AVKit/AVKit.h>
  #import <React/RCTUtils.h>
  #import "RNDeviceInfo.h"
  #import "DeviceUID.h"
-@@ -104,6 +106,19 @@ - (id)init
+@@ -104,6 +107,19 @@ - (id)init
                                                   selector:@selector(headphoneBluetoothConnectionDidChange:)
                                                       name:AVAudioSessionRouteChangeNotification
                                                     object: [AVAudioSession sharedInstance]];
@@ -32,7 +33,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..1072d550a3696c804582a3a5435438f8
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +979,275 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,323 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -302,6 +303,54 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..1072d550a3696c804582a3a5435438f8
 +        @"requestedSpeaker": @(enable),
 +        @"liveOutputPort": out,
 +        @"error": (err ? err.localizedDescription : @""),
++    });
++}
++
++// ATTO (build 151): present the SYSTEM audio route picker (AVRoutePickerView),
++// the popup listing AirPods / iPhone / Speaker. The old JS ActionSheet picker
++// was removed Aug 2 because it silently failed to present over the recording
++// screen's bottom sheets; this presents from the NATIVE layer, which no JS view
++// hierarchy can block. Used by the in-call speaker button when a Bluetooth
++// device is connected (3+ outputs) — a binary override there just fights iOS,
++// which snaps the route back to Bluetooth in under a second (verified in
++// call_audio_session_changed telemetry). Falls back gracefully: if the internal
++// button can't be found (future iOS relayout), returns ok:NO and JS uses the
++// direct toggle instead — a tap is never a no-op.
++RCT_EXPORT_METHOD(showAudioRoutePicker:(RCTPromiseResolveBlock)resolve
++                              rejecter:(RCTPromiseRejectBlock)reject) {
++    dispatch_async(dispatch_get_main_queue(), ^{
++        UIWindow *keyWindow = nil;
++        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
++            if (![scene isKindOfClass:[UIWindowScene class]]) { continue; }
++            for (UIWindow *w in ((UIWindowScene *)scene).windows) {
++                if (w.isKeyWindow) { keyWindow = w; break; }
++            }
++            if (keyWindow) { break; }
++        }
++        if (!keyWindow) {
++            resolve(@{@"ok": @NO, @"reason": @"no_key_window"});
++            return;
++        }
++        AVRoutePickerView *picker = [[AVRoutePickerView alloc] initWithFrame:CGRectMake(0, 0, 1, 1)];
++        // Must be attached and not fully transparent for the tap to register.
++        picker.alpha = 0.02;
++        [keyWindow addSubview:picker];
++        UIButton *button = nil;
++        for (UIView *sub in picker.subviews) {
++            if ([sub isKindOfClass:[UIButton class]]) { button = (UIButton *)sub; break; }
++        }
++        if (!button) {
++            [picker removeFromSuperview];
++            resolve(@{@"ok": @NO, @"reason": @"no_button_subview"});
++            return;
++        }
++        [button sendActionsForControlEvents:UIControlEventTouchUpInside];
++        // Keep the anchor view alive while the system popover is up, then clean.
++        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
++                       dispatch_get_main_queue(), ^{
++            [picker removeFromSuperview];
++        });
++        resolve(@{@"ok": @YES});
 +    });
 +}
 +

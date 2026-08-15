@@ -2604,8 +2604,20 @@ export function useTwilioVoice() {
     // it. All probes dedup per callSid, so retries are free when nothing is
     // there and harmless when adoption already happened.
     void adoptNativeColdCall('boot_probe');
-    const probeRetry3s = setTimeout(() => void adoptNativeColdCall('retry_3s'), 3000);
-    const probeRetry10s = setTimeout(() => void adoptNativeColdCall('retry_10s'), 10000);
+    // Poll ladder (b148): the handoff can land at ANY moment during the ring
+    // window (the user may answer 5-40s after the module boots), so fixed 3s/10s
+    // retries missed answers outside those instants. Poll every 2s for 40s
+    // (CallKit's ring window), stopping as soon as a call is adopted or JS
+    // already tracks one. Each tick is one cheap native getCalls round-trip.
+    let probeTicks = 0;
+    const probeInterval = setInterval(() => {
+      probeTicks += 1;
+      if (probeTicks > 20 || useCallStore.getState().activeCall) {
+        clearInterval(probeInterval);
+        return;
+      }
+      void adoptNativeColdCall(`poll_${probeTicks * 2}s`);
+    }, 2000);
     const coldProbeSub = AppState.addEventListener('change', (s) => {
       if (s === 'active') void adoptNativeColdCall('foreground_probe');
     });
@@ -2687,8 +2699,7 @@ export function useTwilioVoice() {
       // will no longer match `currentRegistrationGen` and it'll bail.
       currentRegistrationGen++;
       clearInterval(refreshInterval);
-      clearTimeout(probeRetry3s);
-      clearTimeout(probeRetry10s);
+      clearInterval(probeInterval);
       coldProbeSub.remove();
       voice.off(Voice.Event.CallInvite, onCallInvite);
       // Fire-and-forget; do not block React unmount on a network round-trip.

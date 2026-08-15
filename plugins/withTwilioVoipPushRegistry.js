@@ -234,12 +234,13 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         ])
       UserDefaults.standard.set(heldCalls.count, forKey: "atto_cold_handoff_posted_count")
       mark("cold_handoff_posted")
-    } else if callKitHasLiveCall() {
-      // ORPHAN DETECTOR (b147): the module is up and CallKit shows a live call,
-      // but we hold nothing to hand off — the exact b146 signature (answer
-      // handler died before registering the call). The connect self-heal should
-      // make this unreachable; if it ever stamps, the accept path is still dying
-      // AND the call never connected through our delegate.
+    } else if callObserver.calls.contains(where: { $0.hasConnected && !$0.hasEnded }) {
+      // ORPHAN DETECTOR (refined b148): only a CONNECTED live call with nothing
+      // to hand off is an orphan. The b147 version also fired for a RINGING call
+      // at module init — which is the NORMAL fast-boot order (module up before
+      // the human answers), not a fault; that fire was the clue that exposed the
+      // ordering bug, but as a permanent alarm it must mean "connected call
+      // invisible to JS".
       mark("cold_handoff_empty_but_call_live")
     }
   }
@@ -635,6 +636,12 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     let call = invite.accept(options: options, delegate: self)
     heldCalls[action.callUUID.uuidString] = call
     mark("cold_accept")
+    // ORDER-2 HANDOFF (b148, the ACTUAL b145/146/147 no-UI bug). RN boots FAST
+    // (1.26s on David's phone) while a human answers at 5-8s — so the module was
+    // already up when the call got accepted, the moduleDidInit handoff moment had
+    // long passed (with nothing to hand off then: the call was still ringing),
+    // and nobody ever handed the accepted call over. Post it RIGHT HERE.
+    if moduleAlive { moduleDidInitHandoff() }
     action.fulfill()
   }
 
@@ -696,12 +703,13 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
       if heldCalls[uuid] == nil {
         heldCalls[uuid] = call
         mark("cold_call_recovered_at_connect")
-        // If the RN module was ALREADY up when this fired (accept-path death on a
-        // warm-ish boot), the handoff moment (moduleDidInit) has passed — post it
-        // NOW so the module still adopts the call.
-        if moduleAlive {
-          moduleDidInitHandoff()
-        }
+      }
+      // Re-post the handoff on EVERY connect when the module is up (b148): covers
+      // the accept-path-death recovery AND the fast-boot order where the accept
+      // handoff raced the module observer. Idempotent — the module overwrites the
+      // same keys and JS dedups adoption per callSid.
+      if moduleAlive {
+        moduleDidInitHandoff()
       }
     }
     postColdCallEvent("connected", call: call)

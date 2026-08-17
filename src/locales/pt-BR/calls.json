@@ -97,5 +97,10 @@
     "preparing": "Carregando faixa...",
     "noTrack": "Abra um projeto com uma faixa primeiro."
   },
-  "recordingSavedOffline": "Sinal fraco. Sua gravação foi salva neste telefone e será enviada quando reconectar."
+  "recordingSavedOffline": "Sinal fraco. Sua gravação foi salva neste telefone e será enviada quando reconectar.",
+  "routePicker": {
+    "title": "Áudio",
+    "earpiece": "iPhone (ouvido)",
+    "speaker": "Alto-falante"
+  }
 }

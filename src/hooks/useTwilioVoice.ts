@@ -28,7 +28,6 @@ import {
   getCallAudioState,
   resolveRouteChangeReason,
   formatRouteChangeRing,
-  showAudioRoutePicker,
 } from '@/lib/telemetry/deviceSnapshot';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
@@ -1984,15 +1983,16 @@ export async function toggleSpeaker() {
   };
 
   try {
-    // ROUTE PICKER branch (b151). With a Bluetooth device connected there are 3+
-    // possible outputs and a binary override just FIGHTS iOS: telemetry showed
-    // the Override to Speaker snapped back to BluetoothHFP in under a second
-    // (David, AirPods test). Present the SYSTEM route picker instead
-    // (AVRoutePickerView) — native-layer presentation, immune to the JS
-    // sheet-stacking that killed the old ActionSheet picker in b98. Detection is
-    // the same rule the old picker used: Twilio's device list has >2 entries
-    // only when an external (Bluetooth) route exists. Every failure falls
-    // through to the direct toggle — a tap is never a no-op.
+    // ROUTE PICKER branch (b155). With a Bluetooth device connected there are 3
+    // real choices (Bluetooth / earpiece / speaker) and a binary toggle can't
+    // express them. NOT the system AVRoutePickerView (b151's attempt): it lists
+    // DEVICES, not ports, so with a speaker override active the earpiece choice
+    // simply does not exist in it (David's b154 test: only "iPhone Speaker" +
+    // AirPods). Our OWN sheet instead, hosted globally like the DTMF keypad —
+    // which presents fine over the recording screen, the exact failure mode
+    // that killed the old ActionSheet in b98. Detection is the old picker's
+    // rule: Twilio's device list has >2 entries only when an external
+    // (Bluetooth) route exists. Failure falls through to the direct toggle.
     if (Platform.OS === 'ios') {
       try {
         const voice = voiceInstance;
@@ -2000,22 +2000,12 @@ export async function toggleSpeaker() {
           ? await voice.getAudioDevices()
           : { audioDevices: null };
         if (audioDevices && audioDevices.length > 2) {
-          const shown = await showAudioRoutePicker();
-          if (shown?.ok) {
-            finish({
-              outcome: 'picker_shown',
-              device_count: audioDevices.length,
-            });
-            return;
-          }
-          // Native picker unavailable (no_button_subview on a future iOS, etc.)
-          // → record it and fall through to the direct toggle.
-          analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
-            want_speaker: wantSpeaker,
-            outcome: 'picker_fallback',
-            picker_reason: shown?.reason ?? 'unavailable',
+          useCallStore.getState().showRoutePicker();
+          finish({
+            outcome: 'sheet_shown',
             device_count: audioDevices.length,
           });
+          return;
         }
       } catch {
         /* device enumeration failed — the direct toggle below still works */
@@ -2080,6 +2070,73 @@ export async function toggleSpeaker() {
       outcome: 'error',
       error: err instanceof Error ? err.message : String(err),
     });
+  }
+}
+
+/** First connected Bluetooth output's display name, or null (feeds the sheet row). */
+export async function getBluetoothDeviceName(): Promise<string | null> {
+  try {
+    const voice = voiceInstance;
+    if (!voice) return null;
+    const { AudioDevice } = getTwilio();
+    const { audioDevices } = await voice.getAudioDevices();
+    const bt = audioDevices?.find((d: any) => d.type === AudioDevice.Type.Bluetooth);
+    return bt?.name ?? 'Bluetooth';
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Route the call's audio to one of the THREE real outputs (b155) — the actions
+ * behind our route-picker sheet. Levers are the proven ones only:
+ *  - speaker: AVAudioSession port override (the b98 canonical speaker lever)
+ *  - earpiece: clear the override + Twilio Earpiece select
+ *  - bluetooth: clear the override + Twilio Bluetooth select
+ * Every outcome lands in call_speaker_toggled with the resulting live port, so
+ * "picked X but got Y" is always visible in data.
+ */
+export async function selectAudioRoute(
+  target: 'bluetooth' | 'earpiece' | 'speaker'
+): Promise<void> {
+  const report = (extra: Record<string, unknown>) => {
+    analytics.capture(ANALYTICS_EVENTS.CALL.SPEAKER_TOGGLED, {
+      outcome: 'route_selected',
+      target,
+      ...extra,
+    });
+  };
+  try {
+    useCallStore.getState().setSpeaker(target === 'speaker');
+    let nativeResult: { ok: boolean; liveOutputPort: string } | null = null;
+    if (target === 'speaker') {
+      nativeResult = await setSpeakerOutput(true);
+    } else {
+      nativeResult = await setSpeakerOutput(false); // clear any speaker override
+      try {
+        const voice = voiceInstance;
+        if (voice) {
+          const { AudioDevice } = getTwilio();
+          const { audioDevices } = await voice.getAudioDevices();
+          const wanted =
+            target === 'bluetooth'
+              ? AudioDevice.Type.Bluetooth
+              : AudioDevice.Type.Earpiece;
+          const dev = audioDevices?.find((d: any) => d.type === wanted);
+          if (dev) await dev.select();
+        }
+      } catch {
+        /* Twilio select is best-effort; the override clear already re-routes */
+      }
+    }
+    // Read the LIVE port back so the row records what actually happened.
+    const live = await getCallAudioState();
+    report({
+      native_ok: nativeResult?.ok ?? null,
+      live_output_port: live?.liveOutputPort ?? nativeResult?.liveOutputPort ?? null,
+    });
+  } catch (err: unknown) {
+    report({ error: err instanceof Error ? err.message : String(err) });
   }
 }
 

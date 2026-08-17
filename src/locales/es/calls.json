@@ -97,5 +97,10 @@
     "preparing": "Cargando pista...",
     "noTrack": "Abre un proyecto con una pista primero."
   },
-  "recordingSavedOffline": "Señal débil. Tu grabación quedó guardada en este teléfono y se subirá al reconectar."
+  "recordingSavedOffline": "Señal débil. Tu grabación quedó guardada en este teléfono y se subirá al reconectar.",
+  "routePicker": {
+    "title": "Audio",
+    "earpiece": "iPhone (oído)",
+    "speaker": "Altavoz"
+  }
 }

@@ -97,5 +97,10 @@
     "preparing": "Loading track...",
     "noTrack": "Open a project with a track first."
   },
-  "recordingSavedOffline": "Weak signal. Your recording is saved on this phone and will upload when you reconnect."
+  "recordingSavedOffline": "Weak signal. Your recording is saved on this phone and will upload when you reconnect.",
+  "routePicker": {
+    "title": "Audio",
+    "earpiece": "iPhone",
+    "speaker": "Speaker"
+  }
 }

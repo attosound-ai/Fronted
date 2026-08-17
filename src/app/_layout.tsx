@@ -46,6 +46,7 @@ import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
+import { AudioRoutePickerHost } from '@/components/call/AudioRoutePickerHost';
 import { CallAudioInjectionHost } from '@/components/call/CallAudioInjectionHost';
 import { MixerHost } from '@/components/call/MixerHost';
 import { AudioProblemHost } from '@/components/call/AudioProblemHost';
@@ -348,6 +349,7 @@ function RootLayout() {
                     <UpdateRequiredGate key={deepResumeKey}>
                       <InCallTopBar />
                       <DtmfKeypadHost />
+                      <AudioRoutePickerHost />
                       <CallAudioInjectionHost />
                       <MixerHost />
                       <AudioProblemHost />

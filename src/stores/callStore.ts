@@ -10,6 +10,7 @@ interface CallStoreState {
   // DTMF keypad overlay visibility. Lives at store level (not on ActiveCall)
   // so a single global host can render the sheet for every call surface.
   keypadVisible: boolean;
+  routePickerVisible: boolean;
   // Live audio-injection snapshot (a phone-side track played INTO the call).
   // Store-level for the same reason as keypadVisible — a single global host
   // (CallAudioInjectionHost) renders the now-playing UI for every call surface.
@@ -50,6 +51,14 @@ interface CallStoreActions {
   setActiveProjectId: (id: string | null) => void;
   showKeypad: () => void;
   hideKeypad: () => void;
+  /**
+   * Audio route picker sheet (b155). Our OWN 3-option sheet (Bluetooth / oído /
+   * altavoz): the system AVRoutePickerView lists DEVICES, not ports, so with a
+   * speaker override active the earpiece option simply does not exist there.
+   * Store-level like keypadVisible: one global host serves every call surface.
+   */
+  showRoutePicker: () => void;
+  hideRoutePicker: () => void;
   setInjection: (snapshot: InjectionSnapshot | null) => void;
   setNetworkWeak: (weak: boolean) => void;
   endCall: () => void;
@@ -61,6 +70,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   isRegistered: false,
   registrationError: null,
   keypadVisible: false,
+  routePickerVisible: false,
   injection: null,
   networkWeak: false,
 
@@ -185,6 +195,9 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   showKeypad: () => set({ keypadVisible: true }),
   hideKeypad: () => set({ keypadVisible: false }),
 
+  showRoutePicker: () => set({ routePickerVisible: true }),
+  hideRoutePicker: () => set({ routePickerVisible: false }),
+
   setInjection: (snapshot) => set({ injection: snapshot }),
 
   setNetworkWeak: (weak) => set({ networkWeak: weak }),
@@ -194,6 +207,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
       activeCall: null,
       activeProjectId: null,
       keypadVisible: false,
+      routePickerVisible: false,
       injection: null,
       networkWeak: false,
     }),

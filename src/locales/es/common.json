@@ -40,7 +40,8 @@
     "couldNotLink": "No se pudo vincular la grabación: {{message}}",
     "couldNotLoadRecording": "No se pudo cargar la grabación: {{message}}",
     "recordingNotFound": "Grabación no encontrada",
-    "recordingNotFoundMessage": "La grabación está tardando más de lo esperado en procesarse. Inténtalo de nuevo en unos segundos."
+    "recordingNotFoundMessage": "La grabación está tardando más de lo esperado en procesarse. Inténtalo de nuevo en unos segundos.",
+    "recordUseCallMode": "No se puede grabar así durante una llamada. Usa el grabador de llamada."
   },
   "time": {
     "now": "ahora",

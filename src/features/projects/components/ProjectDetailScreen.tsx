@@ -13,6 +13,7 @@ import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCallStore } from '@/stores/callStore';
 import { X, Trash2, Mic } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -52,6 +53,10 @@ export function ProjectDetailScreen({
   const editorWasOpened = useRef(false);
   const { isPreloading, progress, preloadEditor } = usePreloadEditor(data?.clips ?? []);
   const setPendingAudio = useCreatePostStore((s) => s.setPendingAudio);
+  // Drives recordingMode below: this screen is reachable DURING a live call (the
+  // in-call editor landing opens it), and recording works completely differently
+  // there. See the recordingMode prop for the failure this prevents.
+  const activeCall = useCallStore((s) => s.activeCall);
 
   // In publish mode, auto-open the editor ONCE when data is loaded
   useEffect(() => {
@@ -139,6 +144,17 @@ export function ProjectDetailScreen({
 
     return (
       <TimelineEditor
+        // RECORD DURING A CALL (build 156). Without this the editor fell back to
+        // the default 'mic' mode, and its recorder (a) cannot get the microphone
+        // while CallKit/Twilio own the session, so the take came out EMPTY, and
+        // (b) writes setAudioModeAsync({playsInSilentMode:true}) — the Playback
+        // category, which STRIPS the mic from the live call. The client hit
+        // exactly this on Aug 20: he was auto-landed here mid-call by
+        // incall_editor_autoload, tapped Record twice and "there was nothing
+        // there" (call_recording_placed fired, call_capture_started never did).
+        // With an active call we use the same server-side Twilio capture the
+        // dedicated call screen uses; with no call, plain mic recording.
+        recordingMode={activeCall ? 'twilioCall' : 'mic'}
         // Force a fresh mount whenever the server-side data changes
         // (e.g. after a refetch). This guarantees `useTimeline`'s
         // `useReducer` lazy init reads the latest lanes/clips instead

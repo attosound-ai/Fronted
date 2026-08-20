@@ -9,6 +9,8 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { showToast } from '@/components/ui/Toast';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useCallStore } from '@/stores/callStore';
 import { projectService } from '@/lib/api/projectService';
 import { serverClipToLocal } from '../types';
 import type { LocalClip } from '../types';
@@ -103,16 +105,46 @@ export function useRecordAudio({
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (isRecording || isUploading) return;
+    // TELEMETRY (build 156): this hook used to emit NOTHING. When the client
+    // tapped Record mid-call on Aug 20 and got an empty take, the only trace in
+    // PostHog was call_recording_placed with no call_capture_started after it —
+    // the failure itself was invisible and had to be found by reading code.
+    // Every outcome below is now a row.
+    const report = (outcome: string, extra?: Record<string, unknown>) => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.MIC_RECORD_ATTEMPT, {
+        outcome,
+        has_active_call: useCallStore.getState().activeCall != null,
+        ...extra,
+      });
+    };
+    if (isRecording || isUploading) {
+      report('blocked_busy', { is_recording: isRecording, is_uploading: isUploading });
+      return;
+    }
+    // HARD GUARD: never run the mic recorder while a call is live. It cannot get
+    // the microphone (CallKit/Twilio own the session) so the take is empty, AND
+    // its setAudioModeAsync write below resolves to the Playback category, which
+    // strips the mic FROM THE LIVE CALL. Callers during a call must use
+    // recordingMode="twilioCall" (server-side capture); ProjectDetailScreen and
+    // ActiveCallScreen both do. This is the last line of defence for any surface
+    // that forgets.
+    if (useCallStore.getState().activeCall) {
+      report('blocked_active_call');
+      showToast(
+        t(
+          'toasts.recordUseCallMode',
+          "Can't record this way during a call. Use the call recorder."
+        )
+      );
+      return;
+    }
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
+        report('permission_denied');
         Alert.alert(
           t('toasts.permissionDenied', 'Permission required'),
-          t(
-            'toasts.micPermission',
-            'Microphone permission is required to record audio.'
-          )
+          t('toasts.micPermission', 'Microphone permission is required to record audio.')
         );
         return;
       }
@@ -124,8 +156,10 @@ export function useRecordAudio({
       await recorder.prepareToRecordAsync();
       recorder.record();
       setIsRecording(true);
+      report('started');
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
+      report('error', { error: msg });
       Alert.alert(t('toasts.recordingFailed', 'Recording failed'), msg);
     }
   }, [isRecording, isUploading, ensureRecorder, t]);
@@ -148,9 +182,7 @@ export function useRecordAudio({
 
       const uri = recorder.uri;
       if (!uri) {
-        showToast(
-          t('toasts.recordingFailed', 'Recording failed: no file produced')
-        );
+        showToast(t('toasts.recordingFailed', 'Recording failed: no file produced'));
         return;
       }
 

@@ -159,6 +159,12 @@ export const ANALYTICS_EVENTS = {
     // (David, Aug 2). We had NO data on placement at all; this makes requested
     // position vs playhead vs lane queryable, and proves the backend honoured it.
     RECORDING_PLACED: 'call_recording_placed',
+    // Mic-recorder attempts (build 156). This path was 100% telemetry-silent:
+    // the client's empty mid-call take on Aug 20 left no row at all. outcome =
+    // started | blocked_busy | blocked_active_call | permission_denied | error;
+    // blocked_active_call means a surface tried plain mic recording during a
+    // live call (it must use recordingMode="twilioCall" instead).
+    MIC_RECORD_ATTEMPT: 'call_mic_record_attempt',
     TWILIO_REGISTERED: 'call_twilio_registered',
     TWILIO_REGISTRATION_FAILED: 'call_twilio_registration_failed',
     // Outcome of the native PushKit->CallKit report (AppDelegate writes it to

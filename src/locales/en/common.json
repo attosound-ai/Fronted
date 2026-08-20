@@ -40,7 +40,8 @@
     "couldNotLink": "Could not link recording: {{message}}",
     "couldNotLoadRecording": "Could not load recording: {{message}}",
     "recordingNotFound": "Recording not found",
-    "recordingNotFoundMessage": "The recording is taking longer than expected to process. Try again in a few seconds."
+    "recordingNotFoundMessage": "The recording is taking longer than expected to process. Try again in a few seconds.",
+    "recordUseCallMode": "Can't record this way during a call. Use the call recorder."
   },
   "time": {
     "now": "now",

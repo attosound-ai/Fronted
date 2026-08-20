@@ -277,7 +277,26 @@ export function InCallTopBar() {
     let engineWasActive = false;
     let worst: { built: number; session: number; rendering: number } | null = null;
 
+    // WHOLE-CALL COVERAGE (build 156). This used to stop after 12 seconds, which
+    // made the most common cause INVISIBLE: the session rate flips when a
+    // Bluetooth device connects MID-CALL (48k -> 24k HFP), and the engines stay
+    // built at the old rate until they realign. Audio rendered through a graph
+    // built at 2x the session rate plays at DOUBLE SPEED — the client's "the
+    // Securus message was sped up", with the realign itself audible as the
+    // "hiccups" he heard. That call's mismatch happened outside the 12s window,
+    // so the summary said clean=true while he was listening to chipmunks.
+    // Now: 1s cadence through the first 15s (the answer window), then every 5s
+    // for the rest of the call, and EVERY episode is reported, not just the first.
+    let tick = 0;
+    let inEpisode = false;
+    let episodes = 0;
+    let episodeStartedAt = 0;
+    let worstEpisodeMs = 0;
     const id = setInterval(() => {
+      tick += 1;
+      // After the answer window, sample every 5th tick (5s) — enough to catch a
+      // route-driven flip, cheap enough for a 20-minute call.
+      if (tick > 15 && tick % 5 !== 0) return;
       void (async () => {
         const d = await mixerService.getMixDiagnostics();
         if (!d) return;
@@ -295,37 +314,60 @@ export function InCallTopBar() {
         if (mismatch) {
           mismatchSamples += 1;
           worst = { built, session, rendering };
-          if (!firstMismatchReported) {
+          if (!inEpisode) {
+            // Start of a NEW mismatch episode (the audible artifact begins here).
+            inEpisode = true;
+            episodes += 1;
+            episodeStartedAt = Date.now();
             firstMismatchReported = true;
             analytics.capture(ANALYTICS_EVENTS.CALL.ENGINE_RATE_MISMATCH, {
               call_sid: sid,
               elapsed_ms: Date.now() - startedAt,
+              episode_index: episodes,
               engines_built_rate: built,
               session_sample_rate: session,
               rendering_format_rate: rendering,
               capturing_format_rate: Number(d.capturingFormatRate ?? 0),
+              // The audible consequence, precomputed so it is queryable directly:
+              // >1 plays FAST (chipmunks), <1 plays slow.
+              playback_speed_ratio:
+                session > 0 ? Number((built / session).toFixed(3)) : null,
+              output_port: String(d.outputPort ?? ''),
             });
           }
+        } else if (inEpisode) {
+          // Episode ended (the engine realigned). Record how long the artifact lasted.
+          inEpisode = false;
+          const ms = Date.now() - episodeStartedAt;
+          if (ms > worstEpisodeMs) worstEpisodeMs = ms;
         }
       })();
     }, 1000);
 
-    const stop = setTimeout(() => {
+    return () => {
       clearInterval(id);
       if (!engineWasActive) return; // plain call, nothing to report
+      if (inEpisode) {
+        const ms = Date.now() - episodeStartedAt;
+        if (ms > worstEpisodeMs) worstEpisodeMs = ms;
+      }
+      // Summary now fires when the CALL ENDS, covering its whole duration.
       analytics.capture(ANALYTICS_EVENTS.CALL.ENGINE_RATE_SUMMARY, {
         call_sid: sid,
         mismatch_samples: mismatchSamples,
+        mismatch_episodes: episodes,
+        worst_episode_ms: worstEpisodeMs,
+        still_mismatched_at_end: inEpisode,
+        call_duration_ms: Date.now() - startedAt,
         clean: mismatchSamples === 0,
         worst_built_rate: worst?.built ?? null,
         worst_session_rate: worst?.session ?? null,
         worst_rendering_rate: worst?.rendering ?? null,
+        worst_speed_ratio:
+          worst && worst.session > 0
+            ? Number((worst.built / worst.session).toFixed(3))
+            : null,
       });
-    }, 12000);
-
-    return () => {
-      clearInterval(id);
-      clearTimeout(stop);
     };
   }, [activeCall?.state, activeCall?.callSid]);
 

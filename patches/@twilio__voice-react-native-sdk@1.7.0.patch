@@ -132,10 +132,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c335141466cb01803
+index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb213a6068a5
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3603 @@
+@@ -0,0 +1,3656 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -155,6 +155,13 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +
 +// We want to get as close to 10 msec buffers as possible because this is what the media engine prefers.
 +static double const kPreferredIOBufferDuration = 0.01;
++
++// ATTO (build 156) — stale-context crash guard. Definitions live next to
++// -deviceContext; declared here because the notification handlers above use them.
++// See the full rationale at AttoSafeExecuteWorkerBlock.
++static uint64_t sAttoStaleContextCatchCount;
++static void AttoSafeExecuteWorkerBlock(TVOAudioDeviceContext context, dispatch_block_t block);
++static void AttoSafeFormatChanged(TVOAudioDeviceContext context);
 +
 +#pragma mark - ATTO mixer ring buffer (lock-free SPSC, float32)
 +
@@ -1110,7 +1117,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +            }
 +            strongSelf->_renderingFormat = nil;
 +            strongSelf->_capturingFormat = nil;
-+            TVOAudioDeviceFormatChanged(ctx);
++            AttoSafeFormatChanged(ctx);
 +        }
 +    });
 +}
@@ -1184,7 +1191,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +            return;
 +        }
 +        if (enabled) {
-+            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++            AttoSafeExecuteWorkerBlock(context, ^{
 +                if (self.audioUnit) {
 +                    [self teardownAudioUnit];
 +                }
@@ -2239,6 +2246,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +        // startCapturingCount>0 + recordCbCount==0 ⇒ device bound but AudioUnit not
 +        // pumping (session/format). startCapturingCount==0 ⇒ device not bound at all.
 +        @"startCapturingCount": @(_dbgStartCapturingCount),
++        @"staleContextCatchCount": @(sAttoStaleContextCatchCount),
 +        @"startRenderingCount": @(_dbgStartRenderingCount),
 +        // ATTO (build 88) AudioUnit lifecycle — starvation vs explicit-stop:
 +        @"audioUnitStartCount": @(_dbgAudioUnitStartCount),
@@ -3419,6 +3427,51 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +
 +#pragma mark - NSNotification Observers
 +
++/*
++ * ATTO (build 156) — STALE-CONTEXT CRASH GUARD.
++ *
++ * Sentry REACT-NATIVE-4M (fatal, build 155, client mid-call, Aug 20):
++ *   NSInvalidArgumentException "The supplied context is invalid."
++ *   -[AttoAudioEngineDevice handleRouteChange:] -> TVOAudioDeviceExecuteWorkerBlock
++ *
++ * A NON-NULL deviceContext is NOT the same as a VALID one. Twilio invalidates the
++ * context when it tears the media stack down; our ivar keeps that pointer until
++ * stopRendering/stopCapturing null it, and every AVAudioSession notification
++ * handler (route change, interruption, media reset, foreground) can fire inside
++ * that window — from a NOTIFICATION thread we do not control. The client hit it
++ * when another app (ChatGPT) moved the audio route between two calls: the route
++ * change ran against the previous call's dead context and the exception killed
++ * the app *while a VoIP push was being answered*, which is why the call then
++ * showed up as a missed call.
++ *
++ * These wrappers are used ONLY from notification/main threads. The real-time
++ * render/record callbacks (TVOAudioDeviceReadRenderData /
++ * TVOAudioDeviceWriteCaptureData) deliberately do NOT use them: @try/@catch is
++ * forbidden on the audio RT thread. The exception is a precondition check thrown
++ * before Twilio mutates anything, so catching it is safe and leaves no partial
++ * state. Every catch is counted and surfaced in the diagnostics dictionary, so a
++ * recurrence is visible as a number instead of a crash.
++ */
++static void AttoSafeExecuteWorkerBlock(TVOAudioDeviceContext context, dispatch_block_t block) {
++    if (context == NULL || block == nil) { return; }
++    @try {
++        TVOAudioDeviceExecuteWorkerBlock(context, block);
++    } @catch (NSException *exception) {
++        sAttoStaleContextCatchCount++;
++        NSLog(@"[AttoAudioEngine] stale device context on worker block (caught): %@", exception.reason);
++    }
++}
++
++static void AttoSafeFormatChanged(TVOAudioDeviceContext context) {
++    if (context == NULL) { return; }
++    @try {
++        TVOAudioDeviceFormatChanged(context);
++    } @catch (NSException *exception) {
++        sAttoStaleContextCatchCount++;
++        NSLog(@"[AttoAudioEngine] stale device context on format change (caught): %@", exception.reason);
++    }
++}
++
 +- (TVOAudioDeviceContext)deviceContext {
 +    if (self.renderingContext->deviceContext) {
 +        return self.renderingContext->deviceContext;
@@ -3445,7 +3498,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +        // If the worker block is executed, then context is guaranteed to be valid.
 +        TVOAudioDeviceContext context = [self deviceContext];
 +        if (context) {
-+            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++            AttoSafeExecuteWorkerBlock(context, ^{
 +                if (type == AVAudioSessionInterruptionTypeBegan) {
 +                    NSLog(@"Interruption began.");
 +                    _dbgInterruptionBeganCount++; // telemetry
@@ -3500,7 +3553,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +                            strongSelf->_capturingFormat = nil;
 +                            TVOAudioDeviceContext ctx = [strongSelf deviceContext];
 +                            if (ctx) {
-+                                TVOAudioDeviceFormatChanged(ctx);
++                                AttoSafeFormatChanged(ctx);
 +                            }
 +                        }
 +                    });
@@ -3515,7 +3568,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +        // If the worker block is executed, then context is guaranteed to be valid.
 +        TVOAudioDeviceContext context = [self deviceContext];
 +        if (context) {
-+            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++            AttoSafeExecuteWorkerBlock(context, ^{
 +                if (self.isInterrupted) {
 +                    NSLog(@"Synthesizing an interruption ended event for iOS 9.x devices.");
 +                    self.interrupted = NO;
@@ -3571,7 +3624,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +                // If the worker block is executed, then context is guaranteed to be valid.
 +                TVOAudioDeviceContext context = [self deviceContext];
 +                if (context) {
-+                    TVOAudioDeviceExecuteWorkerBlock(context, ^{
++                    AttoSafeExecuteWorkerBlock(context, ^{
 +                        [self handleValidRouteChange];
 +                    });
 +                }
@@ -3649,9 +3702,9 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +
 +            TVOAudioDeviceContext context = [self deviceContext];
 +            if (context) {
-+                TVOAudioDeviceFormatChanged(context);
++                AttoSafeFormatChanged(context);
 +
-+                TVOAudioDeviceExecuteWorkerBlock(context, ^{
++                AttoSafeExecuteWorkerBlock(context, ^{
 +                    // Restart the AVAudioEngine with new format
 +                    TVOAudioFormat *activeFormat = [[self class] activeFormat];
 +
@@ -3713,7 +3766,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +        // If the worker block is executed, then context is guaranteed to be valid.
 +        TVOAudioDeviceContext context = [self deviceContext];
 +        if (context) {
-+            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++            AttoSafeExecuteWorkerBlock(context, ^{
 +                [self teardownAudioUnit];
 +            });
 +        }
@@ -3727,7 +3780,7 @@ index 0000000000000000000000000000000000000000..b2d42839dc3ce8a17a10d50c33514146
 +        // If the worker block is executed, then context is guaranteed to be valid.
 +        TVOAudioDeviceContext context = [self deviceContext];
 +        if (context) {
-+            TVOAudioDeviceExecuteWorkerBlock(context, ^{
++            AttoSafeExecuteWorkerBlock(context, ^{
 +                [self startAudioUnit];
 +            });
 +        }

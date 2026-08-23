@@ -1,6 +1,18 @@
 /**
  * Type-safe catalogue of every custom analytics event in ATTO SOUND.
  * Namespaced by feature so funnels / insights in PostHog stay organised.
+ *
+ * READ THIS BEFORE TRUSTING A NAME (Aug 23 2026). Presence in this file means
+ * the name is RESERVED, not that anything emits it. `POST_COMMENTED` sat here
+ * for months while commenting produced no data whatsoever, so "do we have an
+ * event for that?" answered yes when the truth was no — and a real bug (a
+ * comment badge stuck at 1 against a list of 2) had to be diagnosed from psql
+ * and redis-cli instead. A count on the day of writing: 217 names defined, 8
+ * emitted as raw string literals rather than through these constants, and 57
+ * with no reference anywhere in the app.
+ *
+ * To check a specific one before relying on it:
+ *   grep -rn "ANALYTICS_EVENTS.<NS>.<KEY>\|'<event_name>'" src/
  */
 
 export const ANALYTICS_EVENTS = {
@@ -94,6 +106,10 @@ export const ANALYTICS_EVENTS = {
     REFRESHED: 'feed_refreshed',
     POST_LIKED: 'feed_post_liked',
     POST_UNLIKED: 'feed_post_unliked',
+    // RESERVED, NEVER EMITTED. Commenting is covered by SOCIAL.ACTION with
+    // action='comment_create' | 'comment_edit' | 'comment_delete', which also
+    // carries the outcome. Do not wire this one up without deciding what it
+    // adds over that; it exists only so the old name is not silently reused.
     POST_COMMENTED: 'feed_post_commented',
     POST_SHARED: 'feed_post_shared',
     POST_SUPPORT: 'feed_post_support_pressed',
@@ -547,6 +563,17 @@ export const ANALYTICS_EVENTS = {
 
   // ── Social graph ───────────────────────────────
   SOCIAL: {
+    // Outcome layer for optimistic social mutations (see socialTelemetry.ts).
+    // ONE event with an `action` dimension: like/unlike, bookmark, repost,
+    // comment_create/edit/delete, follow/unfollow, each carrying
+    // outcome=applied|failed (+ error and http_status when it failed). The
+    // pre-existing per-action events still fire untouched; this is the layer
+    // that says what actually HAPPENED, which the intent-time events cannot.
+    ACTION: 'social_action',
+    // Fires ONLY when a number on screen disagrees with the server after a
+    // mutation reconciles — a zero-noise alarm. This is the signal that would
+    // have surfaced the Aug 23 comment badge (shown 1, server 3) by itself.
+    COUNTER_DIVERGENCE: 'social_counter_divergence',
     FOLLOW: 'social_follow',
     UNFOLLOW: 'social_unfollow',
     FOLLOW_FAILED: 'social_follow_failed',

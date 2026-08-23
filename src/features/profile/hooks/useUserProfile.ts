@@ -5,6 +5,10 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useFollowStore } from '@/stores/followStore';
 import { useAuthStore } from '@/stores/authStore';
 import { safeCount, analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import {
+  reportSocialAction,
+  reportSocialActionFailed,
+} from '@/lib/analytics/socialTelemetry';
 import type { User } from '@/types';
 
 export function useUserProfile(userId: string) {
@@ -82,27 +86,38 @@ export function useUserProfile(userId: string) {
         });
       }
       analytics.capture(
-        wasFollowing
-          ? ANALYTICS_EVENTS.SOCIAL.UNFOLLOW
-          : ANALYTICS_EVENTS.SOCIAL.FOLLOW,
+        wasFollowing ? ANALYTICS_EVENTS.SOCIAL.UNFOLLOW : ANALYTICS_EVENTS.SOCIAL.FOLLOW,
         {
           profile_id: numericId,
           source: 'public_profile',
-        },
+        }
       );
       return { previous, wasFollowing };
     },
-    onSuccess: () => {
+    onSuccess: (_data, _vars, context) => {
       // Invalidate the current user's own profile to update followingCount
       if (currentUserId && currentUserId !== numericId) {
         queryClient.invalidateQueries({
           queryKey: QUERY_KEYS.USERS.PROFILE(currentUserId),
         });
       }
+      reportSocialAction(
+        context?.wasFollowing ? 'unfollow' : 'follow',
+        String(numericId),
+        'applied'
+      );
     },
     onError: (err: unknown, _vars, context) => {
-      // 409 = already following/unfollowed — state is correct, don't revert
-      if ((err as any)?.response?.status === 409) return;
+      const action = context?.wasFollowing ? 'unfollow' : 'follow';
+      // 409 = already following/unfollowed — state is correct, don't revert.
+      // Still recorded: a spike of these means our local state is drifting from
+      // the server, which is exactly the class of bug this layer exists to see.
+      if ((err as any)?.response?.status === 409) {
+        reportSocialAction(action, String(numericId), 'applied', {
+          already_in_state: true,
+        });
+        return;
+      }
       if (context?.previous) {
         queryClient.setQueryData(QUERY_KEYS.USERS.PROFILE(numericId), context.previous);
       }
@@ -110,6 +125,7 @@ export function useUserProfile(userId: string) {
       if (context !== undefined) {
         setFollowed(numericId, context.wasFollowing);
       }
+      reportSocialActionFailed(action, String(numericId), err);
     },
   });
 
@@ -124,8 +140,7 @@ export function useUserProfile(userId: string) {
     isPlaceholderData,
     error,
     refetch,
-    toggleFollow: () =>
-      followMutation.mutate({ wasFollowing: effectiveIsFollowing }),
+    toggleFollow: () => followMutation.mutate({ wasFollowing: effectiveIsFollowing }),
     isToggling: followMutation.isPending,
   };
 }

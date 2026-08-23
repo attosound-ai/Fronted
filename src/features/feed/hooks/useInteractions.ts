@@ -3,6 +3,10 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import { feedService } from '../services/feedService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
+  reportSocialAction,
+  reportSocialActionFailed,
+} from '@/lib/analytics/socialTelemetry';
+import {
   cancelPostQueries,
   snapshotPostCaches,
   rollbackPostCaches,
@@ -33,30 +37,40 @@ export function useInteractions() {
     onMutate: async ({ postId, wasLiked }) => {
       analytics.capture(
         wasLiked ? ANALYTICS_EVENTS.FEED.POST_UNLIKED : ANALYTICS_EVENTS.FEED.POST_LIKED,
-        { post_id: postId },
+        { post_id: postId }
       );
       await cancelPostQueries(queryClient, postId);
       const snapshot = snapshotPostCaches(queryClient, postId);
       patchPostInCaches(queryClient, postId, (post) => ({
         ...post,
         isLiked: !wasLiked,
-        likesCount: wasLiked
-          ? Math.max(0, post.likesCount - 1)
-          : post.likesCount + 1,
+        likesCount: wasLiked ? Math.max(0, post.likesCount - 1) : post.likesCount + 1,
       }));
       return { snapshot };
     },
-    onError: (_, { postId }, context) => {
+    onError: (error, { postId, wasLiked }, context) => {
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }
+      // Until now this rollback was SILENT while onMutate had already reported
+      // feed_post_liked — telemetry claimed the opposite of what the user saw.
+      reportSocialActionFailed(wasLiked ? 'unlike' : 'like', postId, error);
+    },
+    onSuccess: (_data, { postId, wasLiked }) => {
+      reportSocialAction(wasLiked ? 'unlike' : 'like', postId, 'applied');
     },
   });
 
   // ── Bookmark ──────────────────────────────────────────────────────────────
 
   const bookmarkMutation = useMutation({
-    mutationFn: async ({ postId, wasBookmarked }: { postId: string; wasBookmarked: boolean }) => {
+    mutationFn: async ({
+      postId,
+      wasBookmarked,
+    }: {
+      postId: string;
+      wasBookmarked: boolean;
+    }) => {
       if (wasBookmarked) {
         await feedService.unbookmarkPost(postId);
       } else {
@@ -72,20 +86,28 @@ export function useInteractions() {
       }));
       return { snapshot };
     },
-    onError: (_, { postId }, context) => {
+    onError: (error, { postId, wasBookmarked }, context) => {
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }
+      reportSocialActionFailed(wasBookmarked ? 'unbookmark' : 'bookmark', postId, error);
     },
-    onSuccess: () => {
+    onSuccess: (_data, { postId, wasBookmarked }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.BOOKMARKS });
+      reportSocialAction(wasBookmarked ? 'unbookmark' : 'bookmark', postId, 'applied');
     },
   });
 
   // ── Repost ────────────────────────────────────────────────────────────────
 
   const repostMutation = useMutation({
-    mutationFn: async ({ postId, wasReposted }: { postId: string; wasReposted: boolean }) => {
+    mutationFn: async ({
+      postId,
+      wasReposted,
+    }: {
+      postId: string;
+      wasReposted: boolean;
+    }) => {
       if (wasReposted) {
         await feedService.unrepost(postId);
       } else {
@@ -104,10 +126,14 @@ export function useInteractions() {
       }));
       return { snapshot };
     },
-    onError: (_, { postId }, context) => {
+    onError: (error, { postId, wasReposted }, context) => {
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }
+      reportSocialActionFailed(wasReposted ? 'unrepost' : 'repost', postId, error);
+    },
+    onSuccess: (_data, { postId, wasReposted }) => {
+      reportSocialAction(wasReposted ? 'unrepost' : 'repost', postId, 'applied');
     },
   });
 
@@ -120,6 +146,14 @@ export function useInteractions() {
         ...post,
         sharesCount: (post.sharesCount ?? 0) + 1,
       }));
+    },
+    // Fire-and-forget by design (no rollback), which made a failing share
+    // completely invisible: the count went up locally and stayed up.
+    onError: (error, postId) => {
+      reportSocialActionFailed('share', postId, error);
+    },
+    onSuccess: (_data, postId) => {
+      reportSocialAction('share', postId, 'applied');
     },
   });
 

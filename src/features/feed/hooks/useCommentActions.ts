@@ -14,6 +14,10 @@ import {
   rollbackPostCaches,
   patchPostInCaches,
 } from '../utils/postCacheSync';
+import {
+  reportSocialAction,
+  reportSocialActionFailed,
+} from '@/lib/analytics/socialTelemetry';
 import type { Comment } from './useComments';
 
 export function useCommentActions(postId: string) {
@@ -62,8 +66,15 @@ export function useCommentActions(postId: string) {
 
       try {
         await feedService.editComment(postId, commentId, newText);
-      } catch {
+        reportSocialAction('comment_edit', postId, 'applied', {
+          comment_id: commentId,
+        });
+      } catch (error: unknown) {
+        // Was a silent revert: the edit vanished from screen with no trace.
         queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), snapshot);
+        reportSocialActionFailed('comment_edit', postId, error, {
+          comment_id: commentId,
+        });
       }
     },
     [postId, userId, updateComment, queryClient]
@@ -105,9 +116,15 @@ export function useCommentActions(postId: string) {
 
       try {
         await feedService.deleteComment(postId, commentId);
-      } catch {
+        reportSocialAction('comment_delete', postId, 'applied', {
+          comment_id: commentId,
+        });
+      } catch (error: unknown) {
         queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), commentsSnapshot);
         rollbackPostCaches(queryClient, postId, postSnapshot);
+        reportSocialActionFailed('comment_delete', postId, error, {
+          comment_id: commentId,
+        });
       }
     },
     [postId, userId, queryClient]

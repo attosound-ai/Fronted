@@ -7,7 +7,13 @@ import {
   snapshotPostCaches,
   rollbackPostCaches,
   patchPostInCaches,
+  findPostInCaches,
 } from '../utils/postCacheSync';
+import {
+  reportSocialAction,
+  reportSocialActionFailed,
+  reportCounterDivergence,
+} from '@/lib/analytics/socialTelemetry';
 import type { Role } from '@/types';
 
 export interface CommentAuthor {
@@ -110,6 +116,7 @@ export function useComments(postId: string) {
       return { snapshot, prevComments };
     },
     onError: (_err, {}, context) => {
+      reportSocialActionFailed('comment_create', postId, _err);
       if (context?.snapshot) {
         rollbackPostCaches(queryClient, postId, context.snapshot);
       }
@@ -142,6 +149,17 @@ export function useComments(postId: string) {
         };
         const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
         if (typeof serverCount === 'number') {
+          // What the user is CURRENTLY seeing, read before we correct it. If it
+          // disagrees with the server we emit the divergence — the alarm that
+          // would have surfaced this whole class of bug without a human noticing.
+          const shown = findPostInCaches(queryClient, postId)?.commentsCount;
+          reportCounterDivergence({
+            action: 'comment_create',
+            targetId: postId,
+            field: 'commentsCount',
+            shown,
+            server: serverCount,
+          });
           patchPostInCaches(queryClient, postId, (post) => ({
             ...post,
             commentsCount: serverCount,
@@ -150,6 +168,7 @@ export function useComments(postId: string) {
       } catch {
         // Best-effort reconciliation; the optimistic count stands.
       }
+      reportSocialAction('comment_create', postId, 'applied');
     },
   });
 

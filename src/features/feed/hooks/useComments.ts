@@ -117,9 +117,39 @@ export function useComments(postId: string) {
         queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), context.prevComments);
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       // Replace optimistic comment with real server data
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.COMMENTS(postId) });
+
+      // RECONCILE THE BADGE with the server's authoritative count. The
+      // optimistic +1 above is applied to whatever the cached post object held,
+      // and that can be OLDER than the comment list: David opened a post the
+      // instant its push arrived (count 0), someone else commented, then he
+      // commented — his badge showed 0+1=1 while the refetched list showed 2
+      // (Aug 23; verified against the DB: 3 real comments, Redis 3, badge 1).
+      // Invalidating only the comment list never corrected that. We patch ONLY
+      // the count on the already-cached post objects: no feed invalidation, so
+      // nothing refetches, reorders or flickers. A failure keeps the optimistic
+      // value, exactly as before.
+      try {
+        // NOTE: feedService.getPost returns the RAW API shape (it does not run
+        // the feed mapper), so the count lives under `interactions`. Read both
+        // shapes — otherwise this whole reconciliation is a silent no-op, which
+        // is exactly how it was written the first time.
+        const fresh = (await feedService.getPost(postId)) as unknown as {
+          commentsCount?: number;
+          interactions?: { commentsCount?: number };
+        };
+        const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
+        if (typeof serverCount === 'number') {
+          patchPostInCaches(queryClient, postId, (post) => ({
+            ...post,
+            commentsCount: serverCount,
+          }));
+        }
+      } catch {
+        // Best-effort reconciliation; the optimistic count stands.
+      }
     },
   });
 

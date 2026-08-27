@@ -1,9 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import {
-  useAudioPlayer,
-  useAudioPlayerStatus,
-  useAudioSampleListener,
-} from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, useAudioSampleListener } from 'expo-audio';
 const BAR_COUNT = 40;
 const UPDATE_MS = 80; // ~12 fps
 
@@ -60,6 +56,10 @@ export function useAudioPlayback(url: string | undefined) {
     }
   };
 
+  const pause = () => {
+    if (status.playing) player.pause();
+  };
+
   const seekToFraction = (fraction: number) => {
     if (status.duration > 0) {
       player.seekTo(fraction * status.duration);
@@ -75,6 +75,7 @@ export function useAudioPlayback(url: string | undefined) {
     duration: formatTime(status.duration),
     barAmplitudes: displayAmplitudes,
     togglePlayPause,
+    pause,
     seekToFraction,
   };
 }

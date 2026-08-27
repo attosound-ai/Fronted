@@ -12,6 +12,7 @@ import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
+import { stopActiveFeedAudio } from '@/stores/feedAudioStore';
 import { useDoubleTapLike } from '@/features/feed/hooks/useDoubleTapLike';
 import type { FeedPost, PostAuthor } from '@/types/post';
 import { COLORS } from '@/constants/theme';
@@ -156,10 +157,15 @@ export function VideoMedia({
     if (!player) return;
     if (isVisible && isFocused) {
       player.play();
+      // If this video is audible (sound on), it becomes the single audible
+      // owner: stop any feed audio post so the two never play together (the
+      // client's Aug 23 overlap). Muted autoplay does not claim, so a silent
+      // video scrolling past a playing audio post leaves it alone.
+      if (!isMuted) stopActiveFeedAudio();
     } else {
       player.pause();
     }
-  }, [isVisible, isFocused, player]);
+  }, [isVisible, isFocused, isMuted, player]);
 
   // Keep this player's audio in sync whenever the shared mute state flips —
   // this is what makes one video's toggle apply to every other mounted video.

@@ -320,6 +320,20 @@ export function InCallTopBar() {
             episodes += 1;
             episodeStartedAt = Date.now();
             firstMismatchReported = true;
+            const capturing = Number(d.capturingFormatRate ?? 0);
+            // TRUE audible speed (build 160). The old ratio was built/session, so
+            // a call where built==session but RENDERING ran at half the session
+            // rate (48000 vs 24000, David Aug 26) reported speed=1.0 and read as
+            // clean — while the far end played at DOUBLE speed. What you HEAR is
+            // driven by the rate the RENDER graph produces vs the rate the
+            // session consumes: session/rendering. Report whichever format
+            // actually diverged so the number matches the symptom.
+            const renderRatio = rendering > 0 && session > 0 ? session / rendering : 1;
+            const builtRatio = built > 0 && session > 0 ? built / session : 1;
+            const speedRatio =
+              Math.abs(renderRatio - 1) >= Math.abs(builtRatio - 1)
+                ? renderRatio
+                : builtRatio;
             analytics.capture(ANALYTICS_EVENTS.CALL.ENGINE_RATE_MISMATCH, {
               call_sid: sid,
               elapsed_ms: Date.now() - startedAt,
@@ -327,11 +341,14 @@ export function InCallTopBar() {
               engines_built_rate: built,
               session_sample_rate: session,
               rendering_format_rate: rendering,
-              capturing_format_rate: Number(d.capturingFormatRate ?? 0),
-              // The audible consequence, precomputed so it is queryable directly:
-              // >1 plays FAST (chipmunks), <1 plays slow.
-              playback_speed_ratio:
-                session > 0 ? Number((built / session).toFixed(3)) : null,
+              capturing_format_rate: capturing,
+              // Which side is wrong, so the fix knows where to look.
+              built_matches_session: built === session,
+              rendering_matches_session: rendering === session,
+              capturing_matches_session: capturing === session,
+              // The audible consequence: >1 plays FAST (chipmunks), <1 slow.
+              // Now derived from the format that actually diverged, not just built.
+              playback_speed_ratio: Number(speedRatio.toFixed(3)),
               output_port: String(d.outputPort ?? ''),
             });
           }
@@ -363,10 +380,15 @@ export function InCallTopBar() {
         worst_built_rate: worst?.built ?? null,
         worst_session_rate: worst?.session ?? null,
         worst_rendering_rate: worst?.rendering ?? null,
-        worst_speed_ratio:
-          worst && worst.session > 0
-            ? Number((worst.built / worst.session).toFixed(3))
-            : null,
+        // True worst speed: the format (built OR rendering) that diverged most
+        // from the session, so a rendering-only mismatch is no longer invisible.
+        worst_speed_ratio: (() => {
+          if (!worst || worst.session <= 0) return null;
+          const r = worst.rendering > 0 ? worst.session / worst.rendering : 1;
+          const b = worst.built > 0 ? worst.built / worst.session : 1;
+          const ratio = Math.abs(r - 1) >= Math.abs(b - 1) ? r : b;
+          return Number(ratio.toFixed(3));
+        })(),
       });
     };
   }, [activeCall?.state, activeCall?.callSid]);

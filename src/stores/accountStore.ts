@@ -511,24 +511,45 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
             try {
               const linkedUsers = await authService.getLinkedAccounts();
               if (getSessionEpoch() !== epochAtStart) continue; // stale — redo
-              const validIds = new Set<number>([
-                tokenUserId,
-                ...linkedUsers.map((u: { id: number }) => Number(u.id)),
-              ]);
-              const ghosts = uniqueEntries.filter(
-                (e) => !validIds.has(Number(e.user.id))
-              );
-              validEntries = uniqueEntries.filter((e) => validIds.has(Number(e.user.id)));
 
-              // Clean invalid entries from storage
-              for (const ghost of ghosts) {
-                await clearAccount(ghost.user.id);
-              }
-              if (ghosts.length > 0) {
+              // NEVER purge on an EMPTY linked-accounts list (Aug 23 recurrence of
+              // the Aug 1 switcher-purge incident). On a cold launch this call can
+              // race the token refresh and return [] before the backend resolves
+              // the device's links; purging then DELETES a real, locally-stored,
+              // token-valid account from SecureStore. That is exactly "Larry's
+              // account won't show up, it'll just be one account": suicideking
+              // (153) got purged from Anthony's device on an empty response. An
+              // account with valid tokens + user in SecureStore is one the user
+              // logged into — one weak signal must not erase it. Keep everything
+              // and let the next successful load reconcile.
+              if (linkedUsers.length === 0) {
                 analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
                   anchor_user_id: tokenUserId,
-                  purged_user_ids: ghosts.map((g) => g.user.id),
+                  outcome: 'skipped_empty_linked_list',
+                  local_account_count: uniqueEntries.length,
                 });
+                validEntries = uniqueEntries;
+              } else {
+                const validIds = new Set<number>([
+                  tokenUserId,
+                  ...linkedUsers.map((u: { id: number }) => Number(u.id)),
+                ]);
+                const ghosts = uniqueEntries.filter(
+                  (e) => !validIds.has(Number(e.user.id))
+                );
+                validEntries = uniqueEntries.filter((e) =>
+                  validIds.has(Number(e.user.id))
+                );
+                for (const ghost of ghosts) {
+                  await clearAccount(ghost.user.id);
+                }
+                if (ghosts.length > 0) {
+                  analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
+                    anchor_user_id: tokenUserId,
+                    outcome: 'purged',
+                    purged_user_ids: ghosts.map((g) => g.user.id),
+                  });
+                }
               }
             } catch {
               // If linked accounts API fails, keep all entries (don't purge blindly)

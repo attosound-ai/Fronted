@@ -10,6 +10,8 @@ import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
 import { useNowPlayingStore } from '@/stores/nowPlayingStore';
+import { useVideoSoundStore } from '@/stores/videoSoundStore';
+import { claimFeedAudio, releaseFeedAudio } from '@/stores/feedAudioStore';
 import type { FeedPost } from '@/types/post';
 
 interface AudioMediaProps {
@@ -29,6 +31,7 @@ export function AudioMedia({ post }: AudioMediaProps) {
     barAmplitudes,
     togglePlayPause,
     seekToFraction,
+    pause,
   } = useAudioPlayback(post.audioUrl);
 
   // Remember the last-played feed audio so the in-call "transmit" button can push
@@ -44,6 +47,20 @@ export function AudioMedia({ post }: AudioMediaProps) {
       });
     }
   }, [isPlaying, post.audioUrl, post.id, post.title, setNowPlaying]);
+
+  // SINGLE-AUDIBLE-OWNER (build 160). When this audio post starts, become the
+  // one allowed audio (stopping any other audio post) and silence feed videos
+  // so an unmuted autoplaying video can't play over it — the overlap the client
+  // filmed. On stop/unmount, release ownership.
+  useEffect(() => {
+    if (isPlaying) {
+      claimFeedAudio(post.id, () => pause());
+      useVideoSoundStore.getState().setMuted(true);
+    } else {
+      releaseFeedAudio(post.id);
+    }
+    return () => releaseFeedAudio(post.id);
+  }, [isPlaying, post.id, pause]);
 
   const showLoading = !isLoaded || isBuffering;
 

@@ -133,6 +133,11 @@ export const ANALYTICS_EVENTS = {
     LOAD_MORE: 'feed_load_more',
     AUTHOR_PROFILE_PRESSED: 'feed_author_profile_pressed',
     FOLLOW_PRESSED: 'feed_follow_pressed',
+    // Media upload outcome (build 161). Cloudinary 413s a raw >100MB video, which
+    // is why Anthony's original 1:02 clip failed while David's WhatsApp-shrunk copy
+    // worked. outcome = uploaded | too_large_precheck | rejected_413 | failed, with
+    // original_bytes/final_bytes/compressed so the size threshold is finally visible.
+    MEDIA_UPLOAD: 'feed_media_upload',
   },
 
   // ── Video (playback + load diagnostics) ───────

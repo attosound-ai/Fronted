@@ -152,5 +152,8 @@
       "publishing": "Publicar",
       "saving": "Salvar"
     }
+  },
+  "create": {
+    "videoTooLarge": "Este vídeo é grande demais para enviar, mesmo após comprimir. Corte-o ou exporte em qualidade menor e tente novamente."
   }
 }

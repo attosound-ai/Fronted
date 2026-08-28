@@ -201,6 +201,9 @@ importers:
       react-native-bottom-tabs:
         specifier: ^1.1.0
         version: 1.1.0(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+      react-native-compressor:
+        specifier: 1.10.3
+        version: 1.10.3(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^15.0.2
         version: 15.0.2(patch_hash=affbc9875504b52a05393a9bed9288ac69a761a8a7f62cd0dd1aa4242784c008)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
@@ -4149,6 +4152,13 @@ packages:
 
   react-native-bottom-tabs@1.1.0:
     resolution: {integrity: sha512-Uu1gvM3i1Hb4DjVvR/38J1QVQEs0RkPc7K6yon99HgvRWWOyLs7kjPDhUswtb8ije4pKW712skIXWJ0lgKzbyQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
+  react-native-compressor@1.10.3:
+    resolution: {integrity: sha512-i51DfTwfLcKorWbTXtnPOcQC4SQDuC+DqKkSl9wF9qAUmNS9PtipYZCXOvWShYFnX0mmcWw5vwEp2b2V73PaDQ==}
+    engines: {node: '>= 16.0.0'}
     peerDependencies:
       react: '*'
       react-native: '*'
@@ -9595,6 +9605,11 @@ snapshots:
       react-native: 0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
       sf-symbols-typescript: 2.2.0
       use-latest-callback: 0.2.6(react@19.2.0)
+
+  react-native-compressor@1.10.3(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+    dependencies:
+      react: 19.2.0
+      react-native: 0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 
   react-native-device-info@15.0.2(patch_hash=affbc9875504b52a05393a9bed9288ac69a761a8a7f62cd0dd1aa4242784c008)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
     dependencies:

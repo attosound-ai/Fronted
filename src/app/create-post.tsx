@@ -10,6 +10,7 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { MediaTooLargeError } from '@/lib/media/mediaService';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -302,12 +303,27 @@ export default function CreatePostScreen() {
         showPostPublished();
       }, 400);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('common:errors.generic');
+      // A video too large for Cloudinary used to surface as the cryptic
+      // "Cloudinary upload failed (413)". Show a plain, actionable message
+      // instead (Anthony's Aug 27 upload). MediaTooLargeError is thrown by
+      // mediaService after compression still leaves it over the limit.
+      const isTooLarge =
+        err instanceof MediaTooLargeError ||
+        (err instanceof Error && err.message.includes('413'));
+      const message = isTooLarge
+        ? t(
+            'create.videoTooLarge',
+            'This video is too large to upload, even after compressing. Please trim it or export it at a lower quality and try again.'
+          )
+        : err instanceof Error
+          ? err.message
+          : t('common:errors.generic');
       // Outcome telemetry: a failed publish must be visible in PostHog, not just
       // a local Alert the user dismisses and we never hear about.
       analytics.capture(ANALYTICS_EVENTS.FEED.POST_CREATE_FAILED, {
         post_type: postType,
-        error: message,
+        error: err instanceof Error ? err.message : String(err),
+        too_large: isTooLarge,
       });
       Alert.alert(t('create.errorTitle'), message);
     }

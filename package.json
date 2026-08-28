@@ -73,6 +73,7 @@
     "react-native": "0.83.4",
     "react-native-audio-api": "^0.11.7",
     "react-native-bottom-tabs": "^1.1.0",
+    "react-native-compressor": "1.10.3",
     "react-native-device-info": "^15.0.2",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-gifted-chat": "^3.3.2",

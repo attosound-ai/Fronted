@@ -152,5 +152,8 @@
       "publishing": "Publicar",
       "saving": "Guardar"
     }
+  },
+  "create": {
+    "videoTooLarge": "Este video es demasiado grande para subirlo, incluso después de comprimirlo. Recórtalo o expórtalo en menor calidad e inténtalo de nuevo."
   }
 }

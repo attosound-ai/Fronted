@@ -152,5 +152,8 @@
       "publishing": "Publishing",
       "saving": "Saving"
     }
+  },
+  "create": {
+    "videoTooLarge": "This video is too large to upload, even after compressing. Please trim it or export it at a lower quality and try again."
   }
 }

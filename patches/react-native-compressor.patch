@@ -1,0 +1,10 @@
+diff --git a/ios/Video/VideoMain.swift b/ios/Video/VideoMain.swift
+index 6fe5e9ce2c3467f65508ecba95b68ad025a61c6d..af8a0b56637af10a898b697f823202dcdf788330 100644
+--- a/ios/Video/VideoMain.swift
++++ b/ios/Video/VideoMain.swift
+@@ -1,5 +1,4 @@
+ import Foundation
+-import AssetsLibrary
+ import AVFoundation
+ import Photos
+ import MobileCoreServices

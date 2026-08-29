@@ -99,7 +99,8 @@
     "patchedDependencies": {
       "@howincodes/expo-dynamic-app-icon": "patches/@howincodes__expo-dynamic-app-icon.patch",
       "@twilio/voice-react-native-sdk@1.7.0": "patches/@twilio__voice-react-native-sdk@1.7.0.patch",
-      "react-native-device-info@15.0.2": "patches/react-native-device-info@15.0.2.patch"
+      "react-native-device-info@15.0.2": "patches/react-native-device-info@15.0.2.patch",
+      "react-native-compressor": "patches/react-native-compressor.patch"
     }
   },
   "private": true,

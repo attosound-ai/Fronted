@@ -16,6 +16,9 @@ patchedDependencies:
   '@twilio/voice-react-native-sdk@1.7.0':
     hash: ebd7c30f31d00bc2f0b3a80827cdd8aa6af927186a842cac9164130b7a1c5339
     path: patches/@twilio__voice-react-native-sdk@1.7.0.patch
+  react-native-compressor:
+    hash: af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e
+    path: patches/react-native-compressor.patch
   react-native-device-info@15.0.2:
     hash: affbc9875504b52a05393a9bed9288ac69a761a8a7f62cd0dd1aa4242784c008
     path: patches/react-native-device-info@15.0.2.patch
@@ -203,7 +206,7 @@ importers:
         version: 1.1.0(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-compressor:
         specifier: 1.10.3
-        version: 1.10.3(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 1.10.3(patch_hash=af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^15.0.2
         version: 15.0.2(patch_hash=affbc9875504b52a05393a9bed9288ac69a761a8a7f62cd0dd1aa4242784c008)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
@@ -9606,7 +9609,7 @@ snapshots:
       sf-symbols-typescript: 2.2.0
       use-latest-callback: 0.2.6(react@19.2.0)
 
-  react-native-compressor@1.10.3(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  react-native-compressor@1.10.3(patch_hash=af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e)(react-native@0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       react: 19.2.0
       react-native: 0.83.4(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)

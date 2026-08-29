@@ -7,6 +7,7 @@ import axios, {
 import { API_CONFIG } from '@/constants/config';
 import { authStorage } from '@/lib/auth/storage';
 import { getSessionEpoch } from '@/lib/auth/sessionEpoch';
+import { decodeJwtPayload } from '@/lib/auth/jwt';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 // ── Request-body sanitisation ────────────────────────────────────
@@ -203,17 +204,29 @@ apiClient.interceptors.request.use(
     // signup_pending token if there's no logged-in user yet. The backend
     // accepts signup_pending only for `context: "avatar"`.
     let token: string | null = null;
+    // Signup-scoped tokens have no refresh flow; the pre-emptive refresh below
+    // must only ever run on a full-scope USER token.
+    let isUserToken = false;
     if (isSignupAuthedRoute(config.url)) {
       const { getSignupToken } = await import('@/stores/signupStore');
       token = getSignupToken();
     } else if (config.url?.startsWith('/media/sign')) {
       token = await authStorage.getToken();
+      isUserToken = token != null;
       if (!token) {
         const { getSignupToken } = await import('@/stores/signupStore');
         token = getSignupToken();
       }
     } else {
       token = await authStorage.getToken();
+      isUserToken = token != null;
+    }
+    // Already-expired user token → refresh once BEFORE sending (see
+    // ensureFreshToken). Never for public routes: /auth/refresh itself goes
+    // through this interceptor and gating it would deadlock on its own refresh.
+    const isPublicRoute = PUBLIC_ROUTES.some((route) => config.url?.includes(route));
+    if (token && isUserToken && !isPublicRoute) {
+      token = await ensureFreshToken(token);
     }
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -257,6 +270,70 @@ const processQueue = (error: unknown, token: string | null = null): void => {
   });
   failedQueue = [];
 };
+
+// ── Pre-emptive refresh for an ALREADY-EXPIRED access token ──
+//
+// On a cold launch after the access token's TTL, the startup fan-out fired ~10
+// requests in the same tick, every one of them 401'd, and only then did the
+// response interceptor refresh and retry them all (PostHog: 10 error_api rows
+// within 50 ms of every cold launch, e.g. suicideking Aug 29 16:47:48). That is
+// wasted round-trips, noisy telemetry and added latency on the exact path a
+// VoIP cold launch races. The token's `exp` is readable locally, so when it is
+// already in the past we refresh ONCE, up front, and the fan-out goes out with
+// a valid token. Single-flight, and coordinated with the 401 path below so two
+// refreshes can never run at once (a second refresh with an already-rotated
+// refresh token is how a healthy session gets expired by mistake).
+const EXP_SKEW_MS = 5_000;
+let preflightRefresh: Promise<string | null> | null = null;
+
+function isAccessTokenExpired(token: string): boolean {
+  const exp = decodeJwtPayload(token)?.exp;
+  // Unknown/absent exp: let the server decide, never pre-empt on a guess.
+  if (typeof exp !== 'number') return false;
+  return exp * 1000 <= Date.now() + EXP_SKEW_MS;
+}
+
+async function ensureFreshToken(token: string): Promise<string> {
+  if (!isAccessTokenExpired(token)) return token;
+  // An account switch owns the token right now; don't touch it.
+  if (_paused) return token;
+  // The 401 path is already refreshing: ride that refresh instead of a second one.
+  if (isRefreshing) {
+    return new Promise<string>((resolve) => {
+      failedQueue.push({
+        resolve: (fresh) => resolve(fresh),
+        reject: () => resolve(token),
+      });
+    });
+  }
+  if (!preflightRefresh) {
+    const epochBefore = getSessionEpoch();
+    preflightRefresh = (async () => {
+      try {
+        const { useAuthStore } = await import('@/stores/authStore');
+        const fresh = await useAuthStore.getState().refreshTokens();
+        if (fresh) return fresh.accessToken;
+        // Definitive rejection: expire exactly like the 401 path does, guarded
+        // by the same epoch check so a session that changed hands is untouched.
+        if (
+          getSessionEpoch() === epochBefore &&
+          useAuthStore.getState().isAuthenticated
+        ) {
+          useAuthStore.getState().expireSession('preflight_refresh_failed');
+        }
+        return null;
+      } catch {
+        // Transient (network/5xx): send with the stale token; the 401 path
+        // retries later and an unreachable backend proves nothing about creds.
+        return null;
+      } finally {
+        preflightRefresh = null;
+      }
+    })();
+  }
+  const fresh = await preflightRefresh;
+  return fresh ?? token;
+}
 
 /** Clear the refresh queue — call during account switch to prevent stale refreshes. */
 export function clearRefreshQueue(): void {
@@ -442,6 +519,16 @@ apiClient.interceptors.response.use(
     const currentToken = await authStorage.getToken();
     if (requestToken !== currentToken) {
       return Promise.reject(error);
+    }
+
+    // A pre-emptive refresh is in flight (request interceptor): use its result
+    // rather than starting a second refresh with a token that is being rotated.
+    if (preflightRefresh) {
+      const fresh = await preflightRefresh;
+      if (!fresh) return Promise.reject(error);
+      originalRequest._retry = true;
+      originalRequest.headers.Authorization = `Bearer ${fresh}`;
+      return apiClient(originalRequest);
     }
 
     // If refresh already in progress, queue this request

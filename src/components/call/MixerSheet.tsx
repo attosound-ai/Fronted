@@ -90,6 +90,7 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
     <BottomSheet visible={visible} onClose={onClose} title={t('mixer.title')}>
       <View style={styles.body}>
         <Text style={styles.sectionLabel}>{t('mixer.recordingChannels')}</Text>
+        <Text style={styles.sectionHint}>{t('mixer.recordingHint')}</Text>
         {RECORD_CHANNELS.map((ch) => {
           const meta = CHANNEL_META[ch];
           const state = channels[ch];
@@ -196,6 +197,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 4,
+  },
+  sectionHint: {
+    color: '#666',
+    fontFamily: 'Archivo_400Regular',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 10,
   },
   channelRow: {
     paddingVertical: 6,

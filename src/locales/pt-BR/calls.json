@@ -86,9 +86,10 @@
     "recordingChannels": "Canais de gravação",
     "mic": "Meu microfone",
     "remote": "A outra pessoa",
-    "app": "Áudio do app",
+    "app": "Faixa de fundo",
     "metronome": "Metrônomo",
-    "bpm": "BPM"
+    "bpm": "BPM",
+    "recordingHint": "Desligado grava uma toma limpa para sobrepor. Ligue um para incluí-lo na gravação."
   },
   "transmit": {
     "offline": "Você está sem conexão. Conecte-se para enviar música na chamada.",

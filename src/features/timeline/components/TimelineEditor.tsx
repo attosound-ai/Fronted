@@ -41,7 +41,7 @@ import { LaneEditSheet } from './LaneEditSheet';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { useTimeline } from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
-import { getAudioInjector } from '@/lib/callAudio/createAudioInjector';
+import { getAudioInjector, AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 import { showNetFailureToast } from '@/components/ui/netToast';
 import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
@@ -63,18 +63,22 @@ import type { AudioSegment } from '@/types/call';
 import { COLORS } from '@/constants/theme';
 
 /**
- * Route in-call recording through the ENGINE MIXER instead of the server-side
- * Twilio Media Stream fork. Default OFF.
+ * Remote KILL-SWITCH for the engine-mixer recording path.
  *
- * The engine path records per channel (mic / remote / app / metronome) with the
- * app channel off by default, so a take sung over an injected backing track does
- * NOT contain that track and layers cleanly in the timeline. The Twilio path
- * cannot do that: it records the uplink as the far party hears it, backing track
- * included.
+ * The engine path is now the DEFAULT whenever the injection engine is present
+ * (audio injection on — the same condition that surfaces the mixer button),
+ * because it is what makes the mixer's per-channel config actually apply: it
+ * records per channel (mic / remote / app / metronome) with the app/beat channel
+ * OFF by default, so a take sung over an injected backing track records DRY and
+ * layers cleanly, and the user turns the beat channel on in the mixer when they
+ * want the whole blend baked in. The server-side Twilio fork cannot do that — it
+ * records the uplink as the far party hears it, backing track baked in.
  *
- * What the engine path GIVES UP, and why this stays flag-gated: the take lives on
- * the device until it uploads, so an app kill mid-take loses it, whereas the
- * server-side fork survives that. Flip this off to fall back instantly.
+ * The engine path's trade-off: the take lives on the device until it uploads, so
+ * an app kill mid-take loses it (a partial take is still written to disk),
+ * whereas the server-side fork survives that. So this flag stays as a fleet-wide
+ * escape hatch: set it to FALSE to fall every user back to the Twilio fork
+ * instantly if the engine path ever regresses. Absent/true ⇒ engine mix.
  */
 export const ENGINE_MIX_RECORDING_FLAG = 'incall_engine_mix_recording';
 
@@ -399,9 +403,18 @@ export function TimelineEditor({
     addClip,
     getRecordStartMs: () => recordingStartMsRef.current,
   });
-  // Flag-gated: OFF falls back to the proven server-side Twilio fork, which also
-  // survives the app being killed mid-take. See ENGINE_MIX_RECORDING_FLAG.
-  const engineMixEnabled = useFeatureFlag(ENGINE_MIX_RECORDING_FLAG) === true;
+  // Engine-mix is the DEFAULT in-call recording path whenever the injection engine
+  // is present (audio injection on — the same condition that shows the mixer
+  // button), so the mixer's per-channel config actually drives the take (beat/app
+  // channel OFF by default ⇒ a clean overdub the rep layers over the beat already
+  // in the timeline). Without the injection engine the custom device is not
+  // Twilio's active device, so we MUST stay on the server-side Twilio fork or
+  // recording would fail — that keeps recording working for non-injection users.
+  // ENGINE_MIX_RECORDING_FLAG is a kill-switch: set it false to force everyone back
+  // to the Twilio fork.
+  const injectionEnginePresent = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
+  const engineMixKilled = useFeatureFlag(ENGINE_MIX_RECORDING_FLAG) === false;
+  const useEngineMix = injectionEnginePresent && !engineMixKilled;
   const {
     startRecording: rawStartRecording,
     stopRecording: rawStopRecording,
@@ -410,7 +423,7 @@ export function TimelineEditor({
     elapsed: recordingElapsed,
     elapsedMs: recordingElapsedMs,
   } = recordingMode === 'twilioCall'
-    ? engineMixEnabled
+    ? useEngineMix
       ? engineMixRecording
       : twilioRecording
     : micRecording;

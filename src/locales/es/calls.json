@@ -86,9 +86,10 @@
     "recordingChannels": "Canales de grabación",
     "mic": "Mi micrófono",
     "remote": "La otra persona",
-    "app": "Audio del app",
+    "app": "Pista de fondo",
     "metronome": "Metrónomo",
-    "bpm": "BPM"
+    "bpm": "BPM",
+    "recordingHint": "Apagado graba una toma limpia para superponer. Activa uno para incluirlo en la grabación."
   },
   "transmit": {
     "offline": "Estás sin conexión. Conéctate para enviar música a la llamada.",

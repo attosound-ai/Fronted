@@ -86,9 +86,10 @@
     "recordingChannels": "Recording channels",
     "mic": "My microphone",
     "remote": "The other person",
-    "app": "App audio",
+    "app": "Backing track",
     "metronome": "Metronome",
-    "bpm": "BPM"
+    "bpm": "BPM",
+    "recordingHint": "Off records a clean take to layer over your tracks. Turn one on to bake it into the recording."
   },
   "transmit": {
     "offline": "You're offline. Connect to send music into the call.",

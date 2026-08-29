@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useWaveformData, WAVEFORM_PEAKS } from '../hooks/useWaveformData';
 
 interface WaveformViewProps {
@@ -18,27 +19,28 @@ interface WaveformViewProps {
 const FETCH_SAMPLES = WAVEFORM_PEAKS;
 
 /**
- * Hard ceiling on rendered bar Views, no matter how wide the clip is. Every bar
- * is its own native view, and Fabric mounts/unmounts a clip's entire subtree in
- * ONE synchronous main-thread transaction. Uncapped, a 25-minute clip at the
- * default zoom is ~150,000 px wide, so floor(width/3) produced ~50,000 views;
- * deleting that clip blocked the main thread long enough that the client
- * force-killed the app (Sentry REACT-NATIVE-3W, Aug 3 2026). The data behind
- * those views is only FETCH_SAMPLES amplitudes, so past this cap the extra
- * views carry zero information; bars simply widen to keep filling the clip.
+ * Horizontal resolution of the drawn envelope: one point per PX_PER_POINT
+ * pixels, capped at MAX_POINTS. The whole waveform is ONE native node (an SVG
+ * path), so this cap is about path-string size, not view count. It used to be
+ * up to 512 individual bar <View>s per clip, mounted/unmounted in one Fabric
+ * transaction: a 25-minute clip produced ~50,000 views and deleting it hung
+ * the main thread (Sentry REACT-NATIVE-3W). Now the same clip is 2 nodes.
  */
-const MAX_BARS = 512;
+const PX_PER_POINT = 2;
+const MAX_POINTS = 1024;
 
 /**
- * Resample an amplitude array to exactly `targetCount` entries.
- * Downsamples (bucket averaging) when shrinking, upsamples (linear interpolation) when expanding.
+ * Resample a peak array to exactly `targetCount` entries.
+ * Downsamples by bucket MAX (keeps transients), upsamples by linear interpolation.
  */
 function resample(source: number[], targetCount: number): number[] {
   if (targetCount <= 0 || source.length === 0) return [];
   if (source.length === targetCount) return source;
 
   if (targetCount === 1) {
-    return [source.reduce((a, b) => a + b, 0) / source.length];
+    let peak = 0;
+    for (const v of source) if (v > peak) peak = v;
+    return [peak];
   }
 
   const result: number[] = new Array(targetCount);
@@ -73,10 +75,38 @@ function resample(source: number[], targetCount: number): number[] {
   return result;
 }
 
+/**
+ * Build a filled, vertically mirrored envelope path (the pro-DAW look): the
+ * top edge follows the peaks left→right, the bottom edge mirrors them
+ * right→left, closed into one shape. A floor of MIN_HALF px keeps silence
+ * visible as a thin centre line instead of vanishing.
+ */
+function buildEnvelopePath(peaks: number[], width: number, height: number): string {
+  const n = peaks.length;
+  if (n === 0) return '';
+  const mid = height / 2;
+  const half = Math.max(1, mid - 1);
+  const MIN_HALF = 1;
+  const step = n > 1 ? width / (n - 1) : 0;
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const x = r1(i * step);
+    const y = r1(mid - Math.max(MIN_HALF, peaks[i] * half));
+    d += i === 0 ? `M${x},${y}` : `L${x},${y}`;
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    const x = r1(i * step);
+    const y = r1(mid + Math.max(MIN_HALF, peaks[i] * half));
+    d += `L${x},${y}`;
+  }
+  return `${d}Z`;
+}
+
 // memo: the editor tree still re-renders at a low rate during playback (the
 // throttled reducer commit) and on every unrelated state change. Nothing about a
-// waveform changes then, so skip re-running resample() + reconciling up to 512
-// bar Views per clip unless its own props actually changed.
+// waveform changes then, so skip rebuilding the path unless its own props change.
 export const WaveformView = memo(function WaveformView({
   segmentId,
   width,
@@ -86,60 +116,37 @@ export const WaveformView = memo(function WaveformView({
   trimStart = 0,
   trimEnd = 1,
 }: WaveformViewProps) {
-  const barWidth = 2;
-  const barGap = 1;
-  const idealBars = Math.max(1, Math.floor(width / (barWidth + barGap)));
-  const numBars = Math.min(idealBars, MAX_BARS);
-  // When capped, widen each bar so the waveform still fills the clip instead of
-  // occupying only the leftmost MAX_BARS * 3 px of it.
-  const effectiveBarWidth =
-    numBars < idealBars
-      ? Math.max(barWidth, (width - (numBars - 1) * barGap) / numBars)
-      : barWidth;
+  const numPoints = Math.max(2, Math.min(MAX_POINTS, Math.floor(width / PX_PER_POINT)));
 
-  // Fetch a fixed number of samples — query key never changes during zoom
+  // Fetch a fixed number of peaks — query key never changes during zoom
   const { data: amplitudes } = useWaveformData(segmentId, samples ?? FETCH_SAMPLES);
 
-  // Slice to clip's portion of the segment, then resample to fit the width
-  const bars = useMemo(() => {
-    if (!amplitudes) return [];
+  // Slice to the clip's portion of the segment, resample to the on-screen
+  // resolution, then serialize to ONE path string. Only re-runs when the clip's
+  // own geometry or its peaks change (zoom commit, trim, data arrival).
+  const pathD = useMemo(() => {
+    if (!amplitudes || amplitudes.length === 0) return '';
     const lo = Math.floor(trimStart * amplitudes.length);
     const hi = Math.max(lo + 1, Math.ceil(trimEnd * amplitudes.length));
     const slice = amplitudes.slice(lo, hi);
-    return resample(slice, numBars);
-  }, [amplitudes, numBars, trimStart, trimEnd]);
+    return buildEnvelopePath(resample(slice, numPoints), width, height);
+  }, [amplitudes, numPoints, trimStart, trimEnd, width, height]);
 
-  if (bars.length === 0) {
+  if (pathD === '') {
     return <View style={[styles.container, { width, height }]} />;
   }
 
-  const minBarHeight = 2;
-
   return (
-    <View style={[styles.container, { width, height }]}>
-      {bars.map((amp, i) => {
-        const barHeight = Math.max(minBarHeight, amp * height);
-        return (
-          <View
-            key={i}
-            style={{
-              width: effectiveBarWidth,
-              height: barHeight,
-              backgroundColor: color,
-              borderRadius: 1,
-              marginRight: i < numBars - 1 ? barGap : 0,
-            }}
-          />
-        );
-      })}
+    <View style={[styles.container, { width, height }]} pointerEvents="none">
+      <Svg width={width} height={height}>
+        <Path d={pathD} fill={color} fillOpacity={0.92} />
+      </Svg>
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     overflow: 'hidden',
   },
 });

@@ -5,6 +5,7 @@ import { Pencil } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text } from '@/components/ui/Text';
+import { haptic } from '@/lib/haptics/hapticService';
 import type { LaneMeta } from '../types';
 import { clampDb, formatDb, DB_MIN, DB_MAX } from '../utils/dbConversion';
 
@@ -16,8 +17,12 @@ interface LanePanelProps {
   onEdit: () => void;
   onToggleMute: () => void;
   onToggleSolo: () => void;
-  onGainChange: (gainDb: number) => void;
-  onPanChange: (pan: number) => void;
+  /**
+   * `commit` = true when this value should own an undo entry (gesture begin,
+   * tap, double-tap reset); false for the frames of a drag in between, so one
+   * drag is one Undo instead of sixty.
+   */
+  onGainChange: (gainDb: number, commit: boolean) => void;
 }
 
 const PANEL_WIDTH = 128;
@@ -26,15 +31,14 @@ const SLIDER_TRACK_WIDTH = PANEL_WIDTH - PANEL_PADDING_H * 2; // 104
 
 /**
  * Per-lane mixer strip, rendered as a sticky overlay on the left of the
- * timeline.
+ * timeline. Only what you reach for mid-take lives here; pan (with name,
+ * color and delete) sits in LaneEditSheet behind the pencil.
  *
- *   ● Track name
+ *   ● Track name                 ✎
  *   GAIN                     +0.0 dB
  *   ───────────●──────────
- *   PAN                        Center
- *   ───────────●──────────
  *   ┌──────────────────────────┐
- *   │    [ MUTE ]   [ SOLO ]   │   ← extra vertical padding
+ *   │    [ MUTE ]   [ SOLO ]   │   ← anchored to the panel bottom
  *   └──────────────────────────┘
  *
  * Stateless — all mutations are dispatched via the callbacks.
@@ -48,7 +52,6 @@ export const LanePanel = memo(function LanePanel({
   onToggleMute,
   onToggleSolo,
   onGainChange,
-  onPanChange,
 }: LanePanelProps) {
   const { t } = useTranslation('projects');
   const color = meta?.color ?? '#555';
@@ -56,14 +59,12 @@ export const LanePanel = memo(function LanePanel({
   const muted = meta?.muted ?? false;
   const solo = meta?.solo ?? false;
   const gainDb = meta?.gainDb ?? 0;
-  const pan = meta?.pan ?? 0;
 
-  // Drag start positions — captured on gesture begin so onUpdate can
+  // Drag start position — captured on gesture begin so onUpdate can
   // resolve new positions as `start + translationX`.
   const gainStartX = useRef(0);
-  const panStartX = useRef(0);
 
-  // react-native-gesture-handler Pan gestures. We use RNGH (not
+  // react-native-gesture-handler Pan gesture. We use RNGH (not
   // PanResponder) because the lane panels live inside a vertical
   // ScrollView, and iOS's native UIPanGestureRecognizer on the
   // ScrollView steals drag events from JS PanResponders. RNGH gestures
@@ -73,7 +74,7 @@ export const LanePanel = memo(function LanePanel({
   // `.minDistance(0)` fires onBegin on first touch so a plain tap still
   // moves the thumb. `.runOnJS(true)` routes callbacks to the JS thread
   // so we can call React state setters directly.
-  const gainGesture = React.useMemo(
+  const gainPan = React.useMemo(
     () =>
       Gesture.Pan()
         .minDistance(0)
@@ -82,45 +83,53 @@ export const LanePanel = memo(function LanePanel({
           const clampedX = Math.max(0, Math.min(SLIDER_TRACK_WIDTH, e.x));
           gainStartX.current = clampedX;
           const pct = clampedX / SLIDER_TRACK_WIDTH;
-          onGainChange(clampDb(DB_MIN + pct * (DB_MAX - DB_MIN)));
+          onGainChange(clampDb(DB_MIN + pct * (DB_MAX - DB_MIN)), true);
         })
         .onUpdate((e) => {
           const newX = gainStartX.current + e.translationX;
           const pct = Math.max(0, Math.min(1, newX / SLIDER_TRACK_WIDTH));
-          onGainChange(clampDb(DB_MIN + pct * (DB_MAX - DB_MIN)));
+          onGainChange(clampDb(DB_MIN + pct * (DB_MAX - DB_MIN)), false);
         }),
     [onGainChange]
   );
 
-  const panGesture = React.useMemo(
+  // Double-tap the fader to snap back to unity. Composed as Simultaneous so
+  // the pan keeps its tap-to-jump feel: the first tap still moves the thumb
+  // under the finger, and the second tap's onEnd snaps it to 0 dB.
+  const gainDoubleTap = React.useMemo(
     () =>
-      Gesture.Pan()
-        .minDistance(0)
+      Gesture.Tap()
+        .numberOfTaps(2)
         .runOnJS(true)
-        .onBegin((e) => {
-          const clampedX = Math.max(0, Math.min(SLIDER_TRACK_WIDTH, e.x));
-          panStartX.current = clampedX;
-          const pct = clampedX / SLIDER_TRACK_WIDTH;
-          onPanChange(-1 + pct * 2);
-        })
-        .onUpdate((e) => {
-          const newX = panStartX.current + e.translationX;
-          const pct = Math.max(0, Math.min(1, newX / SLIDER_TRACK_WIDTH));
-          onPanChange(-1 + pct * 2);
+        .onEnd(() => {
+          void haptic('selection');
+          onGainChange(0, true);
         }),
-    [onPanChange]
+    [onGainChange]
+  );
+  const gainGesture = React.useMemo(
+    () => Gesture.Simultaneous(gainPan, gainDoubleTap),
+    [gainPan, gainDoubleTap]
   );
 
-  const handleResetGain = useCallback(() => onGainChange(0), [onGainChange]);
-  const handleResetPan = useCallback(() => onPanChange(0), [onPanChange]);
+  const handleResetGain = useCallback(() => {
+    void haptic('selection');
+    onGainChange(0, true);
+  }, [onGainChange]);
+  const handleToggleMute = useCallback(() => {
+    void haptic('selection');
+    onToggleMute();
+  }, [onToggleMute]);
+  const handleToggleSolo = useCallback(() => {
+    void haptic('selection');
+    onToggleSolo();
+  }, [onToggleSolo]);
 
   return (
     <View style={[styles.container, isActive && styles.containerActive]}>
-      {/* Top stack: track name + two slider sub-groups. Each slider
-          group has its label and track glued together (gap 2), and the
-          groups themselves are separated by a bigger gap (10) so the
-          previous slider's thumb overhang can't visually touch the next
-          label. */}
+      {/* Top stack: track name + the gain group. The group has its label
+          and track glued together (gap 2); the name row sits a bigger gap
+          (12) above it so the name never crowds the GAIN label. */}
       <View style={styles.topStack}>
         {/* Track name + edit button */}
         <View style={styles.nameRow}>
@@ -151,7 +160,12 @@ export const LanePanel = memo(function LanePanel({
         <View style={styles.sliderGroup}>
           <View style={styles.labelRow}>
             <Text style={styles.metricLabel}>{t('timeline.laneGainLabel')}</Text>
-            <TouchableOpacity onPress={handleResetGain} hitSlop={6}>
+            <TouchableOpacity
+              onPress={handleResetGain}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('timeline.laneGainResetAccessibility')}
+            >
               <Text style={styles.metricValue}>{formatDb(gainDb)}</Text>
             </TouchableOpacity>
           </View>
@@ -170,44 +184,29 @@ export const LanePanel = memo(function LanePanel({
             </View>
           </GestureDetector>
         </View>
-
-        {/* Pan group */}
-        <View style={styles.sliderGroup}>
-          <View style={styles.labelRow}>
-            <Text style={styles.metricLabel}>{t('timeline.lanePanLabel')}</Text>
-            <TouchableOpacity onPress={handleResetPan} hitSlop={6}>
-              <Text style={styles.metricValue}>{formatPan(pan)}</Text>
-            </TouchableOpacity>
-          </View>
-          <GestureDetector gesture={panGesture}>
-            <View
-              style={styles.sliderTrack}
-              hitSlop={{ top: 12, bottom: 12, left: 4, right: 4 }}
-            >
-              <View style={styles.panCenterMark} />
-              <View style={[styles.sliderThumb, { left: panToTrack(pan) - 5 }]} />
-            </View>
-          </GestureDetector>
-        </View>
       </View>
 
       {/* Bottom: mute / solo cluster anchored to the container bottom */}
       <View style={styles.buttonWrapper}>
         <TouchableOpacity
-          onPress={onToggleMute}
+          onPress={handleToggleMute}
           hitSlop={{ top: 6, bottom: 4, left: 4, right: 2 }}
           style={[styles.pillButton, muted && styles.pillButtonMuteActive]}
           activeOpacity={0.7}
         >
-          <Text style={[styles.pillText, muted && styles.pillTextActive]}>{t('timeline.laneMute')}</Text>
+          <Text style={[styles.pillText, muted && styles.pillTextActive]}>
+            {t('timeline.laneMute')}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={onToggleSolo}
+          onPress={handleToggleSolo}
           hitSlop={{ top: 6, bottom: 4, left: 2, right: 4 }}
           style={[styles.pillButton, solo && styles.pillButtonSoloActive]}
           activeOpacity={0.7}
         >
-          <Text style={[styles.pillText, solo && styles.pillTextActive]}>{t('timeline.laneSolo')}</Text>
+          <Text style={[styles.pillText, solo && styles.pillTextActive]}>
+            {t('timeline.laneSolo')}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -218,19 +217,6 @@ function dbToTrack(db: number): number {
   const clamped = Math.max(DB_MIN, Math.min(DB_MAX, db));
   const pct = (clamped - DB_MIN) / (DB_MAX - DB_MIN);
   return pct * SLIDER_TRACK_WIDTH;
-}
-
-function panToTrack(pan: number): number {
-  const clamped = Math.max(-1, Math.min(1, pan));
-  const pct = (clamped + 1) / 2;
-  return pct * SLIDER_TRACK_WIDTH;
-}
-
-function formatPan(pan: number): string {
-  if (Math.abs(pan) < 0.02) return 'Center';
-  const side = pan < 0 ? 'L' : 'R';
-  const pct = Math.round(Math.abs(pan) * 100);
-  return `${side}${pct}`;
 }
 
 const styles = StyleSheet.create({
@@ -248,7 +234,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A',
     paddingHorizontal: PANEL_PADDING_H,
-    paddingTop: 8,
+    paddingTop: 10,
     // Safety net: if content grows beyond the declared `height` (e.g.
     // different system font metrics), clip it inside the panel.
     overflow: 'hidden',
@@ -258,13 +244,12 @@ const styles = StyleSheet.create({
     borderRightColor: '#3B82F6',
   },
   topStack: {
-    // Big gap between logical sections (name, gain group, pan group)
-    // so slider thumbs don't visually collide with the next label
-    // and each section reads as its own discrete block.
-    gap: 16,
+    // Gap between the name row and the gain group so the name reads as
+    // its own block above the fader.
+    gap: 12,
   },
   sliderGroup: {
-    // Tight gap inside a group — label sits right above its slider.
+    // Tight gap inside the group — label sits right above its slider.
     gap: 2,
   },
   nameRow: {
@@ -344,25 +329,18 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#FFF',
   },
-  panCenterMark: {
-    position: 'absolute',
-    left: '50%',
-    width: 1,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#444',
-  },
   // Mute/solo wrapper — absolutely anchored to the bottom of the panel
-  // so the vertical gap between the pan slider and the pill tops is
+  // so the vertical gap between the gain fader and the pill tops is
   // deterministic regardless of how flex distributes slack. With
-  // TRACK_HEIGHT=136 and the top stack ending at ~y=70, anchoring the
-  // wrapper at the bottom gives ~30pt of clear space for the pan slider
-  // to breathe (the gap is all empty #0F0F0F panel background).
+  // TRACK_HEIGHT=124 the panel is 120 tall: the top stack ends at y≈60
+  // (thumb overhang to 63) and this wrapper's divider sits at y=77, so
+  // the fader keeps 14pt of clear #0F0F0F below its thumb and its
+  // 12pt hitSlop never overlaps the pills' 6pt one.
   buttonWrapper: {
     position: 'absolute',
     left: PANEL_PADDING_H,
     right: PANEL_PADDING_H,
-    bottom: 6,
+    bottom: 8,
     flexDirection: 'row',
     gap: 6,
     paddingTop: 8,

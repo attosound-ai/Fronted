@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
-import { View, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Check, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
+import { haptic } from '@/lib/haptics/hapticService';
 import type { LaneMeta } from '../types';
 
 interface LaneEditSheetProps {
@@ -21,6 +29,11 @@ interface LaneEditSheetProps {
   onClose: () => void;
   onSave: (meta: LaneMeta) => void;
   onDelete: () => void;
+  /** Live pan updates (-1..1). Unlike name/color, pan is not staged
+   *  until Save: you judge a pan move by ear while the timeline keeps
+   *  playing under the sheet, so it lands in the timeline as you drag. */
+  /** `commit` = true for gesture begin / tap / reset, false for drag frames. */
+  onPanChange?: (pan: number, commit: boolean) => void;
 }
 
 const SWATCHES = [
@@ -34,13 +47,15 @@ const SWATCHES = [
   '#F97316', // orange
 ];
 
+const PAN_THUMB_SIZE = 18;
+
 /**
- * Bottom sheet for renaming a lane and picking its color. Replaces the
- * previous `Alert.prompt` + `Alert.alert` chain which was clunky, iOS-
- * only, and gave no preview of the selected color.
+ * Bottom sheet for renaming a lane, picking its color and setting its pan.
+ * Replaces the previous `Alert.prompt` + `Alert.alert` chain which was
+ * clunky, iOS-only, and gave no preview of the selected color.
  *
- * The sheet is fully controlled — it stages the user's edits locally and
- * only commits them to the timeline state when they tap "Save".
+ * Name and color are staged locally and only committed to the timeline
+ * state when the user taps "Save". Pan applies live (see `onPanChange`).
  */
 export function LaneEditSheet({
   visible,
@@ -51,17 +66,82 @@ export function LaneEditSheet({
   onClose,
   onSave,
   onDelete,
+  onPanChange,
 }: LaneEditSheetProps) {
   const { t } = useTranslation('projects');
   const [name, setName] = useState(currentMeta?.name ?? '');
   const [color, setColor] = useState(currentMeta?.color ?? SWATCHES[0]);
 
-  // Re-sync local state every time the sheet is opened for a new lane
+  // Re-sync local state when the sheet opens (or is re-targeted to another
+  // lane). NOT on every currentMeta change: pan applies live, so currentMeta
+  // gets a new identity on each pan move and re-syncing then would wipe an
+  // unsaved name/color edit mid-drag.
   useEffect(() => {
     if (!visible) return;
     setName(currentMeta?.name ?? '');
     setColor(currentMeta?.color ?? SWATCHES[0]);
-  }, [visible, currentMeta]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, laneIndex]);
+
+  // ── Pan ──
+  // Read straight from currentMeta since every move is already committed.
+  const pan = currentMeta?.pan ?? 0;
+  const panTrackWidthRef = useRef(0);
+  const [panTrackWidth, setPanTrackWidth] = useState(0);
+  const panStartX = useRef(0);
+
+  const handlePanLayout = (e: LayoutChangeEvent) => {
+    panTrackWidthRef.current = e.nativeEvent.layout.width;
+    setPanTrackWidth(e.nativeEvent.layout.width);
+  };
+
+  // Same RNGH pan as the lane strip's gain fader: native, so it takes the
+  // touch ahead of the sheet's own drag-to-dismiss pan instead of racing it
+  // the way a JS PanResponder would. `.minDistance(0)` lets a plain tap
+  // jump the thumb; the track width is measured, so `e.x` maps directly.
+  const panDrag = useMemo(
+    () =>
+      Gesture.Pan()
+        .minDistance(0)
+        .runOnJS(true)
+        .onBegin((e) => {
+          const width = panTrackWidthRef.current;
+          if (width <= 0) return;
+          const clampedX = Math.max(0, Math.min(width, e.x));
+          panStartX.current = clampedX;
+          onPanChange?.(-1 + (clampedX / width) * 2, true);
+        })
+        .onUpdate((e) => {
+          const width = panTrackWidthRef.current;
+          if (width <= 0) return;
+          const newX = panStartX.current + e.translationX;
+          const pct = Math.max(0, Math.min(1, newX / width));
+          onPanChange?.(-1 + pct * 2, false);
+        }),
+    [onPanChange]
+  );
+  // Double-tap the slider to re-center (Simultaneous, like the gain fader:
+  // the first tap jumps the thumb, the second tap's onEnd snaps it back).
+  const panDoubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        .runOnJS(true)
+        .onEnd(() => {
+          void haptic('selection');
+          onPanChange?.(0, true);
+        }),
+    [onPanChange]
+  );
+  const panGesture = useMemo(
+    () => Gesture.Simultaneous(panDrag, panDoubleTap),
+    [panDrag, panDoubleTap]
+  );
+
+  const handleResetPan = () => {
+    void haptic('selection');
+    onPanChange?.(0, true);
+  };
 
   const handleSave = () => {
     onSave({
@@ -81,12 +161,13 @@ export function LaneEditSheet({
     index: laneIndex + 1,
   });
 
+  // Thumb center and the fill that runs from the center mark to it, so
+  // the direction of the pan reads at a glance.
+  const panCenterX = panTrackWidth / 2;
+  const panThumbX = ((Math.max(-1, Math.min(1, pan)) + 1) / 2) * panTrackWidth;
+
   return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      title={t('timeline.laneEditTitle')}
-    >
+    <BottomSheet visible={visible} onClose={onClose} title={t('timeline.laneEditTitle')}>
       <View style={styles.content}>
         {/* Name input */}
         <View style={styles.field}>
@@ -132,13 +213,50 @@ export function LaneEditSheet({
                   })}
                   accessibilityState={{ selected: isSelected }}
                 >
-                  {isSelected && (
-                    <Check size={16} color="#FFF" strokeWidth={3} />
-                  )}
+                  {isSelected && <Check size={16} color="#FFF" strokeWidth={3} />}
                 </TouchableOpacity>
               );
             })}
           </View>
+        </View>
+
+        {/* Pan — one row: label, slider with a center mark, tappable
+            readout. Double-tap the slider or tap the readout to re-center. */}
+        <View style={styles.panRow}>
+          <Text variant="caption" style={[styles.fieldLabel, styles.panLabel]}>
+            {t('timeline.lanePanLabel')}
+          </Text>
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.panTrackHit} onLayout={handlePanLayout}>
+              <View style={styles.panTrack}>
+                <View
+                  style={[
+                    styles.panFill,
+                    {
+                      left: Math.min(panCenterX, panThumbX),
+                      width: Math.abs(panThumbX - panCenterX),
+                      backgroundColor: color,
+                    },
+                  ]}
+                />
+                <View style={styles.panCenterMark} />
+                <View
+                  style={[styles.panThumb, { left: panThumbX - PAN_THUMB_SIZE / 2 }]}
+                />
+              </View>
+            </View>
+          </GestureDetector>
+          <TouchableOpacity
+            onPress={handleResetPan}
+            hitSlop={8}
+            activeOpacity={0.6}
+            accessibilityRole="button"
+            accessibilityLabel={t('timeline.lanePanResetAccessibility')}
+          >
+            <Text variant="caption" style={styles.panValue}>
+              {formatPan(pan, t('timeline.lanePanCenter'))}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Delete row — secondary destructive action */}
@@ -149,17 +267,10 @@ export function LaneEditSheet({
             style={[styles.deleteRow, hasClips && styles.deleteRowDisabled]}
             activeOpacity={0.7}
           >
-            <Trash2
-              size={16}
-              color={hasClips ? '#555' : '#EF4444'}
-              strokeWidth={2.25}
-            />
+            <Trash2 size={16} color={hasClips ? '#555' : '#EF4444'} strokeWidth={2.25} />
             <Text
               variant="body"
-              style={[
-                styles.deleteLabel,
-                hasClips && styles.deleteLabelDisabled,
-              ]}
+              style={[styles.deleteLabel, hasClips && styles.deleteLabelDisabled]}
             >
               {hasClips
                 ? t('timeline.laneEditDeleteBlocked')
@@ -194,12 +305,19 @@ export function LaneEditSheet({
   );
 }
 
+function formatPan(pan: number, centerLabel: string): string {
+  if (Math.abs(pan) < 0.02) return centerLabel;
+  const side = pan < 0 ? 'L' : 'R';
+  const pct = Math.round(Math.abs(pan) * 100);
+  return `${side}${pct}`;
+}
+
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 24,
-    gap: 20,
+    gap: 16,
   },
   field: {
     gap: 8,
@@ -238,6 +356,60 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderColor: '#FFF',
+  },
+  panRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 36,
+  },
+  panLabel: {
+    width: 40,
+  },
+  // Full-height hit area around the thin track; the thumb overhangs the
+  // track but stays inside this box.
+  panTrackHit: {
+    flex: 1,
+    height: 36,
+    justifyContent: 'center',
+  },
+  panTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+  },
+  panFill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    borderRadius: 4,
+    opacity: 0.65,
+  },
+  panCenterMark: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -1,
+    width: 2,
+    top: -3,
+    bottom: -3,
+    borderRadius: 1,
+    backgroundColor: '#555',
+  },
+  panThumb: {
+    position: 'absolute',
+    top: -(PAN_THUMB_SIZE - 8) / 2,
+    width: PAN_THUMB_SIZE,
+    height: PAN_THUMB_SIZE,
+    borderRadius: PAN_THUMB_SIZE / 2,
+    backgroundColor: '#FFF',
+  },
+  panValue: {
+    minWidth: 52,
+    textAlign: 'right',
+    color: '#FFF',
+    fontSize: 12,
+    fontFamily: 'Archivo_500Medium',
   },
   deleteRow: {
     flexDirection: 'row',

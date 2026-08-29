@@ -22,6 +22,7 @@ import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import { useCallStore } from '@/stores/callStore';
+import { haptic } from '@/lib/haptics/hapticService';
 import {
   X,
   CloudUpload,
@@ -44,8 +45,9 @@ import { TimelinePlayhead } from './TimelinePlayhead';
 import { TimelineToolbar } from './TimelineToolbar';
 import { LanePanel } from './LanePanel';
 import { LaneEditSheet } from './LaneEditSheet';
+import { EffectsSheet } from './EffectsSheet';
 import { AudioPreparingModal } from './AudioPreparingModal';
-import { useTimeline } from '../hooks/useTimeline';
+import { useTimeline, clampZoom } from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
 import {
   getAudioInjector,
@@ -56,17 +58,19 @@ import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
 import { useTwilioCallRecording } from '../hooks/useTwilioCallRecording';
 import { useEngineMixRecording } from '../hooks/useEngineMixRecording';
+import { useClipEffects } from '../hooks/useClipEffects';
 import { useFeatureFlag } from '@/lib/analytics';
 
 import { serverClipToLocal, clipToInput } from '../types';
 import { getTimelineDuration } from '../utils/clipOperations';
 import {
   msToPixels,
+  pixelsToMs,
   formatTimelineMs,
   generateRulerMarks,
 } from '../utils/timelineCalculations';
 import { projectService } from '@/lib/api/projectService';
-import type { LaneMeta } from '../types';
+import type { LaneMeta, LocalClip, EffectChain } from '../types';
 import type { TimelineClip, LaneMetadata, ExportResult } from '@/types/project';
 import type { AudioSegment } from '@/types/call';
 import { COLORS } from '@/constants/theme';
@@ -111,17 +115,24 @@ interface TimelineEditorProps {
   topSlot?: React.ReactNode;
 }
 
-// Timeline geometry — tuned for readability over cramming tracks. On a
-// modern iPhone (17 Pro / 16 Pro, ~874pt height) ~3 tracks fit fully;
-// anything beyond that scrolls vertically. Gives ~13pt of clearance
-// between the gain slider thumb and the pan label, and ~41pt between
-// the pan slider and the Mute/Solo pills.
-const TRACK_HEIGHT = 180;
+// Timeline geometry. The lane strip only carries name + gain + Mute/Solo
+// now (pan lives in LaneEditSheet), so 124 is the smallest height that is
+// not cramped: 14pt of clearance between the gain thumb and the Mute/Solo
+// divider, and the fader's hitSlop never overlaps the pills'. On a modern
+// iPhone (17 Pro / 16 Pro, ~874pt height) ~4 tracks fit fully; anything
+// beyond that scrolls vertically.
+const TRACK_HEIGHT = 124;
 const LANE_PADDING = 4;
 const RULER_HEIGHT = 28;
 const LANE_LABEL_WIDTH = 128; // matches LanePanel width
 const RULER_LEFT_GUTTER = 16; // breathing room between sticky panels and ruler start
 const ADD_TRACK_ROW_HEIGHT = 42; // dashed "+ Add Track" row below the last lane
+// Range selection: an edge within this many screen px of the playhead or a
+// clip edge on the lane snaps to it; the drag also needs this much travel
+// before it counts as a range (a quicker touch stays a tap).
+const RANGE_SNAP_PX = 8;
+// Live range updates go through the reducer, so cap them at ~30Hz.
+const RANGE_EMIT_MS = 33;
 
 export function TimelineEditor({
   projectId,
@@ -204,7 +215,21 @@ export function TimelineEditor({
     setLaneSolo,
     setLaneGain,
     setLanePan,
+    patchClipEffects,
+    setSelection,
+    copyRegion,
+    cutRegion,
+    silenceRegion,
+    pasteRegion,
+    canJoinClips,
+    joinClips,
+    insertTime,
   } = useTimeline(initialClips, initialLaneMeta);
+
+  // The clip the edit bar, the effects sheet and Join act on.
+  const selectedClip = state.selectedClipId
+    ? state.clips.find((c) => c.id === state.selectedClipId)
+    : undefined;
 
   // Memory attribution: bracket the in-call editor so a memory heartbeat between
   // these markers is attributed to the editor. This screen is the prime suspect
@@ -617,7 +642,7 @@ export function TimelineEditor({
         .onUpdate((e) => {
           // Clamp the preview to the same [0.1, 4] range the reducer enforces so
           // the live transform never overshoots what the commit will produce.
-          const target = Math.max(0.1, Math.min(4, zoomSv.value * e.scale));
+          const target = clampZoom(zoomSv.value * e.scale);
           pinchScale.value = target / zoomSv.value;
         })
         .onEnd(() => {
@@ -888,12 +913,233 @@ export function TimelineEditor({
     handleRemoveLane(editingLaneIndex);
   }, [editingLaneIndex, handleRemoveLane]);
 
+  // Pan applies live from the sheet (you set it by ear), straight through
+  // the same setter the lane strip used to call.
+  const handleLaneEditPan = useCallback(
+    (pan: number, commit: boolean) => {
+      if (editingLaneIndex === null) return;
+      setLanePan(editingLaneIndex, pan, { commit });
+    },
+    [editingLaneIndex, setLanePan]
+  );
+
   const editingMeta =
     editingLaneIndex !== null ? state.laneMeta[editingLaneIndex] : undefined;
   const editingLaneHasClips =
     editingLaneIndex !== null
       ? state.clips.some((c) => c.laneIndex === editingLaneIndex)
       : false;
+
+  const laneName = useCallback(
+    (laneIndex: number) =>
+      state.laneMeta[laneIndex]?.name ||
+      t('timeline.laneDefaultName', { index: laneIndex + 1 }),
+    [state.laneMeta, t]
+  );
+
+  // Caption for the toolbar's edit bar: the selected clip's lane name (or
+  // its default "Lane N") and the clip's trimmed length, e.g. "Vocals · 00:12".
+  const selectedLabel = selectedClip
+    ? `${laneName(selectedClip.laneIndex)} · ${formatTimelineMs(
+        selectedClip.endInSegment - selectedClip.startInSegment
+      )}`
+    : undefined;
+
+  // ── Per-clip effects ──
+  // The render lands as a NEW segment; register it locally so playback and
+  // the waveform resolve it before the next project refetch replaces it.
+  const [effectsSheetVisible, setEffectsSheetVisible] = useState(false);
+  // Sheet state can outlive its clip (a refetch regenerates ids mid-session);
+  // drop it so the next selection does not pop the sheet open uninvited.
+  useEffect(() => {
+    if (!selectedClip && effectsSheetVisible) setEffectsSheetVisible(false);
+  }, [selectedClip, effectsSheetVisible]);
+  const addLocalSegment = useCallback(
+    (segment: AudioSegment & { downloadUrl: string }) =>
+      setLocalSegments((prev) => [...prev, segment]),
+    []
+  );
+  const {
+    applyEffects,
+    removeEffects,
+    busy: effectsBusy,
+    available: effectsAvailable,
+  } = useClipEffects({
+    projectId,
+    segments: localSegments,
+    addSegment: addLocalSegment,
+    patchClip: patchClipEffects,
+  });
+  const handleApplyEffects = useCallback(
+    async (chain: EffectChain) => {
+      if (!selectedClip) return;
+      const ok = await applyEffects(selectedClip, chain);
+      if (ok) setEffectsSheetVisible(false);
+    },
+    [selectedClip, applyEffects]
+  );
+  const handleRemoveEffects = useCallback(async () => {
+    if (!selectedClip) return;
+    const ok = await removeEffects(selectedClip);
+    if (ok) setEffectsSheetVisible(false);
+  }, [selectedClip, removeEffects]);
+
+  // ── Join ──
+  // Heals the selected clip with its nearest neighbor on the lane when the
+  // reducer says they are contiguous (same source, touching). The right
+  // neighbor is tried first, then the left; the pair is kept in time order.
+  const joinPair = useMemo<[string, string] | null>(() => {
+    if (!selectedClip) return null;
+    const selStart = selectedClip.positionInTimeline;
+    const selEnd = selStart + (selectedClip.endInSegment - selectedClip.startInSegment);
+    let right: LocalClip | undefined;
+    let left: LocalClip | undefined;
+    let rightGap = Infinity;
+    let leftGap = Infinity;
+    for (const c of state.clips) {
+      if (c.laneIndex !== selectedClip.laneIndex || c.id === selectedClip.id) continue;
+      const cStart = c.positionInTimeline;
+      const cEnd = cStart + (c.endInSegment - c.startInSegment);
+      if (cStart >= selEnd - 1 && cStart - selEnd < rightGap) {
+        right = c;
+        rightGap = cStart - selEnd;
+      }
+      if (cEnd <= selStart + 1 && selStart - cEnd < leftGap) {
+        left = c;
+        leftGap = selStart - cEnd;
+      }
+    }
+    if (right && canJoinClips(selectedClip.id, right.id))
+      return [selectedClip.id, right.id];
+    if (left && canJoinClips(left.id, selectedClip.id)) return [left.id, selectedClip.id];
+    return null;
+  }, [selectedClip, state.clips, canJoinClips]);
+  const handleJoin = useCallback(() => {
+    if (!joinPair) return;
+    joinClips(joinPair[0], joinPair[1]);
+  }, [joinPair, joinClips]);
+
+  // ── Range selection (Select mode) ──
+  // While the mode is on, a one-finger horizontal pan on the lane surface
+  // draws a region on the lane under the finger. The pan is native (RNGH),
+  // so once it activates it takes the touch from the JS trim handles and the
+  // horizontal scroll (which is also switched off in this mode, so a drag
+  // never races it). A clip's long-press move still wins if the user holds
+  // 300ms before dragging, because that gesture is already active when this
+  // one would start; a quick tap on a clip still selects it (no travel).
+  const [selectMode, setSelectMode] = useState(false);
+  const toggleSelectMode = useCallback(() => {
+    void haptic('selection');
+    // Entering drops the clip selection (and any range, via the reducer) so
+    // the bar shows the mode; leaving drops the range.
+    if (selectMode) setSelection(null);
+    else selectClip(null);
+    setSelectMode(!selectMode);
+  }, [selectMode, setSelection, selectClip]);
+  // Recording pins the bar to browse and auto-follows the scroll: leave the mode.
+  useEffect(() => {
+    if (!isRecording || !selectMode) return;
+    setSelectMode(false);
+    setSelection(null);
+  }, [isRecording, selectMode, setSelection]);
+
+  const laneCountRef = useRef(state.laneCount);
+  laneCountRef.current = state.laneCount;
+  const rangeDownRef = useRef({ x: 0, y: 0 });
+  const rangeAnchorRef = useRef({ laneIndex: 0, ms: 0 });
+  const rangeLastEmitRef = useRef(0);
+
+  // Snap a tracks-area x to the playhead or a clip edge on the lane when it
+  // is within RANGE_SNAP_PX at the current zoom; otherwise the raw time.
+  const snapRangeEdge = useCallback(
+    (x: number, laneIndex: number) => {
+      const zoom = zoomSv.value;
+      const rawMs = Math.max(0, pixelsToMs(x, zoom));
+      let best = rawMs;
+      let bestDist = pixelsToMs(RANGE_SNAP_PX, zoom);
+      const consider = (ms: number) => {
+        const dist = Math.abs(ms - rawMs);
+        if (dist <= bestDist) {
+          best = ms;
+          bestDist = dist;
+        }
+      };
+      consider(positionSv.value);
+      for (const c of currentClipsRef.current) {
+        if (c.laneIndex !== laneIndex) continue;
+        consider(c.positionInTimeline);
+        consider(c.positionInTimeline + (c.endInSegment - c.startInSegment));
+      }
+      return Math.round(best);
+    },
+    [zoomSv, positionSv]
+  );
+  const emitRange = useCallback(
+    (x: number) => {
+      const { laneIndex, ms: anchor } = rangeAnchorRef.current;
+      const ms = snapRangeEdge(x, laneIndex);
+      setSelection({
+        laneIndex,
+        startMs: Math.min(anchor, ms),
+        endMs: Math.max(anchor, ms),
+      });
+    },
+    [snapRangeEdge, setSelection]
+  );
+  const rangeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(selectMode)
+        .maxPointers(1)
+        // Horizontal only, so a vertical drag still scrolls the lanes.
+        .activeOffsetX([-RANGE_SNAP_PX, RANGE_SNAP_PX])
+        .failOffsetY([-12, 12])
+        .runOnJS(true)
+        .onBegin((e) => {
+          // The anchor is where the finger went down, not where the pan
+          // activated (that is already RANGE_SNAP_PX away).
+          rangeDownRef.current = { x: e.x, y: e.y };
+        })
+        .onStart(() => {
+          const { x, y } = rangeDownRef.current;
+          const laneIndex = Math.max(
+            0,
+            Math.min(laneCountRef.current - 1, Math.floor(y / TRACK_HEIGHT))
+          );
+          const ms = snapRangeEdge(x, laneIndex);
+          rangeAnchorRef.current = { laneIndex, ms };
+          rangeLastEmitRef.current = 0;
+          void haptic('selection');
+          setSelection({ laneIndex, startMs: ms, endMs: ms });
+        })
+        .onUpdate((e) => {
+          const now = Date.now();
+          if (now - rangeLastEmitRef.current < RANGE_EMIT_MS) return;
+          rangeLastEmitRef.current = now;
+          emitRange(e.x);
+        })
+        .onEnd((e) => {
+          emitRange(e.x);
+          // Both edges snapped to the same point: nothing to act on.
+          const { ms: anchor, laneIndex } = rangeAnchorRef.current;
+          if (snapRangeEdge(e.x, laneIndex) === anchor) setSelection(null);
+        }),
+    [selectMode, snapRangeEdge, emitRange, setSelection]
+  );
+
+  // Region caption, e.g. "Range · 00:04 on Vocals", and the Insert action
+  // (opens the region's length of empty time at its start on ALL lanes).
+  const region = state.selection;
+  const regionLabel = region
+    ? t('timeline.toolRangeCaption', {
+        duration: formatTimelineMs(region.endMs - region.startMs),
+        lane: laneName(region.laneIndex),
+      })
+    : undefined;
+  const handleInsert = useCallback(() => {
+    if (!region) return;
+    insertTime(region.startMs, region.endMs - region.startMs, { allLanes: true });
+  }, [region, insertTime]);
 
   return (
     <SafeAreaView
@@ -1023,6 +1269,8 @@ export function TimelineEditor({
               <ScrollView
                 ref={hScrollRef}
                 horizontal
+                // In Select mode a horizontal drag draws a range, never scrolls.
+                scrollEnabled={!selectMode}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{
                   width: totalWidth + LANE_LABEL_WIDTH + RULER_LEFT_GUTTER,
@@ -1038,114 +1286,154 @@ export function TimelineEditor({
                     onSeek={handleSeek}
                   />
 
-                  {/* Tracks area — tap empty space to deselect */}
-                  <View
-                    style={[
-                      styles.tracksArea,
-                      { width: totalWidth, height: tracksAreaHeight },
-                    ]}
-                  >
-                    {/* Lane backgrounds */}
-                    {Array.from({ length: state.laneCount }, (_, i) => (
-                      <View
-                        key={`lane-bg-${i}`}
-                        pointerEvents="none"
-                        style={[
-                          styles.laneBackground,
-                          {
-                            top: i * TRACK_HEIGHT,
-                            height: TRACK_HEIGHT,
-                            backgroundColor: i % 2 === 0 ? '#0d0d0d' : '#111',
-                          },
-                          state.activeLaneIndex === i && styles.laneBackgroundActive,
-                        ]}
-                      />
-                    ))}
-
-                    {state.clips.map((clip) => {
-                      // Neighbors on the same lane (excluding self) — used
-                      // for the live wall-rule clamp during drag.
-                      const sameLaneNeighbors = state.clips.filter(
-                        (c) => c.laneIndex === clip.laneIndex && c.id !== clip.id
-                      );
-                      return (
-                        <TimelineTrack
-                          key={clip.id}
-                          clip={clip}
-                          zoom={state.zoomLevel}
-                          isSelected={state.selectedClipId === clip.id}
-                          onSelect={() => {
-                            clearTimeout(deselectTimerRef.current);
-                            selectClip(clip.id);
-                          }}
-                          onTrimChange={(start, end) => trimClip(clip.id, start, end)}
-                          onMove={(targetLane) => moveClip(clip.id, targetLane)}
-                          onMoveToPosition={(position) =>
-                            moveClipToPosition(clip.id, position)
-                          }
-                          laneClips={sameLaneNeighbors}
-                          trackHeight={TRACK_HEIGHT - LANE_PADDING}
-                          laneCount={state.laneCount}
-                          laneOffset={clip.laneIndex * TRACK_HEIGHT + LANE_PADDING / 2}
-                          laneColor={state.laneMeta[clip.laneIndex]?.color}
-                          segmentDurationMs={segmentDurationMap.get(clip.segmentId) ?? 0}
+                  {/* Tracks area — tap empty space to deselect; in Select
+                      mode a horizontal pan draws a range on the lane */}
+                  <GestureDetector gesture={rangeGesture}>
+                    <View
+                      style={[
+                        styles.tracksArea,
+                        { width: totalWidth, height: tracksAreaHeight },
+                      ]}
+                    >
+                      {/* Lane backgrounds */}
+                      {Array.from({ length: state.laneCount }, (_, i) => (
+                        <View
+                          key={`lane-bg-${i}`}
+                          pointerEvents="none"
+                          style={[
+                            styles.laneBackground,
+                            {
+                              top: i * TRACK_HEIGHT,
+                              height: TRACK_HEIGHT,
+                              backgroundColor: i % 2 === 0 ? '#0d0d0d' : '#111',
+                            },
+                            state.activeLaneIndex === i && styles.laneBackgroundActive,
+                          ]}
                         />
-                      );
-                    })}
+                      ))}
 
-                    {/* Live recording placeholder — grows from the
+                      {state.clips.map((clip) => {
+                        // Neighbors on the same lane (excluding self) — used
+                        // for the live wall-rule clamp during drag.
+                        const sameLaneNeighbors = state.clips.filter(
+                          (c) => c.laneIndex === clip.laneIndex && c.id !== clip.id
+                        );
+                        return (
+                          <TimelineTrack
+                            key={clip.id}
+                            clip={clip}
+                            zoom={state.zoomLevel}
+                            isSelected={state.selectedClipId === clip.id && !selectMode}
+                            onSelect={() => {
+                              clearTimeout(deselectTimerRef.current);
+                              // One tick per selection: switching between clips
+                              // ticks here; the first selection is ticked by the
+                              // toolbar as its edit bar appears.
+                              if (
+                                state.selectedClipId &&
+                                state.selectedClipId !== clip.id
+                              ) {
+                                void haptic('selection');
+                              }
+                              selectClip(clip.id);
+                            }}
+                            onTrimChange={(start, end) => trimClip(clip.id, start, end)}
+                            onMove={(targetLane) => moveClip(clip.id, targetLane)}
+                            onMoveToPosition={(position) =>
+                              moveClipToPosition(clip.id, position)
+                            }
+                            laneClips={sameLaneNeighbors}
+                            trackHeight={TRACK_HEIGHT - LANE_PADDING}
+                            laneCount={state.laneCount}
+                            laneOffset={clip.laneIndex * TRACK_HEIGHT + LANE_PADDING / 2}
+                            laneColor={state.laneMeta[clip.laneIndex]?.color}
+                            segmentDurationMs={
+                              segmentDurationMap.get(clip.segmentId) ?? 0
+                            }
+                          />
+                        );
+                      })}
+
+                      {/* Range selection band — spans the lane, sits above
+                        the clips, never catches touches. */}
+                      {state.selection && (
+                        <View
+                          pointerEvents="none"
+                          style={[
+                            styles.rangeBand,
+                            {
+                              left: msToPixels(state.selection.startMs, state.zoomLevel),
+                              width: Math.max(
+                                2,
+                                msToPixels(
+                                  state.selection.endMs - state.selection.startMs,
+                                  state.zoomLevel
+                                )
+                              ),
+                              top:
+                                state.selection.laneIndex * TRACK_HEIGHT +
+                                LANE_PADDING / 2,
+                              height: TRACK_HEIGHT - LANE_PADDING,
+                            },
+                          ]}
+                        />
+                      )}
+
+                      {/* Live recording placeholder — grows from the
                         snapshotted start position as the recorder's
                         native duration counter ticks. Disappears as
                         soon as the real clip lands in state.clips
                         after upload. */}
-                    {(isRecording || isUploadingRecording) && (
-                      <View
-                        pointerEvents="none"
-                        style={[
-                          styles.recordingPlaceholder,
-                          {
-                            left: msToPixels(
-                              recordingStartMsRef.current,
-                              state.zoomLevel
-                            ),
-                            width: Math.max(
-                              4,
-                              msToPixels(recordingElapsedMs, state.zoomLevel)
-                            ),
-                            top:
-                              recordingLaneRef.current * TRACK_HEIGHT + LANE_PADDING / 2,
-                            height: TRACK_HEIGHT - LANE_PADDING,
-                            backgroundColor: isUploadingRecording
-                              ? 'rgba(245, 158, 11, 0.35)'
-                              : 'rgba(239, 68, 68, 0.35)',
-                            borderColor: isUploadingRecording ? '#F59E0B' : '#EF4444',
-                          },
-                        ]}
-                      >
+                      {(isRecording || isUploadingRecording) && (
                         <View
+                          pointerEvents="none"
                           style={[
-                            styles.recordingDot,
-                            isUploadingRecording && styles.recordingDotUploading,
+                            styles.recordingPlaceholder,
+                            {
+                              left: msToPixels(
+                                recordingStartMsRef.current,
+                                state.zoomLevel
+                              ),
+                              width: Math.max(
+                                4,
+                                msToPixels(recordingElapsedMs, state.zoomLevel)
+                              ),
+                              top:
+                                recordingLaneRef.current * TRACK_HEIGHT +
+                                LANE_PADDING / 2,
+                              height: TRACK_HEIGHT - LANE_PADDING,
+                              backgroundColor: isUploadingRecording
+                                ? 'rgba(245, 158, 11, 0.35)'
+                                : 'rgba(239, 68, 68, 0.35)',
+                              borderColor: isUploadingRecording ? '#F59E0B' : '#EF4444',
+                            },
                           ]}
-                        />
-                        <Text variant="caption" style={styles.recordingLabel}>
-                          {isUploadingRecording
-                            ? t('timeline.recordingUploading', 'Uploading…')
-                            : t('timeline.recordingLive', 'REC')}
-                        </Text>
-                      </View>
-                    )}
+                        >
+                          <View
+                            style={[
+                              styles.recordingDot,
+                              isUploadingRecording && styles.recordingDotUploading,
+                            ]}
+                          />
+                          <Text variant="caption" style={styles.recordingLabel}>
+                            {isUploadingRecording
+                              ? t('timeline.recordingUploading', 'Uploading…')
+                              : t('timeline.recordingLive', 'REC')}
+                          </Text>
+                        </View>
+                      )}
 
-                    {/* Playhead */}
-                    <TimelinePlayhead
-                      positionSv={positionSv}
-                      zoom={state.zoomLevel}
-                      height={tracksAreaHeight + RULER_HEIGHT}
-                      totalDurationMs={totalDuration}
-                      onSeek={handleSeek}
-                      topOffset={-RULER_HEIGHT}
-                    />
-                  </View>
+                      {/* Playhead */}
+                      <TimelinePlayhead
+                        positionSv={positionSv}
+                        zoom={state.zoomLevel}
+                        height={tracksAreaHeight + RULER_HEIGHT}
+                        totalDurationMs={totalDuration}
+                        onSeek={handleSeek}
+                        topOffset={-RULER_HEIGHT}
+                      />
+                    </View>
+                  </GestureDetector>
                 </Animated.View>
               </ScrollView>
             </GestureDetector>
@@ -1180,8 +1468,9 @@ export function TimelineEditor({
                       onEdit={() => handleEditLane(i)}
                       onToggleMute={() => setLaneMute(i, !(meta?.muted ?? false))}
                       onToggleSolo={() => setLaneSolo(i, !(meta?.solo ?? false))}
-                      onGainChange={(gainDb) => setLaneGain(i, gainDb)}
-                      onPanChange={(pan) => setLanePan(i, pan)}
+                      onGainChange={(gainDb, commit) =>
+                        setLaneGain(i, gainDb, { commit })
+                      }
                     />
                   </View>
                 );
@@ -1217,7 +1506,9 @@ export function TimelineEditor({
         )}
       </View>
 
-      {/* Toolbar — both edit ops (row 1) and project actions (row 2) */}
+      {/* Toolbar — project actions, the selected clip's actions, or the drawn
+          range's actions. Zoom detents share the pinch gesture's setter;
+          Paste uses the reducer's defaults (playhead, active lane). */}
       <TimelineToolbar
         onSplit={splitAtPlayhead}
         onDelete={handleDeleteClip}
@@ -1228,6 +1519,13 @@ export function TimelineEditor({
         onRedo={redo}
         onExport={handleExport}
         hasSelection={state.selectedClipId !== null}
+        selectedLabel={selectedLabel}
+        onClearSelection={() => selectClip(null)}
+        selectedHasEffects={!!selectedClip?.effects}
+        onEffectsPress={() => setEffectsSheetVisible(true)}
+        effectsAvailable={effectsAvailable}
+        onJoin={handleJoin}
+        canJoin={joinPair !== null}
         canUndo={canUndo}
         canRedo={canRedo}
         onImport={importAudio}
@@ -1236,11 +1534,22 @@ export function TimelineEditor({
         onStopRecord={stopRecording}
         isRecording={isRecording}
         recordingElapsed={recordingElapsed}
-        onVolumePress={
-          state.selectedClipId ? () => setVolumeModalVisible(true) : undefined
-        }
+        onVolumePress={() => setVolumeModalVisible(true)}
         onPublish={onPublish ? handleExport : undefined}
         isPublishing={isPublishing}
+        zoom={state.zoomLevel}
+        onZoomChange={commitZoom}
+        selectMode={selectMode}
+        onToggleSelectMode={toggleSelectMode}
+        hasRegion={state.selection !== null}
+        regionLabel={regionLabel}
+        onClearRegion={() => setSelection(null)}
+        onCopy={copyRegion}
+        onCut={() => cutRegion(false)}
+        onSilence={silenceRegion}
+        onPaste={() => pasteRegion(Math.round(positionSv.value))}
+        canPaste={state.clipboard !== null}
+        onInsert={handleInsert}
       />
 
       {/* Loading modal shown while audio is being uploaded — covers
@@ -1260,7 +1569,7 @@ export function TimelineEditor({
         progress={isUploadingRecording ? null : importProgress}
       />
 
-      {/* Lane edit sheet — name + color + delete */}
+      {/* Lane edit sheet — name + color + pan + delete */}
       <LaneEditSheet
         visible={editingLaneIndex !== null}
         laneIndex={editingLaneIndex ?? 0}
@@ -1270,6 +1579,21 @@ export function TimelineEditor({
         onClose={() => setEditingLaneIndex(null)}
         onSave={handleLaneEditSave}
         onDelete={handleLaneEditDelete}
+        onPanChange={handleLaneEditPan}
+      />
+
+      {/* Effects sheet — non-destructive render of the selected clip. Closes
+          itself on a successful apply/remove; a failure keeps it open with
+          the draft intact so the user can retry. */}
+      <EffectsSheet
+        visible={effectsSheetVisible && !!selectedClip}
+        onClose={() => setEffectsSheetVisible(false)}
+        initialChain={selectedClip?.effects ?? null}
+        clipLabel={selectedLabel}
+        onApply={handleApplyEffects}
+        onRemove={handleRemoveEffects}
+        busy={effectsBusy}
+        available={effectsAvailable}
       />
 
       {/* Volume Modal */}
@@ -1448,6 +1772,14 @@ const styles = StyleSheet.create({
   laneBackgroundActive: {
     borderLeftWidth: 2,
     borderLeftColor: '#3B82F6',
+  },
+  rangeBand: {
+    position: 'absolute',
+    backgroundColor: 'rgba(59, 130, 246, 0.18)',
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: '#3B82F6',
+    zIndex: 5,
   },
   laneLabelsOverlay: {
     position: 'absolute',

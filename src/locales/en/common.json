@@ -41,7 +41,9 @@
     "couldNotLoadRecording": "Could not load recording: {{message}}",
     "recordingNotFound": "Recording not found",
     "recordingNotFoundMessage": "The recording is taking longer than expected to process. Try again in a few seconds.",
-    "recordUseCallMode": "Can't record this way during a call. Use the call recorder."
+    "recordUseCallMode": "Can't record this way during a call. Use the call recorder.",
+    "callDroppedConnection": "Call dropped from a connection issue, not a hang-up. They can call back.",
+    "injectUseHeadphones": "Playing on speaker. Use headphones to hear your track clearly."
   },
   "time": {
     "now": "now",

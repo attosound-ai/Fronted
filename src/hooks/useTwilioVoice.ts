@@ -11,6 +11,8 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 import { playEndCallSound } from '@/lib/sound/callSounds';
+import { showToast } from '@/components/ui/Toast';
+import i18n from '@/lib/i18n';
 import * as Sentry from '@sentry/react-native';
 import {
   startCallTelemetry,
@@ -653,6 +655,20 @@ function bindCallEvents(call: any): () => void {
       call_sid:
         callContextStash?.callSid ?? useCallStore.getState().activeCall?.callSid ?? null,
     });
+    // Tell the user WHY the call ended when it was an ABNORMAL drop (a signaling /
+    // media timeout, e.g. 31408 RequestTimeout), never on a clean hang-up. A clean
+    // hangup (error == null) is a normal end by either party and stays silent. This
+    // is the feedback that was missing when Anthony's session died on a 31408 mid
+    // setup and he was left guessing "our end or his end" (PostHog Aug 29). It also
+    // frames it as a connection issue, not the audio feature, and that they can
+    // call back — the take was never lost because recording had not started.
+    if (!cleanHangup && disconnectCode != null) {
+      try {
+        showToast(i18n.t('common:toasts.callDroppedConnection'));
+      } catch {
+        // Toast host may be unmounted; user feedback must never throw into teardown.
+      }
+    }
     // Final consolidated context BEFORE teardown clears the stash — captures the
     // end-state (audio category/route, app state) so a drop-at-connect vs a
     // clean-hangup is distinguishable, with the same full variable set.

@@ -9,6 +9,9 @@ import {
   AUDIO_INJECTION_FLAG,
 } from '@/lib/callAudio/createAudioInjector';
 import { installInjectionDeviceIfEnabled } from '@/hooks/useTwilioVoice';
+import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
+import { showToast } from '@/components/ui/Toast';
+import i18n from '@/lib/i18n';
 
 /**
  * CallAudioInjectionHost — the single global owner of the audio-injection
@@ -61,6 +64,9 @@ export function CallAudioInjectionHost() {
   const prevMonitorRef = useRef<boolean | null>(null);
   // Whether THIS injection has already had its initial monitor applied.
   const armedForInjectionRef = useRef(false);
+  // The call we last showed the "use headphones" hint on, so it fires at most
+  // once per call no matter how many times the rep toggles the beat on/off.
+  const hintedCallSidRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isInjecting) {
       prevMonitorRef.current = null;
@@ -92,6 +98,35 @@ export function CallAudioInjectionHost() {
       } catch {
         // Engine may be tearing down; monitor is a comfort control, never fatal.
       }
+      // Headphone hint. The monitor is ON, but on a loudspeaker route the phone's
+      // echo canceller strips the injected track from what the REP hears (its job,
+      // so the far party gets no echo) — which is exactly why Anthony heard "almost
+      // all the beat, but not" on speaker (PostHog Aug 29). On headphones/Bluetooth
+      // his mic can't pick the beat up, nothing gets cancelled, and he hears it
+      // clean. Nudge once per call when we're on speaker/earpiece; purely advisory,
+      // it NEVER changes what the far party gets.
+      void getCallAudioState()
+        .then((s) => {
+          const port = s?.liveOutputPort ?? '';
+          const isHeadphoneRoute = /headphone|bluetooth|airpod|airplay|caraudio/i.test(
+            port
+          );
+          analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_MONITOR, {
+            monitor: true,
+            muted: isMuted,
+            reason: 'inject_route_check',
+            output_port: port || null,
+            headphones: isHeadphoneRoute,
+          });
+          const sid = useCallStore.getState().activeCall?.callSid ?? null;
+          if (!isHeadphoneRoute && port && hintedCallSidRef.current !== sid) {
+            hintedCallSidRef.current = sid;
+            showToast(i18n.t('common:toasts.injectUseHeadphones'));
+          }
+        })
+        .catch(() => {
+          // Route probe is best-effort; the hint is a nicety, never fatal.
+        });
       return;
     }
 

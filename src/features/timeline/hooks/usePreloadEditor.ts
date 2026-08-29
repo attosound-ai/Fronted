@@ -3,8 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { projectService } from '@/lib/api/projectService';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import type { TimelineClip } from '@/types/project';
+import { WAVEFORM_PEAKS } from './useWaveformData';
 
-const DEFAULT_SAMPLES = 100;
+// Single source of truth for the peak count so the cache key seeded here is
+// exactly the one useWaveformData reads.
+const DEFAULT_SAMPLES = WAVEFORM_PEAKS;
 
 export function usePreloadEditor(clips: TimelineClip[]) {
   const queryClient = useQueryClient();
@@ -27,7 +30,7 @@ export function usePreloadEditor(clips: TimelineClip[]) {
       );
 
       // Populate React Query cache for each segment
-      // Key matches exactly what useWaveformData uses: ['waveform', segmentId, 100]
+      // Key matches exactly what useWaveformData uses: ['waveform', segmentId, WAVEFORM_PEAKS]
       let loaded = 0;
       for (const segmentId of uniqueSegmentIds) {
         if (waveforms[segmentId]) {

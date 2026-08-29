@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useWaveformData } from '../hooks/useWaveformData';
+import { useWaveformData, WAVEFORM_PEAKS } from '../hooks/useWaveformData';
 
 interface WaveformViewProps {
   segmentId: string;
@@ -14,8 +14,8 @@ interface WaveformViewProps {
   trimEnd?: number;
 }
 
-/** Always fetch a fixed sample count so the query key stays stable during zoom. */
-const FETCH_SAMPLES = 100;
+/** Always fetch a fixed peak count so the query key stays stable during zoom. */
+const FETCH_SAMPLES = WAVEFORM_PEAKS;
 
 /**
  * Hard ceiling on rendered bar Views, no matter how wide the clip is. Every bar
@@ -44,14 +44,19 @@ function resample(source: number[], targetCount: number): number[] {
   const result: number[] = new Array(targetCount);
 
   if (targetCount < source.length) {
-    // Downsample: average buckets
+    // Downsample: take the PEAK of each bucket. The source is already a peak
+    // envelope (backend), and averaging peaks flattens transients back into the
+    // blur we just removed; max-per-bucket is how every waveform renderer
+    // (peaks.js / wavesurfer) produces a zoomed-out view.
     const bucketSize = source.length / targetCount;
     for (let i = 0; i < targetCount; i++) {
       const start = Math.floor(i * bucketSize);
-      const end = Math.floor((i + 1) * bucketSize);
-      let sum = 0;
-      for (let j = start; j < end; j++) sum += source[j];
-      result[i] = sum / (end - start);
+      const end = Math.max(start + 1, Math.floor((i + 1) * bucketSize));
+      let peak = 0;
+      for (let j = start; j < end && j < source.length; j++) {
+        if (source[j] > peak) peak = source[j];
+      }
+      result[i] = peak;
     }
   } else {
     // Upsample: linear interpolation

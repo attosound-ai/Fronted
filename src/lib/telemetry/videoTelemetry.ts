@@ -69,9 +69,13 @@ export function videoLoadCompleted(ctx: VideoTelemetryContext, loadMs: number): 
 }
 
 /**
- * Fired when the player errors. Goes to PostHog AND Sentry (as an exception, so
- * it aggregates with a stack-free but well-tagged signature). `willFallback`
- * tells you whether an HLS→MP4 recovery is about to be attempted.
+ * Fired when the player errors. Always goes to PostHog (video_load_error, with
+ * will_fallback, is the counter). Sentry gets an EXCEPTION only when the video
+ * is actually dead: an HLS failure that is about to recover via MP4 is a
+ * breadcrumb, not an error. Reporting the self-healing case as an error made
+ * REACT-NATIVE-4F look like a broken feed (79 events / 4 users) when every one
+ * of those played fine a second later; that noise also buries real failures.
+ * The frequency of HLS→MP4 fallbacks is still visible in PostHog.
  */
 export function videoError(
   ctx: VideoTelemetryContext,
@@ -83,6 +87,15 @@ export function videoError(
     source: shortSource(opts.source),
     will_fallback: opts.willFallback,
   });
+  if (opts.willFallback) {
+    Sentry.addBreadcrumb({
+      category: 'video',
+      level: 'warning',
+      message: `video_error:${ctx.surface} (recovering via MP4)`,
+      data: { post_id: ctx.postId, source: shortSource(opts.source) ?? null },
+    });
+    return;
+  }
   Sentry.captureException(
     new Error(
       `video_error:${ctx.surface}${opts.willFallback ? ' (recovering via MP4)' : ''}`

@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "test:timeline": "./scripts/test-timeline.sh",
     "verify:ios-libs": "./scripts/verify-audio-api-binaries.sh",
     "build:ios": "./scripts/verify-audio-api-binaries.sh && eas build --platform ios --profile production --local --non-interactive --output ./build-final.ipa",
     "submit:ios": "eas submit -p ios --path ./build-final.ipa --non-interactive"

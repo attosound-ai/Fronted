@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  runOnJS,
+} from 'react-native-reanimated';
+import { PlayheadReadout } from './PlayheadReadout';
 import {
   View,
   StyleSheet,
@@ -41,7 +47,10 @@ import { LaneEditSheet } from './LaneEditSheet';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { useTimeline } from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
-import { getAudioInjector, AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
+import {
+  getAudioInjector,
+  AUDIO_INJECTION_FLAG,
+} from '@/lib/callAudio/createAudioInjector';
 import { showNetFailureToast } from '@/components/ui/netToast';
 import { useImportAudio } from '../hooks/useImportAudio';
 import { useRecordAudio } from '../hooks/useRecordAudio';
@@ -465,6 +474,12 @@ export function TimelineEditor({
     }
   }, [rawStopRecording, projectId]);
 
+  // UI-thread playhead position. The play loop writes it every frame; the
+  // playhead + time readout animate off it with no React re-render. Reducer
+  // state (state.playbackPositionMs) is committed at a low rate for autosave /
+  // record-at-playhead only. See useTimelinePlayback.
+  const positionSv = useSharedValue(state.playbackPositionMs);
+
   useTimelinePlayback({
     clips: state.clips,
     segments: localSegments,
@@ -473,6 +488,7 @@ export function TimelineEditor({
     laneMeta: state.laneMeta,
     onPositionChange: setPlaybackPosition,
     onPlayingChange: setPlaying,
+    positionSv,
   });
 
   const totalDuration = getTimelineDuration(state.clips);
@@ -563,11 +579,6 @@ export function TimelineEditor({
     hScrollRef.current?.scrollTo({ x: target, animated: false });
   }, [isRecording, recordingElapsedMs, state.zoomLevel, screenWidth]);
 
-  // Pinch-to-zoom (.runOnJS(true) avoids worklet serialization warnings)
-  const zoomRef = useRef(state.zoomLevel);
-  zoomRef.current = state.zoomLevel;
-  const baseZoomRef = useRef(1);
-
   // Tap empty space → deselect (uses timer so track onSelect can cancel)
   const deselectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -581,18 +592,44 @@ export function TimelineEditor({
     [selectClip]
   );
 
+  // Pinch-to-zoom, UI-thread version. During the gesture we only apply a GPU
+  // `scaleX` transform to the timeline content (shared value, no layout), so a
+  // pinch never re-lays-out every clip, ruler mark and waveform bar per frame —
+  // that per-frame `setZoom` was the worst jank in the editor (thousands of
+  // native Views re-measured 60x/s). The REAL zoom is committed to the reducer
+  // exactly once, on release, which triggers a single re-layout at the final
+  // level. `pinchScale` is clamped so the preview matches SET_ZOOM's bounds.
+  const pinchScale = useSharedValue(1);
+  const zoomSv = useSharedValue(state.zoomLevel);
+  zoomSv.value = state.zoomLevel;
+  const commitZoom = useCallback(
+    (level: number) => {
+      setZoom(level);
+    },
+    [setZoom]
+  );
   const pinchGesture = useMemo(
     () =>
       Gesture.Pinch()
-        .runOnJS(true)
         .onBegin(() => {
-          baseZoomRef.current = zoomRef.current;
+          pinchScale.value = 1;
         })
         .onUpdate((e) => {
-          setZoom(baseZoomRef.current * e.scale);
+          // Clamp the preview to the same [0.1, 4] range the reducer enforces so
+          // the live transform never overshoots what the commit will produce.
+          const target = Math.max(0.1, Math.min(4, zoomSv.value * e.scale));
+          pinchScale.value = target / zoomSv.value;
+        })
+        .onEnd(() => {
+          const finalZoom = zoomSv.value * pinchScale.value;
+          pinchScale.value = 1;
+          runOnJS(commitZoom)(finalZoom);
         }),
-    [setZoom]
+    [commitZoom, pinchScale, zoomSv]
   );
+  const pinchPreviewStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: pinchScale.value }],
+  }));
 
   const composedGesture = useMemo(
     () => Gesture.Simultaneous(pinchGesture, tapGesture),
@@ -949,9 +986,11 @@ export function TimelineEditor({
 
       {/* Position + clip count */}
       <View style={styles.positionBar}>
-        <Text variant="caption" style={styles.positionText}>
-          {formatTimelineMs(state.playbackPositionMs)} / {formatTimelineMs(totalDuration)}
-        </Text>
+        <PlayheadReadout
+          positionSv={positionSv}
+          totalDurationMs={totalDuration}
+          style={styles.positionText}
+        />
         <Text variant="caption" style={styles.clipCount}>
           {state.clips.length !== 1
             ? t('timeline.clipCountPlural', { n: state.clips.length })
@@ -991,7 +1030,7 @@ export function TimelineEditor({
                   paddingRight: 40,
                 }}
               >
-                <View>
+                <Animated.View style={[{ transformOrigin: 'left' }, pinchPreviewStyle]}>
                   {/* Ruler */}
                   <TimelineRuler
                     totalDurationMs={totalDuration}
@@ -1099,7 +1138,7 @@ export function TimelineEditor({
 
                     {/* Playhead */}
                     <TimelinePlayhead
-                      positionMs={state.playbackPositionMs}
+                      positionSv={positionSv}
                       zoom={state.zoomLevel}
                       height={tracksAreaHeight + RULER_HEIGHT}
                       totalDurationMs={totalDuration}
@@ -1107,7 +1146,7 @@ export function TimelineEditor({
                       topOffset={-RULER_HEIGHT}
                     />
                   </View>
-                </View>
+                </Animated.View>
               </ScrollView>
             </GestureDetector>
 

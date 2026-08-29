@@ -1,6 +1,11 @@
 import { useRef, useState, useMemo } from 'react';
 import { View, StyleSheet, PanResponder } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  runOnJS,
+} from 'react-native-reanimated';
 import { WaveformView } from './WaveformView';
 import { msToPixels, pixelsToMs, clipDurationMs } from '../utils/timelineCalculations';
 import { clampClipPosition } from '../utils/clipOperations';
@@ -56,9 +61,13 @@ export function TimelineTrack({
   const left = rawLeft + gap;
   const waveformHeight = trackHeight - 8;
 
+  // `isDragging` is React state (it toggles the handles + a style flip once per
+  // drag). The per-frame OFFSETS are shared values: they drive a Reanimated
+  // transform on the UI thread, so a drag no longer re-renders this track and
+  // its waveform every frame (that per-frame re-render was a jank source).
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffsetX, setDragOffsetX] = useState(0);
-  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const dragOffsetX = useSharedValue(0);
+  const dragOffsetY = useSharedValue(0);
 
   const trimRef = useRef({ start: clip.startInSegment, end: clip.endInSegment });
   trimRef.current = { start: clip.startInSegment, end: clip.endInSegment };
@@ -141,8 +150,8 @@ export function TimelineTrack({
         .activateAfterLongPress(300)
         .onStart(() => {
           setIsDragging(true);
-          setDragOffsetX(0);
-          setDragOffsetY(0);
+          dragOffsetX.value = 0;
+          dragOffsetY.value = 0;
         })
         .onUpdate((e) => {
           // Compute the clip's requested position (in ms) from the
@@ -158,15 +167,13 @@ export function TimelineTrack({
             ...laneClipsRef.current.map((c) => ({ ...c })),
             clipRef.current,
           ];
-          const clampedMs = clampClipPosition(
-            synthetic,
-            clipRef.current.id,
-            requestedMs
-          );
+          const clampedMs = clampClipPosition(synthetic, clipRef.current.id, requestedMs);
           const clampedDeltaMs = clampedMs - clipRef.current.positionInTimeline;
           const clampedPx = msToPixels(clampedDeltaMs, zoomRef.current);
-          setDragOffsetX(clampedPx);
-          setDragOffsetY(e.translationY);
+          // Shared-value writes: the transform updates on the UI thread, no
+          // React re-render of the track/waveform per frame.
+          dragOffsetX.value = clampedPx;
+          dragOffsetY.value = e.translationY;
         })
         .onEnd((e) => {
           // Vertical → lane change
@@ -188,26 +195,29 @@ export function TimelineTrack({
           // slot finder.
           if (!laneChanged) {
             const deltaMs = pixelsToMs(e.translationX, zoomRef.current);
-            const newPosition = Math.max(
-              0,
-              clipRef.current.positionInTimeline + deltaMs
-            );
+            const newPosition = Math.max(0, clipRef.current.positionInTimeline + deltaMs);
             if (Math.abs(deltaMs) >= 1) {
               onMoveToPositionRef.current?.(Math.round(newPosition));
             }
           }
 
           setIsDragging(false);
-          setDragOffsetX(0);
-          setDragOffsetY(0);
+          dragOffsetX.value = 0;
+          dragOffsetY.value = 0;
         })
         .onFinalize(() => {
           setIsDragging(false);
-          setDragOffsetX(0);
-          setDragOffsetY(0);
+          dragOffsetX.value = 0;
+          dragOffsetY.value = 0;
         }),
+    // Shared values are stable references; the refs cover everything else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+
+  const dragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragOffsetX.value }, { translateY: dragOffsetY.value }],
+  }));
 
   const composedGesture = useMemo(
     () => Gesture.Race(panGesture, tapGesture),
@@ -216,7 +226,7 @@ export function TimelineTrack({
 
   return (
     <GestureDetector gesture={composedGesture}>
-      <View
+      <Animated.View
         style={[
           styles.track,
           {
@@ -227,16 +237,8 @@ export function TimelineTrack({
             borderColor: laneColor ?? '#444',
           },
           isSelected && styles.selected,
-          isDragging && {
-            opacity: 0.7,
-            transform: [
-              { translateX: dragOffsetX },
-              { translateY: dragOffsetY },
-            ],
-            zIndex: 100,
-            borderColor: '#FFF',
-            borderWidth: 2,
-          },
+          isDragging && styles.dragging,
+          dragStyle,
         ]}
       >
         <WaveformView
@@ -249,24 +251,31 @@ export function TimelineTrack({
         />
         {isSelected && !isDragging && (
           <>
+            {/* Trim handles stay visually thin but get a thumb-sized (~44pt)
+                hit target via hitSlop, the standard mobile-DAW affordance. */}
             <View
               style={[styles.handle, styles.handleLeft]}
+              hitSlop={HANDLE_HIT_SLOP}
               {...leftPanResponder.panHandlers}
             >
               <View style={styles.handleGrip} />
             </View>
             <View
               style={[styles.handle, styles.handleRight]}
+              hitSlop={HANDLE_HIT_SLOP}
               {...rightPanResponder.panHandlers}
             >
               <View style={styles.handleGrip} />
             </View>
           </>
         )}
-      </View>
+      </Animated.View>
     </GestureDetector>
   );
 }
+
+// 14pt visual handle + 15pt each side ≈ 44pt effective touch target.
+const HANDLE_HIT_SLOP = { left: 15, right: 15, top: 0, bottom: 0 };
 
 const styles = StyleSheet.create({
   track: {
@@ -281,8 +290,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     overflow: 'hidden',
   },
+  // Selection reads as ATTO blue (a soft glow) instead of a generic DAW white
+  // border, so it ties to the brand accent used elsewhere in the editor.
   selected: {
-    borderColor: '#FFFFFF',
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  dragging: {
+    opacity: 0.7,
+    zIndex: 100,
+    borderColor: '#FFF',
     borderWidth: 2,
   },
   handle: {

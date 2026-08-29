@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useWaveformData } from '../hooks/useWaveformData';
 
@@ -68,7 +68,11 @@ function resample(source: number[], targetCount: number): number[] {
   return result;
 }
 
-export function WaveformView({
+// memo: the editor tree still re-renders at a low rate during playback (the
+// throttled reducer commit) and on every unrelated state change. Nothing about a
+// waveform changes then, so skip re-running resample() + reconciling up to 512
+// bar Views per clip unless its own props actually changed.
+export const WaveformView = memo(function WaveformView({
   segmentId,
   width,
   height,
@@ -125,7 +129,7 @@ export function WaveformView({
       })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

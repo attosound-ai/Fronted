@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { msToPixels, generateRulerMarks } from '../utils/timelineCalculations';
@@ -8,8 +9,18 @@ interface TimelineRulerProps {
   onSeek: (positionMs: number) => void;
 }
 
-export function TimelineRuler({ totalDurationMs, zoom, onSeek }: TimelineRulerProps) {
-  const marks = generateRulerMarks(totalDurationMs + 5000, zoom);
+// memo + useMemo: the ruler is up to MAX_RULER_MARKS (600) tick/label Views.
+// Regenerating and reconciling them on every editor re-render (playback commit,
+// selection, autosave flag) is pure waste; only duration/zoom change them.
+export const TimelineRuler = memo(function TimelineRuler({
+  totalDurationMs,
+  zoom,
+  onSeek,
+}: TimelineRulerProps) {
+  const marks = useMemo(
+    () => generateRulerMarks(totalDurationMs + 5000, zoom),
+    [totalDurationMs, zoom]
+  );
   const totalWidth = msToPixels(totalDurationMs + 5000, zoom);
 
   const handlePress = (e: { nativeEvent: { locationX: number } }) => {
@@ -36,7 +47,7 @@ export function TimelineRuler({ totalDurationMs, zoom, onSeek }: TimelineRulerPr
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
+import type { SharedValue } from 'react-native-reanimated';
 import { useCallStore } from '@/stores/callStore';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import type { LocalClip, LaneMeta } from '../types';
@@ -16,7 +17,24 @@ interface UseTimelinePlaybackProps {
   laneMeta: Record<number, LaneMeta>;
   onPositionChange: (positionMs: number) => void;
   onPlayingChange: (playing: boolean) => void;
+  /**
+   * UI-thread playhead position (ms). Written EVERY frame while playing so the
+   * playhead + time readout animate at 60fps via Reanimated with ZERO React
+   * re-renders. `onPositionChange` (reducer state) is then only committed at a
+   * low rate (see COMMIT_INTERVAL_MS), because every reducer write re-renders
+   * the whole editor tree, every track and every waveform. That per-frame
+   * re-render was the single biggest source of timeline jank.
+   */
+  positionSv?: SharedValue<number>;
 }
+
+/**
+ * How often the reducer's playbackPositionMs is updated while playing. It is
+ * only needed at this rate for autosave / the record-at-playhead snapshot / the
+ * end-of-timeline check, never for drawing. 5Hz keeps those correct while
+ * cutting the JS re-render rate from ~60/s to 5/s.
+ */
+const COMMIT_INTERVAL_MS = 200;
 
 /**
  * Find the clip containing a position on a specific lane.
@@ -83,6 +101,7 @@ export function useTimelinePlayback({
   laneMeta,
   onPositionChange,
   onPlayingChange,
+  positionSv,
 }: UseTimelinePlaybackProps) {
   // Configure audio routing.
   // During a Twilio call, Twilio owns the AVAudioSession (.playAndRecord).
@@ -234,6 +253,7 @@ export function useTimelinePlayback({
   const startAnimation = useCallback(() => {
     playStartRef.current = Date.now();
     playStartPosRef.current = playbackPositionMs;
+    let lastCommitAt = 0;
 
     const tick = () => {
       const elapsed = Date.now() - playStartRef.current;
@@ -242,12 +262,21 @@ export function useTimelinePlayback({
       const totalDuration = getTimelineDuration(currentClips);
 
       if (newPos >= totalDuration) {
+        if (positionSv) positionSv.value = totalDuration;
         onPositionChange(totalDuration);
         onPlayingChange(false);
         return;
       }
 
-      onPositionChange(newPos);
+      // 60fps path: the shared value drives the playhead + readout on the UI
+      // thread. The reducer commit below is throttled so the editor tree does
+      // not re-render every frame.
+      if (positionSv) positionSv.value = newPos;
+      const now = Date.now();
+      if (!positionSv || now - lastCommitAt >= COMMIT_INTERVAL_MS) {
+        lastCommitAt = now;
+        onPositionChange(newPos);
+      }
 
       // Sync audio at clip boundaries: detect if the active clip changed on any lane
       for (const lane of laneIndices.current) {
@@ -270,7 +299,14 @@ export function useTimelinePlayback({
     };
 
     animFrameRef.current = requestAnimationFrame(tick);
-  }, [playbackPositionMs, onPositionChange, onPlayingChange, syncLanePlayer]);
+  }, [playbackPositionMs, onPositionChange, onPlayingChange, syncLanePlayer, positionSv]);
+
+  // Keep the UI-thread value in step with reducer state whenever the position
+  // changes OUTSIDE the play loop (seek, skip-to-start/end, pause, undo), so the
+  // playhead never shows a stale spot.
+  useEffect(() => {
+    if (positionSv && !isPlaying) positionSv.value = playbackPositionMs;
+  }, [positionSv, playbackPositionMs, isPlaying]);
 
   const stopAnimation = useCallback(() => {
     if (animFrameRef.current !== null) {

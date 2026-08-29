@@ -1,9 +1,22 @@
-import { useRef } from 'react';
-import { View, StyleSheet, PanResponder } from 'react-native';
+import { useMemo } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  runOnJS,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { msToPixels, pixelsToMs } from '../utils/timelineCalculations';
 
 interface TimelinePlayheadProps {
-  positionMs: number;
+  /**
+   * UI-thread playhead position (ms). The playhead reads this directly inside
+   * `useAnimatedStyle`, so the play loop can move it at 60fps WITHOUT a React
+   * re-render of the editor tree. (Before, `positionMs` came in as a prop from
+   * reducer state, so every playback frame re-rendered every track + waveform.)
+   */
+  positionSv: SharedValue<number>;
   zoom: number;
   height: number;
   totalDurationMs: number;
@@ -12,59 +25,57 @@ interface TimelinePlayheadProps {
 }
 
 export function TimelinePlayhead({
-  positionMs,
+  positionSv,
   zoom,
   height,
   totalDurationMs,
   onSeek,
   topOffset = 0,
 }: TimelinePlayheadProps) {
-  const left = msToPixels(positionMs, zoom);
+  // Scrub: pan the cap to seek. Position updates on the UI thread every frame;
+  // the JS seek (which pauses playback + commits to the reducer) fires at the
+  // same rate but the DRAWING never waits on it.
+  const dragStartMs = useSharedValue(0);
 
-  // Use refs to avoid stale closures in PanResponder
-  const posRef = useRef(positionMs);
-  posRef.current = positionMs;
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
-  const totalDurationRef = useRef(totalDurationMs);
-  totalDurationRef.current = totalDurationMs;
-  const onSeekRef = useRef(onSeek);
-  onSeekRef.current = onSeek;
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .hitSlop({ horizontal: 22 })
+        .onBegin(() => {
+          dragStartMs.value = positionSv.value;
+        })
+        .onUpdate((e) => {
+          const startPx = msToPixels(dragStartMs.value, zoom);
+          const newMs = Math.max(
+            0,
+            Math.min(pixelsToMs(startPx + e.translationX, zoom), totalDurationMs)
+          );
+          positionSv.value = newMs;
+          if (onSeek) runOnJS(onSeek)(Math.round(newMs));
+        }),
+    [zoom, totalDurationMs, onSeek, positionSv, dragStartMs]
+  );
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, g) => {
-        if (!onSeekRef.current) return;
-        const currentPx = msToPixels(posRef.current, zoomRef.current);
-        const newPx = currentPx + g.dx;
-        const newMs = Math.max(
-          0,
-          Math.min(pixelsToMs(newPx, zoomRef.current), totalDurationRef.current)
-        );
-        onSeekRef.current(Math.round(newMs));
-      },
-      onPanResponderRelease: () => {},
-    })
-  ).current;
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: msToPixels(positionSv.value, zoom) }],
+  }));
 
   return (
-    <View
-      style={[styles.playhead, { left, height, top: topOffset }]}
-      {...panResponder.panHandlers}
-    >
-      <View style={styles.hitArea}>
-        <View style={styles.head} />
-      </View>
-      <View style={styles.line} />
-    </View>
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={[styles.playhead, { height, top: topOffset }, animatedStyle]}>
+        <View style={styles.hitArea}>
+          <View style={styles.head} />
+        </View>
+        <View style={styles.line} />
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
   playhead: {
     position: 'absolute',
+    left: 0,
     top: 0,
     width: 1,
     zIndex: 10,

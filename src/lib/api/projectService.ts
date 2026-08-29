@@ -150,11 +150,25 @@ export const projectService = {
      * belongs at the playhead it was performed over; without it the backend
      * appends after the last clip on the lane. Older backends ignore the field.
      */
-    positionInTimeline?: number
+    positionInTimeline?: number,
+    /**
+     * createClip=false stores the audio as a SEGMENT ONLY (no clip on the lane).
+     * The non-destructive effects flow needs that: it renders an effected copy
+     * of a clip's audio and points the EXISTING clip at it. Older backends
+     * ignore the field and still create a clip; callers guard on the response.
+     */
+    options?: { createClip?: boolean }
   ): Promise<TimelineClip> {
     const token = await (await import('@/lib/auth/storage')).authStorage.getToken();
     const baseUrl = apiClient.defaults.baseURL ?? '';
     const url = `${baseUrl}${API_ENDPOINTS.PROJECTS.UPLOAD_AUDIO(projectId)}`;
+
+    // Multipart parameters are strings on the wire; the backend parses them.
+    const parameters: Record<string, string> = { laneIndex: String(laneIndex) };
+    if (positionInTimeline !== undefined && positionInTimeline >= 0) {
+      parameters.positionInTimeline = String(Math.round(positionInTimeline));
+    }
+    if (options?.createClip === false) parameters.createClip = 'false';
 
     const task = FileSystem.createUploadTask(
       url,
@@ -164,14 +178,7 @@ export const projectService = {
         uploadType: FileSystem.FileSystemUploadType.MULTIPART,
         fieldName: 'file',
         mimeType,
-        // Multipart parameters are strings on the wire; the backend parses them.
-        parameters:
-          positionInTimeline !== undefined && positionInTimeline >= 0
-            ? {
-                laneIndex: String(laneIndex),
-                positionInTimeline: String(Math.round(positionInTimeline)),
-              }
-            : { laneIndex: String(laneIndex) },
+        parameters,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
       },
@@ -211,6 +218,37 @@ export const projectService = {
     } finally {
       signal?.removeEventListener('abort', onAbort);
     }
+  },
+
+  /**
+   * Store an audio file as a project SEGMENT without creating a clip. Returns
+   * the new segment (with its id) so the caller can point an existing clip at
+   * it. Used by the effects flow; see `uploadAudio` for the transport details.
+   */
+  async uploadSegmentOnly(
+    projectId: string,
+    fileUri: string,
+    fileName: string,
+    mimeType: string
+  ): Promise<AudioSegment> {
+    const data = await projectService.uploadAudio(
+      projectId,
+      fileUri,
+      fileName,
+      mimeType,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      { createClip: false }
+    );
+    // With createClip=false the backend answers with the AudioSegment itself.
+    // A pre-createClip backend answers with a clip: in that case the segment is
+    // still reachable via clip.segmentId, but a stray clip was created — the
+    // caller's next timeline save (which replaces all clips) drops it again.
+    const seg = data as unknown as Partial<AudioSegment> & { segmentId?: string };
+    if (typeof seg.durationMs === 'number' && !seg.segmentId) return seg as AudioSegment;
+    return { id: seg.segmentId ?? '', durationMs: 0 } as unknown as AudioSegment;
   },
 
   async getWaveform(segmentId: string, samples = 100): Promise<number[]> {

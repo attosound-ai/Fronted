@@ -477,6 +477,9 @@ export const ANALYTICS_EVENTS = {
     // produce a 2.46 MB artifact. `ratio` and `encode_ms` are what prove the win is
     // real on a phone (encode time must stay far below the upload time it saves);
     // outcome=failed_fallback_to_original means we shipped the raw file as before.
+    // Non-destructive per-clip effects: apply (render → upload → swap) / remove.
+    // action, outcome, phase (on failure), applied[], render_ms, total_ms.
+    CLIP_EFFECTS: 'project_clip_effects',
     AUDIO_TRANSCODE: 'project_audio_transcode',
     CREATED: 'project_created',
     OPENED: 'project_opened',

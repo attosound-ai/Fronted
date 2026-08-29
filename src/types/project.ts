@@ -1,3 +1,4 @@
+import type { EffectChain } from '../../modules/atto-audio-transcode';
 import type { AudioSegment } from './call';
 
 export interface LaneMetadata {
@@ -42,6 +43,15 @@ export interface TimelineClip {
   order: number;
   volume: number;
   laneIndex: number;
+  /**
+   * Rendered-segment effects model: when an effect chain is applied, the client
+   * renders it on-device, uploads the result as a NEW segment and points
+   * `segmentId` at it. The DRY original stays here so the effect can be removed
+   * or re-tweaked; `effects` is the chain that produced the render. Both null =
+   * plain dry clip. Export mixes `segmentId` as-is, so preview == export.
+   */
+  sourceSegmentId?: string | null;
+  effects?: EffectChain | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +64,8 @@ export interface TimelineClipInput {
   order: number;
   volume?: number;
   laneIndex?: number;
+  sourceSegmentId?: string | null;
+  effects?: EffectChain | null;
 }
 
 export interface ExportResult {

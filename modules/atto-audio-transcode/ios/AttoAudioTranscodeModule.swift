@@ -35,6 +35,22 @@ public class AttoAudioTranscodeModule: Module {
         }
       }
     }
+
+    // Offline effects render (EQ / compressor / reverb / delay / pitch-time) on a
+    // private engine. See AttoAudioEffectsRenderer for why it is offline-only and
+    // why it can never touch the live call's audio session.
+    AsyncFunction("renderEffects") {
+      (inputPath: String, outputPath: String, chain: [String: Any], promise: Promise) in
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          let result = try AttoAudioEffectsRenderer.render(
+            inputPath: inputPath, outputPath: outputPath, chain: chain)
+          promise.resolve(result)
+        } catch {
+          promise.reject("ERR_EFFECTS", error.localizedDescription)
+        }
+      }
+    }
   }
 
   private static let targetSampleRate: Double = 8000

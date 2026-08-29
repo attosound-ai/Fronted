@@ -11,8 +11,74 @@ export interface TranscodeResult {
   encodeMs: number;
 }
 
+/**
+ * Non-destructive effect chain for one clip. Every block is optional; an absent
+ * block means "not applied". Stored on the clip as data (never baked into the
+ * source), rendered on-device by the native module, and serialisable for the
+ * backend. Keep this the SINGLE definition of effect params.
+ */
+export interface EffectChain {
+  eq?: {
+    /** High-pass cutoff in Hz (0 = off). Kills rumble / handling noise. */
+    highPassHz?: number;
+    /** Presence boost/cut in dB around presenceHz (default 3 kHz). */
+    presenceDb?: number;
+    presenceHz?: number;
+    lowShelfDb?: number;
+  };
+  compressor?: {
+    thresholdDb?: number;
+    /** Apple Dynamics Processor head room in dB: smaller = harder compression. */
+    headRoomDb?: number;
+    attackMs?: number;
+    releaseMs?: number;
+    makeupDb?: number;
+  };
+  reverb?: {
+    preset?:
+      | 'smallRoom'
+      | 'mediumRoom'
+      | 'largeRoom'
+      | 'mediumHall'
+      | 'largeHall'
+      | 'plate'
+      | 'cathedral';
+    /** 0..100 */
+    wetDryMix?: number;
+  };
+  delay?: {
+    timeMs?: number;
+    /** -100..100 */
+    feedback?: number;
+    /** 0..100 */
+    wetDryMix?: number;
+    lowPassCutoffHz?: number;
+  };
+  /** Offline only (never in the live call graph). */
+  pitchTime?: {
+    pitchCents?: number;
+    /** Playback rate: 0.25..4 (1 = unchanged). Changes the clip's duration. */
+    rate?: number;
+  };
+}
+
+export interface EffectsRenderResult {
+  outputPath: string;
+  outputBytes: number;
+  durationMs: number;
+  sampleRate: number;
+  channels: number;
+  applied: string[];
+  renderMs: number;
+}
+
 interface AttoAudioTranscodeNative {
   toTelephonyWav(inputPath: string, outputPath: string): Promise<TranscodeResult>;
+  renderEffects?(
+    inputPath: string,
+    outputPath: string,
+    chain: EffectChain
+  ): Promise<EffectsRenderResult>;
 }
 
 // requireOptionalNativeModule (not requireNativeModule): on a build that predates
@@ -40,6 +106,38 @@ export async function toTelephonyWav(
   if (!isTranscodeAvailable()) return null;
   try {
     return await native!.toTelephonyWav(inputPath, outputPath);
+  } catch {
+    return null;
+  }
+}
+
+/** True when this binary carries the offline effects renderer (b167+). */
+export function isEffectsRenderAvailable(): boolean {
+  return Platform.OS === 'ios' && typeof native?.renderEffects === 'function';
+}
+
+/** True when the chain has at least one block to apply. */
+export function isEffectChainEmpty(chain: EffectChain | null | undefined): boolean {
+  if (!chain) return true;
+  return (
+    !chain.eq && !chain.compressor && !chain.reverb && !chain.delay && !chain.pitchTime
+  );
+}
+
+/**
+ * Render `chain` onto a clip's audio, on-device and offline (faster than
+ * realtime, never touches the call's audio session). Returns null when the
+ * renderer is unavailable, the chain is empty, or the render fails; callers
+ * MUST keep using the dry source in that case, so the worst case is no effect.
+ */
+export async function renderEffects(
+  inputPath: string,
+  outputPath: string,
+  chain: EffectChain
+): Promise<EffectsRenderResult | null> {
+  if (!isEffectsRenderAvailable() || isEffectChainEmpty(chain)) return null;
+  try {
+    return await native!.renderEffects!(inputPath, outputPath, chain);
   } catch {
     return null;
   }

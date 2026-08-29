@@ -4,6 +4,7 @@ import { showToast } from '@/components/ui/Toast';
 import { showNetFailureToast } from '@/components/ui/netToast';
 import { projectService } from '@/lib/api/projectService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { withTimeout } from '@/lib/net/connectivity';
 import i18n from '@/lib/i18n';
 import {
   renderEffects,
@@ -30,6 +31,46 @@ interface UseClipEffectsOptions {
 
 const tx = (key: string, def: string): string =>
   i18n.t(`projects:${key}`, { defaultValue: def });
+
+/** A dead connection must not lock the Effects sheet in `busy` forever. */
+const SOURCE_DOWNLOAD_TIMEOUT_MS = 60_000;
+/** Cached dry sources / renders older than this are evicted before an apply. */
+const STALE_RENDER_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+let sweptThisProcess = false;
+
+/**
+ * Evict old fx-src-* / fx-out-* files from the cache directory, once per
+ * process. An 8 kHz 16-bit take is ~1 MB per minute, so without this every
+ * source ever effected accumulated on disk until iOS storage pressure hit.
+ * Best effort: a failure here never blocks an apply.
+ */
+async function sweepStaleRenders(): Promise<void> {
+  if (sweptThisProcess || !FileSystem.cacheDirectory) return;
+  sweptThisProcess = true;
+  try {
+    const names = await FileSystem.readDirectoryAsync(FileSystem.cacheDirectory);
+    const cutoff = Date.now() - STALE_RENDER_MAX_AGE_MS;
+    await Promise.all(
+      names
+        .filter((n) => n.startsWith('fx-src-') || n.startsWith('fx-out-'))
+        .map(async (n) => {
+          const path = `${FileSystem.cacheDirectory}${n}`;
+          const info = await FileSystem.getInfoAsync(path);
+          const modified =
+            info.exists &&
+            'modificationTime' in info &&
+            typeof info.modificationTime === 'number'
+              ? info.modificationTime * 1000
+              : 0;
+          if (modified > 0 && modified < cutoff) {
+            await FileSystem.deleteAsync(path, { idempotent: true });
+          }
+        })
+    );
+  } catch {
+    // Cache housekeeping only.
+  }
+}
 
 /**
  * useClipEffects — the NON-DESTRUCTIVE effects flow for one clip:
@@ -77,12 +118,34 @@ export function useClipEffects({
         }
 
         // 1. Fetch the DRY original to the cache (renders never read a render).
+        // A cached copy is trusted only if it is a plausible WAV (bigger than a
+        // header): downloadAsync writes the response body even on a 403/5xx, and
+        // an interrupted transfer leaves a truncated file, so "exists" alone
+        // would poison every later apply of this source. Bounded by a timeout so
+        // a dead connection cannot lock the sheet in `busy` forever.
         phase = 'download';
+        await sweepStaleRenders();
         const inPath = `${FileSystem.cacheDirectory}fx-src-${sourceId}.wav`;
         const info = await FileSystem.getInfoAsync(inPath);
-        if (!info.exists) {
-          const dl = await FileSystem.downloadAsync(source.downloadUrl, inPath);
+        const cachedOk =
+          info.exists &&
+          'size' in info &&
+          typeof info.size === 'number' &&
+          info.size > 1024;
+        if (!cachedOk) {
+          await FileSystem.deleteAsync(inPath, { idempotent: true }).catch(() => {});
+          let dl: FileSystem.FileSystemDownloadResult;
+          try {
+            dl = await withTimeout(
+              FileSystem.downloadAsync(source.downloadUrl, inPath),
+              SOURCE_DOWNLOAD_TIMEOUT_MS
+            );
+          } catch (e: unknown) {
+            await FileSystem.deleteAsync(inPath, { idempotent: true }).catch(() => {});
+            throw e;
+          }
           if (dl.status < 200 || dl.status >= 300) {
+            await FileSystem.deleteAsync(inPath, { idempotent: true }).catch(() => {});
             throw new Error(`Source download failed (${dl.status})`);
           }
         }
@@ -131,7 +194,9 @@ export function useClipEffects({
           clip_ms: clip.endInSegment - clip.startInSegment,
         });
         showToast(tx('effects.applied', 'Effects applied'));
-        void FileSystem.deleteAsync(outPath, { idempotent: true }).catch(() => {});
+        // The render stays on disk: it IS the segment's playable source until the
+        // next project refetch (see addSegment above). sweepStaleRenders() evicts
+        // it once it is a day old.
         return true;
       } catch (error: unknown) {
         analytics.capture(ANALYTICS_EVENTS.PROJECT.CLIP_EFFECTS, {

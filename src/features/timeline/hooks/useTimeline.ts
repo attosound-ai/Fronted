@@ -68,13 +68,28 @@ function keepSelectedIfPresent(
  * Pure reducer. Every case that changes `clips` also clears the region
  * `selection` (the range it described may no longer exist).
  */
+// The ONE definition of the zoom range. The reducer clamps to it, and the
+// toolbar's detents/slider and the editor's pinch preview must use the same
+// symbols, or a control can ask for a level the timeline will not show.
+export const ZOOM_MIN = 0.1;
+export const ZOOM_MAX = 4;
+export function clampZoom(level: number): number {
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
+}
+
 export function timelineReducer(
   state: TimelineState,
   action: TimelineAction
 ): TimelineState {
   switch (action.type) {
     case 'SET_CLIPS':
-      return { ...state, clips: action.clips, selection: null, isDirty: true };
+      return {
+        ...state,
+        clips: action.clips,
+        selection: null,
+        selectedClipId: keepSelectedIfPresent(state.selectedClipId, action.clips),
+        isDirty: true,
+      };
 
     case 'ADD_CLIP': {
       // Place the new clip at the rightmost edge of its lane so it
@@ -164,7 +179,7 @@ export function timelineReducer(
       return { ...state, isPlaying: action.playing };
 
     case 'SET_ZOOM':
-      return { ...state, zoomLevel: Math.max(0.1, Math.min(4, action.level)) };
+      return { ...state, zoomLevel: clampZoom(action.level) };
 
     case 'MARK_CLEAN':
       return { ...state, isDirty: false };
@@ -534,11 +549,15 @@ export function timelineReducer(
 
     case 'RESTORE_SNAPSHOT': {
       // Restores clips + laneMeta only. `selection` and `clipboard` are
-      // deliberately left alone — they are not part of the snapshot.
+      // deliberately left alone — they are not part of the snapshot. The clip
+      // selection IS reconciled: undoing a split/duplicate removes the clip that
+      // was auto-selected, and a dangling id left the toolbar stuck in edit mode
+      // with a blank caption and Delete acting on nothing.
       return {
         ...state,
         clips: action.clips,
         laneMeta: action.laneMeta,
+        selectedClipId: keepSelectedIfPresent(state.selectedClipId, action.clips),
         isDirty: true,
       };
     }
@@ -601,6 +620,9 @@ export function useTimeline(
   const redoStack = useRef<HistorySnapshot[]>([]);
 
   // Ref for always-current playback position (avoids stale closure in splitAtPlayhead)
+  // Latest clips for callbacks that must not close over a stale list.
+  const clipsRef = useRef(state.clips);
+  clipsRef.current = state.clips;
   const positionMsRef = useRef(state.playbackPositionMs);
   positionMsRef.current = state.playbackPositionMs;
 
@@ -681,6 +703,10 @@ export function useTimeline(
    */
   const patchClipEffects = useCallback(
     (clipId: string, patch: ClipEffectsPatch) => {
+      // The clip can vanish during the multi-second render/upload (an in-call
+      // refetch regenerates ids); without this the hook pushed a phantom undo
+      // entry for a no-op dispatch.
+      if (!clipsRef.current.some((c) => c.id === clipId)) return;
       pushUndo();
       dispatch({ type: 'PATCH_CLIP_EFFECTS', clipId, patch });
     },
@@ -771,17 +797,22 @@ export function useTimeline(
     [pushUndo]
   );
 
+  // Gain / pan faders fire on EVERY gesture frame. Snapshotting per frame
+  // pushed ~60 full-timeline copies per second of dragging onto the uncapped
+  // undo stack and made Undo walk the drag back one frame at a time. Callers
+  // pass `commit: true` once at gesture begin (and on a tap/double-tap reset)
+  // and `commit: false` for the frames in between, so one drag = one Undo.
   const setLaneGain = useCallback(
-    (laneIndex: number, gainDb: number) => {
-      pushUndo();
+    (laneIndex: number, gainDb: number, options?: { commit?: boolean }) => {
+      if (options?.commit !== false) pushUndo();
       dispatch({ type: 'SET_LANE_GAIN', laneIndex, gainDb });
     },
     [pushUndo]
   );
 
   const setLanePan = useCallback(
-    (laneIndex: number, pan: number) => {
-      pushUndo();
+    (laneIndex: number, pan: number, options?: { commit?: boolean }) => {
+      if (options?.commit !== false) pushUndo();
       dispatch({ type: 'SET_LANE_PAN', laneIndex, pan });
     },
     [pushUndo]
@@ -821,21 +852,27 @@ export function useTimeline(
    * out. Leaves a gap by default; `ripple` closes the gap on that lane
    * only.
    */
+  // Same predicate the reducer uses, so a zero-width range (the drag gesture
+  // starts with startMs === endMs) can never push a phantom undo entry for an
+  // op the reducer then no-ops.
+  const hasEditableRegion =
+    state.selection !== null && state.selection.endMs > state.selection.startMs;
+
   const cutRegion = useCallback(
     (ripple = false) => {
-      if (!state.selection) return;
+      if (!hasEditableRegion) return;
       pushUndo();
       dispatch({ type: 'CUT_REGION', ripple });
     },
-    [state.selection, pushUndo]
+    [hasEditableRegion, pushUndo]
   );
 
   /** Replace the selected region with silence (clipboard untouched). */
   const silenceRegion = useCallback(() => {
-    if (!state.selection) return;
+    if (!hasEditableRegion) return;
     pushUndo();
     dispatch({ type: 'SILENCE_REGION' });
-  }, [state.selection, pushUndo]);
+  }, [hasEditableRegion, pushUndo]);
 
   /**
    * Overwrite-paste the clipboard at `atMs` on `laneIndex`. Defaults to

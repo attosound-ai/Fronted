@@ -433,7 +433,7 @@ export function EffectsSheet({
               </Text>
             </TouchableOpacity>
           ) : (
-            <View style={{ flex: 1 }} />
+            <View style={styles.spacer} />
           )}
           <TouchableOpacity
             style={[
@@ -668,6 +668,9 @@ const styles = StyleSheet.create({
   },
   btnOff: {
     opacity: 0.4,
+  },
+  spacer: {
+    flex: 1,
   },
   footnote: {
     color: '#555',

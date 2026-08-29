@@ -3,28 +3,9 @@
  * `punchOutRange`, `sliceRange`, `joinClips` / `canJoinClips`,
  * `insertTime`, and the copy → paste round trip through the reducer.
  *
- * The project has no test runner configured, so this uses Node's
- * built-in `node:test` + `node:assert`. To run, from `front/`:
- *
- *   OUT=$(mktemp -d)
- *   cat > "$OUT/tsconfig.json" <<EOF
- *   {
- *     "extends": "$PWD/tsconfig.json",
- *     "compilerOptions": {
- *       "noEmit": false, "outDir": "$OUT/out", "rootDir": "$PWD",
- *       "typeRoots": ["$PWD/node_modules/@types"],
- *       "module": "nodenext", "moduleResolution": "nodenext"
- *     },
- *     "include": [],
- *     "files": ["$PWD/src/features/timeline/utils/__tests__/regionOps.test.ts"]
- *   }
- *   EOF
- *   npx tsc -p "$OUT/tsconfig.json" &&
- *     NODE_PATH="$PWD/node_modules" node --test \
- *       "$OUT/out/src/features/timeline/utils/__tests__/regionOps.test.js"
- *
- * (`typeRoots` because the config lives outside the repo; `rootDir` is the
- * repo root because `src/types/project.ts` imports from `modules/`.)
+ * The project has no jest/vitest; these run under Node's built-in `node:test`
+ * via `npm run test:timeline` (scripts/test-timeline.sh compiles this file to
+ * CJS in a temp dir and executes it).
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

@@ -96,25 +96,19 @@ export function videoError(
     });
     return;
   }
-  Sentry.captureException(
-    new Error(
-      `video_error:${ctx.surface}${opts.willFallback ? ' (recovering via MP4)' : ''}`
-    ),
-    {
-      tags: {
-        feature: 'video',
-        video_surface: ctx.surface,
-        video_will_fallback: String(opts.willFallback),
+  Sentry.captureException(new Error(`video_error:${ctx.surface}`), {
+    tags: {
+      feature: 'video',
+      video_surface: ctx.surface,
+    },
+    contexts: {
+      video: {
+        surface: ctx.surface,
+        post_id: ctx.postId ?? null,
+        source: shortSource(opts.source) ?? null,
       },
-      contexts: {
-        video: {
-          surface: ctx.surface,
-          post_id: ctx.postId ?? null,
-          source: shortSource(opts.source) ?? null,
-        },
-      },
-    }
-  );
+    },
+  });
 }
 
 /** Fired when the HLS source failed and we swapped in the optimized MP4. */

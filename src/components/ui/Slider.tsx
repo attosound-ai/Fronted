@@ -15,6 +15,12 @@ interface SliderProps {
  * has no @react-native-community/slider, and this keeps the Mixer dependency-free.
  * Inner views are pointerEvents="none" so the container owns every touch and
  * locationX stays relative to the track.
+ *
+ * `disabled` and `onChange` are read through refs: the PanResponder is created
+ * ONCE (useRef), so reading the props directly captured their mount-time values.
+ * A slider mounted disabled (every effect row on a dry clip, a mixer channel
+ * with record off) then ignored touches forever, even after its row was
+ * switched on.
  */
 export function Slider({
   value,
@@ -25,16 +31,20 @@ export function Slider({
 }: SliderProps) {
   const widthRef = useRef(0);
   const [width, setWidth] = useState(0);
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const update = (x: number) => {
-    if (widthRef.current <= 0) return;
-    onChange(Math.max(0, Math.min(1, x / widthRef.current)));
+    if (widthRef.current <= 0 || disabledRef.current) return;
+    onChangeRef.current(Math.max(0, Math.min(1, x / widthRef.current)));
   };
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabled,
-      onMoveShouldSetPanResponder: () => !disabled,
+      onStartShouldSetPanResponder: () => !disabledRef.current,
+      onMoveShouldSetPanResponder: () => !disabledRef.current,
       onPanResponderGrant: (e) => update(e.nativeEvent.locationX),
       onPanResponderMove: (e) => update(e.nativeEvent.locationX),
     })

@@ -285,16 +285,35 @@ const processQueue = (error: unknown, token: string | null = null): void => {
 // refresh token is how a healthy session gets expired by mistake).
 const EXP_SKEW_MS = 5_000;
 let preflightRefresh: Promise<string | null> | null = null;
+// One payload decode per DISTINCT token, not per request: the cold-launch
+// fan-out asks about the same token ~10 times in one tick.
+let expCacheToken: string | null = null;
+let expCacheMs: number | null = null;
+// Clock-skew valve. If a token we JUST received already reads as expired, the
+// device clock is ahead of the server and local `exp` means nothing; refreshing
+// before every request would rotate the refresh token in a storm. Disable the
+// pre-emptive path for the rest of the process (the 401 path still handles
+// reality) rather than trusting a clock the server has just contradicted.
+let preflightDisabled = false;
+
+function accessTokenExpMs(token: string): number | null {
+  if (token !== expCacheToken) {
+    const exp = decodeJwtPayload(token)?.exp;
+    expCacheToken = token;
+    expCacheMs = typeof exp === 'number' ? exp * 1000 : null;
+  }
+  return expCacheMs;
+}
 
 function isAccessTokenExpired(token: string): boolean {
-  const exp = decodeJwtPayload(token)?.exp;
+  const expMs = accessTokenExpMs(token);
   // Unknown/absent exp: let the server decide, never pre-empt on a guess.
-  if (typeof exp !== 'number') return false;
-  return exp * 1000 <= Date.now() + EXP_SKEW_MS;
+  if (expMs === null) return false;
+  return expMs <= Date.now() + EXP_SKEW_MS;
 }
 
 async function ensureFreshToken(token: string): Promise<string> {
-  if (!isAccessTokenExpired(token)) return token;
+  if (preflightDisabled || !isAccessTokenExpired(token)) return token;
   // An account switch owns the token right now; don't touch it.
   if (_paused) return token;
   // The 401 path is already refreshing: ride that refresh instead of a second one.
@@ -306,13 +325,17 @@ async function ensureFreshToken(token: string): Promise<string> {
       });
     });
   }
+  const epochAtEntry = getSessionEpoch();
   if (!preflightRefresh) {
-    const epochBefore = getSessionEpoch();
+    const epochBefore = epochAtEntry;
     preflightRefresh = (async () => {
       try {
         const { useAuthStore } = await import('@/stores/authStore');
         const fresh = await useAuthStore.getState().refreshTokens();
-        if (fresh) return fresh.accessToken;
+        if (fresh) {
+          if (isAccessTokenExpired(fresh.accessToken)) preflightDisabled = true;
+          return fresh.accessToken;
+        }
         // Definitive rejection: expire exactly like the 401 path does, guarded
         // by the same epoch check so a session that changed hands is untouched.
         if (
@@ -332,13 +355,25 @@ async function ensureFreshToken(token: string): Promise<string> {
     })();
   }
   const fresh = await preflightRefresh;
+  // The session changed hands while we waited (account switch landed mid
+  // refresh): never send the previous identity's token. Whatever storage holds
+  // now is the truth.
+  if (getSessionEpoch() !== epochAtEntry) {
+    return (await authStorage.getToken()) ?? token;
+  }
   return fresh ?? token;
 }
 
 /** Clear the refresh queue — call during account switch to prevent stale refreshes. */
 export function clearRefreshQueue(): void {
   isRefreshing = false;
-  failedQueue = [];
+  // Settle, never drop: every queued entry is a promise something awaits (a 401
+  // retry, or a request parked by ensureFreshToken). Emptying the array left
+  // those requests pending forever (axios timeouts start only after dispatch).
+  processQueue(new Error('Refresh queue cleared (account switch)'), null);
+  // A pre-emptive refresh started for the previous identity must not be
+  // awaited by anything that runs after the switch.
+  preflightRefresh = null;
 }
 
 // Signal raised when the backend returns 426 Upgrade Required (i.e. this

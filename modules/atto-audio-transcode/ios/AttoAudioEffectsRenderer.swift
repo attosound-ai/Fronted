@@ -190,9 +190,28 @@ enum AttoAudioEffectsRenderer {
         userInfo: [NSLocalizedDescriptionKey: "Could not allocate render buffer"])
     }
 
-    // Total frames = stretched source length + effect tail.
+    // LATENCY COMPENSATION. Effect AUs (the Dynamics Processor and TimePitch
+    // especially) report an algorithmic latency: their output lags the input by
+    // that many frames, with silence prepended. The clip keeps its in/out window
+    // on the source timeline, so without compensation the take lands LATE over
+    // the beat by the summed latency. We skip that many frames at the start of
+    // the render and pull the same amount extra at the end, so sample 0 of the
+    // output lines up with sample 0 of the source.
+    let latencySeconds = nodes.dropFirst().reduce(0.0) { acc, node in
+      acc + ((node as? AVAudioUnit)?.auAudioUnit.latency ?? 0)
+    }
+    var framesToSkip = AVAudioFrameCount((latencySeconds * format.sampleRate).rounded())
+
+    // Total frames = stretched source length + effect tail + latency we skip.
     let sourceFrames = Double(inputFile.length) / rate
-    let totalFrames = AVAudioFramePosition(sourceFrames + tailSeconds * format.sampleRate)
+    let totalFrames = AVAudioFramePosition(
+      sourceFrames + tailSeconds * format.sampleRate + Double(framesToSkip))
+
+    // A non-success, non-error status does not advance manualRenderingSampleTime,
+    // so an unbounded `continue` would spin a core forever and leave the JS
+    // promise (and the Effects sheet's busy state) hanging. Bound it.
+    var stalledRenders = 0
+    let maxStalledRenders = 64
 
     while engine.manualRenderingSampleTime < totalFrames {
       let remaining = totalFrames - engine.manualRenderingSampleTime
@@ -200,15 +219,27 @@ enum AttoAudioEffectsRenderer {
       let status = try engine.renderOffline(framesToRender, to: buffer)
       switch status {
       case .success:
-        try outFile.write(from: buffer)
+        stalledRenders = 0
+        try writeSkipping(buffer, to: outFile, skip: &framesToSkip)
       case .insufficientDataFromInputNode, .cannotDoInCurrentContext:
-        // No input node in this graph; treat as a transient and keep pulling.
+        stalledRenders += 1
+        if stalledRenders > maxStalledRenders {
+          throw NSError(
+            domain: "AttoAudioEffects", code: 5,
+            userInfo: [NSLocalizedDescriptionKey: "renderOffline stalled (\(status.rawValue))"])
+        }
         continue
       case .error:
         throw NSError(
           domain: "AttoAudioEffects", code: 4,
           userInfo: [NSLocalizedDescriptionKey: "renderOffline reported an error"])
       @unknown default:
+        stalledRenders += 1
+        if stalledRenders > maxStalledRenders {
+          throw NSError(
+            domain: "AttoAudioEffects", code: 5,
+            userInfo: [NSLocalizedDescriptionKey: "renderOffline stalled (unknown status)"])
+        }
         continue
       }
     }
@@ -230,6 +261,41 @@ enum AttoAudioEffectsRenderer {
   }
 
   // MARK: - helpers
+
+  /**
+   * Write `buffer` to `file`, dropping the first `skip` frames (latency
+   * compensation). `skip` is decremented as frames are consumed. Falls back to
+   * writing the whole buffer when the format has no float channel data.
+   */
+  private static func writeSkipping(
+    _ buffer: AVAudioPCMBuffer, to file: AVAudioFile, skip: inout AVAudioFrameCount
+  ) throws {
+    if skip == 0 {
+      try file.write(from: buffer)
+      return
+    }
+    if buffer.frameLength <= skip {
+      skip -= buffer.frameLength
+      return
+    }
+    guard let src = buffer.floatChannelData,
+      let trimmed = AVAudioPCMBuffer(
+        pcmFormat: buffer.format, frameCapacity: buffer.frameLength - skip),
+      let dst = trimmed.floatChannelData
+    else {
+      skip = 0
+      try file.write(from: buffer)
+      return
+    }
+    let keep = Int(buffer.frameLength - skip)
+    let offset = Int(skip)
+    for ch in 0..<Int(buffer.format.channelCount) {
+      dst[ch].update(from: src[ch] + offset, count: keep)
+    }
+    trimmed.frameLength = AVAudioFrameCount(keep)
+    skip = 0
+    try file.write(from: trimmed)
+  }
 
   private static func number(_ v: Any?) -> Double? {
     if let d = v as? Double { return d }

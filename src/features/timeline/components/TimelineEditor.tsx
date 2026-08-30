@@ -95,6 +95,15 @@ import { COLORS } from '@/constants/theme';
  */
 export const ENGINE_MIX_RECORDING_FLAG = 'incall_engine_mix_recording';
 
+/**
+ * Remote gate for the per-clip EFFECTS feature (Effects button, fx badge and
+ * the EffectsSheet). Absent/false = hidden: the feature is built but not yet
+ * part of what the client contracted, so it ships dark and is switched on
+ * from PostHog when that changes, without a new build. The data model
+ * (sourceSegmentId/effects) and the native renderer stay in place either way.
+ */
+export const CLIP_EFFECTS_FLAG = 'clip_effects_enabled';
+
 interface TimelineEditorProps {
   projectId: string;
   clips: TimelineClip[];
@@ -447,6 +456,7 @@ export function TimelineEditor({
   // ENGINE_MIX_RECORDING_FLAG is a kill-switch: set it false to force everyone back
   // to the Twilio fork.
   const injectionEnginePresent = useFeatureFlag(AUDIO_INJECTION_FLAG) === true;
+  const effectsEnabled = useFeatureFlag(CLIP_EFFECTS_FLAG) === true;
   const engineMixKilled = useFeatureFlag(ENGINE_MIX_RECORDING_FLAG) === false;
   const useEngineMix = injectionEnginePresent && !engineMixKilled;
   const {
@@ -1521,9 +1531,9 @@ export function TimelineEditor({
         hasSelection={state.selectedClipId !== null}
         selectedLabel={selectedLabel}
         onClearSelection={() => selectClip(null)}
-        selectedHasEffects={!!selectedClip?.effects}
-        onEffectsPress={() => setEffectsSheetVisible(true)}
-        effectsAvailable={effectsAvailable}
+        selectedHasEffects={effectsEnabled && !!selectedClip?.effects}
+        onEffectsPress={effectsEnabled ? () => setEffectsSheetVisible(true) : undefined}
+        effectsAvailable={effectsEnabled && effectsAvailable}
         onJoin={handleJoin}
         canJoin={joinPair !== null}
         canUndo={canUndo}
@@ -1586,7 +1596,7 @@ export function TimelineEditor({
           itself on a successful apply/remove; a failure keeps it open with
           the draft intact so the user can retry. */}
       <EffectsSheet
-        visible={effectsSheetVisible && !!selectedClip}
+        visible={effectsEnabled && effectsSheetVisible && !!selectedClip}
         onClose={() => setEffectsSheetVisible(false)}
         initialChain={selectedClip?.effects ?? null}
         clipLabel={selectedLabel}

@@ -1,6 +1,7 @@
 import {
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -32,11 +33,16 @@ export function InjectIntoCallButton({
   size = 22,
   style,
 }: InjectIntoCallButtonProps) {
-  const { canInject, isTrackInjecting, inject, stop } = useCallAudioInjection();
+  const { canInject, isTrackInjecting, isPreparing, inject, stop } =
+    useCallAudioInjection();
 
   if (!canInject) return null;
 
   const active = isTrackInjecting(source.uri);
+  // Downloading/decoding: show a REAL spinner. The old rendering flipped the
+  // icon to the active square during prepare, which read as "stuck loading"
+  // when a slow fetch ran its 12s course (David, Aug 30).
+  const preparingThis = active && isPreparing;
 
   return (
     <TouchableOpacity
@@ -50,7 +56,9 @@ export function InjectIntoCallButton({
       accessibilityLabel={active ? 'Stop playing into call' : 'Play into call'}
       hitSlop={8}
     >
-      {active ? (
+      {preparingThis ? (
+        <ActivityIndicator size="small" color="#FFF" />
+      ) : active ? (
         <Square size={size} color="#FFF" strokeWidth={2.25} fill="#FFF" />
       ) : (
         <Radio size={size} color={COLORS.primary} strokeWidth={2.25} />

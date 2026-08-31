@@ -121,7 +121,8 @@
     "toolPaste": "Paste",
     "toolInsert": "Insert",
     "toolJoin": "Join",
-    "toolRangeCaption": "Range · {{duration}} on {{lane}}"
+    "toolRangeCaption": "Range · {{duration}} on {{lane}}",
+    "transmitting": "Sending to the call"
   },
   "effects": {
     "title": "Effects",

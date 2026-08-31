@@ -16,7 +16,15 @@ function getInfiniteKeys(qc: QueryClient): readonly unknown[][] {
       (q) =>
         Array.isArray(q.queryKey) &&
         q.queryKey[0] === 'feed' &&
-        (q.queryKey[1] === 'infinite' || q.queryKey[1] === 'reels')
+        // user-posts and search feed the post-detail screen (usePostFeed) and
+        // profile grids; leaving them out froze the like/bookmark hearts on
+        // exactly those surfaces while the server applied the action (David,
+        // Aug 30: four applied like/unlikes, zero visual change). All four
+        // caches share the FeedResponse pages.data shape.
+        (q.queryKey[1] === 'infinite' ||
+          q.queryKey[1] === 'reels' ||
+          q.queryKey[1] === 'user-posts' ||
+          q.queryKey[1] === 'search')
     )
     .map((q) => q.queryKey);
 }

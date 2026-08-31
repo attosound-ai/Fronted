@@ -1889,48 +1889,102 @@ function restoreInjectionDevice(): void {
 
 export function hangUpCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ENDED);
-  // A LOCAL hangup force-detaches the listeners below BEFORE disconnect(), so
-  // Twilio's Disconnected event never reaches onDisconnected. This path must
-  // therefore emit its own end-of-call facts: the disconnect-reason row
-  // (clean, local — its absence made David's Aug 30 test call unanswerable
-  // from data) and the process-death marker clear (without it every local
-  // hangup left the marker set and the NEXT launch showed a FALSE
-  // "call ended unexpectedly" toast).
-  analytics.capture(ANALYTICS_EVENTS.CALL.DISCONNECTED_REASON, {
-    clean_hangup: true,
-    local_hangup: true,
-    error_code: null,
-    error_message: null,
-    call_sid: useCallStore.getState().activeCall?.callSid ?? null,
-  });
-  clearActiveCallMarker();
   // Tactile + audible hang-up feedback (WhatsApp-style). The chime mixes over
   // the still-active session (mixWithOthers) and never seizes it — see callSounds.
   void haptic('heavy');
   playEndCallSound();
   void endCallTelemetry('hangup');
-  // Force-detach any lingering listeners; the SDK's Disconnected event
-  // *usually* runs the teardown, but we never want a stale Call object
-  // holding closures across a reconnect failure.
-  if (activeCallTeardown) {
-    try {
-      activeCallTeardown();
-    } catch {
-      /* noop */
-    }
-    activeCallTeardown = null;
-  }
-  if (activeCallObj) {
-    try {
-      activeCallObj.disconnect();
-    } catch {
-      /* noop */
+
+  // DISCONNECT FIRST, TEAR DOWN AFTER. The old order force-detached every
+  // listener and then fired disconnect() as an un-awaited promise inside a
+  // sync try/catch (which cannot catch an async rejection). On David's Aug 30
+  // cold-adopted call the UI cleared but the MEDIA KEPT RUNNING for ~27 s until
+  // the far side hung up: he lost the controls while still on the call, and
+  // no branch of that failure was observable. Now:
+  //   1. disconnect() is awaited; a rejection is captured and retried against a
+  //      FRESH Call object from voice.getCalls() (covers a stale adopted ref).
+  //   2. Listeners stay attached, so on success Twilio's Disconnected event
+  //      runs onDisconnected normally (reason row, marker clear, teardown).
+  //   3. A watchdog finalizes the UI if that event never arrives, emitting the
+  //      local-hangup reason row and clearing the marker exactly once.
+  const obj = activeCallObj;
+  const sid = useCallStore.getState().activeCall?.callSid ?? null;
+
+  const finalizeLocally = (path: string) => {
+    // Runs only when onDisconnected did NOT (watchdog / total failure).
+    if (!activeCallObj && !useCallStore.getState().activeCall) return;
+    analytics.capture(ANALYTICS_EVENTS.CALL.DISCONNECTED_REASON, {
+      clean_hangup: true,
+      local_hangup: true,
+      hangup_path: path,
+      error_code: null,
+      error_message: null,
+      call_sid: sid,
+    });
+    clearActiveCallMarker();
+    if (activeCallTeardown) {
+      try {
+        activeCallTeardown();
+      } catch {
+        /* noop */
+      }
+      activeCallTeardown = null;
     }
     activeCallObj = null;
-  }
-  // Restore the stock audio device in case the SDK skips Disconnected (idempotent).
-  restoreInjectionDevice();
-  useCallStore.getState().endCall();
+    restoreInjectionDevice();
+    useCallStore.getState().endCall();
+  };
+
+  void (async () => {
+    let disconnected = false;
+    if (obj) {
+      try {
+        await obj.disconnect();
+        disconnected = true;
+        analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_MARKER, {
+          marker: 'hangup_disconnect_ok',
+        });
+      } catch (error: unknown) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_MARKER, {
+          marker: 'hangup_disconnect_rejected',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    if (!disconnected) {
+      // Retry with a fresh handle: the adopted-call ref (or its uuid) can be
+      // stale while the SDK's live map still has the call.
+      try {
+        const voice = getVoice();
+        const calls = await voice.getCalls();
+        for (const call of calls.values()) {
+          try {
+            await call.disconnect();
+            disconnected = true;
+          } catch {
+            /* try the next one */
+          }
+        }
+        analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_MARKER, {
+          marker: disconnected ? 'hangup_retry_ok' : 'hangup_retry_failed',
+          retry_count: calls.size,
+        });
+      } catch (error: unknown) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_MARKER, {
+          marker: 'hangup_retry_failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    // Watchdog: if Twilio's Disconnected event hasn't cleaned up in 4 s (or
+    // nothing could be disconnected at all), finalize the UI locally so the
+    // user is never stranded on a dead screen — but the call state above tells
+    // us honestly which case this was.
+    setTimeout(
+      () => finalizeLocally(disconnected ? 'event_missing' : 'disconnect_failed'),
+      disconnected ? 4000 : 0
+    );
+  })();
 }
 
 export async function toggleMuteCall() {

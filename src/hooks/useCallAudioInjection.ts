@@ -30,9 +30,13 @@ async function showInjectFailureToast(reason?: InjectReason): Promise<void> {
   // "Couldn't send that into the call" left NOTHING queryable and the diagnosis
   // had to come from device-install snapshots. The toast IS the user's
   // experience — it must never be telemetry-silent.
-  const toastShown = (toast: string) => {
+  // showToast returns whether a mounted host DISPLAYED it; report that truth.
+  // On Aug 30 this event said toast_shown while no host existed and the user
+  // saw nothing — an emitted event is not a shown toast.
+  const toastResult = (toast: string, message: string) => {
+    const shown = showToast(message);
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_FAILED, {
-      outcome: 'toast_shown',
+      outcome: shown ? 'toast_shown' : 'toast_no_host',
       toast,
       reason: reason ?? 'unknown',
     });
@@ -41,20 +45,16 @@ async function showInjectFailureToast(reason?: InjectReason): Promise<void> {
   if (reason === 'prepare_timeout' || reason === 'prepare_failed') {
     const conn = await getConnectivity();
     if (!conn.online) {
-      toastShown('offline');
-      showToast(i18n.t('calls:transmit.offline'));
+      toastResult('offline', i18n.t('calls:transmit.offline'));
     } else if (reason === 'prepare_timeout' || conn.weak) {
-      toastShown('weak_signal');
-      showToast(i18n.t('calls:transmit.weakSignal'));
+      toastResult('weak_signal', i18n.t('calls:transmit.weakSignal'));
     } else {
-      toastShown('failed');
-      showToast(i18n.t('calls:transmit.failed'));
+      toastResult('failed', i18n.t('calls:transmit.failed'));
     }
     return;
   }
   // engine_error, not_connected, no_active_call, not_supported: a plain failure.
-  toastShown('failed');
-  showToast(i18n.t('calls:transmit.failed'));
+  toastResult('failed', i18n.t('calls:transmit.failed'));
 }
 
 /**

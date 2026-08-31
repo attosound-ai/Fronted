@@ -121,7 +121,8 @@
     "toolPaste": "Colar",
     "toolInsert": "Inserir",
     "toolJoin": "Juntar",
-    "toolRangeCaption": "Intervalo · {{duration}} em {{lane}}"
+    "toolRangeCaption": "Intervalo · {{duration}} em {{lane}}",
+    "transmitting": "Tocando na chamada"
   },
   "effects": {
     "title": "Efeitos",

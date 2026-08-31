@@ -156,6 +156,8 @@ export function TimelineEditor({
   // When a call is active the global green InCallTopBar floats over this screen;
   // reserve its height so the editor's own header (close/transport) clears it.
   const callBarVisible = useCallBarVisible();
+  // Live injection state, for the "Transmitting to the call" chip.
+  const isTransmitting = useCallStore((s) => s.injection?.state === 'playing');
   const initialClips = useMemo(() => serverClips.map(serverClipToLocal), [serverClips]);
 
   // Local segments state so we can update after import or orphan resolution
@@ -483,11 +485,46 @@ export function TimelineEditor({
     // The position is also sent to the backend at stop (addSegment), because the
     // backend is what authoritatively places the clip.
     recordingStartMsRef.current = Math.max(0, state.playbackPositionMs);
-    recordingLaneRef.current = state.activeLaneIndex;
+    // AUTO-TARGET A FREE LANE. Recording onto the active lane put the take ON
+    // TOP of the beat clip already there (David, Aug 30: "en vez de crear una
+    // nueva pista lo puso encima"). Overdub semantics: if the active lane has a
+    // clip under the playhead, record onto the first lane that is FREE at the
+    // playhead; if none exists, create one. The user can still drag the clip
+    // afterwards; this only picks a sane default.
+    const at = recordingStartMsRef.current;
+    const laneBusyAt = (laneIndex: number) =>
+      state.clips.some((c) => {
+        if (c.laneIndex !== laneIndex) return false;
+        const start = c.positionInTimeline;
+        const end = start + (c.endInSegment - c.startInSegment);
+        return at >= start && at < end;
+      });
+    let targetLane = state.activeLaneIndex;
+    let autoSwitched = false;
+    if (laneBusyAt(targetLane)) {
+      autoSwitched = true;
+      let free = -1;
+      for (let i = 0; i < state.laneCount; i++) {
+        if (!laneBusyAt(i)) {
+          free = i;
+          break;
+        }
+      }
+      if (free >= 0) {
+        targetLane = free;
+        setActiveLane(free);
+      } else {
+        targetLane = state.laneCount;
+        addLane();
+        setActiveLane(targetLane);
+      }
+    }
+    recordingLaneRef.current = targetLane;
     analytics.capture(ANALYTICS_EVENTS.CALL.RECORDING_PLACED, {
       phase: 'start',
       playhead_ms: Math.round(state.playbackPositionMs),
-      lane_index: state.activeLaneIndex,
+      auto_lane_switched: autoSwitched,
+      lane_index: targetLane,
       clip_count: state.clips.length,
       lane_clip_count: state.clips.filter((c) => c.laneIndex === state.activeLaneIndex)
         .length,
@@ -1247,6 +1284,17 @@ export function TimelineEditor({
           totalDurationMs={totalDuration}
           style={styles.positionText}
         />
+        {/* While 📡 transmits, local playback is paused on purpose (anti-echo)
+            and the engine's monitor is what the user hears. Without a label
+            that reads as "paused but still sounding, two separate things"
+            (David, Aug 30). Name the state instead. */}
+        {isTransmitting && (
+          <View style={styles.transmitChip}>
+            <Text variant="caption" style={styles.transmitChipText}>
+              {t('timeline.transmitting')}
+            </Text>
+          </View>
+        )}
         <Text variant="caption" style={styles.clipCount}>
           {state.clips.length !== 1
             ? t('timeline.clipCountPlural', { n: state.clips.length })
@@ -1721,6 +1769,20 @@ const styles = StyleSheet.create({
   headerGlassTransport: { borderRadius: 18 },
   headerGlassPlay: { borderRadius: 22 },
   headerGlassSave: { borderRadius: 16 },
+  transmitChip: {
+    marginLeft: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(59,130,246,0.18)',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+  },
+  transmitChipText: {
+    color: '#8FB6FF',
+    fontSize: 11,
+    fontFamily: 'Archivo_600SemiBold',
+  },
   positionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

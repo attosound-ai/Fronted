@@ -121,7 +121,8 @@
     "toolPaste": "Pegar",
     "toolInsert": "Insertar",
     "toolJoin": "Unir",
-    "toolRangeCaption": "Rango · {{duration}} en {{lane}}"
+    "toolRangeCaption": "Rango · {{duration}} en {{lane}}",
+    "transmitting": "Sonando en la llamada"
   },
   "effects": {
     "title": "Efectos",

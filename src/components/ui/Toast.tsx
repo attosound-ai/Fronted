@@ -25,15 +25,35 @@ import { Text } from './Text';
 
 type ShowFn = (message: string) => void;
 
-/** Registered by the mounted <Toast /> component. */
-let _show: ShowFn | null = null;
+/**
+ * STACK of mounted hosts, most recent last. Several screens mount their own
+ * <Toast /> (the in-call editor lives in a Modal, so it needs its own); the
+ * old single `_show` slot was nulled by WHICHEVER host unmounted, so closing
+ * the editor killed every toast app-wide until another host screen mounted.
+ * That is why David saw neither the weak-signal toast nor any call feedback
+ * on Aug 30 while telemetry claimed toast_shown. A stack restores the
+ * previous host when one unmounts.
+ */
+const _hosts: ShowFn[] = [];
+
+function registerToastHost(show: ShowFn): () => void {
+  _hosts.push(show);
+  return () => {
+    const i = _hosts.lastIndexOf(show);
+    if (i >= 0) _hosts.splice(i, 1);
+  };
+}
 
 /**
  * showToast - call from anywhere to display the toast.
- * Safe to call even when no <Toast /> is mounted (silently ignored).
+ * Returns whether a mounted host actually displayed it, so callers can report
+ * the truth (an emitted event is not a shown toast).
  */
-export function showToast(message: string): void {
-  _show?.(message);
+export function showToast(message: string): boolean {
+  const host = _hosts[_hosts.length - 1];
+  if (!host) return false;
+  host(message);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,11 +130,11 @@ export function Toast(): React.ReactElement | null {
     [translateY, opacity, dismiss]
   );
 
-  // Register / unregister the module-level setter
+  // Register on the host stack; unmount restores the previous host.
   useEffect(() => {
-    _show = show;
+    const unregister = registerToastHost(show);
     return () => {
-      _show = null;
+      unregister();
       if (dismissTimer.current) clearTimeout(dismissTimer.current);
     };
   }, [show]);

@@ -1,10 +1,17 @@
 const DEFAULT_PIXELS_PER_MS = 0.1; // 100px per second at zoom 1
 
 export function msToPixels(ms: number, zoom = 1): number {
+  // Callable from Reanimated UI-thread worklets (the playhead's animated style
+  // and scrub gesture). Without this directive the UI runtime gets a
+  // non-callable host reference and calling it is a FATAL jsi JSError
+  // ("Object is not a function") that killed the app mid-call the moment the
+  // in-call editor mounted (Sentry REACT-NATIVE-4W, Aug 30, build 169).
+  'worklet';
   return ms * DEFAULT_PIXELS_PER_MS * zoom;
 }
 
 export function pixelsToMs(px: number, zoom = 1): number {
+  'worklet';
   return px / (DEFAULT_PIXELS_PER_MS * zoom);
 }
 

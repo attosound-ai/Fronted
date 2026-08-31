@@ -43,7 +43,8 @@
     "recordingNotFoundMessage": "The recording is taking longer than expected to process. Try again in a few seconds.",
     "recordUseCallMode": "Can't record this way during a call. Use the call recorder.",
     "callDroppedConnection": "Call dropped from a connection issue, not a hang-up. They can call back.",
-    "injectUseHeadphones": "Playing on speaker. Use headphones to hear your track clearly."
+    "injectUseHeadphones": "Playing on speaker. Use headphones to hear your track clearly.",
+    "callCrashRecovered": "Your last call ended unexpectedly. We are on it. They can call back."
   },
   "time": {
     "now": "now",

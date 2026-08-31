@@ -294,6 +294,11 @@ export const ANALYTICS_EVENTS = {
     // → abnormal drop (53xxx = media/network/audio-session, 31xxx = signaling).
     // This is what distinguishes a Securus timeout from a media failure from a hangup.
     DISCONNECTED_REASON: 'call_disconnected_reason',
+    // Emitted on the NEXT launch when a persisted active-call marker survives a
+    // process death (crash / jetsam / force-quit) that happened DURING a call.
+    // sid, ms_since_marker, another_call_active. The only signal the user gets
+    // after a mid-call crash, so it must pair with the callCrashRecovered toast.
+    PROCESS_DEATH_DETECTED: 'call_process_death_detected',
     // Microphone permission. An incoming VoIP call answered from the lock
     // screen can connect with NO mic access (iOS only prompts lazily) — the
     // caller then can't hear the user. We now request at login; these events

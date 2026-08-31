@@ -43,7 +43,8 @@
     "recordingNotFoundMessage": "A gravação está demorando mais do que o esperado para processar. Tente novamente em alguns segundos.",
     "recordUseCallMode": "Não dá para gravar assim durante uma chamada. Use o gravador de chamada.",
     "callDroppedConnection": "A chamada caiu por conexão, não foi desligada. Podem ligar de novo.",
-    "injectUseHeadphones": "No alto-falante. Use fones para ouvir sua faixa com clareza."
+    "injectUseHeadphones": "No alto-falante. Use fones para ouvir sua faixa com clareza.",
+    "callCrashRecovered": "Sua última chamada terminou de forma inesperada. Estamos verificando. Podem ligar de novo."
   },
   "time": {
     "now": "agora",

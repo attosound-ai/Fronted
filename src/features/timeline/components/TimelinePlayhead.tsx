@@ -45,20 +45,34 @@ export function TimelinePlayhead({
           dragStartMs.value = positionSv.value;
         })
         .onUpdate((e) => {
-          const startPx = msToPixels(dragStartMs.value, zoom);
-          const newMs = Math.max(
-            0,
-            Math.min(pixelsToMs(startPx + e.translationX, zoom), totalDurationMs)
-          );
-          positionSv.value = newMs;
-          if (onSeek) runOnJS(onSeek)(Math.round(newMs));
+          try {
+            const startPx = msToPixels(dragStartMs.value, zoom);
+            const newMs = Math.max(
+              0,
+              Math.min(pixelsToMs(startPx + e.translationX, zoom), totalDurationMs)
+            );
+            positionSv.value = newMs;
+            if (onSeek) runOnJS(onSeek)(Math.round(newMs));
+          } catch (err) {
+            // A scrub glitch must never escalate to a fatal UI-runtime error:
+            // build 169 died mid-call from exactly that class of failure.
+          }
         }),
     [zoom, totalDurationMs, onSeek, positionSv, dragStartMs]
   );
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: msToPixels(positionSv.value, zoom) }],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    // try/catch: an error inside a UI-thread style updater is escalated by
+    // Hermes to a FATAL C++ exception. This exact worklet killed the app in a
+    // live call on build 169 (msToPixels was not yet a worklet). The root cause
+    // is fixed at the source; this guard makes the worst case a frozen playhead
+    // instead of a dead call.
+    try {
+      return { transform: [{ translateX: msToPixels(positionSv.value, zoom) }] };
+    } catch (err) {
+      return { transform: [{ translateX: 0 }] };
+    }
+  });
 
   return (
     <GestureDetector gesture={panGesture}>

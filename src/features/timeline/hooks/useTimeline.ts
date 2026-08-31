@@ -74,6 +74,10 @@ function keepSelectedIfPresent(
 export const ZOOM_MIN = 0.1;
 export const ZOOM_MAX = 4;
 export function clampZoom(level: number): number {
+  // Callable from the pinch gesture's UI-thread worklet. A plain function
+  // reference is NOT callable on the UI runtime; calling it is the same fatal
+  // jsi JSError that killed build 169 mid-call (Sentry REACT-NATIVE-4W).
+  'worklet';
   return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
 }
 

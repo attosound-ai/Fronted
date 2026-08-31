@@ -118,7 +118,10 @@ const ZOOM_COMMIT_DELAY_MS = 90;
 // timeline above never jumps when a bar comes and goes.
 const ROW_HEIGHT = 42;
 const ROW_GAP = 8;
-const STAGE_HEIGHT = ROW_HEIGHT * 2 + ROW_GAP;
+// Mode row + caption line; the persistent bottom row lives OUTSIDE the stage.
+const CAPTION_HEIGHT = 30;
+const BOTTOM_ROW_HEIGHT = 38;
+const STAGE_HEIGHT = ROW_HEIGHT + ROW_GAP + CAPTION_HEIGHT;
 // Undo/Redo sit in one fixed cluster at the top right of EVERY state, so
 // the top row of each state reserves its width.
 const HISTORY_BUTTON_WIDTH = 46;
@@ -346,6 +349,30 @@ export function TimelineToolbar({
   // The first clip selection is acknowledged here, as the edit bar appears;
   // switching between clips is ticked by the editor's select wiring, and a
   // range ticks when its drag starts.
+  // Compact variant for the caption line of edit/region: same behaviour,
+  // pill-sized so the caption text keeps room.
+  const recordControlCompact =
+    onRecord || onStopRecord ? (
+      isRecording ? (
+        <Pressable
+          style={[styles.stopRecordButton, styles.recordCompact]}
+          onPress={withHaptic('medium', onStopRecord)}
+        >
+          <StopCircle size={14} color="#FFF" strokeWidth={2.25} />
+          <Text variant="caption" style={styles.stopRecordText}>
+            {formatElapsed(recordingElapsed)}
+          </Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          style={[styles.recordButton, styles.recordCompact]}
+          onPress={withHaptic('medium', onRecord)}
+        >
+          <View style={styles.recordDot} />
+        </Pressable>
+      )
+    ) : null;
+
   const wasEditRef = useRef(mode === 'edit');
   useEffect(() => {
     if (mode === 'edit' && !wasEditRef.current) void haptic('selection');
@@ -394,9 +421,8 @@ export function TimelineToolbar({
           style={[styles.layer, browseStyle]}
           pointerEvents={mode === 'browse' ? 'auto' : 'none'}
         >
-          <View style={[styles.row, styles.rowTop]}>
-            {/* Import steps aside while Select mode is on so Paste fits;
-                importing mid-selection is not a flow anyway. */}
+          <View style={styles.row}>
+            {recordControl}
             {onImport && !selectMode && (
               <ToolButton
                 Icon={FolderOpen}
@@ -407,30 +433,6 @@ export function TimelineToolbar({
                 disabled={isImporting}
               />
             )}
-            {(onRecord || onStopRecord) &&
-              (isRecording ? (
-                <Pressable
-                  style={styles.stopRecordButton}
-                  onPress={withHaptic('medium', onStopRecord)}
-                >
-                  <StopCircle size={18} color="#FFF" strokeWidth={2.25} />
-                  <Text variant="caption" style={styles.stopRecordText}>
-                    {t('timeline.toolStopRecording', {
-                      elapsed: formatElapsed(recordingElapsed),
-                    })}
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={styles.recordButton}
-                  onPress={withHaptic('medium', onRecord)}
-                >
-                  <View style={styles.recordDot} />
-                  <Text variant="caption" style={styles.recordText}>
-                    {t('timeline.toolRecord')}
-                  </Text>
-                </Pressable>
-              ))}
             {onToggleSelectMode && !isRecording && (
               <ToolButton
                 Icon={TextSelect}
@@ -448,65 +450,7 @@ export function TimelineToolbar({
               />
             )}
           </View>
-          <View style={styles.row}>
-            {hasZoom && (
-              <View style={styles.zoomCluster}>
-                <Pressable
-                  onPress={() => stepZoom(-1)}
-                  disabled={!canZoomOut}
-                  style={[styles.zoomButton, !canZoomOut && styles.buttonDisabled]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('timeline.toolZoomOut')}
-                >
-                  <Minus size={16} color="#FFF" strokeWidth={2.5} />
-                </Pressable>
-                <View
-                  style={styles.zoomSlider}
-                  accessibilityLabel={t('timeline.toolZoom')}
-                >
-                  <Slider
-                    value={sliderValue}
-                    onChange={handleSliderChange}
-                    minimumTrackColor="#3B82F6"
-                  />
-                </View>
-                <Pressable
-                  onPress={() => stepZoom(1)}
-                  disabled={!canZoomIn}
-                  style={[styles.zoomButton, !canZoomIn && styles.buttonDisabled]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('timeline.toolZoomIn')}
-                >
-                  <Plus size={16} color="#FFF" strokeWidth={2.5} />
-                </Pressable>
-              </View>
-            )}
-            <View style={styles.shipCluster}>
-              <ToolButton
-                Icon={Download}
-                label={t('timeline.toolExport')}
-                onPress={onExport}
-              />
-              {onPublish && (
-                <Pressable
-                  onPress={onPublish}
-                  disabled={isPublishing}
-                  style={[styles.publishButton, isPublishing && styles.buttonDisabled]}
-                >
-                  {isPublishing ? (
-                    <ActivityIndicator size="small" color="#000" />
-                  ) : (
-                    <Upload size={16} color="#000" strokeWidth={2.25} />
-                  )}
-                  <Text style={styles.publishLabel}>
-                    {isPublishing
-                      ? t('timeline.toolPublishing')
-                      : t('timeline.toolPublish')}
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          </View>
+          <View style={styles.captionRow} />
         </Animated.View>
 
         {/* Edit — what acts on the selected clip */}
@@ -514,7 +458,7 @@ export function TimelineToolbar({
           style={[styles.layer, editStyle]}
           pointerEvents={mode === 'edit' ? 'auto' : 'none'}
         >
-          <View style={[styles.row, styles.rowTop, styles.rowEdit]}>
+          <View style={[styles.row, styles.rowEdit]}>
             <ToolButton
               Icon={Scissors}
               label={t('timeline.toolSplit')}
@@ -555,7 +499,7 @@ export function TimelineToolbar({
             />
           </View>
           <View style={styles.captionRow}>
-            {recordControl}
+            {recordControlCompact}
             {onClearSelection && (
               <Pressable
                 onPress={onClearSelection}
@@ -594,7 +538,7 @@ export function TimelineToolbar({
           style={[styles.layer, regionStyle]}
           pointerEvents={mode === 'region' ? 'auto' : 'none'}
         >
-          <View style={[styles.row, styles.rowTop, styles.rowRegion]}>
+          <View style={[styles.row, styles.rowRegion]}>
             <ToolButton
               Icon={ClipboardCopy}
               label={t('timeline.toolCopy')}
@@ -622,7 +566,7 @@ export function TimelineToolbar({
             />
           </View>
           <View style={styles.captionRow}>
-            {recordControl}
+            {recordControlCompact}
             {onClearRegion && (
               <Pressable
                 onPress={onClearRegion}
@@ -648,9 +592,13 @@ export function TimelineToolbar({
             )}
           </View>
         </Animated.View>
+      </View>
 
-        {/* Undo / Redo — one cluster, visible in every state */}
-        <View style={styles.historyCluster}>
+      {/* Persistent bottom row — identical in every mode, so Undo/Redo, zoom
+          and Export/Publish never move under the thumb (David, Aug 30: the
+          floating history cluster made the whole bar read as misaligned). */}
+      <View style={styles.bottomRow}>
+        <View style={styles.historyInline}>
           <ToolButton
             Icon={Undo2}
             label={t('timeline.toolUndo')}
@@ -665,6 +613,58 @@ export function TimelineToolbar({
             disabled={!canRedo}
             style={styles.historyButton}
           />
+        </View>
+        {hasZoom && (
+          <View style={styles.zoomCluster}>
+            <Pressable
+              onPress={() => stepZoom(-1)}
+              disabled={!canZoomOut}
+              style={[styles.zoomButton, !canZoomOut && styles.buttonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel={t('timeline.toolZoomOut')}
+            >
+              <Minus size={16} color="#FFF" strokeWidth={2.5} />
+            </Pressable>
+            <View style={styles.zoomSlider} accessibilityLabel={t('timeline.toolZoom')}>
+              <Slider
+                value={sliderValue}
+                onChange={handleSliderChange}
+                minimumTrackColor="#3B82F6"
+              />
+            </View>
+            <Pressable
+              onPress={() => stepZoom(1)}
+              disabled={!canZoomIn}
+              style={[styles.zoomButton, !canZoomIn && styles.buttonDisabled]}
+              accessibilityRole="button"
+              accessibilityLabel={t('timeline.toolZoomIn')}
+            >
+              <Plus size={16} color="#FFF" strokeWidth={2.5} />
+            </Pressable>
+          </View>
+        )}
+        <View style={styles.shipCluster}>
+          <ToolButton
+            Icon={Download}
+            label={t('timeline.toolExport')}
+            onPress={onExport}
+          />
+          {onPublish && (
+            <Pressable
+              onPress={onPublish}
+              disabled={isPublishing}
+              style={[styles.publishButton, isPublishing && styles.buttonDisabled]}
+            >
+              {isPublishing ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <Upload size={16} color="#000" strokeWidth={2.25} />
+              )}
+              <Text style={styles.publishLabel}>
+                {isPublishing ? t('timeline.toolPublishing') : t('timeline.toolPublish')}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -692,10 +692,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  // Top rows leave the right edge free for the history cluster.
-  rowTop: {
-    paddingRight: HISTORY_WIDTH + 8,
-  },
   // Five equal tools next to the history cluster: a tight gap keeps their
   // labels at (nearly) full size on 375pt phones.
   rowEdit: {
@@ -704,14 +700,22 @@ const styles = StyleSheet.create({
   rowRegion: {
     gap: 4,
   },
-  historyCluster: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    height: ROW_HEIGHT,
+  bottomRow: {
+    height: BOTTOM_ROW_HEIGHT,
+    marginTop: ROW_GAP,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  historyInline: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  recordCompact: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   historyButton: {
     width: HISTORY_BUTTON_WIDTH,
@@ -827,7 +831,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
   },
   captionRow: {
-    height: ROW_HEIGHT,
+    height: CAPTION_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

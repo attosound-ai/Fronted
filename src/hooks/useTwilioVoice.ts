@@ -14,6 +14,58 @@ import { playEndCallSound } from '@/lib/sound/callSounds';
 import { showToast } from '@/components/ui/Toast';
 import i18n from '@/lib/i18n';
 import * as Sentry from '@sentry/react-native';
+import { mmkvStorage } from '@/lib/storage/mmkv';
+
+// ── Mid-call process-death detection ────────────────────────────────────────
+// A crash/jetsam/force-quit DURING a call kills the process with no chance to
+// tell the user anything: the b169 playhead crash ended an 8-minute call and
+// the app simply vanished (Sentry REACT-NATIVE-4W, PostHog heartbeats stopping
+// mid-stream). The marker below is written when a call CONNECTS and cleared on
+// every end path; if the next launch finds it still set, the process died
+// mid-call, so we finally say so (toast) and measure it (telemetry).
+const ACTIVE_CALL_MARKER_KEY = 'active_call_marker_v1';
+
+function setActiveCallMarker(sid: string | null): void {
+  try {
+    mmkvStorage.setString(
+      ACTIVE_CALL_MARKER_KEY,
+      JSON.stringify({ sid: sid ?? 'unknown', at: Date.now() })
+    );
+  } catch {
+    // Marker is best-effort; never let bookkeeping touch the call path.
+  }
+}
+
+function clearActiveCallMarker(): void {
+  try {
+    mmkvStorage.setString(ACTIVE_CALL_MARKER_KEY, '');
+  } catch {
+    // best-effort
+  }
+}
+
+function reportInterruptedCallIfAny(): void {
+  try {
+    const raw = mmkvStorage.getString(ACTIVE_CALL_MARKER_KEY);
+    if (!raw) return;
+    const marker = JSON.parse(raw) as { sid?: string; at?: number };
+    clearActiveCallMarker();
+    const active = useCallStore.getState().activeCall;
+    analytics.capture(ANALYTICS_EVENTS.CALL.PROCESS_DEATH_DETECTED, {
+      sid: marker.sid ?? null,
+      ms_since_marker: marker.at ? Date.now() - marker.at : null,
+      another_call_active: !!active,
+      same_call: !!active && active.callSid === marker.sid,
+    });
+    // Only speak when the user is NOT already on a call again (a cold-launch
+    // re-ring adopts the new call before this delayed check runs).
+    if (!active) {
+      showToast(i18n.t('common:toasts.callCrashRecovered'));
+    }
+  } catch {
+    clearActiveCallMarker();
+  }
+}
 import {
   startCallTelemetry,
   endCallTelemetry,
@@ -574,6 +626,7 @@ function bindCallEvents(call: any): () => void {
       JSON.stringify({ time: new Date().toISOString() })
     );
     setCallState('connected');
+    setActiveCallMarker(useCallStore.getState().activeCall?.callSid ?? null);
     // Telemetry begins capturing tick snapshots at this point — pre-connect
     // states are already covered by startCallTelemetry() at invite/outgoing.
     // Stats + answer context ride along; see beginConnectedCallTelemetry.
@@ -622,6 +675,7 @@ function bindCallEvents(call: any): () => void {
   const onConnectFailure = () => {
     activeCallObj = null;
     stopCallStatsCapture();
+    clearActiveCallMarker();
     void endCallTelemetry('call_connect_failure');
     endCall();
     // A connect failure can land AFTER CallKit already activated PlayAndRecord /
@@ -672,6 +726,7 @@ function bindCallEvents(call: any): () => void {
     // Final consolidated context BEFORE teardown clears the stash — captures the
     // end-state (audio category/route, app state) so a drop-at-connect vs a
     // clean-hangup is distinguishable, with the same full variable set.
+    clearActiveCallMarker();
     captureCallContext('disconnected');
     void captureCallStats('final');
     stopCallStatsCapture();
@@ -1636,6 +1691,7 @@ export async function acceptIncomingCall() {
       activeCallObj = recovered;
       pendingInvite = null;
       setCallState('connected');
+      setActiveCallMarker(useCallStore.getState().activeCall?.callSid ?? null);
       bindCallEvents(recovered);
       // CallKit accepted natively (no JS invite left) — the Connected event may
       // have already fired before bindCallEvents ran, so onConnected's
@@ -2716,6 +2772,9 @@ export function useTwilioVoice() {
     // it. All probes dedup per callSid, so retries are free when nothing is
     // there and harmless when adoption already happened.
     void adoptNativeColdCall('boot_probe');
+    // Mid-call process death from the PREVIOUS run: report it once the cold
+    // adoption window has had a chance to attach any live call.
+    setTimeout(reportInterruptedCallIfAny, 6000);
     // Poll ladder (b148): the handoff can land at ANY moment during the ring
     // window (the user may answer 5-40s after the module boots), so fixed 3s/10s
     // retries missed answers outside those instants. Poll every 2s for 40s

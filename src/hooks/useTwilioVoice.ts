@@ -1889,6 +1889,21 @@ function restoreInjectionDevice(): void {
 
 export function hangUpCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.ENDED);
+  // A LOCAL hangup force-detaches the listeners below BEFORE disconnect(), so
+  // Twilio's Disconnected event never reaches onDisconnected. This path must
+  // therefore emit its own end-of-call facts: the disconnect-reason row
+  // (clean, local — its absence made David's Aug 30 test call unanswerable
+  // from data) and the process-death marker clear (without it every local
+  // hangup left the marker set and the NEXT launch showed a FALSE
+  // "call ended unexpectedly" toast).
+  analytics.capture(ANALYTICS_EVENTS.CALL.DISCONNECTED_REASON, {
+    clean_hangup: true,
+    local_hangup: true,
+    error_code: null,
+    error_message: null,
+    call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+  });
+  clearActiveCallMarker();
   // Tactile + audible hang-up feedback (WhatsApp-style). The chime mixes over
   // the still-active session (mixWithOthers) and never seizes it — see callSounds.
   void haptic('heavy');

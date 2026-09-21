@@ -91,7 +91,8 @@
     "archive": "Archivar",
     "draftPrefix": "Borrador:",
     "pinnedSection": "Fijados",
-    "archivedCount": "{{count}} archivados"
+    "archivedCount": "{{count}} archivados",
+    "unarchive": "Restaurar"
   },
   "thread": {
     "newMessages": "Mensajes nuevos"

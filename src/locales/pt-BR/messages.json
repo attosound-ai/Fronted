@@ -91,7 +91,8 @@
     "archive": "Arquivar",
     "draftPrefix": "Rascunho:",
     "pinnedSection": "Fixadas",
-    "archivedCount": "{{count}} arquivadas"
+    "archivedCount": "{{count}} arquivadas",
+    "unarchive": "Restaurar"
   },
   "thread": {
     "newMessages": "Novas mensagens"

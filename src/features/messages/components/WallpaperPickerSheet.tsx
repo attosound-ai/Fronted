@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, X } from 'lucide-react-native';
+import { Check, RotateCcw, X } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { haptic } from '@/lib/haptics/hapticService';
@@ -192,7 +192,7 @@ function NoneTile({ label, isSelected, onPress, variant }: NoneTileProps) {
         {variant === 'none' ? (
           <X size={28} color="#666" strokeWidth={1.75} />
         ) : (
-          <Text style={styles.inheritGlyph}>↺</Text>
+          <RotateCcw size={26} color="#666" strokeWidth={1.75} />
         )}
       </View>
       <Text style={styles.tileLabel} numberOfLines={1}>

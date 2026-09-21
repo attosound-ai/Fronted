@@ -91,7 +91,8 @@
     "archive": "Archive",
     "draftPrefix": "Draft:",
     "pinnedSection": "Pinned",
-    "archivedCount": "{{count}} archived"
+    "archivedCount": "{{count}} archived",
+    "unarchive": "Restore"
   },
   "thread": {
     "newMessages": "New messages"

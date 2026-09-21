@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { WifiOff, RefreshCw, Pencil } from 'lucide-react-native';
+import { Archive, WifiOff, RefreshCw, Pencil } from 'lucide-react-native';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -25,7 +26,7 @@ import {
   useConversationPrefsStore,
 } from '../stores/conversationPrefsStore';
 import { ConversationSwipeRow } from './ConversationSwipeRow';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ConversationsHeader } from './ConversationsHeader';
 import { ConversationItem } from './ConversationItem';
 import { EmptyConversations } from './EmptyConversations';
@@ -58,6 +59,15 @@ export function ConversationList({
   const pinned = useConversationPrefsStore((s) => s.pinned);
   const archived = useConversationPrefsStore((s) => s.archived);
   // Pinned first, archived hidden until something new arrives in them.
+  const [showArchived, setShowArchived] = useState(false);
+  const unarchive = useConversationPrefsStore((s) => s.unarchive);
+  const archivedList = useMemo(
+    () =>
+      rawConversations.filter((c) =>
+        isArchived(archived, c.conversationId, c.lastMessageAt)
+      ),
+    [rawConversations, archived]
+  );
   const conversations = useMemo(
     () =>
       orderConversations(
@@ -87,6 +97,43 @@ export function ConversationList({
   const handleNewMessage = useCallback(() => {
     router.push('/new-message');
   }, []);
+
+  // WhatsApp keeps an "Archived" row at the end of the list; tapping it shows
+  // the hidden chats, and tapping one of those brings it back.
+  const archivedFooter =
+    archivedList.length > 0 ? (
+      <View>
+        <TouchableOpacity
+          onPress={() => setShowArchived((v) => !v)}
+          style={styles.archivedRow}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showArchived }}
+        >
+          <Archive size={18} color={COLORS.gray[500]} strokeWidth={2} />
+          <Text variant="body" style={styles.archivedLabel}>
+            {t('listActions.archivedCount', { count: archivedList.length })}
+          </Text>
+        </TouchableOpacity>
+        {showArchived
+          ? archivedList.map((item) => (
+              <TouchableOpacity
+                key={item.conversationId}
+                onPress={() => {
+                  unarchive(item.conversationId);
+                  analytics.capture(ANALYTICS_EVENTS.MESSAGES.CONVERSATION_ARCHIVED, {
+                    conversation_id: item.conversationId,
+                    restored: true,
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('listActions.unarchive')}
+              >
+                <ConversationItem conversation={item} onPress={handleConversationPress} />
+              </TouchableOpacity>
+            ))
+          : null}
+      </View>
+    ) : null;
 
   const renderItem = useCallback(
     ({ item }: { item: ChatConversation }) => (
@@ -192,6 +239,7 @@ export function ConversationList({
           />
         }
         ListEmptyComponent={EmptyConversations}
+        ListFooterComponent={archivedFooter}
         showsVerticalScrollIndicator={false}
       />
       {fab}
@@ -245,6 +293,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#000',
   },
+  archivedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 14,
+  },
+  archivedLabel: { color: COLORS.gray[500] },
   fab: {
     position: 'absolute',
     bottom: 24,

@@ -103,7 +103,12 @@
     "title": "Mensaje",
     "close": "Cerrar",
     "more": "Más reacciones",
-    "replyingTo": "Respondiendo a {{name}}"
+    "replyingTo": "Respondiendo a {{name}}",
+    "forward": "Reenviar",
+    "forwardTitle": "Reenviar a",
+    "forwarded": "Reenviado",
+    "linkCopied": "Enlace copiado",
+    "copyLink": "Copiar enlace"
   },
   "listActions": {
     "pin": "Fijar",
@@ -121,10 +126,12 @@
     "title": "Hilo",
     "replies_one": "{{count}} respuesta",
     "replies_other": "{{count}} respuestas",
-    "replyPlaceholder": "Responder en el hilo...",
+    "replyPlaceholder": "Agregar una respuesta",
     "menu": "Responder en hilo",
     "empty": "Todavía no hay respuestas. Empieza el hilo.",
-    "rootMissing": "El mensaje ya no está disponible."
+    "rootMissing": "El mensaje ya no está disponible.",
+    "noReplies": "Aún no hay respuestas",
+    "alsoSend": "Enviar también al chat"
   },
   "composer": {
     "expand": "Ampliar editor",

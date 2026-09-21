@@ -103,7 +103,12 @@
     "title": "Message",
     "close": "Close",
     "more": "More reactions",
-    "replyingTo": "Replying to {{name}}"
+    "replyingTo": "Replying to {{name}}",
+    "forward": "Forward",
+    "forwardTitle": "Forward to",
+    "forwarded": "Forwarded",
+    "linkCopied": "Link copied",
+    "copyLink": "Copy link"
   },
   "listActions": {
     "pin": "Pin",
@@ -121,10 +126,12 @@
     "title": "Thread",
     "replies_one": "{{count}} reply",
     "replies_other": "{{count}} replies",
-    "replyPlaceholder": "Reply in thread...",
+    "replyPlaceholder": "Add a reply",
     "menu": "Reply in thread",
     "empty": "No replies yet. Start the thread.",
-    "rootMissing": "The message is no longer available."
+    "rootMissing": "The message is no longer available.",
+    "noReplies": "No replies yet",
+    "alsoSend": "Also send to the chat"
   },
   "composer": {
     "expand": "Expand editor",

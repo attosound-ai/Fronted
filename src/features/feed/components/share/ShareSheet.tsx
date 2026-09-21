@@ -58,7 +58,10 @@ export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareShee
   return (
     <BottomSheet visible={visible} onClose={onClose} title={t('post.share')}>
       {/* Chats first: sending a post to someone is what people reach for. */}
-      <SendToChatRow post={sharedPost} onSent={() => onShareTracked?.()} />
+      <SendToChatRow
+        payload={{ kind: 'post', post: sharedPost }}
+        onSent={() => onShareTracked?.()}
+      />
       <TouchableOpacity style={styles.option} onPress={handleShareExternal}>
         <View style={styles.iconCircle}>
           <Share2 size={22} color="#FFF" strokeWidth={2.25} />

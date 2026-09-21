@@ -3,11 +3,13 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { X } from 'lucide-react-native';
+import { Check, ChevronLeft } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useSharedValue } from 'react-native-reanimated';
 
-import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { COLORS } from '@/constants/theme';
+import { haptic } from '@/lib/haptics/hapticService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { useThread } from '@/features/messages/hooks/useThread';
 import { useParticipantProfile } from '@/features/messages/hooks/useParticipantAvatar';
@@ -21,12 +23,12 @@ import {
   type ChatComposerHandle,
 } from '@/features/messages/components/ChatComposer';
 import { MediaMessage } from '@/features/messages/media/MediaMessage';
-import { useSharedValue } from 'react-native-reanimated';
 
 /**
- * Slack style thread: the root message pinned at the top, its replies below
- * in order, and a composer that only posts into this thread. Opened from a
- * bubble's context menu or its "N replies" footer.
+ * Slack's thread, and Slack's shape for it: not a card floating over the
+ * conversation but a screen of its own, pushed from the right, with the
+ * message that started it at the top, a rule that counts the replies, and a
+ * composer that can also drop the reply back into the chat.
  */
 export default function ChatThreadScreen() {
   const { t } = useTranslation('messages');
@@ -47,17 +49,28 @@ export default function ChatThreadScreen() {
   const composerRef = useRef<ChatComposerHandle>(null);
   const draftRef = useRef('');
   const [justSentId, setJustSentId] = useState<string | null>(null);
+  const [alsoSend, setAlsoSend] = useState(false);
   const timesReveal = useSharedValue(0);
 
-  const rows = useMemo(
+  const rootRows = useMemo(
     () =>
       toGiftedMessages(
-        [...(root ? [root] : []), ...replies],
+        root ? [root] : [],
         userId,
         participantName,
         participant.avatarUri ?? undefined
       ),
-    [root, replies, userId, participantName, participant.avatarUri]
+    [root, userId, participantName, participant.avatarUri]
+  );
+  const replyRows = useMemo(
+    () =>
+      toGiftedMessages(
+        replies,
+        userId,
+        participantName,
+        participant.avatarUri ?? undefined
+      ),
+    [replies, userId, participantName, participant.avatarUri]
   );
 
   const renderMedia = useCallback(
@@ -75,85 +88,108 @@ export default function ChatThreadScreen() {
       edited: t('actions.edited', { defaultValue: 'edited' }),
       replies: (count: number) => t('thread.replies', { count }),
       replay: t('effects.replay'),
+      forwarded: t('actions.forwarded'),
     }),
     [t]
   );
 
   const handleSend = useCallback(
     async (text: string) => {
-      const sent = await sendReply(text);
+      // Slack's "also send to the channel": the reply stays in the thread
+      // and is shown in the conversation as well.
+      const sent = await sendReply(text, alsoSend ? { alsoSendToChat: true } : undefined);
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_REPLY_SENT, {
+        conversation_id: conversationId,
+        thread_id: threadId,
+        also_sent_to_chat: alsoSend,
+      });
       setJustSentId(sent.messageId);
     },
-    [sendReply]
+    [alsoSend, conversationId, sendReply, threadId]
+  );
+
+  const row = useCallback(
+    (item: AttoMessage, isRoot: boolean) => (
+      <MessageRow
+        message={item}
+        isOwn={String(item.user._id) === userId}
+        position={{ first: true, last: true }}
+        currentUserId={userId}
+        justSent={justSentId === String(item._id)}
+        senderIsCreator={false}
+        menuItems={[]}
+        labels={labels}
+        onMenuAction={() => {}}
+        onReply={() => {}}
+        onDoubleTap={() => {}}
+        onToggleReaction={() => {}}
+        renderMedia={renderMedia}
+        dimmed={false}
+        timesReveal={timesReveal}
+        onTimesRevealed={() => {}}
+        readLabel={isRoot ? null : null}
+      />
+    ),
+    [justSentId, labels, renderMedia, timesReveal, userId]
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 6 }]}>
-      <View style={styles.header}>
-        <GlassSurface radius={22} style={styles.glassButton}>
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.iconButton}
-            accessibilityRole="button"
-            accessibilityLabel={t('composer.collapse')}
-          >
-            <X size={22} color={COLORS.white} strokeWidth={2.25} />
-          </Pressable>
-        </GlassSurface>
-        <GlassSurface radius={20} style={styles.titlePill}>
-          <Text style={styles.title}>
-            {t('thread.title')}
-            {replies.length > 0
-              ? `  ·  ${t('thread.replies', { count: replies.length })}`
-              : ''}
-          </Text>
-        </GlassSurface>
-        <View style={styles.glassButton} />
+    <View style={styles.container}>
+      {/* Slack's header: back, the word Thread, and whose conversation it
+          belongs to underneath. */}
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel={t('chatHeader.backAccessibilityLabel')}
+        >
+          <ChevronLeft size={26} color={COLORS.white} strokeWidth={2.25} />
+        </Pressable>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>{t('thread.title')}</Text>
+          {participantName ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {participantName}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.back} />
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={styles.body}>
         <FlatList
-          data={rows}
+          data={replyRows}
           keyExtractor={(m) => String(m._id)}
           contentContainerStyle={styles.list}
           keyboardDismissMode="interactive"
-          renderItem={({ item, index }) => {
-            const isOwn = String(item.user._id) === userId;
-            const isRoot = index === 0 && !!root;
-            return (
-              <View style={isRoot ? styles.rootWrap : undefined}>
-                <MessageRow
-                  message={item}
-                  isOwn={isOwn}
-                  position={{ first: true, last: true }}
-                  currentUserId={userId}
-                  justSent={justSentId === String(item._id)}
-                  senderIsCreator={false}
-                  menuItems={[]}
-                  labels={labels}
-                  onMenuAction={() => {}}
-                  onReply={() => {}}
-                  onDoubleTap={() => {}}
-                  onToggleReaction={() => {}}
-                  renderMedia={renderMedia}
-                  dimmed={false}
-                  timesReveal={timesReveal}
-                  onTimesRevealed={() => {}}
-                  readLabel={null}
-                />
-                {isRoot ? <View style={styles.divider} /> : null}
+          ListHeaderComponent={
+            <View>
+              {rootRows.map((item) => (
+                <View key={String(item._id)}>{row(item, true)}</View>
+              ))}
+              {/* The rule that counts what came after, exactly where Slack
+                  puts it. */}
+              <View style={styles.countRow}>
+                <Text style={styles.countText}>
+                  {replies.length > 0
+                    ? t('thread.replies', { count: replies.length })
+                    : t('thread.noReplies')}
+                </Text>
+                <View style={styles.countRule} />
               </View>
-            );
-          }}
+            </View>
+          }
+          renderItem={({ item }) => row(item, false)}
           ListEmptyComponent={
-            !isLoading ? (
-              <Text style={styles.empty}>
-                {root ? t('thread.empty') : t('thread.rootMissing')}
-              </Text>
+            !isLoading && !root ? (
+              <Text style={styles.empty}>{t('thread.rootMissing')}</Text>
             ) : null
           }
         />
-        <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+
+        <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <ChatComposer
             ref={composerRef}
             conversationId={`${conversationId}:${threadId}`}
@@ -161,6 +197,27 @@ export default function ChatThreadScreen() {
             generation={0}
             placeholder={t('thread.replyPlaceholder')}
             onSend={(text) => void handleSend(text)}
+            // Slack keeps the broadcast checkbox inside the reply box,
+            // above what you are writing.
+            preview={
+              <Pressable
+                onPress={() => {
+                  haptic('selection');
+                  setAlsoSend((v) => !v);
+                }}
+                style={styles.alsoRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: alsoSend }}
+                accessibilityLabel={t('thread.alsoSend')}
+              >
+                <View style={[styles.checkbox, alsoSend && styles.checkboxOn]}>
+                  {alsoSend ? (
+                    <Check size={13} color={COLORS.black} strokeWidth={3} />
+                  ) : null}
+                </View>
+                <Text style={styles.alsoText}>{t('thread.alsoSend')}</Text>
+              </Pressable>
+            }
           />
         </View>
       </KeyboardAvoidingView>
@@ -173,28 +230,21 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 6,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
   },
-  glassButton: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  titlePill: {
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  title: { color: COLORS.white, fontSize: 15, fontFamily: 'Archivo_600SemiBold' },
+  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerText: { flex: 1, alignItems: 'center' },
+  title: { color: COLORS.white, fontSize: 17, fontFamily: 'Archivo_600SemiBold' },
+  subtitle: { color: '#9A9AA0', fontSize: 12, fontFamily: 'Archivo_400Regular' },
   body: { flex: 1 },
-  list: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 12 },
-  rootWrap: { paddingBottom: 4 },
-  divider: {
+  list: { paddingHorizontal: 10, paddingTop: 4, paddingBottom: 12 },
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 12 },
+  countText: { color: '#9A9AA0', fontSize: 13, fontFamily: 'Archivo_500Medium' },
+  countRule: {
+    flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    marginVertical: 10,
-    marginHorizontal: 8,
   },
   empty: {
     color: '#888',
@@ -202,5 +252,24 @@ const styles = StyleSheet.create({
     marginTop: 24,
     fontFamily: 'Archivo_400Regular',
   },
-  toolbar: { paddingHorizontal: 10, paddingTop: 6 },
+  toolbar: { paddingHorizontal: 10, paddingTop: 6, gap: 8 },
+  alsoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: COLORS.white, borderColor: COLORS.white },
+  alsoText: { color: '#C9C9CE', fontSize: 13, fontFamily: 'Archivo_400Regular' },
 });

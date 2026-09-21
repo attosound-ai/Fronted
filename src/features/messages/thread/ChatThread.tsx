@@ -208,6 +208,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         edited: t('chat.edited', { defaultValue: 'edited' }),
         replies: (count: number) => t('thread.replies', { count }),
         replay: t('effects.replay'),
+        forwarded: t('actions.forwarded'),
       }),
       [t]
     );

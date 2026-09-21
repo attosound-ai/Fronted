@@ -118,6 +118,8 @@ export interface MessageMetadata {
   post?: SharedPost;
   /** A note written with the shared post, shown under the card. */
   caption?: string;
+  /** Slack's broadcast: a thread reply that also belongs in the chat. */
+  alsoSendToChat?: boolean;
   [key: string]: unknown;
 }
 

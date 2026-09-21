@@ -474,9 +474,10 @@ function RootLayout() {
                         <Stack.Screen
                           name="chat-thread"
                           options={{
+                            // Slack pushes a thread as its own screen, it
+                            // never floats it as a card over the channel.
                             headerShown: false,
-                            presentation: 'modal',
-                            animation: 'slide_from_bottom',
+                            animation: 'slide_from_right',
                           }}
                         />
                         <Stack.Screen

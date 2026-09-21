@@ -57,6 +57,7 @@ import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import { type AttachAction } from './AttachMenu';
 import { TopFadeBlur } from './TopFadeBlur';
 import { PinnedBar } from './PinnedBar';
+import { ForwardSheet } from './ForwardSheet';
 import { ReplyFocus } from './ReplyFocus';
 import { usePinnedMessages } from '../hooks/usePinnedMessages';
 import { useCameraStore, type CameraMode } from '../stores/cameraStore';
@@ -163,6 +164,7 @@ export function ChatScreen({
   const [selectedMessage, setSelectedMessage] = useState<AttoMessage | null>(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
 
   // Composer state. The native field owns the text (see ChatComposer); the
@@ -321,7 +323,12 @@ export function ChatScreen({
   // Slack style threads: replies live in their own screen, the main list
   // only shows the root with a "N replies" footer.
   const threadCounts = useMemo(() => countThreadReplies(messages), [messages]);
-  const mainMessages = useMemo(() => messages.filter((m) => !m.threadId), [messages]);
+  // A thread reply stays in its thread, unless the sender ticked Slack's
+  // "also send to the chat", in which case it shows in both.
+  const mainMessages = useMemo(
+    () => messages.filter((m) => !m.threadId || m.metadata?.alsoSendToChat === true),
+    [messages]
+  );
   const giftedMessages = toGiftedMessages(
     mainMessages,
     userId,
@@ -563,6 +570,16 @@ export function ChatScreen({
         case 'unpin':
           unpin(String(msg._id));
           showToast(t('pinned.unpinned'));
+          break;
+        case 'forward':
+          setForwardMessage(msg);
+          break;
+        case 'copyLink':
+          Clipboard.setStringAsync(
+            `https://atto.sound/m/${conversationId}/${String(msg._id)}`
+          );
+          showToast(t('actions.linkCopied'));
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_LINK_COPIED, eventProps);
           break;
         case 'copy':
           Clipboard.setStringAsync(msg.text);
@@ -1067,9 +1084,22 @@ export function ChatScreen({
           },
         },
         {
+          actionKey: 'forward',
+          actionTitle: t('actions.forward'),
+          icon: {
+            type: 'IMAGE_SYSTEM',
+            imageValue: { systemName: 'arrowshape.turn.up.right' },
+          },
+        },
+        {
           actionKey: 'copy',
           actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
           icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
+        },
+        {
+          actionKey: 'copyLink',
+          actionTitle: t('actions.copyLink'),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'link' } },
         },
         {
           actionKey: 'thread',
@@ -1178,6 +1208,7 @@ export function ChatScreen({
           threadRef.current?.scrollToBottom(true);
         }}
       />
+      <ForwardSheet message={forwardMessage} onClose={() => setForwardMessage(null)} />
       <WallpaperPickerSheet
         visible={wallpaperPickerVisible}
         onClose={() => setWallpaperPickerVisible(false)}

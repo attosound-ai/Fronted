@@ -19,10 +19,24 @@ import { useConversations } from '../hooks/useConversations';
 import { useUserSearch } from '../hooks/useUserSearch';
 import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import { messageService } from '../services/messageService';
-import type { SharedPost } from '../types';
+import type { MessageMetadata, SharedPost } from '../types';
+
+/** What the row sends: a post card, or a message being forwarded. */
+export type SendPayload =
+  | { kind: 'post'; post: SharedPost }
+  | {
+      kind: 'forward';
+      content: string;
+      contentType: string;
+      metadata?: MessageMetadata | null;
+      /** Shown in the row's title, so people know what is being sent. */
+      label?: string;
+    };
 
 interface SendToChatRowProps {
-  post: SharedPost;
+  payload: SendPayload;
+  /** Hidden when the sheet already has its own note field. */
+  withNote?: boolean;
   onSent?: (conversationId: string) => void;
 }
 
@@ -31,7 +45,7 @@ interface SendToChatRowProps {
  * Instagram and Telegram offer the conversation before anything else. One
  * tap sends the post as a card into that chat.
  */
-export function SendToChatRow({ post, onSent }: SendToChatRowProps) {
+export function SendToChatRow({ payload, withNote = true, onSent }: SendToChatRowProps) {
   const { t } = useTranslation('messages');
   const { conversations, isLoading } = useConversations();
   const [sent, setSent] = useState<Record<string, boolean>>({});
@@ -52,17 +66,33 @@ export function SendToChatRow({ post, onSent }: SendToChatRowProps) {
       haptic('light');
       try {
         const caption = note.trim();
-        await messageService.sendMessage({
-          conversationId,
-          content: `https://atto.sound/post/${post.id}`,
-          contentType: 'post',
-          metadata: caption ? { post, caption } : { post },
-        });
-        analytics.capture(ANALYTICS_EVENTS.MESSAGES.SHARED_POST_SENT, {
-          conversation_id: conversationId,
-          post_id: post.id,
-          post_type: post.type,
-        });
+        if (payload.kind === 'post') {
+          const { post } = payload;
+          await messageService.sendMessage({
+            conversationId,
+            content: `https://atto.sound/post/${post.id}`,
+            contentType: 'post',
+            metadata: caption ? { post, caption } : { post },
+          });
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.SHARED_POST_SENT, {
+            conversation_id: conversationId,
+            post_id: post.id,
+            post_type: post.type,
+          });
+        } else {
+          // Forwarded, the way WhatsApp and Telegram mark it: the same
+          // content, with a note that it comes from somewhere else.
+          await messageService.sendMessage({
+            conversationId,
+            content: payload.content,
+            contentType: payload.contentType,
+            metadata: { ...(payload.metadata ?? {}), forwarded: true },
+          });
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_FORWARDED, {
+            conversation_id: conversationId,
+            content_type: payload.contentType,
+          });
+        }
         setSent((s) => ({ ...s, [conversationId]: true }));
         onSent?.(conversationId);
       } catch (error) {
@@ -76,7 +106,7 @@ export function SendToChatRow({ post, onSent }: SendToChatRowProps) {
         setSending(null);
       }
     },
-    [note, onSent, post, sending, sent]
+    [note, onSent, payload, sending, sent]
   );
 
   // Someone you have not written to yet: resolve (or create) the chat and
@@ -148,16 +178,18 @@ export function SendToChatRow({ post, onSent }: SendToChatRowProps) {
       </ScrollView>
 
       {/* Instagram and WhatsApp let a note ride along with what is shared. */}
-      <TextInput
-        value={note}
-        onChangeText={setNote}
-        placeholder={t('sharedPost.notePlaceholder')}
-        placeholderTextColor="#7A7A80"
-        style={styles.noteField}
-        keyboardAppearance="dark"
-        maxLength={300}
-        accessibilityLabel={t('sharedPost.notePlaceholder')}
-      />
+      {withNote ? (
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          placeholder={t('sharedPost.notePlaceholder')}
+          placeholderTextColor="#7A7A80"
+          style={styles.noteField}
+          keyboardAppearance="dark"
+          maxLength={300}
+          accessibilityLabel={t('sharedPost.notePlaceholder')}
+        />
+      ) : null}
 
       <Modal
         visible={searchOpen}

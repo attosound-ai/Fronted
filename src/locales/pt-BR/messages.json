@@ -58,7 +58,12 @@
     "title": "Mensagem",
     "close": "Fechar",
     "more": "Mais reações",
-    "replyingTo": "Respondendo a {{name}}"
+    "replyingTo": "Respondendo a {{name}}",
+    "forward": "Encaminhar",
+    "forwardTitle": "Encaminhar para",
+    "forwarded": "Encaminhada",
+    "linkCopied": "Link copiado",
+    "copyLink": "Copiar link"
   },
   "chatHeader": {
     "backAccessibilityLabel": "Voltar",
@@ -121,10 +126,12 @@
     "title": "Tópico",
     "replies_one": "{{count}} resposta",
     "replies_other": "{{count}} respostas",
-    "replyPlaceholder": "Responder no tópico...",
+    "replyPlaceholder": "Adicionar uma resposta",
     "menu": "Responder no tópico",
     "empty": "Ainda não há respostas. Comece o tópico.",
-    "rootMissing": "A mensagem não está mais disponível."
+    "rootMissing": "A mensagem não está mais disponível.",
+    "noReplies": "Ainda sem respostas",
+    "alsoSend": "Enviar também para o chat"
   },
   "composer": {
     "expand": "Expandir editor",

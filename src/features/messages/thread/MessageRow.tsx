@@ -79,6 +79,7 @@ export interface MessageRowProps {
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
     replay: string;
+    forwarded: string;
   };
   onMenuAction: (actionKey: string, message: AttoMessage) => void;
   onReply: (message: AttoMessage) => void;
@@ -415,6 +416,27 @@ function MessageRowInner({
           fill={senderIsCreator ? 'gold' : isOwn ? COLORS.white : '#262626'}
         />
       )}
+      {message.metadata?.forwarded ? (
+        <View style={styles.forwardedRow}>
+          <ArrowUpLeft
+            size={12}
+            color={
+              isOwn || senderIsCreator ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.5)'
+            }
+            strokeWidth={2.25}
+            style={styles.forwardedIcon}
+          />
+          <RNText
+            style={[
+              styles.forwardedText,
+              (isOwn || senderIsCreator) && styles.forwardedTextOwn,
+            ]}
+            maxFontSizeMultiplier={1.1}
+          >
+            {labels.forwarded}
+          </RNText>
+        </View>
+      ) : null}
       {message.replyToId && message.replyToContent ? (
         <View
           style={[
@@ -884,7 +906,7 @@ const styles = StyleSheet.create({
   // A video note is only the circle: no padding, no background, no shape.
   bubbleBare: { padding: 0, minWidth: 0, backgroundColor: 'transparent' },
   // A post card brings its own padding so its cover can bleed to the edge.
-  bubblePost: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 8, minWidth: 0 },
+  bubblePost: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 10, minWidth: 0 },
   // A video note has no bubble to hold the time: WhatsApp hangs it under
   // the circle, on the wallpaper, where it is always legible.
   metaUnderCircle: {
@@ -913,7 +935,19 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   metaOnGlass: { color: COLORS.white },
-  metaPostCard: { paddingRight: 12, marginTop: 4 },
+  // WhatsApp's "Forwarded": a small arrow and a quiet line above the body.
+  forwardedRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  forwardedIcon: { transform: [{ scaleX: -1 }] },
+  forwardedText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontStyle: 'italic',
+    fontFamily: 'Archivo_400Regular',
+  },
+  forwardedTextOwn: { color: 'rgba(0,0,0,0.45)' },
+  // The time needs air from the bubble's edge: on the iPad it was
+  // almost touching the corner.
+  metaPostCard: { paddingRight: 14, marginTop: 6 },
   // Time and ticks over a photo or video, WhatsApp style pill.
   metaOverMedia: {
     position: 'absolute',

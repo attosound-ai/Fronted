@@ -23,9 +23,22 @@
         "NSMicrophoneUsageDescription": "Atto needs microphone access for voice calls",
         "NSPhotoLibraryUsageDescription": "ATTO needs access to your photo library to set your profile picture",
         "NSCameraUsageDescription": "ATTO needs camera access to take a profile photo",
-        "UIBackgroundModes": ["voip", "audio", "fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "voip",
+          "audio",
+          "fetch",
+          "remote-notification"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
-        "CFBundleLocalizations": ["en", "es", "pt-BR", "en", "es", "pt-BR"]
+        "CFBundleLocalizations": [
+          "en",
+          "es",
+          "pt-BR",
+          "en",
+          "es",
+          "pt-BR"
+        ],
+        "NSAppleMusicUsageDescription": "ATTO needs access to your music library so you can bring a song into a project"
       }
     },
     "android": {
@@ -61,6 +74,14 @@
       "typedRoutes": true
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          }
+        }
+      ],
       "./plugins/withSentryNativeInit",
       "./plugins/withTwilioVoipPushRegistry",
       "expo-router",
@@ -80,7 +101,11 @@
       [
         "expo-localization",
         {
-          "supportedLocales": ["en", "es", "pt-BR"]
+          "supportedLocales": [
+            "en",
+            "es",
+            "pt-BR"
+          ]
         }
       ],
       [

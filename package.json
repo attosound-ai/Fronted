@@ -19,8 +19,10 @@
     "@expo/metro-runtime": "~55.0.7",
     "@expo/vector-icons": "^15.0.3",
     "@howincodes/expo-dynamic-app-icon": "^3.0.2",
+    "@lodev09/react-native-true-sheet": "3.11.13",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-community/netinfo": "^12.0.1",
+    "@react-native-community/slider": "5.1.2",
     "@react-native-masked-view/masked-view": "0.3.2",
     "@react-navigation/material-top-tabs": "^7.4.19",
     "@sentry/react-native": "~7.11.0",
@@ -36,6 +38,7 @@
     "expo-asset": "~55.0.10",
     "expo-audio": "~55.0.9",
     "expo-blur": "~55.0.10",
+    "expo-build-properties": "55.0.18",
     "expo-clipboard": "~55.0.9",
     "expo-constants": "~55.0.9",
     "expo-contacts": "~55.0.9",
@@ -101,7 +104,11 @@
       "@howincodes/expo-dynamic-app-icon": "patches/@howincodes__expo-dynamic-app-icon.patch",
       "@twilio/voice-react-native-sdk@1.7.0": "patches/@twilio__voice-react-native-sdk@1.7.0.patch",
       "react-native-device-info@15.0.2": "patches/react-native-device-info@15.0.2.patch",
-      "react-native-compressor": "patches/react-native-compressor.patch"
+      "react-native-compressor": "patches/react-native-compressor.patch",
+      "react-native@0.83.4": "patches/react-native@0.83.4.patch",
+      "expo-audio@55.0.11": "patches/expo-audio@55.0.11.patch",
+      "@stripe/stripe-react-native@0.58.0": "patches/@stripe__stripe-react-native@0.58.0.patch",
+      "@lodev09/react-native-true-sheet@3.11.13": "patches/@lodev09__react-native-true-sheet@3.11.13.patch"
     }
   },
   "private": true,

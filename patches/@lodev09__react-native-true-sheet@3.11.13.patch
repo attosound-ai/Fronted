@@ -1,0 +1,115 @@
+diff --git a/ios/TrueSheetViewController.mm b/ios/TrueSheetViewController.mm
+index 9d8cfe953a03067469b98890ff74d6f198f40d0f..d6a41d53ba9b7971ba059faff1eaf349db05a56a 100644
+--- a/ios/TrueSheetViewController.mm
++++ b/ios/TrueSheetViewController.mm
+@@ -44,6 +44,8 @@ - (void)restoreWindowAccessibilityElements;
+ - (void)setSheetAccessibilityElementsHidden:(BOOL)hidden;
+ - (void)setAccessibilityContentElement:(UIView *)contentView;
+ - (void)endInteractiveDismissState;
++- (void)atto_removeEdgeFill;
++- (void)atto_updateEdgeFillForPosition:(CGFloat)position;
+ - (void)emitInteractivePosition;
+ - (void)animateInteractiveContainerToTransform:(CGAffineTransform)transform
+                                       duration:(NSTimeInterval)duration
+@@ -61,6 +63,8 @@ @implementation TrueSheetViewController {
+ 
+   CADisplayLink *_transitioningTimer;
+   UIView *_transitionFakeView;
++  // ATTO: fills the side and bottom gaps iOS 26 leaves around a floating sheet.
++  UIView *_edgeFillView;
+   BOOL _isDragging;
+   BOOL _isTransitioning;
+   BOOL _isTransitionSnapping;
+@@ -464,6 +468,7 @@ - (void)viewDidDisappear:(BOOL)animated {
+   // the stale flag block learning on the next present.
+   _keyboardSheetGrown = NO;
+ 
++  [self atto_removeEdgeFill];
+   [self emitDidDismissEvents];
+ }
+ 
+@@ -507,6 +512,12 @@ - (void)viewWillLayoutSubviews {
+ - (void)viewDidLayoutSubviews {
+   [super viewDidLayoutSubviews];
+ 
++  // ATTO: keep the edge fill on the sheet when layout changes without a
++  // position event (rotation, content resize while settled).
++  if (_isPresented && !_isTransitioning && !_isDragging) {
++    [self atto_updateEdgeFillForPosition:self.currentPosition];
++  }
++
+   // Update state on rotation (width change)
+   CGFloat width = self.view.frame.size.width;
+   if (_lastWidth != width) {
+@@ -801,7 +812,71 @@ - (void)endInteractiveDismissState {
+   _interactivePositionLink = nil;
+ }
+ 
++#pragma mark - ATTO edge fill
++
++// iOS 26 floats every sheet below the large detent: inset from both sides and
++// lifted off the bottom, with whatever is behind showing through the gaps. On a
++// black app over video that reads as a broken sheet. The sheet stays the
++// system's own UISheetPresentationController; this only puts a view of the
++// sheet's colour behind it, full width and down to the bottom edge, that
++// follows the sheet's top edge wherever it goes (present, drag, keyboard,
++// dismiss). Only for opaque sheets on a phone: a glass sheet keeps floating.
++- (void)atto_removeEdgeFill {
++  [_edgeFillView removeFromSuperview];
++  _edgeFillView = nil;
++}
++
++- (void)atto_updateEdgeFillForPosition:(CGFloat)position {
++  if (@available(iOS 26.0, *)) {
++    UIView *presentedView = self.presentedView;
++    UIView *container = self.sheet.containerView;
++    BOOL opaque = self.backgroundColor && CGColorGetAlpha(self.backgroundColor.CGColor) >= 0.99;
++    if (!presentedView || !container || !opaque || self.isDesignCompatibilityMode ||
++        UIDevice.currentDevice.userInterfaceIdiom != UIUserInterfaceIdiomPhone) {
++      [self atto_removeEdgeFill];
++      return;
++    }
++
++    // The direct child of the container that holds the presented view: the
++    // fill goes right under it, so it sits above the dimming view.
++    UIView *anchor = presentedView;
++    while (anchor.superview && anchor.superview != container) {
++      anchor = anchor.superview;
++    }
++    if (anchor.superview != container) {
++      [self atto_removeEdgeFill];
++      return;
++    }
++
++    if (!_edgeFillView) {
++      _edgeFillView = [[UIView alloc] init];
++      _edgeFillView.userInteractionEnabled = NO;
++      _edgeFillView.layer.cornerCurve = kCACornerCurveContinuous;
++      _edgeFillView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
++    }
++    // Re inserting keeps it directly under the sheet even if UIKit reorders.
++    [container insertSubview:_edgeFillView belowSubview:anchor];
++
++    CGFloat height = container.bounds.size.height;
++    CGFloat y = fmin(fmax(position, 0), height);
++    // The sheet is inset from the sides, so a concentric outer corner is the
++    // sheet's radius plus that inset.
++    CGFloat inset = fmax(presentedView.frame.origin.x, 0);
++    CGFloat radius = (self.cornerRadius ? self.cornerRadius.doubleValue : presentedView.layer.cornerRadius) + inset;
++
++    [CATransaction begin];
++    [CATransaction setDisableActions:YES];
++    _edgeFillView.backgroundColor = self.backgroundColor;
++    _edgeFillView.layer.cornerRadius = radius;
++    _edgeFillView.frame = CGRectMake(0, y, container.bounds.size.width, height - y + 1);
++    _edgeFillView.hidden = (height - y) < 1;
++    [CATransaction commit];
++  }
++}
++
+ - (void)emitChangePositionDelegateWithPosition:(CGFloat)position realtime:(BOOL)realtime debug:(NSString *)debug {
++  [self atto_updateEdgeFillForPosition:position];
++
+   UIViewController *presented = self.presentedViewController;
+   if (presented) {
+     UIModalPresentationStyle style = presented.modalPresentationStyle;

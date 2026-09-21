@@ -1,0 +1,59 @@
+diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
+index d2046b5185ff05f1f5b0d131b26b83e0052bb785..04fb08329f69f164684bb1c59fe150eff29236c9 100644
+--- a/ios/AudioModule.swift
++++ b/ios/AudioModule.swift
+@@ -1,5 +1,8 @@
+ import ExpoModulesCore
+ 
++// ATTO patch: serial queue for blocking AVAudioSession work (see Function("play")).
++private let attoAudioSessionQueue = DispatchQueue(label: "expo.audio.session", qos: .userInitiated)
++
+ public class AudioModule: Module {
+   private var sessionIsActive = true
+   private let registry = AudioComponentRegistry()
+@@ -210,9 +213,24 @@ public class AudioModule: Module {
+       }
+ 
+       Function("play") { player in
+-        try activateSession()
++        // ATTO patch: `AVAudioSession.setActive(true)` is a blocking call that
++        // can take seconds while another owner (CallKit, the VoIP audio unit)
++        // is still releasing the session. Running it here, synchronously on
++        // the JavaScript thread, froze the whole app for ~9 s when a feed audio
++        // post was played right after a call (Sep 14 2026, build 184). Activate
++        // on a serial background queue and start playback on main. The same
++        // queue orders pause after play, so quick toggles keep their order.
+         let rate = player.currentRate > 0 ? player.currentRate : 1.0
+-        player.play(at: rate)
++        attoAudioSessionQueue.async {
++          do {
++            try self.activateSession()
++          } catch {
++            print("expo-audio: session activation failed before play: \(error)")
++          }
++          DispatchQueue.main.async {
++            player.play(at: rate)
++          }
++        }
+       }
+ 
+       Function("setPlaybackRate") { (player, rate: Double, pitchCorrectionQuality: PitchCorrectionQuality?) in
+@@ -242,9 +260,15 @@ public class AudioModule: Module {
+       }
+ 
+       Function("pause") { player in
+-        player.ref.pause()
+-        if !player.keepAudioSessionActive {
+-          deactivateSession()
++        // ATTO patch: same serial queue as `play`, so a pause issued right
++        // after play is applied after it, never before.
++        attoAudioSessionQueue.async {
++          DispatchQueue.main.async {
++            player.ref.pause()
++          }
++          if !player.keepAudioSessionActive {
++            self.deactivateSession()
++          }
+         }
+       }
+ 

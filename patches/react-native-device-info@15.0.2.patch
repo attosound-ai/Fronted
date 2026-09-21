@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..0d5a3f95d39f087ba08d8a8bcb471ea1b3cc2bf5 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..516f162e0b58c934f4ac20108aec7c38ee019098 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,10 @@
@@ -33,7 +33,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..0d5a3f95d39f087ba08d8a8bcb471ea1
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,329 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,331 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -285,6 +285,8 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..0d5a3f95d39f087ba08d8a8bcb471ea1
 +        @"coldEnginePreinstalledAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_preinstalled_at"]),
 +        @"coldEngineAlreadyInstalledAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_already_installed_at"]),
 +        @"coldEnginePreinstallFailedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_preinstall_failed_at"]),
++        @"coldEngineResetAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_reset_at"]),
++        @"coldEngineResetUnavailableAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_reset_unavailable_at"]),
 +    });
 +}
 +

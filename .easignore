@@ -1,0 +1,70 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env.*
+!.env.example
+
+# build artifacts
+*.ipa
+*.apk
+*.aab
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Claude Code dev tooling — local skills cache, not for the repo
+.claude/
+skills-lock.json
+
+# Stale npm lockfile — this project uses pnpm (see pnpm-lock.yaml)
+package-lock.json
+
+# Local EAS build/submit logs (build-*.ipa already ignored above)
+build-*.log
+submit-*.log
+
+# ── EAS upload trimming (added for the build-173 ship) ──
+# Local iOS/Android build outputs and stray media/log artifacts EAS never needs.
+*.ipa
+*.mbtree
+ffmpeg2pass-*.log
+ios/build/
+android/build/
+android/app/build/
+android/.gradle/
+*.tsbuildinfo

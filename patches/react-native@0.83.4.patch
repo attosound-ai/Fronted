@@ -1,0 +1,86 @@
+diff --git a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+index 82d9a79af7345f012fffd42dfe703056a463725e..fe21b34d02372408969fc043d92dca7a8cf55d12 100644
+--- a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
++++ b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+@@ -88,6 +88,16 @@ - (BOOL)textField:(__unused UITextField *)textField
+     return YES;
+   }
+ 
++  // ATTO patch: the keyboard can hand us a range computed against text the
++  // field no longer contains (dictation, autocorrect candidates, rapid delete
++  // after a programmatic reset). Clamp instead of throwing NSRangeException.
++  NSUInteger fieldLength = _backedTextInputView.attributedText.string.length;
++  if (range.location > fieldLength) {
++    range = NSMakeRange(fieldLength, 0);
++  } else if (range.location + range.length > fieldLength) {
++    range.length = fieldLength - range.location;
++  }
++
+   NSMutableAttributedString *attributedString = [_backedTextInputView.attributedText mutableCopy];
+   [attributedString replaceCharactersInRange:range withString:newText];
+   [_backedTextInputView setAttributedText:[attributedString copy]];
+@@ -272,9 +282,24 @@ - (BOOL)textView:(__unused UITextView *)textView shouldChangeTextInRange:(NSRang
+     return NO;
+   }
+ 
+-  if (range.location + range.length > _backedTextInputView.text.length) {
+-    range = NSMakeRange(range.location, _backedTextInputView.text.length - range.location);
+-  } else if ([newText isEqualToString:text]) {
++  // ATTO patch: the keyboard can hand us a range computed against text the
++  // view no longer contains (dictation into a multiline input, autocorrect
++  // candidates, rapid delete after a programmatic reset). The upstream clamp
++  // only covered `location + length > text.length`; when `location` itself is
++  // past the end the NSUInteger subtraction underflowed and
++  // `replaceCharactersInRange:` threw NSRangeException (fatal). Clamp fully
++  // and apply the edit at the end of the text so the keyboard resyncs.
++  NSUInteger viewLength = _backedTextInputView.attributedText.string.length;
++  BOOL rangeWasOutOfBounds = NO;
++  if (range.location > viewLength) {
++    range = NSMakeRange(viewLength, 0);
++    rangeWasOutOfBounds = YES;
++  } else if (range.location + range.length > viewLength) {
++    range.length = viewLength - range.location;
++    rangeWasOutOfBounds = YES;
++  }
++
++  if (!rangeWasOutOfBounds && [newText isEqualToString:text]) {
+     _textDidChangeIsComing = YES;
+     return YES;
+   }
+diff --git a/Libraries/Text/TextInput/RCTBaseTextInputView.mm b/Libraries/Text/TextInput/RCTBaseTextInputView.mm
+index c916ce895fb5e64234d25a265cc565ab78f569d7..0809cf7591ed6ffa38bc8142ca5f0d41e4059c7c 100644
+--- a/Libraries/Text/TextInput/RCTBaseTextInputView.mm
++++ b/Libraries/Text/TextInput/RCTBaseTextInputView.mm
+@@ -526,6 +526,14 @@ - (NSString *)textInputShouldChangeText:(NSString *)text inRange:(NSRange)range
+               initWithString:[self.textAttributes applyTextAttributesToText:limitedString]
+                   attributes:self.textAttributes.effectiveTextAttributes];
+         } else {
++          // ATTO patch: clamp a stale keyboard range so the truncation path can
++          // never throw NSRangeException (see RCTBackedTextInputDelegateAdapter).
++          NSUInteger currentLength = newAttributedText.length;
++          if (range.location > currentLength) {
++            range = NSMakeRange(currentLength, 0);
++          } else if (range.location + range.length > currentLength) {
++            range.length = currentLength - range.location;
++          }
+           [newAttributedText replaceCharactersInRange:range withString:limitedString];
+         }
+         backedTextInputView.attributedText = newAttributedText;
+diff --git a/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm
+index 04aa6daf9e30cf65f36ee3e2b121c7aa7dbe91d0..7f0b6cc3e10f52aae802072b0714104487d0a055 100644
+--- a/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm
++++ b/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm
+@@ -1614,7 +1614,12 @@ - (void)transferVisualPropertiesFromView:(UIView *)sourceView toView:(UIView *)d
+ 
+ - (BOOL)canBecomeFirstResponder
+ {
+-  return YES;
++  // ATTO patch (mirrors the React Native 0.86 fix): a plain view must only be
++  // able to become first responder when imperative focus is enabled. With an
++  // unconditional YES, UIKit hands first responder to arbitrary views while a
++  // keyboard dismisses, which makes UISheetPresentationController's keyboard
++  // avoidance snap without animation (native sheets on RN 0.83 to 0.85).
++  return ReactNativeFeatureFlags::enableImperativeFocus();
+ }
+ 
+ - (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args

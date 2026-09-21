@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b23f99ccd6
+index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa6a5a9069
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,139 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -17,10 +17,23 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +
 +@import TwilioVoice;
 +
++#import "AttoCallPlaybackSession.h"
++
 +NS_CLASS_AVAILABLE(NA, 11_0)
 +@interface AttoAudioEngineDevice : NSObject <TVOAudioDevice>
 +
 +@property (nonatomic, assign, getter=isEnabled) BOOL enabled;
++
++/*
++ * ATTO (Sep 15 2026): the in call PLAYBACK SESSION. Owns the transport (play,
++ * pause, seek) of up to kAttoStemCount aligned stems played through a fixed
++ * pool of player nodes on both engines; TRANSMIT is only a gate on the record
++ * pool's volume. See AttoCallPlaybackSession.h. Created inert in -init; the
++ * engine hands it fresh player pools on every (re)build and it reschedules
++ * itself. While a session is loaded the legacy single file injection
++ * (scheduleFile:) is refused so the two paths never share the players.
++ */
++@property (nonatomic, strong, readonly) AttoCallPlaybackSession *playbackSession;
 +
 +/*
 + * AVAudioSession configuration block. This custom device manages its OWN session
@@ -132,10 +145,10 @@ index 0000000000000000000000000000000000000000..2e5e5f368fa75bc2e484d93a1276f6b2
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb213a6068a5
+index 0000000000000000000000000000000000000000..621ad53196db6a7aaa8789a52179c3573857accd
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3656 @@
+@@ -0,0 +1,3806 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -471,6 +484,13 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +@property (nonatomic, strong) AVAudioPlayerNode *recordFilePlayer;
 +@property (nonatomic, strong) AVAudioUnitReverb *recordReverb;
 +
++// ATTO (Sep 15 2026) playback session stem pools: kAttoStemCount players per
++// engine, attached at engine build time only (never mutated while rendering),
++// each connected straight to the main mixer with the float mono music format.
++@property (nonatomic, strong, nullable) NSArray<AVAudioPlayerNode *> *playoutStemPlayers;
++@property (nonatomic, strong, nullable) NSArray<AVAudioPlayerNode *> *recordStemPlayers;
++@property (nonatomic, strong, readwrite) AttoCallPlaybackSession *playbackSession;
++
 +// Injection state (ATTO generalization)
 +@property (nonatomic, assign) float fileGain;
 +@property (nonatomic, assign) BOOL monitorEnabled;
@@ -523,6 +543,12 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +    // throws (crash). ensureEngineFormatForActiveSession rebuilds the engines when
 +    // this no longer equals the live activeFormat, at call start.
 +    TVOAudioFormat *_enginesBuiltFormat;
++
++    // ATTO (Sep 15 2026): incremented on every setupAudioEngine. The playback
++    // session compares it with the build it last scheduled against, so a rebuild
++    // it was not told about (route change, media services reset) is detected and
++    // healed on its next tick instead of leaving silent players behind.
++    uint64_t _engineBuildSeq;
 +
 +    // ATTO (build 83) lifecycle telemetry: how many times Twilio has driven the
 +    // device's start hooks. If these are 0 during a live call, Twilio is NOT using
@@ -745,6 +771,25 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +        self.capturingContext->bufferList = &_captureBufferList;
 +
 +        /*
++         * ATTO (Sep 15 2026): the playback session is created INERT (no players,
++         * no timers, no session work). Its two device hooks are lock free on
++         * purpose: they run on the session's own queue, sometimes while the media
++         * worker holds @synchronized(self) and is waiting for that queue in
++         * playersWillHaltReleasing:. The C contexts live for the device's whole
++         * life, so reading them without a lock is safe.
++         */
++        _playbackSession = [[AttoCallPlaybackSession alloc] init];
++        AudioCapturerContext *capturingContextForSession = self.capturingContext;
++        AudioRendererContext *renderingContextForSession = self.renderingContext;
++        _playbackSession.setInjectActive = ^(BOOL on) {
++            capturingContextForSession->injectActive = on ? 1 : 0;
++        };
++        _playbackSession.deviceContextsAlive = ^BOOL{
++            return renderingContextForSession->deviceContext != NULL ||
++                   capturingContextForSession->deviceContext != NULL;
++        };
++
++        /*
 +         * ATTO (build 83): -init is now INERT. Building the AVAudioEngines and —
 +         * critically — calling setupAVAudioSession (setCategory:PlayAndRecord +
 +         * setActive:YES) at module load SEIZED the global audio session the moment
@@ -838,6 +883,17 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +
 +- (BOOL)setupAudioEngine {
 +    BOOL ok = [self setupPlayoutAudioEngine] && [self setupRecordAudioEngine];
++
++    // ATTO (Sep 15 2026): hand the fresh stem pools to the playback session and
++    // let it reschedule (idempotent, on its own queue) if it was playing. A no op
++    // when no session is loaded, so calls without a session are unchanged.
++    _engineBuildSeq++;
++    [self.playbackSession attachRecordPlayers:(self.recordStemPlayers ?: @[])
++                               playoutPlayers:(self.playoutStemPlayers ?: @[])
++                                     buildSeq:_engineBuildSeq];
++    if (ok) {
++        [self.playbackSession ensureScheduledWithReason:@"engine_rebuild"];
++    }
 +
 +    // ATTO mixer: if a record session is live, re-establish the engine-bound
 +    // mixer pieces (metronome monitor + app tap) after the engines were rebuilt
@@ -1440,6 +1496,13 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +- (BOOL)scheduleFile:(NSString *)localPath monitor:(BOOL)monitor gain:(float)gain {
 +    if (localPath.length == 0) {
 +        NSLog(@"[AttoAudioEngineDevice] scheduleFile: empty path");
++        return NO;
++    }
++    // ATTO (Sep 15 2026): the legacy single file path and the playback session
++    // are mutually exclusive. JS picks one per call; refusing here guarantees the
++    // legacy status timer never reports over a session.
++    if ([self.playbackSession isLoaded]) {
++        NSLog(@"[AttoAudioEngineDevice] scheduleFile refused: a playback session is loaded");
 +        return NO;
 +    }
 +
@@ -2208,7 +2271,7 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +        capturingFormatRate = _capturingFormat ? _capturingFormat.sampleRate : 0.0;
 +    }
 +
-+    return @{
++    NSDictionary *base = @{
 +        @"micFrames": @(_dbgMicFrames),
 +        @"remoteFrames": @(_dbgRemoteFrames),
 +        @"appFrames": @(_dbgAppFrames),
@@ -2326,6 +2389,27 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +        @"recordPlayerPlaying": @(self.recordFilePlayer.isPlaying ? 1 : 0),
 +        @"playoutPlayerPlaying": @(self.playoutFilePlayer.isPlaying ? 1 : 0),
 +    };
++    // ATTO (Sep 15 2026): playback session counters + per stem player state. The
++    // session part is atomics only; the player reads are the same live property
++    // reads the three lines above already do.
++    NSMutableDictionary *merged = [base mutableCopy];
++    [merged addEntriesFromDictionary:[self.playbackSession diagnostics]];
++    merged[@"engineBuildSeq"] = @(_engineBuildSeq);
++    NSMutableArray<NSNumber *> *stemRecordPlaying = [NSMutableArray arrayWithCapacity:kAttoStemCount];
++    NSMutableArray<NSNumber *> *stemRecordVolume = [NSMutableArray arrayWithCapacity:kAttoStemCount];
++    NSMutableArray<NSNumber *> *stemPlayoutPlaying = [NSMutableArray arrayWithCapacity:kAttoStemCount];
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        AVAudioPlayerNode *r = (i < self.recordStemPlayers.count) ? self.recordStemPlayers[i] : nil;
++        AVAudioPlayerNode *p = (i < self.playoutStemPlayers.count) ? self.playoutStemPlayers[i] : nil;
++        [stemRecordPlaying addObject:@(r.isPlaying ? 1 : 0)];
++        [stemRecordVolume addObject:@(r ? r.volume : 0)];
++        [stemPlayoutPlaying addObject:@(p.isPlaying ? 1 : 0)];
++    }
++    merged[@"stemRecordPlaying"] = stemRecordPlaying;
++    merged[@"stemRecordVolume"] = stemRecordVolume;
++    merged[@"stemPlayoutPlaying"] = stemPlayoutPlaying;
++    merged[@"stemPoolSize"] = @(self.recordStemPlayers.count);
++    return merged;
 +}
 +
 +/*
@@ -2700,6 +2784,29 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +            self.recordReverb = reverb;
 +            self.recordFilePlayer = player;
 +        }
++
++        /*
++         * ATTO (Sep 15 2026): the playback session's stem pool. Attached HERE, at
++         * build time, and never again: the whole point of a fixed pool is that no
++         * node is ever attached or detached while the engine renders (that is the
++         * CannotDoInCurrentContext class of render failure). Straight into the
++         * main mixer with the same float mono format; no reverb stage, the session
++         * mixes dry stems that were rendered offline.
++         */
++        NSMutableArray<AVAudioPlayerNode *> *pool = [NSMutableArray arrayWithCapacity:kAttoStemCount];
++        for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++            AVAudioPlayerNode *stem = [[AVAudioPlayerNode alloc] init];
++            [engine attachNode:stem];
++            [engine connect:stem to:engine.mainMixerNode format:format];
++            stem.volume = 0.0f; // silent until the session opens a gate
++            [pool addObject:stem];
++        }
++        if (isPlayoutEngine) {
++            self.playoutStemPlayers = pool;
++            [self installSessionLevelTapOn:pool.firstObject];
++        } else {
++            self.recordStemPlayers = pool;
++        }
 +    } @catch (NSException *exception) {
 +        /*
 +         * Last-resort safety net: a music-node setup failure must NEVER crash the
@@ -2717,7 +2824,54 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +    }
 +}
 +
++/*
++ * ATTO (Sep 15 2026): setup time tap on playout stem 0 feeding the session's
++ * monitor level (the in call waveform). Installed before the engine starts, so
++ * it is not a runtime graph mutation. The block only computes an RMS and stores
++ * an atomic; it never allocates or messages the render thread.
++ */
++- (void)installSessionLevelTapOn:(AVAudioPlayerNode *)node {
++    if (node == nil) { return; }
++    AVAudioFormat *fmt = [node outputFormatForBus:0];
++    if (fmt == nil) { return; }
++    __weak AttoCallPlaybackSession *weakSession = self.playbackSession;
++    @try {
++        [node installTapOnBus:0
++                   bufferSize:1024
++                       format:fmt
++                        block:^(AVAudioPCMBuffer * _Nonnull buffer, AVAudioTime * _Nonnull when) {
++            AttoCallPlaybackSession *session = weakSession;
++            if (session == nil || buffer.floatChannelData == NULL || buffer.frameLength == 0) {
++                return;
++            }
++            const float *src = buffer.floatChannelData[0];
++            float sum = 0.0f;
++            for (AVAudioFrameCount i = 0; i < buffer.frameLength; i++) {
++                sum += src[i] * src[i];
++            }
++            float rms = sqrtf(sum / (float)buffer.frameLength);
++            [session noteMonitorRms:(rms > 1.0f ? 1.0f : rms)];
++        }];
++    } @catch (__unused NSException *e) {
++        // The level is a nicety for the waveform; never fatal.
++    }
++}
++
 +- (void)teardownPlayer {
++    // ATTO (Sep 15 2026): the session captures its position and halts its stems
++    // on its own queue BEFORE the nodes go away, so completion handlers from the
++    // dying players are ignored and the next build resumes where this one stopped.
++    [self.playbackSession playersWillHaltReleasing:YES];
++    for (AVAudioPlayerNode *stem in self.recordStemPlayers) {
++        @try { [self.recordEngine detachNode:stem]; } @catch (__unused NSException *e) {}
++    }
++    self.recordStemPlayers = nil;
++    for (AVAudioPlayerNode *stem in self.playoutStemPlayers) {
++        @try { [stem removeTapOnBus:0]; } @catch (__unused NSException *e) {}
++        @try { [self.playoutEngine detachNode:stem]; } @catch (__unused NSException *e) {}
++    }
++    self.playoutStemPlayers = nil;
++
 +    if (self.recordFilePlayer) {
 +        if (self.recordFilePlayer.isPlaying) {
 +            [self.recordFilePlayer stop];
@@ -2800,6 +2954,9 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +
 +        // We will make sure AVAudioEngine and AVAudioPlayerNode is accessed on the main queue.
 +        dispatch_async(dispatch_get_main_queue(), ^{
++            // ATTO (Sep 15 2026): halt the session's stems (position captured) before
++            // the engine restart purges them, and reschedule right after.
++            [self.playbackSession playersWillHaltReleasing:NO];
 +            if (self.playoutFilePlayer.isPlaying) {
 +                [self.playoutFilePlayer stop];
 +            }
@@ -2811,6 +2968,7 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +            if (![self.playoutEngine startAndReturnError:&error]) {
 +                NSLog(@"Failed to start AVAudioEngine, error = %@", error);
 +            }
++            [self.playbackSession ensureScheduledWithReason:@"start_hook_render"];
 +        });
 +
 +        self.renderingContext->deviceContext = context;
@@ -2831,6 +2989,7 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +
 +            // We will make sure AVAudioEngine and AVAudioPlayerNode is accessed on the main queue.
 +            dispatch_async(dispatch_get_main_queue(), ^{
++                [self.playbackSession playersWillHaltReleasing:NO];
 +                if (self.playoutFilePlayer.isPlaying) {
 +                    [self.playoutFilePlayer stop];
 +                }
@@ -2929,6 +3088,8 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +
 +        // We will make sure AVAudioEngine and AVAudioPlayerNode is accessed on the main queue.
 +        dispatch_async(dispatch_get_main_queue(), ^{
++            // ATTO (Sep 15 2026): see startRendering.
++            [self.playbackSession playersWillHaltReleasing:NO];
 +            if (self.recordFilePlayer.isPlaying) {
 +                [self.recordFilePlayer stop];
 +            }
@@ -2940,6 +3101,7 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +            if (![self.recordEngine startAndReturnError:&error]) {
 +                NSLog(@"Failed to start AVAudioEngine, error = %@", error);
 +            }
++            [self.playbackSession ensureScheduledWithReason:@"start_hook_capture"];
 +        });
 +
 +        self.capturingContext->deviceContext = context;
@@ -2961,6 +3123,7 @@ index 0000000000000000000000000000000000000000..743cd2bbe46d921de5e79247b801bb21
 +
 +            // We will make sure AVAudioEngine and AVAudioPlayerNode is accessed on the main queue.
 +            dispatch_async(dispatch_get_main_queue(), ^{
++                [self.playbackSession playersWillHaltReleasing:NO];
 +                if (self.recordFilePlayer.isPlaying) {
 +                    [self.recordFilePlayer stop];
 +                }
@@ -3816,10 +3979,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e309dd9159
+index 0000000000000000000000000000000000000000..96e3cf578f192d9e6fd0f6a4512a0beee5ed4957
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,276 @@
+@@ -0,0 +1,429 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -3858,7 +4021,10 @@ index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e3
 +}
 +
 +- (NSArray<NSString *> *)supportedEvents {
-+    return @[@"AttoAudioInjectionEvent"];
++    // AttoCallPlaybackEvent (Sep 15 2026) is the playback session's channel. It
++    // is deliberately separate from the legacy event: the legacy JS listener
++    // turns any `ended` into "stopped", which must never happen to a session tick.
++    return @[@"AttoAudioInjectionEvent", @"AttoCallPlaybackEvent"];
 +}
 +
 +- (void)startObserving {
@@ -3893,6 +4059,156 @@ index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e3
 +            @"ended": @(ended),
 +        }];
 +    };
++    [AttoAudioEngineDevice sharedDevice].playbackSession.onEvent = ^(NSDictionary *payload) {
++        __strong typeof(weakSelf) strongSelf = weakSelf;
++        if (strongSelf == nil || !strongSelf->_hasListeners) {
++            return;
++        }
++        // Called on the session queue; RCTEventEmitter is safe from any thread.
++        [strongSelf sendEventWithName:@"AttoCallPlaybackEvent" body:payload];
++    };
++}
++
++#pragma mark - Playback session (transport always works, transmit is a gate)
++
++/*
++ * Every session method resolves with the session status dictionary (see
++ * AttoCallPlaybackSession.status) or rejects with `session_failed` + the
++ * session's message. The work happens on the session's serial queue; nothing
++ * here touches the main queue or AVAudioSession.
++ */
++static void AttoResolveSession(NSDictionary *status, NSString *error,
++                               RCTPromiseResolveBlock resolve, RCTPromiseRejectBlock reject) {
++    if (error != nil) {
++        reject(@"session_failed", error, nil);
++    } else {
++        resolve(status ?: @{});
++    }
++}
++
++RCT_EXPORT_METHOD(sessionLoad:(NSArray *)stems
++                  loop:(BOOL)loop
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [self wireStatusHook];
++        AttoAudioEngineDevice *device = [AttoAudioEngineDevice sharedDevice];
++        // The legacy single file path and the session never share the players.
++        [device stopFile];
++        [device.playbackSession loadStems:stems loop:loop completion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionLoad threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionSetStem:(double)index
++                  path:(NSString *)path
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession setStem:(NSUInteger)index
++                                                                 path:path
++                                                           completion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionSetStem threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionSetStemGain:(double)index
++                  gain:(double)gain
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession setStem:(NSUInteger)index gain:(float)gain];
++        resolve(@(YES));
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionSetStemGain threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionPlay:(double)fromMs
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession playFromMs:fromMs
++                                                              completion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionPlay threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionPause:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession pauseWithCompletion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionPause threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionSeek:(double)ms
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession seekToMs:ms
++                                                            completion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionSeek threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionStop:(NSString *)reason
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession stopWithReason:reason
++                                                                  completion:^(NSDictionary *status, NSString *error) {
++            AttoResolveSession(status, error, resolve, reject);
++        }];
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionStop threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionSetTransmit:(BOOL)on
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession setTransmit:on];
++        resolve(@(YES));
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionSetTransmit threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionSetMonitor:(BOOL)on
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [[AttoAudioEngineDevice sharedDevice].playbackSession setMonitor:on];
++        resolve(@(YES));
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionSetMonitor threw", nil);
++    }
++}
++
++RCT_EXPORT_METHOD(sessionGetStatus:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        resolve([[AttoAudioEngineDevice sharedDevice].playbackSession status]);
++    } @catch (NSException *exception) {
++        reject(@"session_failed", exception.reason ?: @"sessionGetStatus threw", nil);
++    }
 +}
 +
 +#pragma mark - Device installation
@@ -4093,6 +4409,1128 @@ index 0000000000000000000000000000000000000000..100b6872f73bc85f8f75036ff38fb4e3
 +    } @catch (NSException *exception) {
 +        reject(@"extract_failed", exception.reason ?: @"extractAudioTrack threw", nil);
 +    }
++}
++
++@end
+diff --git a/ios/AttoCallPlaybackSession.h b/ios/AttoCallPlaybackSession.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3ce3232b963f4cd98d1efdd6cbb22137d5a4521
+--- /dev/null
++++ b/ios/AttoCallPlaybackSession.h
+@@ -0,0 +1,125 @@
++//
++//  AttoCallPlaybackSession.h
++//  TwilioVoiceReactNative (ATTO SOUND)
++//
++//  The in call PLAYBACK SESSION: one timeline of up to kAttoStemCount aligned
++//  "stems" (canonical CAF files, int16 mono 48 kHz) played by a fixed pool of
++//  AVAudioPlayerNodes that AttoAudioEngineDevice creates when it builds its two
++//  manual rendering engines. The RECORD pool feeds Twilio (the far party), the
++//  PLAYOUT pool feeds the VoiceProcessingIO output (the local user, and therefore
++//  the echo canceller's reference).
++//
++//  Product rule this class exists for (Sep 15 2026): the transport (play, pause,
++//  seek) always works and decides what is heard; TRANSMIT is only a gate on the
++//  record pool's volume. Turning transmit on never starts anything, turning it
++//  off never stops anything.
++//
++//  Threading: every AVAudioPlayerNode call on the stem players goes through ONE
++//  serial queue (`sessionQueue`). Apple's header requires player node API calls
++//  made from completion handlers to be synchronised to the same thread/queue, and
++//  the device's own main thread can lag by seconds during editor use, so the
++//  session never depends on main. State that other threads read (status ticks,
++//  the record callback's injectActive flag) is published through atomics.
++//
++
++#import <Foundation/Foundation.h>
++#import <AVFoundation/AVFoundation.h>
++
++NS_ASSUME_NONNULL_BEGIN
++
++/// Fixed number of stem players per engine. Never attach or detach players at
++/// runtime: graph mutation while the engines render is what produces
++/// AVAudioEngineManualRenderingStatusCannotDoInCurrentContext.
++static const NSUInteger kAttoStemCount = 6;
++
++typedef NS_ENUM(NSInteger, AttoSessionState) {
++    AttoSessionStateIdle = 0,
++    AttoSessionStateLoaded,
++    AttoSessionStatePlaying,
++    AttoSessionStatePaused,
++    AttoSessionStateEnded,
++};
++
++typedef void (^AttoSessionCompletion)(NSDictionary * _Nullable status, NSString * _Nullable error);
++
++@interface AttoCallPlaybackSession : NSObject
++
++/// Fired for every state transition and at 4 Hz while playing. Called on the
++/// session queue; the bridge forwards it to JS as `AttoCallPlaybackEvent`.
++@property (nonatomic, copy, nullable) void (^onEvent)(NSDictionary *payload);
++
++/// Wired by the device: writes `capturingContext->injectActive`. Must be lock
++/// free (it is invoked from the session queue, possibly while the device holds
++/// its own lock on another thread).
++@property (nonatomic, copy, nullable) void (^setInjectActive)(BOOL on);
++
++/// Wired by the device: YES while Twilio has handed us at least one device
++/// context (a call is live). Lock free. Used by the idle watchdog.
++@property (nonatomic, copy, nullable) BOOL (^deviceContextsAlive)(void);
++
++#pragma mark - Device hooks (engine lifecycle)
++
++/// Called by the device after it (re)built the engines. Passing the fresh pools
++/// marks the session as needing a reschedule; the actual reschedule happens on
++/// the session queue via `ensureScheduledWithReason:`.
++- (void)attachRecordPlayers:(NSArray<AVAudioPlayerNode *> *)record
++             playoutPlayers:(NSArray<AVAudioPlayerNode *> *)playout
++                   buildSeq:(uint64_t)buildSeq;
++
++/// Called by the device right before it stops or destroys the stem players
++/// (engine teardown, engine restart in the start hooks). Captures the last known
++/// position synchronously and halts the players on the session queue.
++/// `release` = YES drops the player references (teardown); NO keeps them (an
++/// engine restart that keeps the same nodes).
++- (void)playersWillHaltReleasing:(BOOL)release;
++
++/// Idempotent self heal: if the session should be playing but a stem player is
++/// not (engine rebuilt, engine restarted, player purged), reschedule from the
++/// last known position. Safe to call from any thread, any number of times.
++- (void)ensureScheduledWithReason:(NSString *)reason;
++
++/// Fed by the device's setup time tap on playout stem 0 (RMS 0..1 of the block).
++- (void)noteMonitorRms:(float)rms;
++
++#pragma mark - Transport API (bridge)
++
++/// stems: array of { "path": NSString, "gain": NSNumber } (at most kAttoStemCount).
++- (void)loadStems:(NSArray<NSDictionary *> *)stems
++             loop:(BOOL)loop
++       completion:(AttoSessionCompletion)completion;
++
++/// Replace one stem's file keeping position and state (structural timeline edit).
++- (void)setStem:(NSUInteger)index path:(NSString *)path completion:(AttoSessionCompletion)completion;
++
++/// Live per stem gain (lane fader, mute, solo). Volume only, no reschedule.
++- (void)setStem:(NSUInteger)index gain:(float)gain;
++
++/// fromMs < 0 resumes from the paused position (or 0 when loaded/ended).
++- (void)playFromMs:(double)fromMs completion:(AttoSessionCompletion)completion;
++- (void)pauseWithCompletion:(AttoSessionCompletion)completion;
++- (void)seekToMs:(double)ms completion:(AttoSessionCompletion)completion;
++- (void)stopWithReason:(NSString *)reason completion:(AttoSessionCompletion)completion;
++
++/// The transmit gate. Only the RECORD pool's volume changes.
++- (void)setTransmit:(BOOL)on;
++/// The local monitor. Only the PLAYOUT pool's volume changes.
++- (void)setMonitor:(BOOL)on;
++
++/// Snapshot for JS: state, positionMs, durationMs, transmit, monitor, loopCount,
++/// levelRms, generation. Thread safe.
++- (NSDictionary *)status;
++
++/// Counters merged into the device's mixDiagnostics. Thread safe, never touches
++/// AVAudioSession.
++- (NSDictionary *)diagnostics;
++
++/// YES when a session is loaded (any state but idle). The device uses it to
++/// refuse the legacy single file injection while a session exists.
++- (BOOL)isLoaded;
++
++/// Current transmit gate, for the record callback's frame attribution.
++- (BOOL)transmitGateOpen;
++
++@end
++
++NS_ASSUME_NONNULL_END
+diff --git a/ios/AttoCallPlaybackSession.m b/ios/AttoCallPlaybackSession.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d79a0c1f20
+--- /dev/null
++++ b/ios/AttoCallPlaybackSession.m
+@@ -0,0 +1,985 @@
++//
++//  AttoCallPlaybackSession.m
++//  TwilioVoiceReactNative (ATTO SOUND)
++//
++//  See AttoCallPlaybackSession.h for the contract. Implementation notes:
++//
++//  POSITION. Files are canonical (int16 mono 48 kHz) but the engines may run at
++//  any rate (48k, 24k VoIP, 16k HFP) and get rebuilt mid call when the route
++//  moves. AVAudioPlayerNode sample rate converts FILE segments, so a 48 kHz file
++//  plays correctly into a 16 kHz graph; what does not survive a rate change is
++//  frame arithmetic. All position math is therefore in SECONDS:
++//      position = baseSec + playerTime.sampleTime / playerTime.sampleRate
++//  where baseSec is the timeline position the current play() started from.
++//
++//  GENERATION. Every schedule bumps an atomic generation before touching the
++//  players. Completion handlers capture the generation they were scheduled
++//  under and are ignored when it moved: AVAudioPlayerNode fires completions on
++//  `stop` too, and a stale "ended" used to reset the UI to zero mid track.
++//
++//  LOOP. Iterations are scheduled at explicit PLAYER sample times (relative to
++//  the node's start, per the header's TIMESTAMPS section), one iteration ahead,
++//  so looping is sample exact and independent of callback latency. The longest
++//  stem's DataConsumed callback queues the next iteration for every stem.
++//
++//  ENDED. DataRendered of the longest stem, never DataPlayedBack: that one
++//  accounts for device output latency, which does not exist in manual
++//  rendering, and may never fire.
++//
++//  REBUILDS. The device destroys and recreates the player pools whenever the
++//  route or the negotiated format changes, and restarts each engine on its own
++//  from the start hooks. The session keeps files, state and the last known
++//  position outside the players and reschedules idempotently (`buildSeq` and
++//  `isPlaying` checks) from the last known position.
++//
++
++#import "AttoCallPlaybackSession.h"
++#import <stdatomic.h>
++
++static const NSTimeInterval kAttoTickInterval = 0.25;
++/// Ticks (250 ms) with no device context before a playing session autopauses.
++static const int kAttoIdleTicksBeforePause = 8;
++/// Ticks with a stem player not playing before the tick self heal reschedules.
++static const int kAttoStalledTicksBeforeHeal = 2;
++/// Lead time for the common start of all stems (seconds of the output clock).
++static const double kAttoStartLeadSec = 0.02;
++/// Steps and pause of the volume ramp used off the render thread (3 x 4 ms).
++static const int kAttoRampSteps = 3;
++static const useconds_t kAttoRampStepUs = 4000;
++
++static void *const kAttoSessionQueueKey = (void *)&kAttoSessionQueueKey;
++
++#pragma mark - Stem
++
++@interface AttoStem : NSObject
++@property (nonatomic, copy, nullable) NSString *path;
++@property (nonatomic, strong, nullable) AVAudioFile *recordFile;
++@property (nonatomic, strong, nullable) AVAudioFile *playoutFile;
++@property (nonatomic, assign) AVAudioFramePosition lengthFrames;
++@property (nonatomic, assign) double rate;
++@property (nonatomic, assign) float gain;
++@property (nonatomic, readonly) double durationSec;
++@property (nonatomic, readonly) BOOL hasAudio;
++@end
++
++@implementation AttoStem
++- (instancetype)init {
++    if ((self = [super init])) {
++        _gain = 1.0f;
++    }
++    return self;
++}
++- (double)durationSec {
++    return (_rate > 0 && _lengthFrames > 0) ? ((double)_lengthFrames / _rate) : 0.0;
++}
++- (BOOL)hasAudio {
++    return _recordFile != nil && _lengthFrames > 0 && _rate > 0;
++}
++@end
++
++#pragma mark - Session
++
++@implementation AttoCallPlaybackSession {
++    dispatch_queue_t _queue;
++    NSArray<AVAudioPlayerNode *> *_record;   // kAttoStemCount players or nil
++    NSArray<AVAudioPlayerNode *> *_playout;  // kAttoStemCount players or nil
++    NSMutableArray<AttoStem *> *_stems;      // always kAttoStemCount entries
++
++    atomic_uint_fast64_t _generation;
++    atomic_int _state;                        // AttoSessionState
++    atomic_bool _transmit;
++    atomic_bool _monitor;
++    atomic_bool _loop;
++    _Atomic double _lastKnownSec;             // refreshed every tick and at every halt
++    _Atomic float _levelRms;
++    atomic_uint_fast64_t _loopCount;
++
++    // Queue only state.
++    double _baseSec;                          // timeline second the current play() started at
++    double _pausedSec;
++    double _durationSec;
++    double _playStartSec;                     // == _baseSec at schedule time, kept for loop maths
++    uint64_t _engineBuildSeq;
++    uint64_t _scheduledBuildSeq;
++    NSUInteger _longestStem;
++    dispatch_source_t _tickTimer;
++    int _idleTicks;
++    int _stalledTicks;
++
++    // Diagnostics (atomics so `diagnostics` can be read from any thread).
++    atomic_uint_fast64_t _dbgRescheduleCount;
++    atomic_uint_fast64_t _dbgSpuriousCompletionIgnored;
++    atomic_uint_fast64_t _dbgTransmitGateOnCount;
++    atomic_uint_fast64_t _dbgLoadCount;
++    atomic_uint_fast64_t _dbgLoopIterations;
++    atomic_uint_fast64_t _dbgEndedCount;
++    atomic_uint_fast64_t _dbgIdlePauses;
++    atomic_uint_fast64_t _dbgHaltCount;
++    _Atomic double _dbgLastLoadMs;
++    _Atomic double _dbgLastStemFileRate;
++    _Atomic double _dbgLastStemDestRate;
++    NSString *_dbgLastRescheduleReason;       // queue only
++}
++
++- (instancetype)init {
++    if ((self = [super init])) {
++        _queue = dispatch_queue_create("ai.atto.callPlaybackSession", DISPATCH_QUEUE_SERIAL);
++        dispatch_queue_set_specific(_queue, kAttoSessionQueueKey, kAttoSessionQueueKey, NULL);
++        _stems = [NSMutableArray arrayWithCapacity:kAttoStemCount];
++        for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++            [_stems addObject:[AttoStem new]];
++        }
++        atomic_store(&_state, AttoSessionStateIdle);
++        atomic_store(&_monitor, true);
++        atomic_store(&_transmit, false);
++        _dbgLastRescheduleReason = @"";
++    }
++    return self;
++}
++
++#pragma mark - Queue helpers
++
++- (BOOL)onQueue {
++    return dispatch_get_specific(kAttoSessionQueueKey) == kAttoSessionQueueKey;
++}
++
++- (void)sync:(dispatch_block_t)block {
++    if ([self onQueue]) {
++        block();
++    } else {
++        dispatch_sync(_queue, block);
++    }
++}
++
++- (void)async:(dispatch_block_t)block {
++    dispatch_async(_queue, block);
++}
++
++static NSString *AttoStateName(AttoSessionState s) {
++    switch (s) {
++        case AttoSessionStateLoaded:  return @"loaded";
++        case AttoSessionStatePlaying: return @"playing";
++        case AttoSessionStatePaused:  return @"paused";
++        case AttoSessionStateEnded:   return @"ended";
++        case AttoSessionStateIdle:
++        default:                      return @"idle";
++    }
++}
++
++#pragma mark - Volume
++
++/// Volume is an AVAudioMixing parameter applied by the downstream mixer; the
++/// ramp avoids the click of a hard 0 to gain step. Never called on main.
++static void AttoRampVolume(AVAudioPlayerNode *player, float target) {
++    if (player == nil) { return; }
++    float from = player.volume;
++    if (fabsf(from - target) < 0.0005f) { return; }
++    for (int step = 1; step < kAttoRampSteps; step++) {
++        float v = from + (target - from) * ((float)step / (float)kAttoRampSteps);
++        player.volume = v;
++        usleep(kAttoRampStepUs);
++    }
++    player.volume = target;
++}
++
++- (float)recordVolumeForStem:(NSUInteger)i {
++    AttoStem *stem = _stems[i];
++    return atomic_load(&_transmit) ? stem.gain : 0.0f;
++}
++
++- (float)playoutVolumeForStem:(NSUInteger)i {
++    AttoStem *stem = _stems[i];
++    return atomic_load(&_monitor) ? stem.gain : 0.0f;
++}
++
++- (void)applyVolumesOnQueueRamped:(BOOL)ramped {
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        AVAudioPlayerNode *r = (i < _record.count) ? _record[i] : nil;
++        AVAudioPlayerNode *p = (i < _playout.count) ? _playout[i] : nil;
++        float rv = [self recordVolumeForStem:i];
++        float pv = [self playoutVolumeForStem:i];
++        if (ramped) {
++            AttoRampVolume(r, rv);
++            AttoRampVolume(p, pv);
++        } else {
++            if (r) { r.volume = rv; }
++            if (p) { p.volume = pv; }
++        }
++    }
++}
++
++- (void)silencePlayersOnQueue {
++    for (AVAudioPlayerNode *p in _record)  { p.volume = 0.0f; }
++    for (AVAudioPlayerNode *p in _playout) { p.volume = 0.0f; }
++}
++
++- (void)stopPlayersOnQueue {
++    for (AVAudioPlayerNode *p in _record) {
++        @try { if (p.isPlaying) { [p stop]; } } @catch (__unused NSException *e) {}
++    }
++    for (AVAudioPlayerNode *p in _playout) {
++        @try { if (p.isPlaying) { [p stop]; } } @catch (__unused NSException *e) {}
++    }
++}
++
++#pragma mark - Position
++
++/// Seconds rendered by a player since its current play() (0 when unknown).
++static double AttoPlayerElapsedSec(AVAudioPlayerNode *player) {
++    if (player == nil) { return 0.0; }
++    @try {
++        AVAudioTime *nodeTime = player.lastRenderTime;
++        // playerTimeForNodeTime ASSERTS on an invalid node time (Sentry REACT-NATIVE-4G).
++        if (nodeTime == nil || !(nodeTime.isSampleTimeValid || nodeTime.isHostTimeValid)) {
++            return 0.0;
++        }
++        AVAudioTime *playerTime = [player playerTimeForNodeTime:nodeTime];
++        if (playerTime == nil || playerTime.sampleRate <= 0) { return 0.0; }
++        double t = (double)playerTime.sampleTime / playerTime.sampleRate;
++        return t < 0.0 ? 0.0 : t;
++    } @catch (__unused NSException *e) {
++        return 0.0;
++    }
++}
++
++- (AVAudioPlayerNode *)clockPlayerOnQueue {
++    // The record pool is what the far party hears, so it is the clock; fall back
++    // to the playout pool when the record engine is between rebuilds.
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        if (!_stems[i].hasAudio) { continue; }
++        if (i < _record.count && _record[i].isPlaying) { return _record[i]; }
++    }
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        if (!_stems[i].hasAudio) { continue; }
++        if (i < _playout.count && _playout[i].isPlaying) { return _playout[i]; }
++    }
++    return nil;
++}
++
++- (double)currentSecOnQueue {
++    AttoSessionState state = (AttoSessionState)atomic_load(&_state);
++    switch (state) {
++        case AttoSessionStatePlaying: {
++            AVAudioPlayerNode *clock = [self clockPlayerOnQueue];
++            if (clock == nil) { return _baseSec; }
++            double pos = _baseSec + AttoPlayerElapsedSec(clock);
++            if (_durationSec <= 0) { return 0.0; }
++            if (atomic_load(&_loop)) {
++                pos = fmod(pos, _durationSec);
++            } else if (pos > _durationSec) {
++                pos = _durationSec;
++            }
++            return pos;
++        }
++        case AttoSessionStatePaused:
++        case AttoSessionStateLoaded:
++            return _pausedSec;
++        case AttoSessionStateEnded:
++            return _durationSec;
++        case AttoSessionStateIdle:
++        default:
++            return 0.0;
++    }
++}
++
++#pragma mark - Events
++
++- (NSDictionary *)statusOnQueueWithReason:(NSString * _Nullable)reason {
++    double sec = [self currentSecOnQueue];
++    atomic_store(&_lastKnownSec, sec);
++    return @{
++        @"state": AttoStateName((AttoSessionState)atomic_load(&_state)),
++        @"positionMs": @(sec * 1000.0),
++        @"durationMs": @(_durationSec * 1000.0),
++        @"transmit": @(atomic_load(&_transmit)),
++        @"monitor": @(atomic_load(&_monitor)),
++        @"loop": @(atomic_load(&_loop)),
++        @"loopCount": @(atomic_load(&_loopCount)),
++        @"levelRms": @(atomic_load(&_levelRms)),
++        @"generation": @(atomic_load(&_generation)),
++        @"buildSeq": @(_engineBuildSeq),
++        @"reason": reason ?: [NSNull null],
++    };
++}
++
++- (void)emitOnQueue:(NSString *)reason {
++    void (^handler)(NSDictionary *) = self.onEvent;
++    if (handler == nil) { return; }
++    handler([self statusOnQueueWithReason:reason]);
++}
++
++- (void)setStateOnQueue:(AttoSessionState)state reason:(NSString *)reason {
++    atomic_store(&_state, state);
++    BOOL playing = (state == AttoSessionStatePlaying);
++    void (^inject)(BOOL) = self.setInjectActive;
++    if (inject) { inject(playing && atomic_load(&_transmit)); }
++    if (playing) {
++        [self startTickTimerOnQueue];
++    } else {
++        [self stopTickTimerOnQueue];
++    }
++    [self emitOnQueue:reason];
++}
++
++#pragma mark - Scheduling
++
++- (AVAudioTime * _Nullable)commonStartTimeForPlayers:(NSArray<AVAudioPlayerNode *> *)players {
++    for (AVAudioPlayerNode *p in players) {
++        @try {
++            AVAudioTime *t = p.lastRenderTime;
++            if (t != nil && t.isSampleTimeValid && t.sampleRate > 0) {
++                AVAudioFramePosition lead = (AVAudioFramePosition)llround(kAttoStartLeadSec * t.sampleRate);
++                return [AVAudioTime timeWithSampleTime:(t.sampleTime + lead) atRate:t.sampleRate];
++            }
++        } @catch (__unused NSException *e) {}
++    }
++    return nil;
++}
++
++/// Schedules the segment of `stem` that starts at timeline second `sec` on
++/// `player`, at player sample time `whenSec` (relative to the player's start).
++/// Returns NO when the stem has nothing left to play from that second.
++- (BOOL)scheduleStem:(AttoStem *)stem
++                file:(AVAudioFile *)file
++              player:(AVAudioPlayerNode *)player
++             fromSec:(double)sec
++             whenSec:(double)whenSec
++          completion:(AVAudioPlayerNodeCompletionHandler _Nullable)completion
++        callbackType:(AVAudioPlayerNodeCompletionCallbackType)type {
++    if (player == nil || file == nil || !stem.hasAudio) { return NO; }
++    AVAudioFramePosition frame = (AVAudioFramePosition)llround(sec * stem.rate);
++    if (frame < 0) { frame = 0; }
++    if (frame >= stem.lengthFrames) { return NO; }
++    AVAudioFrameCount count = (AVAudioFrameCount)(stem.lengthFrames - frame);
++    AVAudioTime *when = nil;
++    if (whenSec > 0) {
++        double outRate = [player outputFormatForBus:0].sampleRate;
++        if (outRate > 0) {
++            when = [AVAudioTime timeWithSampleTime:(AVAudioFramePosition)llround(whenSec * outRate) atRate:outRate];
++        }
++    }
++    @try {
++        [player scheduleSegment:file
++                  startingFrame:frame
++                     frameCount:count
++                         atTime:when
++           completionCallbackType:type
++              completionHandler:completion];
++        return YES;
++    } @catch (__unused NSException *e) {
++        return NO;
++    }
++}
++
++/// Queues loop iteration `iteration` (1 based) of every stem, one ahead of playback.
++- (void)queueLoopIteration:(uint64_t)iteration generation:(uint64_t)gen {
++    if (atomic_load(&_generation) != gen) { return; }
++    if (!atomic_load(&_loop) || _durationSec <= 0) { return; }
++    // Player timeline second at which this iteration starts: the remainder of the
++    // first pass plus (iteration - 1) full passes.
++    double whenSec = (_durationSec - _playStartSec) + (double)(iteration - 1) * _durationSec;
++    __weak typeof(self) weakSelf = self;
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        AttoStem *stem = _stems[i];
++        if (!stem.hasAudio) { continue; }
++        AVAudioPlayerNode *r = (i < _record.count) ? _record[i] : nil;
++        AVAudioPlayerNode *p = (i < _playout.count) ? _playout[i] : nil;
++        AVAudioPlayerNodeCompletionHandler consumed = nil;
++        if (i == _longestStem) {
++            consumed = ^(AVAudioPlayerNodeCompletionCallbackType type) {
++                __strong typeof(weakSelf) strongSelf = weakSelf;
++                if (!strongSelf) { return; }
++                if (atomic_load(&strongSelf->_generation) != gen) {
++                    atomic_fetch_add(&strongSelf->_dbgSpuriousCompletionIgnored, 1);
++                    return;
++                }
++                // Never touch the players inside the completion (the header warns
++                // it can deadlock); hop to the session queue.
++                dispatch_async(strongSelf->_queue, ^{
++                    [strongSelf queueLoopIteration:(iteration + 1) generation:gen];
++                });
++            };
++        }
++        // The callback rides on the record player (the clock); when the record
++        // pool is missing between rebuilds it rides on the playout player instead
++        // so the loop never silently stops advancing.
++        [self scheduleStem:stem file:stem.recordFile player:r fromSec:0 whenSec:whenSec
++                completion:(r ? consumed : nil) callbackType:AVAudioPlayerNodeCompletionDataConsumed];
++        [self scheduleStem:stem file:stem.playoutFile player:p fromSec:0 whenSec:whenSec
++                completion:(r ? nil : consumed) callbackType:AVAudioPlayerNodeCompletionDataConsumed];
++    }
++    atomic_fetch_add(&_dbgLoopIterations, 1);
++}
++
++/// The one place that starts audio. Queue only.
++- (void)scheduleFromSecOnQueue:(double)sec reason:(NSString *)reason {
++    uint64_t gen = atomic_fetch_add(&_generation, 1) + 1;
++    [self silencePlayersOnQueue];
++    [self stopPlayersOnQueue];
++
++    if (_durationSec <= 0) {
++        [self setStateOnQueue:AttoSessionStateLoaded reason:@"no_audio"];
++        return;
++    }
++    if (sec < 0) { sec = 0; }
++    if (sec >= _durationSec) {
++        if (atomic_load(&_loop)) {
++            sec = fmod(sec, _durationSec);
++        } else {
++            _pausedSec = _durationSec;
++            [self setStateOnQueue:AttoSessionStateEnded reason:@"seek_past_end"];
++            return;
++        }
++    }
++    if (_record.count == 0 && _playout.count == 0) {
++        // Engines are between rebuilds; keep the intent, ensureScheduled will retry.
++        _baseSec = sec;
++        _playStartSec = sec;
++        atomic_store(&_lastKnownSec, sec);
++        [self setStateOnQueue:AttoSessionStatePlaying reason:reason];
++        return;
++    }
++
++    _baseSec = sec;
++    _playStartSec = sec;
++    atomic_store(&_lastKnownSec, sec);
++    _scheduledBuildSeq = _engineBuildSeq;
++    _dbgLastRescheduleReason = reason ?: @"";
++
++    __weak typeof(self) weakSelf = self;
++    BOOL loop = atomic_load(&_loop);
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        AttoStem *stem = _stems[i];
++        if (!stem.hasAudio) { continue; }
++        AVAudioPlayerNode *r = (i < _record.count) ? _record[i] : nil;
++        AVAudioPlayerNode *p = (i < _playout.count) ? _playout[i] : nil;
++        if (r) {
++            atomic_store(&_dbgLastStemFileRate, stem.rate);
++            atomic_store(&_dbgLastStemDestRate, [r outputFormatForBus:0].sampleRate);
++        }
++        AVAudioPlayerNodeCompletionHandler handler = nil;
++        AVAudioPlayerNodeCompletionCallbackType type = AVAudioPlayerNodeCompletionDataRendered;
++        if (i == _longestStem) {
++            if (loop) {
++                type = AVAudioPlayerNodeCompletionDataConsumed;
++                handler = ^(AVAudioPlayerNodeCompletionCallbackType cbType) {
++                    __strong typeof(weakSelf) strongSelf = weakSelf;
++                    if (!strongSelf) { return; }
++                    if (atomic_load(&strongSelf->_generation) != gen) {
++                        atomic_fetch_add(&strongSelf->_dbgSpuriousCompletionIgnored, 1);
++                        return;
++                    }
++                    dispatch_async(strongSelf->_queue, ^{
++                        [strongSelf queueLoopIteration:2 generation:gen];
++                    });
++                };
++            } else {
++                handler = ^(AVAudioPlayerNodeCompletionCallbackType cbType) {
++                    __strong typeof(weakSelf) strongSelf = weakSelf;
++                    if (!strongSelf) { return; }
++                    if (atomic_load(&strongSelf->_generation) != gen) {
++                        atomic_fetch_add(&strongSelf->_dbgSpuriousCompletionIgnored, 1);
++                        return;
++                    }
++                    dispatch_async(strongSelf->_queue, ^{
++                        [strongSelf handleEndedForGeneration:gen];
++                    });
++                };
++            }
++        }
++        // Record path first: it is what the far party hears and what the clock
++        // reads. The ended/loop callback rides on it, or on the playout player
++        // when the record pool is missing between rebuilds.
++        [self scheduleStem:stem file:stem.recordFile player:r fromSec:sec whenSec:0
++                completion:(r ? handler : nil) callbackType:type];
++        [self scheduleStem:stem file:stem.playoutFile player:p fromSec:sec whenSec:0
++                completion:(r ? nil : handler)
++              callbackType:(r ? AVAudioPlayerNodeCompletionDataConsumed : type)];
++    }
++    if (loop) {
++        // Keep exactly one iteration queued ahead from the very first pass.
++        [self queueLoopIteration:1 generation:gen];
++    }
++
++    [self applyVolumesOnQueueRamped:NO];
++
++    // Start every stem of an engine at the same node time so they stay sample
++    // aligned. When the engine has not rendered yet (no valid node time) play
++    // immediately; the players then start within one render cycle of each other.
++    AVAudioTime *recStart = [self commonStartTimeForPlayers:_record];
++    AVAudioTime *playStart = [self commonStartTimeForPlayers:_playout];
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        if (!_stems[i].hasAudio) { continue; }
++        if (i < _record.count) {
++            @try { [_record[i] playAtTime:recStart]; } @catch (__unused NSException *e) {}
++        }
++        if (i < _playout.count) {
++            @try { [_playout[i] playAtTime:playStart]; } @catch (__unused NSException *e) {}
++        }
++    }
++    _stalledTicks = 0;
++    _idleTicks = 0;
++    [self setStateOnQueue:AttoSessionStatePlaying reason:reason];
++}
++
++- (void)handleEndedForGeneration:(uint64_t)gen {
++    if (atomic_load(&_generation) != gen) { return; }
++    if ((AttoSessionState)atomic_load(&_state) != AttoSessionStatePlaying) { return; }
++    atomic_fetch_add(&_dbgEndedCount, 1);
++    _pausedSec = _durationSec;
++    atomic_store(&_lastKnownSec, _durationSec);
++    [self silencePlayersOnQueue];
++    [self stopPlayersOnQueue];
++    [self setStateOnQueue:AttoSessionStateEnded reason:@"track_ended"];
++}
++
++#pragma mark - Tick timer (session queue)
++
++- (void)startTickTimerOnQueue {
++    if (_tickTimer) { return; }
++    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
++    dispatch_source_set_timer(timer,
++                              dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kAttoTickInterval * NSEC_PER_SEC)),
++                              (uint64_t)(kAttoTickInterval * NSEC_PER_SEC),
++                              (uint64_t)(0.05 * NSEC_PER_SEC));
++    __weak typeof(self) weakSelf = self;
++    dispatch_source_set_event_handler(timer, ^{
++        __strong typeof(weakSelf) strongSelf = weakSelf;
++        if (strongSelf) { [strongSelf tickOnQueue]; }
++    });
++    dispatch_resume(timer);
++    _tickTimer = timer;
++}
++
++- (void)stopTickTimerOnQueue {
++    if (_tickTimer) {
++        dispatch_source_cancel(_tickTimer);
++        _tickTimer = nil;
++    }
++}
++
++- (void)tickOnQueue {
++    if ((AttoSessionState)atomic_load(&_state) != AttoSessionStatePlaying) { return; }
++
++    // Idle watchdog: a playing session with no device context for 2 s means the
++    // call is gone (or its JS mirror was orphaned). Pause, keep the position.
++    BOOL (^alive)(void) = self.deviceContextsAlive;
++    if (alive && !alive()) {
++        _idleTicks++;
++        if (_idleTicks >= kAttoIdleTicksBeforePause) {
++            _idleTicks = 0;
++            atomic_fetch_add(&_dbgIdlePauses, 1);
++            [self pauseOnQueueWithReason:@"device_idle"];
++            return;
++        }
++    } else {
++        _idleTicks = 0;
++    }
++
++    // Self heal: a stem that should be playing but is not (purged by an engine
++    // restart we were not told about) is rescheduled from the last known second.
++    BOOL stalled = NO;
++    if (_scheduledBuildSeq != _engineBuildSeq) {
++        stalled = YES;
++    } else {
++        for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++            if (!_stems[i].hasAudio) { continue; }
++            if (i < _record.count && !_record[i].isPlaying) { stalled = YES; break; }
++            if (i < _playout.count && !_playout[i].isPlaying) { stalled = YES; break; }
++        }
++    }
++    if (stalled) {
++        _stalledTicks++;
++        if (_stalledTicks >= kAttoStalledTicksBeforeHeal) {
++            _stalledTicks = 0;
++            atomic_fetch_add(&_dbgRescheduleCount, 1);
++            [self scheduleFromSecOnQueue:atomic_load(&_lastKnownSec) reason:@"tick_self_heal"];
++            return;
++        }
++    } else {
++        _stalledTicks = 0;
++    }
++
++    [self emitOnQueue:@"tick"];
++}
++
++#pragma mark - Device hooks
++
++- (void)attachRecordPlayers:(NSArray<AVAudioPlayerNode *> *)record
++             playoutPlayers:(NSArray<AVAudioPlayerNode *> *)playout
++                   buildSeq:(uint64_t)buildSeq {
++    [self sync:^{
++        self->_record = [record copy];
++        self->_playout = [playout copy];
++        self->_engineBuildSeq = buildSeq;
++    }];
++}
++
++- (void)playersWillHaltReleasing:(BOOL)release {
++    [self sync:^{
++        atomic_fetch_add(&self->_dbgHaltCount, 1);
++        if ((AttoSessionState)atomic_load(&self->_state) == AttoSessionStatePlaying) {
++            atomic_store(&self->_lastKnownSec, [self currentSecOnQueue]);
++        }
++        // Completions from the halted players must not be mistaken for a real end.
++        atomic_fetch_add(&self->_generation, 1);
++        [self silencePlayersOnQueue];
++        [self stopPlayersOnQueue];
++        if (release) {
++            self->_record = nil;
++            self->_playout = nil;
++        }
++    }];
++}
++
++- (void)ensureScheduledWithReason:(NSString *)reason {
++    [self async:^{
++        if ((AttoSessionState)atomic_load(&self->_state) != AttoSessionStatePlaying) { return; }
++        if (self->_record.count == 0 && self->_playout.count == 0) { return; }
++        BOOL needs = (self->_scheduledBuildSeq != self->_engineBuildSeq);
++        if (!needs) {
++            for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++                if (!self->_stems[i].hasAudio) { continue; }
++                if (i < self->_record.count && !self->_record[i].isPlaying) { needs = YES; break; }
++                if (i < self->_playout.count && !self->_playout[i].isPlaying) { needs = YES; break; }
++            }
++        }
++        if (!needs) { return; }
++        atomic_fetch_add(&self->_dbgRescheduleCount, 1);
++        [self scheduleFromSecOnQueue:atomic_load(&self->_lastKnownSec) reason:reason];
++    }];
++}
++
++- (void)noteMonitorRms:(float)rms {
++    // EMA so the wave breathes instead of flickering; written from the tap thread,
++    // read atomically by status.
++    float prev = atomic_load(&_levelRms);
++    float next = prev + 0.35f * (rms - prev);
++    atomic_store(&_levelRms, next);
++}
++
++#pragma mark - Loading
++
++static NSURL *AttoFileURL(NSString *path) {
++    if ([path hasPrefix:@"file://"]) {
++        return [NSURL URLWithString:path];
++    }
++    return [NSURL fileURLWithPath:path];
++}
++
++- (NSString * _Nullable)openStem:(AttoStem *)stem path:(NSString *)path gain:(float)gain {
++    NSError *err = nil;
++    NSURL *url = AttoFileURL(path);
++    AVAudioFile *recordFile = [[AVAudioFile alloc] initForReading:url error:&err];
++    if (recordFile == nil) {
++        return [NSString stringWithFormat:@"cannot open %@: %@", path, err.localizedDescription ?: @"unknown"];
++    }
++    AVAudioFile *playoutFile = [[AVAudioFile alloc] initForReading:url error:&err];
++    if (playoutFile == nil) {
++        return [NSString stringWithFormat:@"cannot open %@: %@", path, err.localizedDescription ?: @"unknown"];
++    }
++    if (recordFile.processingFormat.channelCount != 1) {
++        // The player node does not convert channel counts; canonical files are mono.
++        return [NSString stringWithFormat:@"stem must be mono (%u channels): %@",
++                (unsigned)recordFile.processingFormat.channelCount, path];
++    }
++    if (recordFile.length <= 0) {
++        return [NSString stringWithFormat:@"stem has no frames: %@", path];
++    }
++    stem.path = path;
++    stem.recordFile = recordFile;
++    stem.playoutFile = playoutFile;
++    stem.lengthFrames = recordFile.length;
++    stem.rate = recordFile.processingFormat.sampleRate;
++    stem.gain = gain;
++    return nil;
++}
++
++- (void)clearStem:(AttoStem *)stem {
++    stem.path = nil;
++    stem.recordFile = nil;
++    stem.playoutFile = nil;
++    stem.lengthFrames = 0;
++    stem.rate = 0;
++    stem.gain = 1.0f;
++}
++
++- (void)recomputeDurationOnQueue {
++    double longest = 0;
++    NSUInteger idx = 0;
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        double d = _stems[i].durationSec;
++        if (d > longest) { longest = d; idx = i; }
++    }
++    _durationSec = longest;
++    _longestStem = idx;
++}
++
++- (void)loadStems:(NSArray<NSDictionary *> *)stems
++             loop:(BOOL)loop
++       completion:(AttoSessionCompletion)completion {
++    [self async:^{
++        CFTimeInterval t0 = CACurrentMediaTime();
++        atomic_fetch_add(&self->_generation, 1);
++        [self silencePlayersOnQueue];
++        [self stopPlayersOnQueue];
++        [self stopTickTimerOnQueue];
++        for (AttoStem *s in self->_stems) { [self clearStem:s]; }
++
++        if (stems.count == 0 || stems.count > kAttoStemCount) {
++            atomic_store(&self->_state, AttoSessionStateIdle);
++            completion(nil, [NSString stringWithFormat:@"stem count out of range: %lu", (unsigned long)stems.count]);
++            return;
++        }
++        for (NSUInteger i = 0; i < stems.count; i++) {
++            NSDictionary *spec = stems[i];
++            NSString *path = spec[@"path"];
++            if (![path isKindOfClass:[NSString class]] || path.length == 0) {
++                continue; // an empty slot
++            }
++            float gain = [spec[@"gain"] isKindOfClass:[NSNumber class]] ? [spec[@"gain"] floatValue] : 1.0f;
++            if (gain < 0) { gain = 0; }
++            if (gain > 4) { gain = 4; }
++            NSString *err = [self openStem:self->_stems[i] path:path gain:gain];
++            if (err) {
++                for (AttoStem *s in self->_stems) { [self clearStem:s]; }
++                atomic_store(&self->_state, AttoSessionStateIdle);
++                completion(nil, err);
++                return;
++            }
++        }
++        [self recomputeDurationOnQueue];
++        atomic_store(&self->_loop, loop);
++        atomic_store(&self->_loopCount, 0);
++        self->_pausedSec = 0;
++        self->_baseSec = 0;
++        atomic_store(&self->_lastKnownSec, 0);
++        atomic_fetch_add(&self->_dbgLoadCount, 1);
++        atomic_store(&self->_dbgLastLoadMs, (CACurrentMediaTime() - t0) * 1000.0);
++        [self setStateOnQueue:AttoSessionStateLoaded reason:@"loaded"];
++        completion([self statusOnQueueWithReason:@"loaded"], nil);
++    }];
++}
++
++- (void)setStem:(NSUInteger)index path:(NSString *)path completion:(AttoSessionCompletion)completion {
++    [self async:^{
++        if (index >= kAttoStemCount) {
++            completion(nil, @"stem index out of range");
++            return;
++        }
++        AttoSessionState state = (AttoSessionState)atomic_load(&self->_state);
++        if (state == AttoSessionStateIdle) {
++            completion(nil, @"no session loaded");
++            return;
++        }
++        AttoStem *stem = self->_stems[index];
++        float keptGain = stem.gain;
++        AttoStem *replacement = [AttoStem new];
++        if (path.length > 0) {
++            NSString *err = [self openStem:replacement path:path gain:keptGain];
++            if (err) {
++                completion(nil, err);
++                return;
++            }
++        }
++        // Swap keeping position and state. A playing session reschedules every
++        // stem from the current second so the pools stay aligned; the audible cost
++        // is one render cycle.
++        double sec = [self currentSecOnQueue];
++        stem.path = replacement.path;
++        stem.recordFile = replacement.recordFile;
++        stem.playoutFile = replacement.playoutFile;
++        stem.lengthFrames = replacement.lengthFrames;
++        stem.rate = replacement.rate;
++        stem.gain = keptGain;
++        [self recomputeDurationOnQueue];
++        if (state == AttoSessionStatePlaying) {
++            [self scheduleFromSecOnQueue:sec reason:@"stem_swap"];
++        } else {
++            if (self->_pausedSec > self->_durationSec) { self->_pausedSec = self->_durationSec; }
++            [self emitOnQueue:@"stem_swap"];
++        }
++        completion([self statusOnQueueWithReason:@"stem_swap"], nil);
++    }];
++}
++
++- (void)setStem:(NSUInteger)index gain:(float)gain {
++    if (index >= kAttoStemCount) { return; }
++    if (gain < 0) { gain = 0; }
++    if (gain > 4) { gain = 4; }
++    [self async:^{
++        self->_stems[index].gain = gain;
++        AVAudioPlayerNode *r = (index < self->_record.count) ? self->_record[index] : nil;
++        AVAudioPlayerNode *p = (index < self->_playout.count) ? self->_playout[index] : nil;
++        AttoRampVolume(r, [self recordVolumeForStem:index]);
++        AttoRampVolume(p, [self playoutVolumeForStem:index]);
++    }];
++}
++
++#pragma mark - Transport
++
++- (void)playFromMs:(double)fromMs completion:(AttoSessionCompletion)completion {
++    [self async:^{
++        AttoSessionState state = (AttoSessionState)atomic_load(&self->_state);
++        if (state == AttoSessionStateIdle) {
++            completion(nil, @"no session loaded");
++            return;
++        }
++        double sec;
++        if (fromMs >= 0) {
++            sec = fromMs / 1000.0;
++        } else if (state == AttoSessionStatePaused || state == AttoSessionStateLoaded) {
++            sec = self->_pausedSec;
++        } else if (state == AttoSessionStateEnded) {
++            sec = 0;
++        } else {
++            sec = [self currentSecOnQueue]; // already playing: restart at the same spot
++        }
++        [self scheduleFromSecOnQueue:sec reason:@"play"];
++        completion([self statusOnQueueWithReason:@"play"], nil);
++    }];
++}
++
++- (void)pauseOnQueueWithReason:(NSString *)reason {
++    AttoSessionState state = (AttoSessionState)atomic_load(&self->_state);
++    if (state != AttoSessionStatePlaying) {
++        [self emitOnQueue:reason];
++        return;
++    }
++    // Read the position at the instant of the audible cut, not after a deferred stop.
++    double sec = [self currentSecOnQueue];
++    self->_pausedSec = sec;
++    atomic_store(&self->_lastKnownSec, sec);
++    atomic_fetch_add(&self->_generation, 1);
++    for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++        AVAudioPlayerNode *r = (i < self->_record.count) ? self->_record[i] : nil;
++        AVAudioPlayerNode *p = (i < self->_playout.count) ? self->_playout[i] : nil;
++        AttoRampVolume(r, 0.0f);
++        AttoRampVolume(p, 0.0f);
++    }
++    [self stopPlayersOnQueue];
++    [self setStateOnQueue:AttoSessionStatePaused reason:reason];
++}
++
++- (void)pauseWithCompletion:(AttoSessionCompletion)completion {
++    [self async:^{
++        if ((AttoSessionState)atomic_load(&self->_state) == AttoSessionStateIdle) {
++            completion(nil, @"no session loaded");
++            return;
++        }
++        [self pauseOnQueueWithReason:@"pause"];
++        completion([self statusOnQueueWithReason:@"pause"], nil);
++    }];
++}
++
++- (void)seekToMs:(double)ms completion:(AttoSessionCompletion)completion {
++    [self async:^{
++        AttoSessionState state = (AttoSessionState)atomic_load(&self->_state);
++        if (state == AttoSessionStateIdle) {
++            completion(nil, @"no session loaded");
++            return;
++        }
++        double sec = ms / 1000.0;
++        if (sec < 0) { sec = 0; }
++        if (state == AttoSessionStatePlaying) {
++            [self scheduleFromSecOnQueue:sec reason:@"seek"];
++        } else {
++            if (sec > self->_durationSec) { sec = self->_durationSec; }
++            self->_pausedSec = sec;
++            atomic_store(&self->_lastKnownSec, sec);
++            if (state == AttoSessionStateEnded && sec < self->_durationSec) {
++                atomic_store(&self->_state, AttoSessionStatePaused);
++            }
++            [self emitOnQueue:@"seek"];
++        }
++        completion([self statusOnQueueWithReason:@"seek"], nil);
++    }];
++}
++
++- (void)stopWithReason:(NSString *)reason completion:(AttoSessionCompletion)completion {
++    [self async:^{
++        atomic_fetch_add(&self->_generation, 1);
++        [self silencePlayersOnQueue];
++        [self stopPlayersOnQueue];
++        for (AttoStem *s in self->_stems) { [self clearStem:s]; }
++        self->_durationSec = 0;
++        self->_pausedSec = 0;
++        self->_baseSec = 0;
++        atomic_store(&self->_lastKnownSec, 0);
++        atomic_store(&self->_loopCount, 0);
++        atomic_store(&self->_levelRms, 0.0f);
++        [self setStateOnQueue:AttoSessionStateIdle reason:reason ?: @"stop"];
++        completion([self statusOnQueueWithReason:reason ?: @"stop"], nil);
++    }];
++}
++
++- (void)setTransmit:(BOOL)on {
++    BOOL was = atomic_exchange(&_transmit, on);
++    if (on && !was) { atomic_fetch_add(&_dbgTransmitGateOnCount, 1); }
++    [self async:^{
++        BOOL playing = ((AttoSessionState)atomic_load(&self->_state) == AttoSessionStatePlaying);
++        void (^inject)(BOOL) = self.setInjectActive;
++        if (inject) { inject(playing && on); }
++        for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++            AVAudioPlayerNode *r = (i < self->_record.count) ? self->_record[i] : nil;
++            AttoRampVolume(r, [self recordVolumeForStem:i]);
++        }
++        [self emitOnQueue:on ? @"transmit_on" : @"transmit_off"];
++    }];
++}
++
++- (void)setMonitor:(BOOL)on {
++    atomic_store(&_monitor, on);
++    [self async:^{
++        for (NSUInteger i = 0; i < kAttoStemCount; i++) {
++            AVAudioPlayerNode *p = (i < self->_playout.count) ? self->_playout[i] : nil;
++            AttoRampVolume(p, [self playoutVolumeForStem:i]);
++        }
++        [self emitOnQueue:on ? @"monitor_on" : @"monitor_off"];
++    }];
++}
++
++#pragma mark - Read only
++
++- (NSDictionary *)status {
++    __block NSDictionary *result = nil;
++    [self sync:^{
++        result = [self statusOnQueueWithReason:nil];
++    }];
++    return result;
++}
++
++- (BOOL)isLoaded {
++    return (AttoSessionState)atomic_load(&_state) != AttoSessionStateIdle;
++}
++
++- (BOOL)transmitGateOpen {
++    return atomic_load(&_transmit);
++}
++
++- (NSDictionary *)diagnostics {
++    // Deliberately lock free and player free: read from getMixDiagnostics on the
++    // RN module queue, possibly while the session queue is busy.
++    AttoSessionState state = (AttoSessionState)atomic_load(&_state);
++    return @{
++        @"sessionState": AttoStateName(state),
++        @"sessionPositionMs": @(atomic_load(&_lastKnownSec) * 1000.0),
++        @"sessionGeneration": @(atomic_load(&_generation)),
++        @"transmitGate": @(atomic_load(&_transmit) ? 1 : 0),
++        @"monitorOn": @(atomic_load(&_monitor) ? 1 : 0),
++        @"transmitGateOnCount": @(atomic_load(&_dbgTransmitGateOnCount)),
++        @"sessionRescheduleCount": @(atomic_load(&_dbgRescheduleCount)),
++        @"spuriousCompletionIgnoredCount": @(atomic_load(&_dbgSpuriousCompletionIgnored)),
++        @"sessionLoadCount": @(atomic_load(&_dbgLoadCount)),
++        @"lastSessionLoadMs": @(atomic_load(&_dbgLastLoadMs)),
++        @"sessionLoopIterations": @(atomic_load(&_dbgLoopIterations)),
++        @"sessionEndedCount": @(atomic_load(&_dbgEndedCount)),
++        @"sessionIdlePauses": @(atomic_load(&_dbgIdlePauses)),
++        @"sessionHaltCount": @(atomic_load(&_dbgHaltCount)),
++        @"lastStemFileRate": @(atomic_load(&_dbgLastStemFileRate)),
++        @"lastStemDestRate": @(atomic_load(&_dbgLastStemDestRate)),
++        @"sessionLevelRms": @(atomic_load(&_levelRms)),
++    };
 +}
 +
 +@end

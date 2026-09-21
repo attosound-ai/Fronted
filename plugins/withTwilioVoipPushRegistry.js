@@ -398,6 +398,29 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
       let beforeCls = String(describing: Swift.type(of: TwilioVoiceSDK.audioDevice))
       if beforeCls == "AttoAudioEngineDevice" {
         mark("cold_engine_already_installed")
+        // ENGINE RESET (Sep 13 2026). Telemetry over 14 days: every injection
+        // that reached the far party ran on an engine installed fresh at THIS
+        // push (cold_engine_preinstalled), and every silent one ran on a device
+        // that was "already installed" from an earlier idle preinstall and had
+        // been through a background cycle since. Its engines are stale by then
+        // (file scheduled, player never enters playing, mix renders silence).
+        // Tear the engines down here, before any media stack exists, so
+        // startRendering rebuilds them at the live call rate exactly like a fresh
+        // process does. teardownAudioEngine is an existing ObjC method on the
+        // device; perform() keeps the call guarded at runtime.
+        // Never touch the engines while a call is live (a second push during a
+        // held cold call): tearing them down would silence the call in progress.
+        let liveCall = !heldCalls.isEmpty ||
+          callObserver.calls.contains(where: { $0.hasConnected && !$0.hasEnded })
+        if liveCall {
+          mark("cold_engine_reset_skipped_live_call")
+        } else if let dev = TwilioVoiceSDK.audioDevice as? NSObject,
+                  dev.responds(to: NSSelectorFromString("teardownAudioEngine")) {
+          _ = dev.perform(NSSelectorFromString("teardownAudioEngine"))
+          mark("cold_engine_reset")
+        } else {
+          mark("cold_engine_reset_unavailable")
+        }
       } else if let engCls = NSClassFromString("AttoAudioEngineDevice") as? NSObject.Type,
                 let modCls = NSClassFromString("TwilioVoiceReactNative") as? NSObject.Type,
                 let dev = engCls.perform(NSSelectorFromString("sharedDevice"))?.takeUnretainedValue() {

@@ -1,0 +1,15 @@
+diff --git a/ios/StripeSwiftInterop.h b/ios/StripeSwiftInterop.h
+index c7a804d3045c22312bcfa39ee2c669ba2b7f10a8..72e30b0d2b0232109e071370e13057a8103485ca 100644
+--- a/ios/StripeSwiftInterop.h
++++ b/ios/StripeSwiftInterop.h
+@@ -11,7 +11,9 @@
+ @protocol STPPaymentCardTextFieldDelegate;
+ @protocol STPCardFormViewDelegate;
+ 
+-typedef NS_ENUM(NSUInteger, STPPaymentStatus);
++// ATTO patch: Xcode 26+ rejects the NSUInteger forward declaration; the Swift
++// enum is Int (NSInteger). stripe-react-native issue 2357.
++typedef NS_ENUM(NSInteger, STPPaymentStatus);
+ 
+ // stripe_react_native-Swift.h also depends on these headers.
+ #import <React/RCTBridgeModule.h>

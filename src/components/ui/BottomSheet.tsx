@@ -1,247 +1,209 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+/**
+ * BottomSheet — the app's sheet primitive, now a NATIVE sheet.
+ *
+ * iOS: UISheetPresentationController (system grabber, detents, dimming,
+ * spring physics, keyboard avoidance, scroll hand off, VoiceOver).
+ * Android: Material BottomSheetDialog (BottomSheetBehavior, edge to edge,
+ * back button, nested scrolling).
+ *
+ * The public API is unchanged on purpose (`visible`, `onClose`, `title`,
+ * `children`) so every existing sheet in the app gets the native behaviour
+ * without touching its call site. Under the hood the `visible` prop drives
+ * the imperative `present()` / `dismiss()` of TrueSheet, and a user driven
+ * dismissal (swipe, backdrop tap, Android back) is reported through
+ * `onClose` exactly as the old JS sheet did.
+ *
+ * Replaces the previous RN Modal + Reanimated + gesture handler sheet, whose
+ * JS driven animation never matched the system feel and which needed the
+ * lock/unlock remount workaround in DtmfKeypadHost.
+ */
+
+import { useCallback, useEffect, useRef } from 'react';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
-  View,
-  Modal,
-  StyleSheet,
-  Dimensions,
-  TouchableWithoutFeedback,
-  Keyboard,
-  type KeyboardEvent,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-  type SharedValue,
-} from 'react-native-reanimated';
-import {
-  Gesture,
-  GestureDetector,
-  GestureHandlerRootView,
-} from 'react-native-gesture-handler';
+  TrueSheet,
+  type BackgroundBlur,
+  type BlurOptions,
+  type SheetDetent,
+} from '@lodev09/react-native-true-sheet';
 
 import { Text } from './Text';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const DISMISS_THRESHOLD = 80;
-const VELOCITY_THRESHOLD = 400;
+const SHEET_BACKGROUND = '#1A1A1A';
+const SHEET_CORNER_RADIUS = 20;
+/** Tallest a content sized sheet may grow (fraction of the window). */
+const MAX_CONTENT_FRACTION = 0.85;
 
-// ── Context for scroll coordination ──────────────────────────────────
-
-interface BottomSheetScrollCtx {
-  contentScrollY: SharedValue<number>;
-  isDragging: SharedValue<boolean>;
-}
-
-const BottomSheetScrollContext = createContext<BottomSheetScrollCtx | null>(null);
-
-export function useBottomSheetScroll() {
-  return useContext(BottomSheetScrollContext);
-}
-
-// ── Component ────────────────────────────────────────────────────────
-
-interface BottomSheetProps {
+export interface BottomSheetProps {
   visible: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  /**
+   * Sheet heights (max 3). Defaults to a single content sized detent, capped
+   * at 85% of the window; taller content scrolls inside its own ScrollView.
+   */
+  detents?: SheetDetent[];
+  /**
+   * Set to false while an operation must not be interrupted: the native
+   * sheet then refuses swipe / backdrop dismissal (the close button inside
+   * the sheet still works through `onClose`).
+   */
+  dismissible?: boolean;
+  /**
+   * Pin the first ScrollView / FlatList child to the sheet frame so it fills
+   * a fixed detent (use with explicit fractional `detents`; not with 'auto').
+   */
+  scrollable?: boolean;
+  /**
+   * Fired once the native sheet is on screen. Focus text inputs here instead
+   * of `autoFocus`: a field focused while the sheet is still off screen does
+   * not reliably bring the keyboard up on iOS.
+   */
+  onPresented?: () => void;
+  /**
+   * Fired once the sheet is fully off screen and stays closed, for both a
+   * programmatic dismiss (`visible` went false) and a user dismiss the owner
+   * honoured. Navigate from here: pushing a screen while the sheet is still
+   * sliding away hides the push animation behind it.
+   */
+  onDismissed?: () => void;
+  /**
+   * Overrides the opaque sheet fill. Pass 'transparent' together with
+   * `backgroundBlur` for a sheet that shows what sits behind it, the way the
+   * Apple call keypad does.
+   */
+  backgroundColor?: string;
+  /** iOS material behind the sheet content. Blends with `backgroundColor`. */
+  backgroundBlur?: BackgroundBlur;
+  /** Strength of that material (0 to 100). Lower lets more of the backdrop through. */
+  blurOptions?: BlurOptions;
 }
 
-export function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
-  const translateY = useSharedValue(SCREEN_HEIGHT);
-  const dragY = useSharedValue(0);
-  const overlayOpacity = useSharedValue(0);
-  const keyboardOffset = useSharedValue(0);
-  const contentScrollY = useSharedValue(0);
-  const isDragging = useSharedValue(false);
-  const prevTouchY = useSharedValue(0);
+export function BottomSheet({
+  visible,
+  onClose,
+  title,
+  children,
+  detents,
+  dismissible = true,
+  scrollable = false,
+  onPresented,
+  onDismissed,
+  backgroundColor = SHEET_BACKGROUND,
+  backgroundBlur,
+  blurOptions,
+}: BottomSheetProps) {
+  const sheetRef = useRef<TrueSheet>(null);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
 
+  // Latest values for the native callbacks without re-subscribing.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const onPresentedRef = useRef(onPresented);
+  onPresentedRef.current = onPresented;
+  const onDismissedRef = useRef(onDismissed);
+  onDismissedRef.current = onDismissed;
+  const presentedRef = useRef(false);
 
-  // Keep context ref stable across renders
-  const [scrollCtx] = useState<BottomSheetScrollCtx>(() => ({
-    contentScrollY,
-    isDragging,
-  }));
-
-  const dismissKeyboard = () => Keyboard.dismiss();
-
-  const close = () => {
-    Keyboard.dismiss();
-    onCloseRef.current();
-  };
-
-  const panGesture = Gesture.Pan()
-    .manualActivation(true)
-    .onTouchesDown((e) => {
-      prevTouchY.value = e.changedTouches[0].y;
-    })
-    .onTouchesMove((e, stateManager) => {
-      const currentY = e.changedTouches[0].y;
-      const delta = currentY - prevTouchY.value;
-      prevTouchY.value = currentY;
-
-      if (delta > 2) {
-        // Swiping down — activate if scroll is at top (or no scroll)
-        if (contentScrollY.value <= 1) {
-          stateManager.activate();
-        } else {
-          stateManager.fail();
-        }
-      } else if (delta < -2) {
-        // Swiping up — let scroll handle it
-        stateManager.fail();
-      }
-    })
-    .onStart(() => {
-      isDragging.value = true;
-      runOnJS(dismissKeyboard)();
-    })
-    .onChange((e) => {
-      if (e.changeY > 0) {
-        dragY.value += e.changeY;
-      } else {
-        dragY.value += e.changeY * 0.15;
-      }
-      const progress = Math.min(dragY.value / (SCREEN_HEIGHT * 0.35), 1);
-      overlayOpacity.value = 1 - progress;
-    })
-    .onFinalize((e) => {
-      isDragging.value = false;
-
-      if (dragY.value > DISMISS_THRESHOLD || e.velocityY > VELOCITY_THRESHOLD) {
-        dragY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
-        overlayOpacity.value = withTiming(0, { duration: 250 }, () => {
-          dragY.value = 0;
-          runOnJS(close)();
-        });
-      } else {
-        dragY.value = withSpring(0, { damping: 15, stiffness: 120 });
-        overlayOpacity.value = withTiming(1, { duration: 150 });
-      }
+  const present = useCallback(() => {
+    sheetRef.current?.present().catch(() => {
+      // Presenting while another presentation is in flight is harmless; the
+      // next `visible` change will reconcile.
     });
-
-  // ── Keyboard ──
-
-  useEffect(() => {
-    const onShow = (e: KeyboardEvent) => {
-      keyboardOffset.value = withTiming(e.endCoordinates.height, {
-        duration: e.duration || 250,
-      });
-    };
-    const onHide = (e: KeyboardEvent) => {
-      keyboardOffset.value = withTiming(0, { duration: e.duration || 200 });
-    };
-
-    const showSub = Keyboard.addListener('keyboardWillShow', onShow);
-    const hideSub = Keyboard.addListener('keyboardWillHide', onHide);
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [keyboardOffset]);
-
-  // ── Open / Close ──
+  }, []);
 
   useEffect(() => {
     if (visible) {
-      dragY.value = 0;
-      contentScrollY.value = 0;
-      translateY.value = withTiming(0, { duration: 300 });
-      overlayOpacity.value = withTiming(1, { duration: 300 });
-    } else {
-      keyboardOffset.value = 0;
-      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
-      overlayOpacity.value = withTiming(0, { duration: 250 });
+      // A re-run while the sheet is already up (fast refresh, a parent
+      // re-render with a new callback) must not present it a second time.
+      if (!presentedRef.current) present();
+    } else if (presentedRef.current) {
+      sheetRef.current?.dismiss().catch(() => {});
     }
-  }, [visible, translateY, dragY, overlayOpacity, keyboardOffset, contentScrollY]);
+  }, [visible, present]);
 
-  // ── Animated styles ──
+  const handleDidPresent = useCallback(() => {
+    presentedRef.current = true;
+    onPresentedRef.current?.();
+  }, []);
 
-  const sheetStyle = useAnimatedStyle(() => ({
-    bottom: 0,
-    paddingBottom: keyboardOffset.value > 0 ? keyboardOffset.value + 12 : 40,
-    maxHeight: keyboardOffset.value > 0 ? SCREEN_HEIGHT * 0.95 : SCREEN_HEIGHT * 0.85,
-    transform: [{ translateY: translateY.value + dragY.value }],
-  }));
+  const handleDidDismiss = useCallback(() => {
+    presentedRef.current = false;
+    // Dismissed by the user (swipe, backdrop, back button): report it like the
+    // old sheet did. If the owner decides to keep it open (e.g. an upload in
+    // progress) `visible` stays true and we bring the sheet back.
+    if (visibleRef.current) onCloseRef.current();
+    setTimeout(() => {
+      if (visibleRef.current && !presentedRef.current) {
+        present();
+        return;
+      }
+      // The sheet is staying closed, so it is safe to run whatever the owner
+      // queued behind the dismissal (typically navigation).
+      onDismissedRef.current?.();
+    }, 0);
+  }, [present]);
 
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity.value,
-  }));
+  const maxContentHeight = Math.round(windowHeight * MAX_CONTENT_FRACTION);
+
+  // Edge to edge, like the system's own sheets. TrueSheet turns on
+  // `prefersPageSizing`, which is UIKit's page sheet behaviour: the sheet
+  // follows the READABLE width and ends up inset from both edges. Giving it an
+  // explicit content width flips UIKit to form sizing at exactly the screen
+  // width, which is what Apple's share sheet does (checked side by side on
+  // David's phone, Sep 19 2026).
+  const maxContentWidth = Math.round(windowWidth);
 
   return (
-    // `presentationStyle="overFullScreen"` forces iOS to present this Modal in a
-    // NON-OPAQUE window over the root. Without it, a `transparent` Modal whose
-    // Reanimated-driven content fails to re-prime after a background→foreground
-    // cycle (New Arch) leaves an opaque host window on screen = a full black
-    // screen covering the app (the in-call keypad auto-opens and stays mounted
-    // across a lock→unlock — see DtmfKeypadHost). overFullScreen guarantees the
-    // app shows through even if the sheet content is momentarily missing.
-    <Modal
-      visible={visible}
-      transparent
-      presentationStyle="overFullScreen"
-      animationType="none"
-      onRequestClose={onClose}
+    <TrueSheet
+      ref={sheetRef}
+      detents={detents ?? ['auto']}
+      maxContentHeight={maxContentHeight}
+      backgroundColor={backgroundColor}
+      backgroundBlur={backgroundBlur}
+      blurOptions={blurOptions}
+      cornerRadius={SHEET_CORNER_RADIUS}
+      maxContentWidth={maxContentWidth}
+      grabber
+      dimmed
+      dismissible={dismissible}
+      scrollable={scrollable}
+      onDidPresent={handleDidPresent}
+      onDidDismiss={handleDidDismiss}
     >
-      <GestureHandlerRootView style={styles.flex}>
-        <TouchableWithoutFeedback onPress={close}>
-          <Animated.View style={[styles.overlay, overlayStyle]} />
-        </TouchableWithoutFeedback>
-
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.container, sheetStyle]}>
-            <View style={styles.handleZone}>
-              <View style={styles.handle} />
-            </View>
-
-            {title && (
-              <Text variant="h3" style={styles.title}>
-                {title}
-              </Text>
-            )}
-
-            <BottomSheetScrollContext.Provider value={scrollCtx}>
-              {children}
-            </BottomSheetScrollContext.Provider>
-          </Animated.View>
-        </GestureDetector>
+      {/* Gesture handler needs its own root inside a natively presented view
+          (sliders, swipeables and pressables inside sheets). flexGrow instead
+          of flex so the 'auto' detent can measure the content. */}
+      <GestureHandlerRootView style={styles.root}>
+        <View style={[styles.content, { maxHeight: maxContentHeight }]}>
+          {title ? (
+            <Text variant="h3" style={styles.title}>
+              {title}
+            </Text>
+          ) : null}
+          {children}
+        </View>
       </GestureHandlerRootView>
-    </Modal>
+    </TrueSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
+  root: {
+    flexGrow: 1,
   },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  container: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: '#1A1A1A',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+  content: {
+    // Room for the native grabber above the title and a little breathing
+    // space above the home indicator (the sheet itself already accounts for
+    // the safe area). Horizontal padding belongs to each sheet's own content,
+    // so a full bleed row (a list, a grid) can reach the edges.
+    paddingTop: 24,
     paddingHorizontal: 24,
-  },
-  handleZone: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 12,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#666666',
-    borderRadius: 2,
+    paddingBottom: 16,
   },
   title: {
     color: '#FFFFFF',

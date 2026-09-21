@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import {
   TextInput,
   View,
@@ -25,15 +25,14 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
  * Principio SOLID:
  * - Single Responsibility: Solo maneja entrada de texto
  * - Interface Segregation: Props específicas para inputs
+ *
+ * Forwards its ref to the native TextInput so callers can focus it
+ * programmatically (e.g. once a native sheet has finished presenting).
  */
-export function Input({
-  label,
-  error,
-  containerStyle,
-  style,
-  rightElement,
-  ...props
-}: InputProps) {
+export const Input = forwardRef<TextInput, InputProps>(function Input(
+  { label, error, containerStyle, style, rightElement, ...props },
+  ref
+) {
   const [isFocused, setIsFocused] = useState(false);
 
   return (
@@ -45,6 +44,7 @@ export function Input({
       )}
       <View style={styles.inputWrapper}>
         <TextInput
+          ref={ref}
           style={[
             styles.input,
             isFocused && styles.inputFocused,
@@ -66,7 +66,7 @@ export function Input({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

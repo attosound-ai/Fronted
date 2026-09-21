@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, TextInput, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text } from './Text';
 import { getCountryByDial } from '@/utils/countryCodes';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 
 interface PhoneInputProps {
   countryCode: string;
@@ -12,6 +13,8 @@ interface PhoneInputProps {
   onPhoneNumberChange: (number: string) => void;
   label?: string;
   error?: string;
+  /** Focus the number field on mount so the keyboard comes up by itself. */
+  autoFocus?: boolean;
 }
 
 export function PhoneInput({
@@ -20,9 +23,12 @@ export function PhoneInput({
   onPhoneNumberChange,
   label,
   error,
+  autoFocus = false,
 }: PhoneInputProps) {
   const { t } = useTranslation('common');
   const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(inputRef, autoFocus);
 
   const selectedCountry = getCountryByDial(countryCode);
   const prefix = `${selectedCountry?.flag ?? '🌐'} ${selectedCountry?.dial ?? countryCode}`;
@@ -49,6 +55,7 @@ export function PhoneInput({
           style={styles.input}
           value={phoneNumber}
           onChangeText={onPhoneNumberChange}
+          ref={inputRef}
           keyboardType="phone-pad"
           placeholder={t('phoneInput.placeholder')}
           placeholderTextColor="#666666"

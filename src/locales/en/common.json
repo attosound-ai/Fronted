@@ -97,7 +97,11 @@
     "upgradeFailed": "Failed to process upgrade. Please try again.",
     "cancelFailed": "Failed to cancel. Please try again.",
     "title": "Error",
-    "usernameTaken": "Username already taken"
+    "usernameTaken": "Username already taken",
+    "avatarUploadTitle": "Photo did not upload",
+    "avatarUploadMessage": "The connection dropped while sending your photo. Try again or continue without it and add it later from your profile.",
+    "avatarUploadRetry": "Try again",
+    "avatarUploadSkip": "Continue without photo"
   },
   "phoneInput": {
     "placeholder": "Phone number",

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, Check } from 'lucide-react-native';
 
@@ -80,11 +80,18 @@ export function Select({
       )}
 
       <BottomSheet visible={isOpen} onClose={() => setIsOpen(false)}>
-        <FlatList
-          data={options}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
+        {/* A plain ScrollView, not a FlatList: the Select often sits inside a
+            step's KeyboardAwareScrollView, and React warns about a virtualized
+            list nested in a same orientation ScrollView (the dev overlay that
+            kept interrupting the demo recording). Option lists here are short
+            (relationships, states), so windowing buys nothing. */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {options.map((item) => (
             <TouchableOpacity
+              key={item.value}
               style={styles.option}
               onPress={() => handleSelect(item.value)}
               activeOpacity={0.7}
@@ -101,8 +108,8 @@ export function Select({
                 <Check size={20} color="#3B82F6" strokeWidth={2.25} />
               )}
             </TouchableOpacity>
-          )}
-        />
+          ))}
+        </ScrollView>
         {footer}
       </BottomSheet>
     </View>

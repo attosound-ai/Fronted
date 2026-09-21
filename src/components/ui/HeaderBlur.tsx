@@ -89,6 +89,13 @@ interface HeaderBlurProps {
   solid?: boolean;
   /** How far the fade spills below the bar. */
   fadeExtend?: number;
+  /**
+   * Scrim opacity at the very top (0 to 1). Overrides the tier default so a
+   * light header can start at a full, pure color instead of a tinted veil.
+   */
+  maxAlpha?: number;
+  /** Frost flavour under the scrim: dark for the app chrome, light for a white header. */
+  blurTint?: 'dark' | 'light';
 }
 
 export function HeaderBlur({
@@ -96,10 +103,13 @@ export function HeaderBlur({
   tintRgb = DEFAULT_TINT,
   solid = false,
   fadeExtend = FADE_EXTEND,
+  maxAlpha: maxAlphaProp,
+  blurTint = 'dark',
 }: HeaderBlurProps) {
   // Solid mode: opaque-ish scrim, no frost (blends with the solid bar above).
   const showFrost = MASKED_VIEW_NATIVE_AVAILABLE && !solid;
-  const maxAlpha = solid ? 0.95 : MASKED_VIEW_NATIVE_AVAILABLE ? 0.55 : 0.92;
+  const maxAlpha =
+    maxAlphaProp ?? (solid ? 0.95 : MASKED_VIEW_NATIVE_AVAILABLE ? 0.55 : 0.92);
   const scrim = useMemo(() => buildFade(tintRgb, maxAlpha), [tintRgb, maxAlpha]);
 
   return (
@@ -120,7 +130,11 @@ export function HeaderBlur({
         >
           <BlurView
             intensity={64}
-            tint="systemChromeMaterialDark"
+            tint={
+              blurTint === 'light'
+                ? 'systemChromeMaterialLight'
+                : 'systemChromeMaterialDark'
+            }
             style={StyleSheet.absoluteFill}
           />
         </MaskedView>

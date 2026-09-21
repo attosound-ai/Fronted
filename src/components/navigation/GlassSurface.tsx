@@ -1,19 +1,23 @@
 /**
- * GlassSurface — adaptive "Liquid Glass" background, 3-tier:
- *   1. iOS 26+  → real Liquid Glass via expo-glass-effect `GlassView`
- *   2. iOS <26  → translucent blur via expo-blur `BlurView`
- *   3. Android  → solid elevated surface (#1A1A1A) — the app's existing
- *                 floating-card convention (blur on Android is weak/expensive)
+ * GlassSurface: adaptive "Liquid Glass" background, three tiers:
+ *   1. iOS 26 and newer: real Liquid Glass via expo-glass-effect `GlassView`
+ *   2. Older iOS: translucent blur via expo-blur `BlurView`
+ *   3. Android: solid elevated surface (#1A1A1A), the app's existing
+ *      floating card convention (blur on Android is weak and expensive)
  *
  * The tier is decided ONCE at module init (both checks are synchronous). Render
  * it as a `StyleSheet.absoluteFill` background behind your content; it is
  * `pointerEvents="none"` so touches pass through to the content above.
+ *
+ * The optional props exist for surfaces that need a different glass recipe than
+ * the app chrome, such as the call keypad keys, which follow Apple's dial pad.
+ * Leave them out and the surface looks exactly as it always did.
  */
 
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { ReactNode } from 'react';
 import { BlurView } from 'expo-blur';
-import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { GlassView, isLiquidGlassAvailable, type GlassStyle } from 'expo-glass-effect';
 
 type Tier = 'glass' | 'blur' | 'solid';
 
@@ -31,37 +35,59 @@ export function GlassSurface({
   children,
   style,
   radius = 0,
+  glassStyle = 'regular',
+  tintColor,
+  blurIntensity = 60,
+  solidColor,
 }: {
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
   /**
    * Corner radius. Applied to BOTH the clipping container and the native
-   * blur/glass element so rounded corners stay smooth and continuous —
-   * clipping a blur via overflow alone leaves rough edges on iOS.
+   * blur or glass element so rounded corners stay smooth and continuous.
+   * Clipping a blur with overflow alone leaves rough edges on iOS.
    */
   radius?: number;
+  /** 'clear' is thinner and lets more of the backdrop through than 'regular'. */
+  glassStyle?: GlassStyle;
+  /** Tints the glass, and tints the blur and solid tiers with the same color. */
+  tintColor?: string;
+  /** Blur strength on the pre iOS 26 tier. */
+  blurIntensity?: number;
+  /** Fill for the Android tier when the default elevated surface is wrong. */
+  solidColor?: string;
 }) {
   const round = radius ? { borderRadius: radius } : null;
   return (
     <View style={[style, radius ? { borderRadius: radius, overflow: 'hidden' } : null]}>
       {GLASS_TIER === 'glass' ? (
         <GlassView
-          glassEffectStyle="regular"
+          glassEffectStyle={glassStyle}
+          tintColor={tintColor}
           colorScheme="dark"
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, round]}
         />
       ) : GLASS_TIER === 'blur' ? (
         <BlurView
-          intensity={60}
+          intensity={blurIntensity}
           tint="systemChromeMaterialDark"
           pointerEvents="none"
-          style={[StyleSheet.absoluteFill, round]}
+          style={[
+            StyleSheet.absoluteFill,
+            round,
+            tintColor ? { backgroundColor: tintColor } : null,
+          ]}
         />
       ) : (
         <View
           pointerEvents="none"
-          style={[StyleSheet.absoluteFill, styles.solid, round]}
+          style={[
+            StyleSheet.absoluteFill,
+            styles.solid,
+            round,
+            solidColor ? { backgroundColor: solidColor } : null,
+          ]}
         />
       )}
       {children}

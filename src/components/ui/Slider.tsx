@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
-import { View, PanResponder, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { useCallback } from 'react';
+import { View, StyleSheet } from 'react-native';
+import NativeSlider from '@react-native-community/slider';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 interface SliderProps {
   /** Current value, 0..1. */
@@ -11,16 +13,16 @@ interface SliderProps {
 }
 
 /**
- * Minimal horizontal slider (0..1), gesture-driven via PanResponder — the app
- * has no @react-native-community/slider, and this keeps the Mixer dependency-free.
- * Inner views are pointerEvents="none" so the container owns every touch and
- * locationX stays relative to the track.
+ * Horizontal slider (0..1) backed by each OS's native control (UISlider on
+ * iOS, SeekBar on Android) through @react-native-community/slider.
  *
- * `disabled` and `onChange` are read through refs: the PanResponder is created
- * ONCE (useRef), so reading the props directly captured their mount-time values.
- * A slider mounted disabled (every effect row on a dry clip, a mixer channel
- * with record off) then ignored touches forever, even after its row was
- * switched on.
+ * It replaced a JS PanResponder track: inside a BottomSheet the sheet's
+ * native pan gesture (react-native-gesture-handler) took over the touch on the
+ * first few pixels of movement, so the old track only ever saw the initial
+ * touch down. Sliding did nothing, tapping set the value (Sep 12 2026 report).
+ * The native control tracks the drag itself, and it is declared to the
+ * gesture system with Gesture.Native so an enclosing GestureDetector treats it
+ * as a real native gesture participant instead of cancelling it.
  */
 export function Slider({
   value,
@@ -29,51 +31,32 @@ export function Slider({
   thumbColor = '#FFFFFF',
   disabled = false,
 }: SliderProps) {
-  const widthRef = useRef(0);
-  const [width, setWidth] = useState(0);
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  const update = (x: number) => {
-    if (widthRef.current <= 0 || disabledRef.current) return;
-    onChangeRef.current(Math.max(0, Math.min(1, x / widthRef.current)));
-  };
-
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabledRef.current,
-      onMoveShouldSetPanResponder: () => !disabledRef.current,
-      onPanResponderGrant: (e) => update(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => update(e.nativeEvent.locationX),
-    })
-  ).current;
-
-  const onLayout = (e: LayoutChangeEvent) => {
-    widthRef.current = e.nativeEvent.layout.width;
-    setWidth(e.nativeEvent.layout.width);
-  };
-
   const clamped = Math.max(0, Math.min(1, value));
-  const thumbX = clamped * width;
+  const handleChange = useCallback(
+    (next: number) => {
+      if (disabled) return;
+      onChange(Math.max(0, Math.min(1, next)));
+    },
+    [disabled, onChange]
+  );
 
   return (
-    <View
-      style={[styles.container, disabled && styles.disabled]}
-      onLayout={onLayout}
-      {...pan.panHandlers}
-    >
-      <View pointerEvents="none" style={styles.track} />
-      <View
-        pointerEvents="none"
-        style={[styles.fill, { width: thumbX, backgroundColor: minimumTrackColor }]}
-      />
-      <View
-        pointerEvents="none"
-        style={[styles.thumb, { left: thumbX - 9, backgroundColor: thumbColor }]}
-      />
-    </View>
+    <GestureDetector gesture={Gesture.Native()}>
+      <View style={[styles.container, disabled && styles.disabled]}>
+        <NativeSlider
+          style={styles.slider}
+          value={clamped}
+          minimumValue={0}
+          maximumValue={1}
+          step={0}
+          disabled={disabled}
+          onValueChange={handleChange}
+          minimumTrackTintColor={minimumTrackColor}
+          maximumTrackTintColor="#333333"
+          thumbTintColor={thumbColor}
+        />
+      </View>
+    </GestureDetector>
   );
 }
 
@@ -85,25 +68,8 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.4,
   },
-  track: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#333333',
-  },
-  fill: {
-    position: 'absolute',
-    height: 4,
-    borderRadius: 2,
-    left: 0,
-  },
-  thumb: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
+  slider: {
+    width: '100%',
+    height: 36,
   },
 });

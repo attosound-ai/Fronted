@@ -97,7 +97,11 @@
     "upgradeFailed": "Falha ao processar o upgrade. Tente novamente.",
     "cancelFailed": "Falha ao cancelar. Tente novamente.",
     "title": "Erro",
-    "usernameTaken": "Este nome de usuário já está em uso"
+    "usernameTaken": "Este nome de usuário já está em uso",
+    "avatarUploadTitle": "A foto não foi enviada",
+    "avatarUploadMessage": "A conexão falhou ao enviar sua foto. Tente de novo ou continue sem foto e adicione depois no seu perfil.",
+    "avatarUploadRetry": "Tentar de novo",
+    "avatarUploadSkip": "Continuar sem foto"
   },
   "phoneInput": {
     "placeholder": "Número de telefone",

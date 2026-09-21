@@ -1,16 +1,23 @@
 import React, { useEffect } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallStore } from '@/stores/callStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useMountEffect } from '@/hooks';
+import { useFeatureFlag } from '@/lib/analytics';
+import { INCALL_EDITOR_AUTOLOAD_FLAG } from '@/hooks/useConnectedCallLanding';
 import { ActiveCallScreen } from '@/components/call/ActiveCallScreen';
 import { SimpleRecordingScreen } from '@/components/call/SimpleRecordingScreen';
 
 export default function RecordingScreen() {
   const recordState = useSubscriptionStore((s) => s.entitlementState('record_upload'));
   const hasAdvancedProduction = useSubscriptionStore((s) =>
-    s.hasEntitlement('advanced_production'),
+    s.hasEntitlement('advanced_production')
   );
+  const editorFlagOn = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
+  // Set by the project picker: the user chose a project on purpose, so the
+  // editor opens with it instead of the plain recorder.
+  const { editor } = useLocalSearchParams<{ editor?: string }>();
+  const editorRequested = editor === '1';
 
   // Redirect away ONLY once we're certain the user is NOT record-capable
   // (entitlementState === false). While it's still unknown (null — store not
@@ -42,8 +49,13 @@ export default function RecordingScreen() {
     router.replace('/(tabs)');
   };
 
-  if (hasAdvancedProduction) {
-    return <ActiveCallScreen onBack={handleBack} />;
+  // A call always lands on the recorder everyone knows: call controls on top,
+  // the red record button at the bottom. The in call editor only takes over
+  // for the cohort that has its flag on. Without the flag ActiveCallScreen
+  // showed a bare "On call" placeholder, and once the free plan was granted
+  // advanced_production every new creator landed on it (Sep 20 2026).
+  if (hasAdvancedProduction && (editorFlagOn || editorRequested)) {
+    return <ActiveCallScreen onBack={handleBack} openEditor={editorRequested} />;
   }
 
   return <SimpleRecordingScreen onBack={handleBack} />;

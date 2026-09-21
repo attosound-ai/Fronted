@@ -61,6 +61,11 @@ export function CallAudioInjectionHost() {
   const isInjecting = useCallStore(
     (s) => s.injection?.state === 'playing' || s.injection?.state === 'preparing'
   );
+  // Engine mode (Sep 15 2026): the call playback session keeps its monitor ON
+  // for the whole call (the rep always hears what plays; the feed mute button
+  // acts on the video's claim instead). The legacy monitor coupling below is
+  // for the fallback path only.
+  const engineMode = useCallStore((s) => s.playback.engineMode);
   const prevMonitorRef = useRef<boolean | null>(null);
   // Whether THIS injection has already had its initial monitor applied.
   const armedForInjectionRef = useRef(false);
@@ -68,6 +73,7 @@ export function CallAudioInjectionHost() {
   // once per call no matter how many times the rep toggles the beat on/off.
   const hintedCallSidRef = useRef<string | null>(null);
   useEffect(() => {
+    if (engineMode) return;
     if (!isInjecting) {
       prevMonitorRef.current = null;
       armedForInjectionRef.current = false;
@@ -145,7 +151,7 @@ export function CallAudioInjectionHost() {
     } catch {
       // Engine may be tearing down; monitor is a comfort control, never fatal.
     }
-  }, [isInjecting, isMuted]);
+  }, [isInjecting, isMuted, engineMode]);
 
   // Stop the engine the instant the call ends (sid → null). Idempotent + safe.
   const prevSidRef = useRef<string | null>(null);

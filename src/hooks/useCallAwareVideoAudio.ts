@@ -26,12 +26,32 @@ import { useVideoSoundStore } from '@/stores/videoSoundStore';
  * `useTwilioVoice`'s onConnected for the case where a video already held
  * Playback before the call connected.
  */
+/**
+ * The mute a video player must actually carry right now: the user's global
+ * choice OR the call's force mute (legacy injection live, or engine video
+ * mode for the whole call). Every component's own `player.muted = isMuted`
+ * effect runs AFTER this hook's force mute (declaration order), so those
+ * effects must go through this helper or a sound toggle mid call would unmute
+ * the local copy and the far party would hear it twice.
+ */
+export function effectiveVideoMuted(isMuted: boolean): boolean {
+  const call = useCallStore.getState();
+  const injecting =
+    call.injection?.state === 'playing' || call.injection?.state === 'preparing';
+  return isMuted || injecting || call.playback.engineVideo;
+}
+
 export function useCallAwareVideoAudio(player: VideoPlayer | null | undefined): void {
   const inCall = useCallStore((s) => s.activeCall != null);
   const isMuted = useVideoSoundStore((s) => s.isMuted);
   const isInjecting = useCallStore(
     (s) => s.injection?.state === 'playing' || s.injection?.state === 'preparing'
   );
+  // Engine video mode (Sep 15 2026): latched per call, every video's audio plays
+  // through the engine session, so the local player stays muted for the whole
+  // call, ads included.
+  const engineVideo = useCallStore((s) => s.playback.engineVideo);
+  const forceMuted = isInjecting || engineVideo;
 
   useEffect(() => {
     if (!player) return;
@@ -56,10 +76,15 @@ export function useCallAwareVideoAudio(player: VideoPlayer | null | undefined): 
   // one — "mete un audio externo". The rep still hears the injected track via the
   // engine's monitor path (which IS echo-cancelled correctly). Restores the user's
   // global mute preference when injection stops.
+  //
+  // The same force mute applies while the call is in engine video mode: there the
+  // player's audio track is played by the engine session for the whole call (the
+  // session is inside the echo canceller's reference), so the local copy must
+  // never reach the speaker. This covers ads too, which never claim the session.
   useEffect(() => {
     if (!player) return;
     try {
-      if (isInjecting) {
+      if (forceMuted) {
         player.muted = true;
       } else {
         player.muted = useVideoSoundStore.getState().isMuted;
@@ -70,5 +95,5 @@ export function useCallAwareVideoAudio(player: VideoPlayer | null | undefined): 
     // isMuted is in the deps so a mute toggle re-applies immediately once
     // injection ends (while injecting the player stays force-muted by design;
     // the rep's monitor is what the mute button drives — CallAudioInjectionHost).
-  }, [player, isInjecting, isMuted]);
+  }, [player, forceMuted, isMuted]);
 }

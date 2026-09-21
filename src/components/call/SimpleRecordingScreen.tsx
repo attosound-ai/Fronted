@@ -780,6 +780,10 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
 
       <BottomSheet
         visible={uploadSheetVisible}
+        // Native sheet: while the upload must not be interrupted the sheet
+        // itself refuses swipe / backdrop dismissal instead of relying on the
+        // onClose guard alone.
+        dismissible={uploadSheetCanClose}
         onClose={() => {
           console.log('[SimpleRecording] bottomSheet:onClose', {
             uploadSheetCanClose,

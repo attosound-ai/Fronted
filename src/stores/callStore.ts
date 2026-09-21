@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ActiveCall, ActiveCallState } from '@/types/call';
 import type { InjectionSnapshot } from '@/lib/callAudio/AudioInjector';
+import { IDLE_PLAYBACK, type PlaybackSnapshot } from '@/lib/callAudio/session/types';
 
 interface CallStoreState {
   activeCall: ActiveCall | null;
@@ -17,6 +18,11 @@ interface CallStoreState {
   // null when nothing is being injected. Cleared on endCall so a hang-up can
   // never strand a playing engine in the UI.
   injection: InjectionSnapshot | null;
+  // Call playback session mirror (Sep 15 2026): what the native engine is
+  // playing during the call, who owns it, and the 📡 transmit gate. Every
+  // surface reads `playback.engineMode` to decide between the engine and its
+  // own expo player; the legacy `injection` above stays for the fallback path.
+  playback: PlaybackSnapshot;
   // True when Twilio is reporting network-quality warnings (high jitter / packet
   // loss / RTT / low MOS). Drives the "Weak signal" chip so a user attributes
   // cutouts to their connection, not the app (Anthony, Aug 5: "not 100% sure it
@@ -60,6 +66,7 @@ interface CallStoreActions {
   showRoutePicker: () => void;
   hideRoutePicker: () => void;
   setInjection: (snapshot: InjectionSnapshot | null) => void;
+  setPlayback: (snapshot: PlaybackSnapshot) => void;
   setNetworkWeak: (weak: boolean) => void;
   endCall: () => void;
 }
@@ -72,6 +79,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   keypadVisible: false,
   routePickerVisible: false,
   injection: null,
+  playback: IDLE_PLAYBACK,
   networkWeak: false,
 
   setRegistered: (registered, error = null) =>
@@ -200,8 +208,12 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
 
   setInjection: (snapshot) => set({ injection: snapshot }),
 
+  setPlayback: (snapshot) => set({ playback: snapshot }),
+
   setNetworkWeak: (weak) => set({ networkWeak: weak }),
 
+  // `playback` is NOT reset here: the controller owns it and resets it itself
+  // when it sees the sid go null (it must stop the native session first).
   endCall: () =>
     set({
       activeCall: null,

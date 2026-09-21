@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   useAudioPlayer,
   useAudioPlayerStatus,
@@ -8,6 +8,9 @@ import {
 import { useCallStore } from '@/stores/callStore';
 import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useCallPlayback } from '@/lib/callAudio/session/useCallPlayback';
+import { buildSequentialSpec, stemSetKey } from '@/lib/callAudio/session/mixSpec';
+import type { PlaybackSource } from '@/lib/callAudio/session/types';
 import type { AudioSegment } from '@/types/call';
 
 /**
@@ -27,7 +30,29 @@ export function useSimpleRecordingPlayback(
   // reconfigure the iOS audio session and interrupt call audio.
   const hasSegments = segments.length > 0;
   const currentUrl = hasSegments ? (segments[currentIndex]?.downloadUrl ?? null) : null;
-  const player = useAudioPlayer(currentUrl, {
+
+  // Engine call (Sep 15 2026): during an engine call the takes play through the
+  // native session as ONE sequential stem (segments concatenated in order), and
+  // the expo player below gets no source at all.
+  const stems = useMemo(
+    () => [
+      buildSequentialSpec(
+        segments.flatMap((s) =>
+          s.downloadUrl ? [{ uri: s.downloadUrl, durationMs: s.durationMs ?? 0 }] : []
+        )
+      ),
+    ],
+    [segments]
+  );
+  const stemKey = stemSetKey(stems);
+  const engineSource = useMemo<PlaybackSource | null>(
+    () => (hasSegments ? { type: 'stems', kind: 'take', stems, key: stemKey } : null),
+    [hasSegments, stems, stemKey]
+  );
+  const engine = useCallPlayback(`take:${stemKey}`, 'take', engineSource);
+  const engineMode = engine.engineMode;
+
+  const player = useAudioPlayer(engineMode ? null : currentUrl, {
     updateInterval: 500,
     keepAudioSessionActive: true,
   });
@@ -107,6 +132,22 @@ export function useSimpleRecordingPlayback(
 
   const play = useCallback(async () => {
     if (segments.length === 0) return;
+    if (engineMode) {
+      // Engine branch: no audio mode dance, the session lives inside the call's
+      // audio unit. Same telemetry event so the two paths compare side by side.
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_PLAYBACK, {
+        action: 'play',
+        url_kind: currentUrl?.startsWith('file://') ? 'local_file' : 'remote',
+        file_duration_ms: engine.durationMs,
+        is_loaded: engine.status !== 'idle' && engine.status !== 'preparing',
+        segment_count: segments.length,
+        engine_mode: true,
+      });
+      stoppedByUserRef.current = false;
+      lastHandledFinishRef.current = false;
+      void engine.play(0);
+      return;
+    }
     // During a call: set PlayAndRecord + mixWithOthers so audio
     // coexists with Twilio VoIP instead of overriding it.
     const call = useCallStore.getState().activeCall;
@@ -140,24 +181,41 @@ export function useSimpleRecordingPlayback(
       player.seekTo(0);
       player.play();
     }
-  }, [segments.length, isPlaying, player, currentUrl, status.duration, status.isLoaded]);
+  }, [
+    segments.length,
+    isPlaying,
+    player,
+    currentUrl,
+    status.duration,
+    status.isLoaded,
+    engineMode,
+    engine,
+  ]);
 
   const stop = useCallback(() => {
+    if (engineMode) {
+      stoppedByUserRef.current = true;
+      void engine.pause().then(() => engine.seek(0));
+      return;
+    }
     stoppedByUserRef.current = true;
     player.pause();
     player.seekTo(0);
     setIsPlaying(false);
     setCurrentIndex(0);
     reclaimCallAudio();
-  }, [player]);
+  }, [player, engineMode, engine]);
+
+  // In engine mode the session is the source of truth for "playing".
+  const isPlayingNow = engineMode ? engine.isPlaying : isPlaying;
 
   const toggle = useCallback(() => {
-    if (isPlaying) {
+    if (isPlayingNow) {
       stop();
     } else {
       play();
     }
-  }, [isPlaying, play, stop]);
+  }, [isPlayingNow, play, stop]);
 
   function reclaimCallAudio() {
     const call = useCallStore.getState().activeCall;
@@ -174,9 +232,9 @@ export function useSimpleRecordingPlayback(
   }
 
   return {
-    isPlaying,
-    amplitude,
-    currentTime: status.currentTime ?? 0,
+    isPlaying: isPlayingNow,
+    amplitude: engineMode ? Math.min(1, engine.levelRms * 3) : amplitude,
+    currentTime: engineMode ? engine.positionMs / 1000 : (status.currentTime ?? 0),
     totalDuration,
     toggle,
     stop,

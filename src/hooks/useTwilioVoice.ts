@@ -1266,6 +1266,86 @@ async function recoverCallFromSDK(): Promise<any | null> {
   return null;
 }
 
+/**
+ * True when the native Voice SDK still holds a live call. The account-switch
+ * preflight uses this to tell a REAL active call apart from an ORPHANED
+ * callStore.activeCall — a call that ended without endCall() running, which
+ * would otherwise block account switching forever (Sep 8 2026 incident class).
+ * Fail-safe: on any SDK error we assume a call MAY be live so we never tear
+ * down a real call by mistake.
+ */
+export async function hasLiveNativeCall(): Promise<boolean> {
+  try {
+    const voice = getVoice();
+    const calls = await voice.getCalls();
+    return calls.size > 0;
+  } catch {
+    return true; // fail safe: assume live rather than risk killing a real call
+  }
+}
+
+/**
+ * Route a cold-adopted call to the linked account that OWNS it. The live
+ * onCallInvite auto-switch (see onCallInvite) cannot run for a cold-launch
+ * adopted call — the invite fired into a dead process — so a call for a linked
+ * CREATOR can be adopted while a REPRESENTATIVE account is active. It then runs
+ * invisibly (CallBanner is gated on the recording entitlement) AND blocks the
+ * user from switching to the owning account. This mirrors onCallInvite's
+ * auto-switch for the adoption path. Best-effort: on failure we keep the call
+ * on the current account and the in-call indicator + blocked-switch prompt
+ * cover the fallback.
+ */
+async function routeAdoptedCallToOwner(targetUserId: number, sid: string): Promise<void> {
+  const { useAccountStore } = await import('@/stores/accountStore');
+  if (Number(useAccountStore.getState().activeAccountId) === targetUserId) return;
+
+  // On a cold launch the linked-accounts list may still be hydrating; wait
+  // briefly for the target to appear before deciding it is truly not linked.
+  const WAIT_MS = [0, 300, 800];
+  let linked = false;
+  for (const delay of WAIT_MS) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    if (
+      useAccountStore.getState().accounts.some((a) => Number(a.user.id) === targetUserId)
+    ) {
+      linked = true;
+      break;
+    }
+  }
+  const fromId = useAccountStore.getState().activeAccountId;
+  if (!linked) {
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_TARGET_NOT_LINKED, {
+      call_sid: sid,
+      target_user_id: targetUserId,
+      active_account_id: fromId,
+    });
+    return;
+  }
+  analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_AUTO_SWITCH_STARTED, {
+    call_sid: sid,
+    from_account_id: fromId,
+    to_account_id: targetUserId,
+  });
+  try {
+    await useAccountStore.getState().switchToAccountForIncomingCall(targetUserId);
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_AUTO_SWITCH_SUCCEEDED, {
+      call_sid: sid,
+      account_id: targetUserId,
+    });
+  } catch (switchErr) {
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_AUTO_SWITCH_FAILED, {
+      call_sid: sid,
+      stage: 'switch',
+      to_account_id: targetUserId,
+      error: switchErr instanceof Error ? switchErr.message : String(switchErr),
+    });
+    Sentry.captureException(switchErr, {
+      tags: { feature: 'twilio-voice', step: 'cold-adopt-route' },
+      extra: { target_user_id: targetUserId },
+    });
+  }
+}
+
 // One adoption per call, across every probe trigger (boot + foreground).
 const adoptedColdCallSids = new Set<string>();
 
@@ -1299,6 +1379,30 @@ async function adoptNativeColdCall(trigger: string): Promise<void> {
     }
     activeCallObj = recovered;
     pendingInvite = null;
+
+    // Route the adopted call to its OWNING account BEFORE we hydrate the store,
+    // so all post-adopt context (identity, subscription, landing, audio
+    // attribution) belongs to the right account — mirroring onCallInvite. The
+    // telephony-service stamps TargetUserId on the call's custom parameters.
+    try {
+      const params =
+        typeof recovered.getCustomParameters === 'function'
+          ? (recovered.getCustomParameters() as Record<string, string>)
+          : {};
+      const targetUserId = Number(params?.TargetUserId);
+      if (Number.isFinite(targetUserId) && targetUserId > 0) {
+        await routeAdoptedCallToOwner(targetUserId, sid);
+      }
+    } catch (routeErr) {
+      // Never let routing break adoption — a call on the wrong account still
+      // beats a dropped call.
+      analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_AUTO_SWITCH_FAILED, {
+        call_sid: sid,
+        stage: 'param_parse',
+        error: routeErr instanceof Error ? routeErr.message : String(routeErr),
+      });
+    }
+
     // Creates the store's activeCall (state 'connected', direction 'inbound') —
     // this is what makes InCallTopBar render, DtmfKeypadHost auto-open (the
     // Securus press-1 path) and useConnectedCallLanding navigate.
@@ -1815,6 +1919,18 @@ let injectionDeviceInstalled = false;
 // installed for so each account re-installs, and re-assert on every call connect.
 let injectionDeviceUserId: string | number | null = null;
 
+/**
+ * Whether the custom engine is Twilio's active device FOR THE CURRENT ACCOUNT.
+ * The call playback session (lib/callAudio/session) latches its engine mode
+ * from this at connect: without the device installed the session's players do
+ * not exist and every surface must keep its expo player instead.
+ */
+export function isInjectionDeviceInstalled(): boolean {
+  if (!IS_IOS || !injectionDeviceInstalled) return false;
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  return injectionDeviceUserId === currentUserId;
+}
+
 export async function installInjectionDeviceIfEnabled(
   source: 'connect' | 'preinstall' = 'connect'
 ): Promise<void> {
@@ -1985,6 +2101,28 @@ export function hangUpCall() {
       disconnected ? 4000 : 0
     );
   })();
+}
+
+/**
+ * Hang up the current call and RESOLVE only once callStore.activeCall has
+ * actually cleared (or a bounded timeout elapses). Used by the "End call &
+ * switch" path: the account-switch preflight refuses while activeCall != null,
+ * and hangUpCall() disconnects asynchronously (+ watchdog), so the caller must
+ * wait for teardown before switching rather than assume synchronous clearing.
+ */
+export async function endCallAndWait(timeoutMs = 4000): Promise<void> {
+  if (useCallStore.getState().activeCall == null) return;
+  hangUpCall();
+  const start = Date.now();
+  while (useCallStore.getState().activeCall != null) {
+    if (Date.now() - start > timeoutMs) {
+      // hangUpCall's watchdog guarantees eventual clearing, but force it now so
+      // the pending switch is never blocked by a lingering store entry.
+      useCallStore.getState().endCall();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 export async function toggleMuteCall() {

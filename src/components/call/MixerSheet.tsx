@@ -91,6 +91,9 @@ export function MixerSheet({ visible, onClose }: MixerSheetProps) {
       <View style={styles.body}>
         <Text style={styles.sectionLabel}>{t('mixer.recordingChannels')}</Text>
         <Text style={styles.sectionHint}>{t('mixer.recordingHint')}</Text>
+        {/* The app channel is tapped BEFORE the transmit gate: it carries what
+            the rep hears, whether or not the far party does (Sep 15 2026). */}
+        <Text style={styles.sectionHint}>{t('mixer.appHint')}</Text>
         {RECORD_CHANNELS.map((ch) => {
           const meta = CHANNEL_META[ch];
           const state = channels[ch];

@@ -38,7 +38,8 @@
     "laneName": "Lane Name",
     "laneNamePrompt": "Enter a name for lane {{number}}",
     "recBadge": "REC",
-    "micPermissionRequired": "Microphone permission is required to record."
+    "micPermissionRequired": "Microphone permission is required to record.",
+    "hideKeypad": "Hide"
   },
   "audioProblem": {
     "title": "Audio problem",
@@ -52,6 +53,11 @@
     "tapToRecord": "Tap to Record",
     "callInProgress": "Call in progress",
     "openRecordScreen": "Open Record"
+  },
+  "activeIndicator": {
+    "default": "On a call, tap to manage",
+    "withLabel": "On a call with {{label}}",
+    "a11y": "Return to active call"
   },
   "simple": {
     "delete": "Delete",
@@ -89,14 +95,25 @@
     "app": "Backing track",
     "metronome": "Metronome",
     "bpm": "BPM",
-    "recordingHint": "Off records a clean take to layer over your tracks. Turn one on to bake it into the recording."
+    "recordingHint": "Off records a clean take to layer over your tracks. Turn one on to bake it into the recording.",
+    "appHint": "App audio is what you hear in the call."
   },
   "transmit": {
     "offline": "You're offline. Connect to send music into the call.",
     "weakSignal": "Weak signal. The track didn't load. Tap again to retry.",
     "failed": "Couldn't send that into the call.",
     "preparing": "Loading track...",
-    "noTrack": "Open a project with a track first."
+    "noTrack": "Open a project with a track first.",
+    "armed": "Ready. Whatever you play now, they hear too.",
+    "live": "They hear it",
+    "mutedByMic": "Your mic is muted, so they hear nothing.",
+    "a11yOn": "Stop sharing what you hear with the call",
+    "a11yOff": "Share what you hear with the call",
+    "silentDetected": "The call may not be receiving the audio. Tap the share button off and on."
+  },
+  "playback": {
+    "preparing": "Preparing...",
+    "adsSilentInCall": "Ads stay silent during calls."
   },
   "recordingSavedOffline": "Weak signal. Your recording is saved on this phone and will upload when you reconnect.",
   "routePicker": {

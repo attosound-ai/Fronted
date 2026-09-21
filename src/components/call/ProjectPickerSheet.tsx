@@ -36,7 +36,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
   const handleSelectProject = (projectId: string) => {
     setActiveProjectId(projectId);
     handleClose();
-    router.push('/recording');
+    router.push('/recording?editor=1');
   };
 
   const handleCreateSubmit = () => {
@@ -47,7 +47,7 @@ export function ProjectPickerSheet({ visible, onClose }: ProjectPickerSheetProps
         onSuccess: (project) => {
           setActiveProjectId(project.id);
           handleClose();
-          router.push('/recording');
+          router.push('/recording?editor=1');
         },
         onError: () => {
           showToast(t('common:toasts.failedToCreateProject'));

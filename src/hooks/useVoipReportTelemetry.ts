@@ -133,6 +133,10 @@ export function useVoipReportTelemetry(): void {
           cold_engine_preinstalled_ms: since(s.coldEnginePreinstalledAt ?? null),
           cold_engine_already_ms: since(s.coldEngineAlreadyInstalledAt ?? null),
           cold_engine_preinstall_failed_ms: since(s.coldEnginePreinstallFailedAt ?? null),
+          // Sep 13 2026: set when an already installed device was reset at push
+          // so this call started on fresh engines (the reused engine fix).
+          cold_engine_reset_ms: since(s.coldEngineResetAt ?? null),
+          cold_engine_reset_unavailable_ms: since(s.coldEngineResetUnavailableAt ?? null),
           // Join key to call_* events (same Twilio CallSid) and to the Sentry
           // cold_callkit breadcrumbs of any crash in this window.
           cold_call_sid: s.coldLastCallSid || null,

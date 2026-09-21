@@ -38,7 +38,8 @@
     "laneName": "Nome da Faixa",
     "laneNamePrompt": "Digite um nome para a faixa {{number}}",
     "recBadge": "REC",
-    "micPermissionRequired": "É necessária permissão do microfone para gravar."
+    "micPermissionRequired": "É necessária permissão do microfone para gravar.",
+    "hideKeypad": "Ocultar"
   },
   "audioProblem": {
     "title": "Problema de áudio",
@@ -52,6 +53,11 @@
     "tapToRecord": "Toque para Gravar",
     "callInProgress": "Chamada em andamento",
     "openRecordScreen": "Abrir gravação"
+  },
+  "activeIndicator": {
+    "default": "Em uma chamada, toque para gerenciar",
+    "withLabel": "Em uma chamada com {{label}}",
+    "a11y": "Voltar para a chamada ativa"
   },
   "simple": {
     "delete": "Excluir",
@@ -89,14 +95,25 @@
     "app": "Faixa de fundo",
     "metronome": "Metrônomo",
     "bpm": "BPM",
-    "recordingHint": "Desligado grava uma toma limpa para sobrepor. Ligue um para incluí-lo na gravação."
+    "recordingHint": "Desligado grava uma toma limpa para sobrepor. Ligue um para incluí-lo na gravação.",
+    "appHint": "O áudio do app é o que você ouve na chamada."
   },
   "transmit": {
     "offline": "Você está sem conexão. Conecte-se para enviar música na chamada.",
     "weakSignal": "Sinal fraco. A faixa não carregou. Toque de novo para tentar.",
     "failed": "Não foi possível enviar isso na chamada.",
     "preparing": "Carregando faixa...",
-    "noTrack": "Abra um projeto com uma faixa primeiro."
+    "noTrack": "Abra um projeto com uma faixa primeiro.",
+    "armed": "Pronto. O que você tocar agora, eles também ouvem.",
+    "live": "Eles estão ouvindo",
+    "mutedByMic": "Seu microfone está mudo, então eles não ouvem nada.",
+    "a11yOn": "Parar de compartilhar o que você ouve com a chamada",
+    "a11yOff": "Compartilhar o que você ouve com a chamada",
+    "silentDetected": "A chamada pode não estar recebendo o áudio. Desligue e ligue o botão de compartilhar."
+  },
+  "playback": {
+    "preparing": "Preparando...",
+    "adsSilentInCall": "Os anúncios ficam mudos durante as chamadas."
   },
   "recordingSavedOffline": "Sinal fraco. Sua gravação foi salva neste telefone e será enviada quando reconectar.",
   "routePicker": {

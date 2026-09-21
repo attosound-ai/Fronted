@@ -1,32 +1,43 @@
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Text } from '@/components/ui/Text';
-import { GlassSurface } from '@/components/navigation/GlassSurface';
+import { GlassSurface, GLASS_TIER } from '@/components/navigation/GlassSurface';
 import { haptic } from '@/lib/haptics/hapticService';
 import { playDtmfTone } from '@/lib/sound/callSounds';
-import { COLORS, SPACING } from '@/constants/theme';
 
 /**
- * Pure, SDK-agnostic DTMF dialpad. It knows nothing about Twilio, the call
- * store, or networking — it only renders a 4×3 grid and reports which key was
- * pressed via `onPressDigit`. The caller decides what to do with the digit
- * (e.g. forward it to the telephony adapter's `sendCallDigit`).
+ * DTMF dial pad drawn like the Apple Phone keypad: circular Liquid Glass keys,
+ * the digit over its letter row, and the system font so the glyphs match the
+ * ones people already know. It stays SDK agnostic: it knows nothing about
+ * Twilio, the call store or networking, it only renders the 4 by 3 grid and
+ * reports which key was pressed through `onPressDigit`.
+ *
+ * Metrics follow Apple's dial pad: 75 pt keys, 28 pt between columns, 14 pt
+ * between rows, a 36 pt digit and a 10 pt letter row with wide tracking.
  */
-const ROWS: ReadonlyArray<ReadonlyArray<string>> = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
-  ['*', '0', '#'],
+const ROWS: readonly (readonly { digit: string; letters?: string }[])[] = [
+  [{ digit: '1' }, { digit: '2', letters: 'ABC' }, { digit: '3', letters: 'DEF' }],
+  [
+    { digit: '4', letters: 'GHI' },
+    { digit: '5', letters: 'JKL' },
+    { digit: '6', letters: 'MNO' },
+  ],
+  [
+    { digit: '7', letters: 'PQRS' },
+    { digit: '8', letters: 'TUV' },
+    { digit: '9', letters: 'WXYZ' },
+  ],
+  [{ digit: '*' }, { digit: '0', letters: '+' }, { digit: '#' }],
 ];
 
 interface DtmfKeypadProps {
   onPressDigit: (digit: string) => void;
   /**
-   * Reports EVERY physical key tap — including taps that are dropped because
+   * Reports EVERY physical key tap, including taps that are dropped because
    * the keypad is `disabled` (call not yet connected). Kept separate from
    * `onPressDigit` (which only fires for live sends) so the caller can record
    * dropped taps, the biggest blind spot in the Securus "press 1" flow. The
-   * component stays SDK/analytics-agnostic; it only reports the raw tap.
+   * component stays agnostic of the SDK and of analytics: it only reports the
+   * raw tap.
    */
   onKeyTap?: (digit: string, meta: { disabled: boolean }) => void;
   disabled?: boolean;
@@ -43,37 +54,69 @@ export function DtmfKeypad({
     onKeyTap?.(digit, { disabled });
     if (disabled) return;
     void haptic('selection');
-    playDtmfTone(digit); // authentic dual-tone, mixes over the live call
+    playDtmfTone(digit); // authentic dual tone, mixes over the live call
     onPressDigit(digit);
   };
 
   return (
-    <View style={styles.grid}>
+    <View style={[styles.grid, disabled && styles.gridDisabled]}>
       {ROWS.map((row) => (
-        <View key={row.join('')} style={styles.row}>
-          {row.map((digit) => (
-            <GlassSurface
+        <View key={row.map((k) => k.digit).join('')} style={styles.row}>
+          {row.map(({ digit, letters }) => (
+            <Pressable
               key={digit}
-              radius={KEY_SIZE / 2}
-              style={[styles.key, disabled && styles.keyDisabled]}
+              onPress={() => press(digit)}
+              // NOT natively `disabled`: a disabled pressable swallows the tap
+              // entirely, so a dropped "press 1" would leave no trace. The
+              // disabled LOOK stays (dimmed grid, no press highlight, a11y
+              // state) while `press` still receives and reports the tap.
+              accessibilityRole="button"
+              accessibilityLabel={digit}
+              accessibilityHint={letters}
+              accessibilityState={{ disabled }}
+              style={styles.keyPressable}
             >
-              <TouchableOpacity
-                style={styles.keyInner}
-                onPress={() => press(digit)}
-                // NOT `disabled` natively: a native-disabled Touchable swallows
-                // the tap entirely, so a dropped "press 1" would leave no trace.
-                // We keep the disabled LOOK (style + no active flash + a11y state)
-                // but still receive onPress so `press` can report the dropped tap.
-                activeOpacity={disabled ? 1 : 0.6}
-                accessibilityRole="button"
-                accessibilityLabel={digit}
-                accessibilityState={{ disabled }}
-              >
-                <Text variant="h2" style={styles.keyLabel}>
-                  {digit}
-                </Text>
-              </TouchableOpacity>
-            </GlassSurface>
+              {({ pressed }) => (
+                <GlassSurface
+                  radius={KEY_SIZE / 2}
+                  glassStyle="clear"
+                  tintColor={
+                    GLASS_TIER === 'glass'
+                      ? pressed && !disabled
+                        ? KEY_TINT_PRESSED
+                        : KEY_TINT
+                      : undefined
+                  }
+                  style={styles.key}
+                >
+                  {/* The pre iOS 26 tiers get the same lift from a plain
+                      overlay: the blur and the solid fill do not tint. */}
+                  {GLASS_TIER !== 'glass' && (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        styles.legacyFill,
+                        pressed && !disabled && styles.legacyFillPressed,
+                      ]}
+                    />
+                  )}
+                  <View style={styles.keyContent}>
+                    <Text
+                      style={[styles.digit, digit === '*' && styles.asterisk]}
+                      allowFontScaling={false}
+                    >
+                      {digit}
+                    </Text>
+                    {letters ? (
+                      <Text style={styles.letters} allowFontScaling={false}>
+                        {letters}
+                      </Text>
+                    ) : null}
+                  </View>
+                </GlassSurface>
+              )}
+            </Pressable>
           ))}
         </View>
       ))}
@@ -81,33 +124,73 @@ export function DtmfKeypad({
   );
 }
 
-const KEY_SIZE = 72;
+const KEY_SIZE = 75;
+const COLUMN_GAP = 28;
+const ROW_GAP = 14;
+/** Apple's keys read as a light fill over whatever sits behind the sheet. */
+const KEY_TINT = 'rgba(255,255,255,0.14)';
+const KEY_TINT_PRESSED = 'rgba(255,255,255,0.42)';
+
+/** The dial pad is one of the few places that uses the system font on purpose:
+ *  Apple's digits are SF Pro and the app's Archivo reads as a different keypad. */
+const SYSTEM_FONT = Platform.select({ ios: undefined, default: 'sans-serif' });
 
 const styles = StyleSheet.create({
   grid: {
     alignItems: 'center',
-    gap: SPACING.md,
-    paddingVertical: SPACING.sm,
+    gap: ROW_GAP,
+  },
+  gridDisabled: {
+    opacity: 0.4,
   },
   row: {
     flexDirection: 'row',
-    gap: SPACING.xl,
+    gap: COLUMN_GAP,
+  },
+  keyPressable: {
+    width: KEY_SIZE,
+    height: KEY_SIZE,
+    borderRadius: KEY_SIZE / 2,
   },
   key: {
     width: KEY_SIZE,
     height: KEY_SIZE,
-    // GlassSurface renders the frosted-glass fill + radius (same as the in-call
-    // bar buttons); the key just sizes it. No solid background/border here.
   },
-  keyInner: {
+  legacyFill: {
+    backgroundColor: KEY_TINT,
+  },
+  legacyFillPressed: {
+    backgroundColor: KEY_TINT_PRESSED,
+  },
+  keyContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyDisabled: {
-    opacity: 0.4,
+  digit: {
+    color: '#FFFFFF',
+    fontFamily: SYSTEM_FONT,
+    fontSize: 36,
+    fontWeight: '400',
+    lineHeight: 42,
+    includeFontPadding: false,
+    textAlign: 'center',
   },
-  keyLabel: {
-    color: COLORS.white,
+  asterisk: {
+    // The asterisk glyph hangs high in SF Pro, so Apple nudges it down to sit
+    // on the same optical center as the digits.
+    lineHeight: 52,
+    fontSize: 38,
+  },
+  letters: {
+    color: '#FFFFFF',
+    fontFamily: SYSTEM_FONT,
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 2,
+    lineHeight: 12,
+    marginTop: 1,
+    includeFontPadding: false,
+    textAlign: 'center',
   },
 });

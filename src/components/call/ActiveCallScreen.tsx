@@ -19,6 +19,8 @@ import { COLORS } from '@/constants/theme';
 
 interface ActiveCallScreenProps {
   onBack: () => void;
+  /** The user picked a project on purpose: skip the plain screen, open the editor. */
+  openEditor?: boolean;
 }
 
 // Hard ceiling for downloading the exported WAV to the device. Generous enough
@@ -36,7 +38,7 @@ const DOWNLOAD_TIMEOUT_MS = 60_000;
  * NOT inject a second green bar here (that produced the doubled-green header).
  * TimelineEditor reserves the bar's height at the top so its own header clears it.
  */
-export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
+export function ActiveCallScreen({ onBack, openEditor = false }: ActiveCallScreenProps) {
   const { t } = useTranslation('calls');
   const queryClient = useQueryClient();
   const activeProjectId = useCallStore((s) => s.activeProjectId);
@@ -48,7 +50,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
   // call never touches the heavy path. Re-enable per-cohort via the flag once the
   // editor's in-call memory is reduced. See useConnectedCallLanding for the flag.
   const editorFlagOn = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
-  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(openEditor);
   const showEditor = editorFlagOn || manualOpen;
 
   const { data, isLoading } = useProjectDetail(showEditor ? (activeProjectId ?? '') : '');
@@ -87,7 +89,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
   }, [queryClient]);
 
   const handlePublish = useCallback(
-    async (result: ExportResult, durationMs: number) => {
+    async (result: ExportResult, durationMs: number, coverUri?: string) => {
       const localUri = `${FileSystem.cacheDirectory}export_${activeProjectId}_${Date.now()}.wav`;
       // Download the exported WAV to the device before handing it to the
       // post composer. This is the phase we suspected of the "Publicar tardó
@@ -127,6 +129,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
         uri: localUri,
         fileName: `${data?.project.name ?? 'project'}.wav`,
         durationMs,
+        coverUri,
       });
       router.push('/create-post');
     },
@@ -201,6 +204,7 @@ export function ActiveCallScreen({ onBack }: ActiveCallScreenProps) {
       clips={data.clips}
       segments={data.segments}
       lanes={data.project.lanes}
+      settings={data.project.settings}
       onClose={onBack}
       onPublish={handlePublish}
       recordingMode="twilioCall"

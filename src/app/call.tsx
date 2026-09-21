@@ -65,7 +65,16 @@ function handOff(trigger: string = 'effect') {
   });
 
   if (goRecord) {
-    router.replace('/(tabs)/recording');
+    // /call is a native fullScreenModal. A plain replace() left that modal
+    // presented and drew the tabs INSIDE it: the app showed up as a card pushed
+    // down the screen and the modal covered the in call bar, so the call had
+    // no controls (Sep 20 2026). dismissTo pops the modal and lands on the
+    // recorder in ONE action, so there is no dismiss then push race either.
+    if (router.canDismiss()) {
+      router.dismissTo('/(tabs)/recording');
+    } else {
+      router.replace('/(tabs)/recording');
+    }
     return;
   }
   if (router.canDismiss()) {

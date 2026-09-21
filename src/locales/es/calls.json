@@ -38,7 +38,8 @@
     "laneName": "Nombre de la pista",
     "laneNamePrompt": "Ingrese un nombre para la pista {{number}}",
     "recBadge": "REC",
-    "micPermissionRequired": "Se requiere permiso del micrófono para grabar."
+    "micPermissionRequired": "Se requiere permiso del micrófono para grabar.",
+    "hideKeypad": "Ocultar"
   },
   "audioProblem": {
     "title": "Problema de audio",
@@ -52,6 +53,11 @@
     "tapToRecord": "Toque para grabar",
     "callInProgress": "Llamada en curso",
     "openRecordScreen": "Abrir grabación"
+  },
+  "activeIndicator": {
+    "default": "En una llamada, toca para gestionar",
+    "withLabel": "En una llamada con {{label}}",
+    "a11y": "Volver a la llamada activa"
   },
   "simple": {
     "delete": "Eliminar",
@@ -89,14 +95,25 @@
     "app": "Pista de fondo",
     "metronome": "Metrónomo",
     "bpm": "BPM",
-    "recordingHint": "Apagado graba una toma limpia para superponer. Activa uno para incluirlo en la grabación."
+    "recordingHint": "Apagado graba una toma limpia para superponer. Activa uno para incluirlo en la grabación.",
+    "appHint": "El audio de la app es lo que tú oyes en la llamada."
   },
   "transmit": {
     "offline": "Estás sin conexión. Conéctate para enviar música a la llamada.",
     "weakSignal": "Señal débil. La pista no cargó. Toca otra vez para reintentar.",
     "failed": "No se pudo enviar eso a la llamada.",
     "preparing": "Cargando pista...",
-    "noTrack": "Abre un proyecto con una pista primero."
+    "noTrack": "Abre un proyecto con una pista primero.",
+    "armed": "Listo. Lo que reproduzcas ahora también lo oyen.",
+    "live": "Lo están oyendo",
+    "mutedByMic": "Tu micrófono está en silencio, así que no oyen nada.",
+    "a11yOn": "Dejar de compartir lo que oyes con la llamada",
+    "a11yOff": "Compartir lo que oyes con la llamada",
+    "silentDetected": "Puede que la llamada no esté recibiendo el audio. Apaga y enciende el botón de compartir."
+  },
+  "playback": {
+    "preparing": "Preparando...",
+    "adsSilentInCall": "Los anuncios quedan en silencio durante las llamadas."
   },
   "recordingSavedOffline": "Señal débil. Tu grabación quedó guardada en este teléfono y se subirá al reconectar.",
   "routePicker": {

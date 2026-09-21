@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { StatusBar } from 'expo-status-bar';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { useCallStore } from '@/stores/callStore';
@@ -30,6 +31,32 @@ import { openMixer } from './MixerHost';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { mixerService } from '@/lib/callAudio/mixerService';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
+import { getCallPlaybackController } from '@/lib/callAudio/session/controllerInstance';
+import { showToast } from '@/components/ui/Toast';
+import * as Sentry from '@sentry/react-native';
+
+/** Consecutive diag samples with no far party progress before the watchdog acts. */
+const SILENT_TRANSMIT_SAMPLES = 3;
+
+/**
+ * Call bar color experiment (Sep 19 2026): David wants to see the top fade in
+ * white instead of the green it has always been. Flip this one value to
+ * compare; the timer and live dot follow so they stay readable on either.
+ */
+const CALL_BAR_THEME = 'white' as 'green' | 'white';
+// The timer and live dot stay white on both: David found black unreadable
+// on the white fade over the feed.
+// White starts at a full 100% white at the top edge over a light frost; the
+// default 55% veil over dark frost read as cream.
+const CALL_BAR =
+  CALL_BAR_THEME === 'white'
+    ? { tintRgb: '255, 255, 255', fg: '#FFFFFF', maxAlpha: 1, blurTint: 'light' as const }
+    : {
+        tintRgb: '34, 197, 94',
+        fg: '#FFFFFF',
+        maxAlpha: undefined,
+        blurTint: 'dark' as const,
+      };
 
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -54,6 +81,12 @@ export function InCallTopBar() {
   // user last played in the feed/reels (nowPlaying), not a specific post.
   const { canInject, isInjecting, isPreparing, inject, stop } = useCallAudioInjection();
   const nowPlaying = useNowPlayingStore((s) => s.track);
+  // Call playback session (Sep 15 2026). In engine mode 📡 is ONLY a gate: it
+  // never starts or stops anything; the transport of whatever surface owns the
+  // session decides what is heard, and the gate decides whether the far party
+  // hears the same. Starts OFF on every call (CallPlaybackHost resets it).
+  const playback = useCallStore((s) => s.playback);
+  const engineMode = playback.engineMode;
 
   // Transmit is a MODE: tap 📡 → push the audio the user is playing RIGHT NOW into
   // the call; tap again → stop. The source is LOCKED at turn-on and does NOT change
@@ -66,6 +99,13 @@ export function InCallTopBar() {
 
   const onTransmit = () => {
     void haptic('selection');
+    if (engineMode) {
+      void getCallPlaybackController().setTransmit(!playback.transmit, {
+        surface: 'call_bar',
+        micMuted: !!activeCall?.isMuted,
+      });
+      return;
+    }
     const next = !transmitMode;
     // Snapshot what's playing at THIS instant and lock it for the whole session.
     const src = next ? useNowPlayingStore.getState().track : null;
@@ -235,13 +275,57 @@ export function InCallTopBar() {
           has_now_playing: !!nowPlaying,
           mixer_enabled: mixerEnabled,
           transmit_mode: transmitMode,
+          // Call playback session (Sep 15 2026): the gate, the owner and the
+          // native session counters, so "did the far party get it" is answered
+          // from one row.
+          engine_mode: engineMode,
+          transmit_gate: diag?.transmitGate ?? null,
+          transmit_gate_on_count: diag?.transmitGateOnCount ?? null,
+          session_state: String(diag?.sessionState ?? ''),
+          session_position_ms: diag?.sessionPositionMs ?? null,
+          session_generation: diag?.sessionGeneration ?? null,
+          session_reschedule_count: diag?.sessionRescheduleCount ?? null,
+          spurious_completion_ignored_count: diag?.spuriousCompletionIgnoredCount ?? null,
+          session_load_count: diag?.sessionLoadCount ?? null,
+          last_session_load_ms: diag?.lastSessionLoadMs ?? null,
+          session_loop_iterations: diag?.sessionLoopIterations ?? null,
+          session_ended_count: diag?.sessionEndedCount ?? null,
+          session_idle_pauses: diag?.sessionIdlePauses ?? null,
+          session_halt_count: diag?.sessionHaltCount ?? null,
+          last_stem_file_rate: diag?.lastStemFileRate ?? null,
+          last_stem_dest_rate: diag?.lastStemDestRate ?? null,
+          engine_build_seq: diag?.engineBuildSeq ?? null,
+          stem_pool_size: diag?.stemPoolSize ?? null,
+          stem_record_playing: diag?.stemRecordPlaying ?? null,
+          stem_record_volume: diag?.stemRecordVolume ?? null,
+          playback_owner_surface: playback.surface,
+          playback_status: playback.status,
+          playback_source_kind: playback.source?.kind ?? null,
         });
       } catch {
         // diagnostics unavailable — ignore
       }
     },
-    [nowPlaying, canInject, mixerEnabled, transmitMode]
+    [
+      nowPlaying,
+      canInject,
+      mixerEnabled,
+      transmitMode,
+      engineMode,
+      playback.surface,
+      playback.status,
+      playback.source?.kind,
+    ]
   );
+
+  // Engine mode: snapshot ~3.5s after the far party should have started hearing
+  // something (gate open + playing), the analogue of the legacy inject trigger.
+  const sessionLive = engineMode && playback.transmit && playback.status === 'playing';
+  useEffect(() => {
+    if (!sessionLive) return;
+    const id = setTimeout(() => void captureDiag('session_transmit'), 3500);
+    return () => clearTimeout(id);
+  }, [sessionLive, playback.ownerId, captureDiag]);
 
   // Inject-triggered snapshot (~3.5s after transmit) — WHY an injected reel may not
   // reach the far party.
@@ -292,6 +376,17 @@ export function InCallTopBar() {
     let episodes = 0;
     let episodeStartedAt = 0;
     let worstEpisodeMs = 0;
+    // SILENT TRANSMIT WATCHDOG (Sep 15 2026), riding on the same samples. With
+    // the gate open and the session playing, two things must advance: the
+    // session's own position (else the stem players stalled: one self heal by
+    // restarting at the current second) and injectFramesToCapture (else the
+    // capture callback is dead: no reschedule can help, tell the user and Sentry).
+    let lastSessionPos = -1;
+    let stalledSamples = 0;
+    let lastInjectFrames = -1;
+    let flatCaptureSamples = 0;
+    let healedOnce = false;
+    let captureDeadReported = false;
     const id = setInterval(() => {
       tick += 1;
       // After the answer window, sample every 5th tick (5s) — enough to catch a
@@ -300,6 +395,55 @@ export function InCallTopBar() {
       void (async () => {
         const d = await mixerService.getMixDiagnostics();
         if (!d) return;
+        const pb = useCallStore.getState().playback;
+        if (pb.engineMode && pb.transmit && pb.status === 'playing') {
+          const pos = Number(d.sessionPositionMs ?? -1);
+          const frames = Number(d.injectFramesToCapture ?? -1);
+          stalledSamples = pos === lastSessionPos ? stalledSamples + 1 : 0;
+          flatCaptureSamples = frames === lastInjectFrames ? flatCaptureSamples + 1 : 0;
+          lastSessionPos = pos;
+          lastInjectFrames = frames;
+          if (stalledSamples >= SILENT_TRANSMIT_SAMPLES) {
+            stalledSamples = 0;
+            const healed = !healedOnce;
+            analytics.capture(ANALYTICS_EVENTS.CALL.TRANSMIT_SILENT_DETECTED, {
+              call_sid: sid,
+              class: 'player_stalled',
+              healed,
+              position_ms: pos,
+              inject_frames: frames,
+              owner_surface: pb.surface,
+            });
+            if (healed && pb.ownerId) {
+              healedOnce = true;
+              void getCallPlaybackController().play(pb.ownerId);
+            }
+          } else if (
+            flatCaptureSamples >= SILENT_TRANSMIT_SAMPLES &&
+            !captureDeadReported
+          ) {
+            captureDeadReported = true;
+            analytics.capture(ANALYTICS_EVENTS.CALL.TRANSMIT_SILENT_DETECTED, {
+              call_sid: sid,
+              class: 'capture_dead',
+              healed: false,
+              position_ms: pos,
+              inject_frames: frames,
+              record_cb_count: Number(d.recordCbCount ?? 0),
+              owner_surface: pb.surface,
+            });
+            Sentry.captureMessage('call_transmit_silent_capture_dead', {
+              level: 'warning',
+              extra: { call_sid: sid, position_ms: pos, inject_frames: frames },
+            });
+            showToast(t('transmit.silentDetected'));
+          }
+        } else {
+          lastSessionPos = -1;
+          lastInjectFrames = -1;
+          stalledSamples = 0;
+          flatCaptureSamples = 0;
+        }
         const built = Number(d.enginesBuiltRate ?? 0);
         const session = Number(d.sessionSampleRate ?? 0);
         const rendering = Number(d.renderingFormatRate ?? 0);
@@ -391,6 +535,8 @@ export function InCallTopBar() {
         })(),
       });
     };
+    // t is stable (i18n instance); the watchdog reads the store imperatively.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCall?.state, activeCall?.callSid]);
 
   const isConnected = isCallConnected(activeCall?.state);
@@ -429,12 +575,24 @@ export function InCallTopBar() {
           but green) — an OVERLAY that does NOT push content (reels/feed layouts
           untouched); screens reserve room below via useScreenTopInset. Green
           lives ONLY here, never on the screen headers. */}
-      <HeaderBlur tintRgb="34, 197, 94" fadeExtend={28} />
+      <HeaderBlur
+        tintRgb={CALL_BAR.tintRgb}
+        fadeExtend={28}
+        maxAlpha={CALL_BAR.maxAlpha}
+        blurTint={CALL_BAR.blurTint}
+      />
+      {/* System time and battery would vanish on the white top edge. */}
+      {CALL_BAR_THEME === 'white' ? <StatusBar style="dark" /> : null}
       <View style={styles.content}>
-        <View style={styles.timerContainer}>
-          <View style={styles.liveDot} />
-          <Text style={styles.timer}>{formatElapsed(elapsed)}</Text>
-        </View>
+        {/* Same dark glass as the buttons so the timer reads on any fade. */}
+        <GlassSurface radius={17} style={styles.timerPill}>
+          <View style={styles.timerContainer}>
+            <View style={[styles.liveDot, { backgroundColor: CALL_BAR.fg }]} />
+            <Text style={[styles.timer, { color: CALL_BAR.fg }]}>
+              {formatElapsed(elapsed)}
+            </Text>
+          </View>
+        </GlassSurface>
 
         <GlassSurface radius={21} style={styles.glassBtn}>
           <TouchableOpacity
@@ -479,7 +637,49 @@ export function InCallTopBar() {
             Spinner while the track is PREPARING (downloading/decoding) so a slow
             prepare on poor service never looks dead (David, Aug 5); red Square
             while transmitting; Radio otherwise. */}
-        {canInject ? (
+        {engineMode ? (
+          // Engine mode: a GATE. Off = outline; armed (on, nothing playing) =
+          // filled; live (on, playing) = filled + dot; mic muted = dimmed, because
+          // Twilio's mute silences the whole uplink including the shared audio.
+          <GlassSurface radius={21} style={styles.glassBtn}>
+            <TouchableOpacity
+              style={[styles.glassBtnInner, playback.transmit && styles.glassBtnActive]}
+              onPress={onTransmit}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: playback.transmit }}
+              accessibilityLabel={
+                playback.transmit ? t('transmit.a11yOn') : t('transmit.a11yOff')
+              }
+              accessibilityHint={
+                playback.transmit
+                  ? activeCall?.isMuted
+                    ? t('transmit.mutedByMic')
+                    : playback.status === 'playing'
+                      ? t('transmit.live')
+                      : t('transmit.armed')
+                  : undefined
+              }
+            >
+              <View
+                style={
+                  activeCall?.isMuted && playback.transmit ? styles.dimmed : undefined
+                }
+              >
+                <Radio
+                  size={20}
+                  color="#FFF"
+                  fill={playback.transmit ? 'rgba(255,255,255,0.35)' : 'transparent'}
+                  strokeWidth={2.25}
+                />
+              </View>
+              {playback.transmit &&
+              playback.status === 'playing' &&
+              !activeCall?.isMuted ? (
+                <View style={styles.liveBadge} />
+              ) : null}
+            </TouchableOpacity>
+          </GlassSurface>
+        ) : canInject ? (
           <GlassSurface radius={21} style={styles.glassBtn}>
             <TouchableOpacity
               style={[styles.glassBtnInner, transmitMode && styles.glassBtnActive]}
@@ -561,12 +761,29 @@ const styles = StyleSheet.create({
   glassBtnActive: {
     backgroundColor: 'rgba(0,0,0,0.28)',
   },
+  dimmed: {
+    opacity: 0.45,
+  },
+  liveBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#FFF',
+  },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
+  },
+  timerPill: {
+    height: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   timerContainer: {
     flexDirection: 'row',

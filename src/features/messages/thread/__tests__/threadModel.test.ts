@@ -11,9 +11,11 @@ import {
   RADIUS_INNER,
   RADIUS_OUTER,
   unreadDividerIndex,
-  REPLY_SWIPE_MAX_PX,
-  REPLY_SWIPE_TRIGGER_PX,
+  REPLY_SWIPE_BAND_PX,
+  REPLY_SWIPE_TRIGGER_OTHER_PX,
+  REPLY_SWIPE_TRIGGER_OWN_PX,
   replySwipeTranslation,
+  replySwipeTrigger,
   shouldShowJumpPill,
   type ThreadItem,
 } from '../threadModel';
@@ -122,11 +124,21 @@ test('the jump pill shows only well away from the bottom', () => {
 });
 
 test('swipe to reply follows the finger then rubber bands to a cap', () => {
-  assert.equal(replySwipeTranslation(-20), 0);
-  assert.equal(replySwipeTranslation(30), 30);
-  assert.equal(replySwipeTranslation(REPLY_SWIPE_TRIGGER_PX), REPLY_SWIPE_TRIGGER_PX);
-  assert.ok(replySwipeTranslation(200) < 200);
-  assert.equal(replySwipeTranslation(10_000), REPLY_SWIPE_MAX_PX);
+  const own = replySwipeTrigger(true);
+  const other = replySwipeTrigger(false);
+  assert.equal(own, REPLY_SWIPE_TRIGGER_OWN_PX);
+  assert.equal(other, REPLY_SWIPE_TRIGGER_OTHER_PX);
+  assert.ok(own > other);
+  assert.equal(replySwipeTranslation(-20, other), 0);
+  assert.equal(replySwipeTranslation(30, other), 30);
+  assert.equal(replySwipeTranslation(other, other), other);
+  assert.ok(replySwipeTranslation(200, other) < 200);
+  // Telegram's band: excess of 100 pt lands at 1 - 1/1.4 of the band.
+  const at100 = replySwipeTranslation(other + 100, other);
+  assert.ok(Math.abs(at100 - (other + (1 - 1 / 1.4) * REPLY_SWIPE_BAND_PX)) < 0.01);
+  assert.ok(replySwipeTranslation(10_000, other) < other + REPLY_SWIPE_BAND_PX);
+  // Approaches the band asymptotically: 10 000 pt of drag sits at about 97.6.
+  assert.ok(replySwipeTranslation(10_000, other) > other + REPLY_SWIPE_BAND_PX - 5);
 });
 
 test('unread divider sits above the oldest unread received message', () => {

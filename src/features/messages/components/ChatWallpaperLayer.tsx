@@ -43,7 +43,7 @@ function ChatWallpaperLayerInner({ wallpaper, sendPulse }: ChatWallpaperLayerPro
   useEffect(() => {
     if (sendPulse === lastPulse.current) return;
     lastPulse.current = sendPulse;
-    if (!sendPulse || !wallpaper || wallpaper.kind === 'image') return;
+    if (!sendPulse || !wallpaper || (wallpaper.kind ?? 'image') === 'image') return;
     turns.value = withTiming(turns.value + 1, {
       duration: SEND_TURN_MS,
       easing: Easing.inOut(Easing.cubic),
@@ -72,7 +72,9 @@ function ChatWallpaperLayerInner({ wallpaper, sendPulse }: ChatWallpaperLayerPro
     />
   );
 
-  if (wallpaper.kind === 'image') {
+  // A row cached by an older build has no `kind`: it is an image tile.
+  const kind = wallpaper.kind ?? (wallpaper.imageUrl ? 'image' : 'gradient');
+  if (kind === 'image') {
     return (
       <View style={styles.layer} pointerEvents="none">
         <ImageBackground
@@ -114,7 +116,7 @@ function ChatWallpaperLayerInner({ wallpaper, sendPulse }: ChatWallpaperLayerPro
           style={StyleSheet.absoluteFillObject}
         />
       </Animated.View>
-      {wallpaper.kind === 'pattern' && wallpaper.patternUrl ? (
+      {kind === 'pattern' && wallpaper.patternUrl ? (
         <ImageBackground
           source={{ uri: wallpaper.patternUrl }}
           style={[StyleSheet.absoluteFillObject, { opacity: patternOpacity }]}
@@ -131,10 +133,13 @@ function ChatWallpaperLayerInner({ wallpaper, sendPulse }: ChatWallpaperLayerPro
  * and an empty list falls back to the tint (or near black).
  */
 export function gradientStops(
-  colors: string[],
+  colors: string[] | null | undefined,
   tint: string | null
 ): readonly [string, string, ...string[]] {
-  const clean = colors.filter((c) => /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c.trim()));
+  // Catalogue rows cached before the kinds existed have no colours at all.
+  const clean = (colors ?? []).filter((c) =>
+    /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(String(c).trim())
+  );
   if (clean.length >= 2)
     return clean as unknown as readonly [string, string, ...string[]];
   const base = clean[0] ?? tint ?? '#0B0B0F';

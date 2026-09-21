@@ -170,16 +170,31 @@ export function shouldShowJumpPill(offsetFromBottomPx: number): boolean {
 }
 
 /** Swipe distance that commits a reply, and how far the bubble may travel. */
-export const REPLY_SWIPE_TRIGGER_PX = 56;
-export const REPLY_SWIPE_MAX_PX = 88;
+/**
+ * Swipe to reply, with Telegram's constants (ChatSwipeToReplyRecognizer and
+ * swipeToReplyGesture in Telegram iOS): the threshold is 45 pt for the other
+ * side's bubbles and 60 pt for our own (ours already sit against the edge we
+ * drag towards), the bubble follows the finger one to one up to the threshold
+ * and then rubber bands to at most threshold + 100 pt.
+ */
+export const REPLY_SWIPE_TRIGGER_OTHER_PX = 45;
+export const REPLY_SWIPE_TRIGGER_OWN_PX = 60;
+export const REPLY_SWIPE_BAND_PX = 100;
+
+export function replySwipeTrigger(isOwn: boolean): number {
+  'worklet';
+  return isOwn ? REPLY_SWIPE_TRIGGER_OWN_PX : REPLY_SWIPE_TRIGGER_OTHER_PX;
+}
 
 /** Rubber banded translation of a bubble while swiping to reply. */
-export function replySwipeTranslation(dragPx: number): number {
+export function replySwipeTranslation(dragPx: number, trigger: number): number {
   'worklet';
   if (dragPx <= 0) return 0;
-  if (dragPx <= REPLY_SWIPE_TRIGGER_PX) return dragPx;
-  const extra = dragPx - REPLY_SWIPE_TRIGGER_PX;
-  return Math.min(REPLY_SWIPE_MAX_PX, REPLY_SWIPE_TRIGGER_PX + extra * 0.35);
+  if (dragPx <= trigger) return dragPx;
+  const excess = dragPx - trigger;
+  return (
+    trigger + (1 - 1 / ((excess * 0.4) / REPLY_SWIPE_BAND_PX + 1)) * REPLY_SWIPE_BAND_PX
+  );
 }
 
 /**

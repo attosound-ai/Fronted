@@ -20,7 +20,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { ArrowUpLeft, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react-native';
+import { ArrowUpLeft, Clock, AlertCircle } from 'lucide-react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GOLD } from '@/constants/gold';
@@ -35,8 +35,8 @@ import {
   emojiOnlyCount,
   emojiOnlySize,
   RADIUS_OUTER,
-  REPLY_SWIPE_MAX_PX,
-  REPLY_SWIPE_TRIGGER_PX,
+  replySwipeTranslation,
+  replySwipeTrigger,
   type GroupPosition,
 } from './threadModel';
 
@@ -91,15 +91,6 @@ export interface MessageRowProps {
 // Quick and crisp, no visible overshoot: the reference apps settle in about
 // 200 to 250 ms. A soft spring here read as slow and bouncy.
 /** Rubber banded translation while swiping to reply. Same rule as threadModel, on the UI thread. */
-function swipeTranslation(dragPx: number): number {
-  'worklet';
-  if (dragPx <= 0) return 0;
-  if (dragPx <= REPLY_SWIPE_TRIGGER_PX) return dragPx;
-  return Math.min(
-    REPLY_SWIPE_MAX_PX,
-    REPLY_SWIPE_TRIGGER_PX + (dragPx - REPLY_SWIPE_TRIGGER_PX) * 0.35
-  );
-}
 
 /** Tail geometry: 24 pt of the width sit under the bubble, 8 pt curl past its edge. */
 // iMessage geometry, measured on a real sent bubble at 3x: the bubble keeps
@@ -178,6 +169,7 @@ function MessageRowInner({
   );
   const drag = useSharedValue(0);
   const armed = useSharedValue(false);
+  const buzzed = useSharedValue(false);
 
   const fireReply = useCallback(() => onReply(message), [onReply, message]);
   const requestTapback = useCallback(
@@ -195,7 +187,7 @@ function MessageRowInner({
     [onDoubleTap, message]
   );
   const fireDoubleTap = useCallback(() => requestTapback('double_tap'), [requestTapback]);
-  const buzz = useCallback((kind: 'light' | 'medium') => void haptic(kind), []);
+  const buzz = useCallback((kind: 'light' | 'medium' | 'heavy') => void haptic(kind), []);
 
   const reportTimes = useCallback(() => onTimesRevealed?.(), [onTimesRevealed]);
   // One pan, two directions: right swipes this bubble out to reply, left
@@ -209,11 +201,17 @@ function MessageRowInner({
         .onUpdate((e) => {
           if (e.translationX >= 0) {
             timesReveal.value = 0;
-            drag.value = swipeTranslation(e.translationX);
-            const nowArmed = e.translationX >= REPLY_SWIPE_TRIGGER_PX;
+            const trigger = replySwipeTrigger(isOwn);
+            drag.value = replySwipeTranslation(e.translationX, trigger);
+            const nowArmed = e.translationX >= trigger;
             if (nowArmed !== armed.value) {
               armed.value = nowArmed;
-              if (nowArmed) runOnJS(buzz)('medium');
+              // Telegram: one heavy tap the first time the threshold is
+              // reached; crossing back and forth does not repeat it.
+              if (nowArmed && !buzzed.value) {
+                buzzed.value = true;
+                runOnJS(buzz)('heavy');
+              }
             }
           } else {
             drag.value = 0;
@@ -222,7 +220,10 @@ function MessageRowInner({
           }
         })
         .onEnd(() => {
+          // Decided on release (Telegram): crossing the threshold and coming
+          // back before lifting the finger sends nothing.
           if (armed.value) runOnJS(fireReply)();
+          buzzed.value = false;
           if (timesReveal.value > 0.5) runOnJS(reportTimes)();
           armed.value = false;
           drag.value = withSpring(0, SPRING);
@@ -232,7 +233,7 @@ function MessageRowInner({
           drag.value = withSpring(0, SPRING);
           timesReveal.value = withSpring(0, SPRING);
         }),
-    [drag, armed, timesReveal, buzz, fireReply, reportTimes]
+    [drag, armed, buzzed, isOwn, timesReveal, buzz, fireReply, reportTimes]
   );
 
   const doubleTap = useMemo(
@@ -260,7 +261,7 @@ function MessageRowInner({
     opacity: withTiming(dimmed ? 0.3 : 1, { duration: 180 }),
   }));
   const replyHint = useAnimatedStyle(() => {
-    const p = Math.min(1, drag.value / REPLY_SWIPE_TRIGGER_PX);
+    const p = Math.min(1, drag.value / replySwipeTrigger(isOwn));
     return {
       opacity: p,
       transform: [{ scale: 0.6 + 0.4 * p }, { translateX: -40 + 40 * p }],
@@ -444,7 +445,7 @@ function MessageRowInner({
       {readLabel ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
-          style={styles.readLabel}
+          style={[styles.readLabel, hasReactions && styles.readLabelAfterReactions]}
           maxFontSizeMultiplier={1.0}
         >
           {readLabel}
@@ -594,9 +595,40 @@ function Ticks({ message }: { message: AttoMessage }) {
     return <Clock size={12} color="rgba(0,0,0,0.4)" strokeWidth={2.25} />;
   }
   if (message.received) {
-    return <CheckCheck size={13} color="#000" strokeWidth={2.25} />;
+    return <TickMarks double color="rgba(0,0,0,0.75)" />;
   }
-  return <Check size={13} color="rgba(0,0,0,0.4)" strokeWidth={2.25} />;
+  return <TickMarks double={false} color="rgba(0,0,0,0.4)" />;
+}
+
+/**
+ * WhatsApp's ticks: two identical check marks, the second shifted right by a
+ * fixed offset, thin round strokes. lucide's CheckCheck clips the second
+ * mark, which read as two different sizes.
+ */
+function TickMarks({ double, color }: { double: boolean; color: string }) {
+  const width = double ? 17 : 12;
+  return (
+    <Svg width={width} height={11} viewBox={`0 0 ${width} 11`}>
+      <Path
+        d="M1.2 6.2 L4.4 9.3 L10.6 2.2"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {double ? (
+        <Path
+          d="M6.4 6.2 L9.6 9.3 L15.8 2.2"
+          stroke={color}
+          strokeWidth={1.6}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      ) : null}
+    </Svg>
+  );
 }
 
 /** Slide the freshly sent bubble in from the composer: iMessage's send. */
@@ -761,6 +793,8 @@ const styles = StyleSheet.create({
     marginTop: TAIL_DROP + 2,
     marginRight: 4,
   },
+  // The reaction spacer already clears the tail.
+  readLabelAfterReactions: { marginTop: 2 },
   // Hangs from the bubble's bottom edge on the inner side, like Telegram's
   // own message reactions; the spacer keeps the next row clear of it.
   reactions: { position: 'absolute', bottom: -REACTION_HANG, zIndex: 2 },

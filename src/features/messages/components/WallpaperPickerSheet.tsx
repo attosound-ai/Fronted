@@ -48,7 +48,7 @@ export function WallpaperPickerSheet({
   conversationId,
 }: WallpaperPickerSheetProps) {
   const { t } = useTranslation('messages');
-  const { data: wallpapers = [], isLoading, isError } = useChatWallpapers();
+  const { data: wallpapers = [], isLoading, isError, refetch } = useChatWallpapers();
   const globalId = useChatWallpaperStore((s) => s.selectedWallpaperId);
   const perConversation = useChatWallpaperStore((s) => s.perConversation);
   const setGlobal = useChatWallpaperStore((s) => s.setSelectedWallpaperId);
@@ -58,6 +58,8 @@ export function WallpaperPickerSheet({
   useEffect(() => {
     if (!visible) return;
     setScope(conversationId ? 'conversation' : 'all');
+    // The catalogue is admin managed: pull the latest each time it opens.
+    void refetch();
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.WALLPAPER_PICKER_OPENED, {
       from_conversation: !!conversationId,
       catalogue_size: wallpapers.length,
@@ -136,7 +138,7 @@ export function WallpaperPickerSheet({
               key={w.id}
               wallpaper={w}
               isSelected={selectedId === w.id}
-              onPress={() => handleSelect(w.id, w.kind)}
+              onPress={() => handleSelect(w.id, w.kind ?? 'image')}
             />
           ))}
         </View>
@@ -216,7 +218,8 @@ function WallpaperTile({ wallpaper, isSelected, onPress }: WallpaperTileProps) {
   );
 
   let preview;
-  if (wallpaper.kind === 'image') {
+  const kind = wallpaper.kind ?? (wallpaper.imageUrl ? 'image' : 'gradient');
+  if (kind === 'image') {
     const previewUri = wallpaper.thumbnailUrl || wallpaper.imageUrl;
     preview = (
       <ImageBackground
@@ -242,7 +245,7 @@ function WallpaperTile({ wallpaper, isSelected, onPress }: WallpaperTileProps) {
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFillObject}
         />
-        {wallpaper.kind === 'pattern' && wallpaper.patternUrl ? (
+        {kind === 'pattern' && wallpaper.patternUrl ? (
           <ImageBackground
             source={{ uri: wallpaper.patternUrl }}
             style={[

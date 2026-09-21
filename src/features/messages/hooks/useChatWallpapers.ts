@@ -15,7 +15,9 @@ export function useChatWallpapers() {
   return useQuery<ChatWallpaper[]>({
     queryKey: QUERY_KEYS.MESSAGES.WALLPAPERS,
     queryFn: () => wallpaperService.list(),
-    staleTime: 60 * 60 * 1000, // 1 hour — wallpapers change rarely
+    // Admin changes should land on the next open, not an hour later.
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
     gcTime: 24 * 60 * 60 * 1000,
   });
 }

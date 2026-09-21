@@ -12,11 +12,26 @@ export interface ThreadItem {
   createdAt: number;
   text: string;
   deleted?: boolean;
+  /** `text`, `audio`, `video_note`, ... Some kinds never merge. */
+  contentType?: string;
+}
+
+/**
+ * Kinds that never join a run, so they always keep their own tail. Telegram
+ * returns `.none` from mediaMergeableStyle for round video notes and for
+ * service messages, which is what these are.
+ */
+function mergeable(item: ThreadItem): boolean {
+  return item.contentType !== 'video_note' && !item.deleted;
 }
 
 /** Bubbles closer than this from the same author share a group. */
-// Telegram merges consecutive messages of one author within five minutes.
-export const GROUP_GAP_MS = 5 * 60_000;
+/**
+ * Telegram merges consecutive messages from one author when they are less
+ * than ten minutes apart (`abs(t1 - t2) < 10 * 60` in messagesShouldBeMerged,
+ * ChatMessageItemImpl.swift). Exactly ten minutes does not merge.
+ */
+export const GROUP_GAP_MS = 10 * 60_000;
 /** Corner radius of a bubble edge that faces the outside of its group. */
 export const RADIUS_OUTER = 18;
 /** Corner radius of an edge that touches a neighbour in the group. */
@@ -50,8 +65,10 @@ export function groupPositions(items: ThreadItem[]): GroupPosition[] {
 
 function sameGroup(older: ThreadItem, newer: ThreadItem): boolean {
   if (older.senderId !== newer.senderId) return false;
-  if (older.deleted || newer.deleted) return false;
-  if (newer.createdAt - older.createdAt > GROUP_GAP_MS) return false;
+  if (!mergeable(older) || !mergeable(newer)) return false;
+  if (newer.createdAt - older.createdAt >= GROUP_GAP_MS) return false;
+  // A day pill between two messages ends the run, as a different date header
+  // does in Telegram.
   return sameDay(older.createdAt, newer.createdAt);
 }
 

@@ -162,6 +162,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           createdAt: new Date(m.createdAt).getTime(),
           text: m.text,
           deleted: m.isDeleted,
+          contentType: m.contentType,
         })),
       [messages]
     );

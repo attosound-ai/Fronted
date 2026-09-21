@@ -11,10 +11,12 @@ import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { useCallPlayback } from '@/lib/callAudio/session/useCallPlayback';
 import type { MessageMetadata } from '../types';
 
-const BARS = 40;
+const BARS = 34;
 const BAR_WIDTH = 2.5;
-const BAR_GAP = 1.5;
-const WAVE_HEIGHT = 26;
+const BAR_GAP = 1.6;
+// WhatsApp's wave is about 22 pt tall and shares its line with the speed
+// chip; the duration and the message time live on the line below it.
+const WAVE_HEIGHT = 22;
 const RATES = [1, 1.5, 2] as const;
 
 interface VoiceNoteBubbleProps {
@@ -176,43 +178,46 @@ function VoiceNoteBubbleInner({ url, metadata, onLight }: VoiceNoteBubbleProps) 
         )}
       </Pressable>
       <View style={styles.body}>
-        <Pressable
-          style={styles.wave}
-          onLayout={(e) => {
-            waveWidth.current = e.nativeEvent.layout.width;
-          }}
-          onPress={(e) => seekTo(e.nativeEvent.locationX)}
-          accessibilityRole="adjustable"
-          accessibilityLabel={t('media.previewAudio')}
-        >
-          {bars.map((level, i) => {
-            const played = (i + 0.5) / BARS <= progress;
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.bar,
-                  {
-                    height: Math.max(3, level * WAVE_HEIGHT),
-                    backgroundColor: played ? fg : dim,
-                  },
-                ]}
-              />
-            );
-          })}
-        </Pressable>
-        <View style={styles.footer}>
-          <Text style={[styles.time, { color: dim }]}>{formatTime(shown)}</Text>
+        <View style={styles.waveRow}>
           <Pressable
-            onPress={cycleRate}
-            hitSlop={6}
-            style={[styles.rate, { borderColor: dim }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('media.speed')}
+            style={styles.wave}
+            onLayout={(e) => {
+              waveWidth.current = e.nativeEvent.layout.width;
+            }}
+            onPress={(e) => seekTo(e.nativeEvent.locationX)}
+            accessibilityRole="adjustable"
+            accessibilityLabel={t('media.previewAudio')}
           >
-            <Text style={[styles.rateText, { color: fg }]}>{RATES[rateIndex]}x</Text>
+            {bars.map((level, i) => {
+              const played = (i + 0.5) / BARS <= progress;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.bar,
+                    {
+                      height: Math.max(3, level * WAVE_HEIGHT),
+                      backgroundColor: played ? fg : dim,
+                    },
+                  ]}
+                />
+              );
+            })}
           </Pressable>
+          {/* WhatsApp only offers the speed once the note has been played. */}
+          {isPlaying || position > 0 ? (
+            <Pressable
+              onPress={cycleRate}
+              hitSlop={8}
+              style={[styles.rate, { borderColor: dim }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('media.speed')}
+            >
+              <Text style={[styles.rateText, { color: fg }]}>{RATES[rateIndex]}x</Text>
+            </Pressable>
+          ) : null}
         </View>
+        <Text style={[styles.time, { color: dim }]}>{formatTime(shown)}</Text>
       </View>
     </View>
   );
@@ -228,32 +233,33 @@ function formatTime(ms: number): string {
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    minWidth: 220,
-    paddingVertical: 2,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 1 },
   play: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playGlyph: { marginLeft: 2 },
-  body: { flex: 1, gap: 4 },
+  body: { gap: 1 },
+  waveRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   wave: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: WAVE_HEIGHT + 4,
+    height: WAVE_HEIGHT,
     gap: BAR_GAP,
     width: BARS * (BAR_WIDTH + BAR_GAP),
   },
   bar: { width: BAR_WIDTH, borderRadius: BAR_WIDTH / 2 },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  time: { fontSize: 11, fontFamily: 'Archivo_500Medium', fontVariant: ['tabular-nums'] },
-  rate: { borderWidth: 1, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 1 },
+  // The message time and ticks float over this line's right end, so the
+  // duration keeps the left and nothing takes a line of its own.
+  time: {
+    fontSize: 11,
+    fontFamily: 'Archivo_500Medium',
+    fontVariant: ['tabular-nums'],
+    marginTop: 1,
+  },
+  rate: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 0 },
   rateText: { fontSize: 10, fontFamily: 'Archivo_600SemiBold' },
 });

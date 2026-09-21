@@ -166,18 +166,19 @@
     "replay": "Repetir",
     "hint": "Mantén enviar para los efectos",
     "names": {
-      "slam": "Golpe",
-      "loud": "Fuerte",
-      "gentle": "Suave",
-      "invisible": "Tinta invisible",
-      "echo": "Eco",
-      "spotlight": "Foco",
-      "balloons": "Globos",
-      "confetti": "Confeti",
-      "love": "Amor",
-      "lasers": "Láseres",
-      "fireworks": "Fuegos artificiales",
-      "celebration": "Celebración"
-    }
+      "slam": "GOLPE",
+      "loud": "FUERTE",
+      "gentle": "SUAVE",
+      "invisible": "TINTA INVISIBLE",
+      "echo": "ECO",
+      "spotlight": "FOCO",
+      "balloons": "GLOBOS",
+      "confetti": "CONFETI",
+      "love": "AMOR",
+      "lasers": "LÁSERES",
+      "fireworks": "FUEGOS",
+      "celebration": "CELEBRACIÓN"
+    },
+    "sendWith": "ENVIAR CON {{name}}"
   }
 }

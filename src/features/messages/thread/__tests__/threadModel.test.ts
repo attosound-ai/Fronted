@@ -45,8 +45,8 @@ test('consecutive messages from one author within a minute form one group', () =
 });
 
 test('a change of author or a pause over the group window starts a new group', () => {
-  // 'c' sits 6 minutes after 'b': past the 5 minute window (Telegram's).
-  const items = [m('d', 'b', 400), m('c', 'a', 370), m('b', 'a', 10), m('a', 'a', 0)];
+  // 'c' sits 11 minutes after 'b': past Telegram's 10 minute window.
+  const items = [m('d', 'b', 700), m('c', 'a', 670), m('b', 'a', 10), m('a', 'a', 0)];
   assert.deepEqual(groupPositions(items), [
     { first: true, last: true },
     { first: true, last: true },
@@ -155,4 +155,30 @@ test('unread divider sits above the oldest unread received message', () => {
   assert.equal(unreadDividerIndex(items, 'me', 2), 2);
   assert.equal(unreadDividerIndex(items, 'me', 3), 3);
   assert.equal(unreadDividerIndex(items, 'me', 4), null);
+});
+
+test("the group window is Telegram's ten minutes, exclusive", () => {
+  const justUnder = [m('b', 'a', 599), m('a', 'a', 0)];
+  assert.deepEqual(groupPositions(justUnder), [
+    { first: false, last: true },
+    { first: true, last: false },
+  ]);
+  const exactly = [m('b', 'a', 600), m('a', 'a', 0)];
+  assert.deepEqual(groupPositions(exactly), [
+    { first: true, last: true },
+    { first: true, last: true },
+  ]);
+});
+
+test('a round video note never joins a run', () => {
+  const items = [
+    { id: 'c', senderId: 'a', createdAt: 20_000, text: '' },
+    { id: 'b', senderId: 'a', createdAt: 10_000, text: '', contentType: 'video_note' },
+    { id: 'a', senderId: 'a', createdAt: 0, text: 'hola' },
+  ];
+  assert.deepEqual(groupPositions(items), [
+    { first: true, last: true },
+    { first: true, last: true },
+    { first: true, last: true },
+  ]);
 });

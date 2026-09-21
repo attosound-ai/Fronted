@@ -428,6 +428,7 @@ function MessageRowInner({
           styles.meta,
           message.text && !isMedia ? styles.metaFloating : null,
           isVisual ? styles.metaOverMedia : null,
+          message.contentType === 'audio' ? styles.metaCorner : null,
         ]}
       >
         {message.isEdited ? (
@@ -821,6 +822,9 @@ const styles = StyleSheet.create({
     gap: 4,
     marginTop: 2,
   },
+  // A voice note keeps its duration on the last line; the time and ticks
+  // sit at that line's right end instead of taking another line.
+  metaCorner: { position: 'absolute', right: 12, bottom: 5, marginTop: 0 },
   bubbleVisual: { paddingHorizontal: 3, paddingTop: 3, paddingBottom: 3, minWidth: 0 },
   // Time and ticks over a photo or video, WhatsApp style pill.
   metaOverMedia: {

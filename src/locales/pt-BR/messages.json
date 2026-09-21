@@ -166,18 +166,19 @@
     "replay": "Repetir",
     "hint": "Segure enviar para os efeitos",
     "names": {
-      "slam": "Impacto",
-      "loud": "Alto",
-      "gentle": "Suave",
-      "invisible": "Tinta invisível",
-      "echo": "Eco",
-      "spotlight": "Holofote",
-      "balloons": "Balões",
-      "confetti": "Confete",
-      "love": "Amor",
-      "lasers": "Lasers",
-      "fireworks": "Fogos",
-      "celebration": "Celebração"
-    }
+      "slam": "IMPACTO",
+      "loud": "ALTO",
+      "gentle": "SUAVE",
+      "invisible": "TINTA INVISÍVEL",
+      "echo": "ECO",
+      "spotlight": "HOLOFOTE",
+      "balloons": "BALÕES",
+      "confetti": "CONFETE",
+      "love": "AMOR",
+      "lasers": "LASERS",
+      "fireworks": "FOGOS",
+      "celebration": "CELEBRAÇÃO"
+    },
+    "sendWith": "ENVIAR COM {{name}}"
   }
 }

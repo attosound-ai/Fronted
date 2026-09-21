@@ -166,18 +166,19 @@
     "replay": "Replay",
     "hint": "Hold send for effects",
     "names": {
-      "slam": "Slam",
-      "loud": "Loud",
-      "gentle": "Gentle",
-      "invisible": "Invisible Ink",
-      "echo": "Echo",
-      "spotlight": "Spotlight",
-      "balloons": "Balloons",
-      "confetti": "Confetti",
-      "love": "Love",
-      "lasers": "Lasers",
-      "fireworks": "Fireworks",
-      "celebration": "Celebration"
-    }
+      "slam": "SLAM",
+      "loud": "LOUD",
+      "gentle": "GENTLE",
+      "invisible": "INVISIBLE INK",
+      "echo": "ECHO",
+      "spotlight": "SPOTLIGHT",
+      "balloons": "BALLOONS",
+      "confetti": "CONFETTI",
+      "love": "LOVE",
+      "lasers": "LASERS",
+      "fireworks": "FIREWORKS",
+      "celebration": "CELEBRATION"
+    },
+    "sendWith": "SEND WITH {{name}}"
   }
 }

@@ -44,8 +44,10 @@ import { useCameraStore } from '@/features/messages/stores/cameraStore';
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 /** ChatGPT's camera card: side margins of 14 and about 57% of the screen. */
 const SIDE = 14;
-const CARD_W = SCREEN_W - SIDE * 2;
-const CARD_H = Math.round(SCREEN_H * 0.57);
+/** On a tablet the card stays a card: it is centred, not stretched. */
+const CARD_W = Math.min(SCREEN_W - SIDE * 2, 420);
+const CARD_LEFT = Math.round((SCREEN_W - CARD_W) / 2);
+const CARD_H = Math.min(Math.round(SCREEN_H * 0.57), 620);
 const CARD_RADIUS = 30;
 const CONTROLS_H = 104;
 /** WhatsApp shows the video note as the circle it will become. */
@@ -480,7 +482,7 @@ function formatTime(ms: number): string {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)' },
-  card: { position: 'absolute', left: SIDE, width: CARD_W, height: CARD_H },
+  card: { position: 'absolute', left: CARD_LEFT, width: CARD_W, height: CARD_H },
   frame: {
     position: 'absolute',
     left: 0,

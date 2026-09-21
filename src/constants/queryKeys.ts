@@ -56,6 +56,7 @@ export const QUERY_KEYS = {
     CONVERSATION_BY_PARTICIPANT: (participantId: string) =>
       ['messages', 'conversation', 'by-participant', participantId] as const,
     WALLPAPERS: ['messages', 'wallpapers'] as const,
+    PINNED: (chatId: string) => ['messages', 'pinned', chatId] as const,
   },
 
   // Payments

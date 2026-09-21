@@ -90,12 +90,11 @@ export function AccountTypeSheet({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} onDismissed={handleDismissed}>
+      {/* The title alone carries the question: the client asked for the
+          explaining sentence under it to go. */}
       <View style={styles.header}>
         <Text variant="h2" style={styles.title}>
           {t('accountType.title')}
-        </Text>
-        <Text variant="body" style={styles.subtitle}>
-          {t('accountType.subtitle')}
         </Text>
       </View>
 
@@ -148,10 +147,6 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#FFFFFF',
-  },
-  subtitle: {
-    color: '#9A9A9A',
-    lineHeight: 21,
   },
   options: {
     gap: 12,

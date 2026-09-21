@@ -223,7 +223,10 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       const own = String(newest.user._id) === currentUserId;
       if (own || !farFromBottom) {
         setUnseenCount(0);
-        if (own) listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        // Whoever sent it: if the bottom was in view, follow the new row.
+        // `maintainVisibleContentPosition` holds the anchor when rows are
+        // inserted, so without this the message lands below the fold.
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
       } else {
         setUnseenCount((n) => n + 1);
       }

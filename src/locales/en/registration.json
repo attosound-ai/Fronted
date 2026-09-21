@@ -1,14 +1,13 @@
 {
   "accountType": {
-    "title": "How do you want to start?",
-    "subtitle": "Pick the one that describes you. You can add the artist details at the end.",
+    "title": "Let's get started",
     "representative": {
-      "title": "Represent an artist",
-      "description": "You manage an artist's account with their permission and set it up for them."
+      "title": "Represent a creator",
+      "description": "You manage a creator's account with their consent and set it up for them."
     },
     "listener": {
       "title": "My own account",
-      "description": "Listen, follow and support. If you are the artist, you will validate that at the end."
+      "description": "Explore, listen, follow and support."
     }
   },
   "basicInfo": {
@@ -85,10 +84,10 @@
     "inmateGateBack": "Back"
   },
   "creatorInmate": {
-    "title": "Are you the artist?",
-    "subtitle": "Optional. If you are the artist, look yourself up so your account is verified as a creator. If not, skip this and finish.",
+    "title": "Are you the creator?",
+    "subtitle": "Optional. If you are the creator, look yourself up so your account is verified as a creator. If not, skip this and finish.",
     "validate": "Validate and finish",
-    "skip": "Skip, I am not the artist"
+    "skip": "Skip, I am not the creator"
   },
   "creatorAccountSetup": {
     "title": "Set up the creator account",
@@ -245,7 +244,10 @@
         "step2Heading": "Step 2 — Mail Photos to ATTO",
         "step2Body": "Do not send photos via email or other platforms. Our team will upload them and create your avatar — usually in 1–3 days.",
         "step3Heading": "Step 3 — Your Family Posts Messages",
-        "step3Body": "Once your avatar is ready, family or friends log into their ATTO account, choose \"Post Avatar Message,\" type what you want to say, and your avatar delivers it as a 10-second video — visible to everyone on ATTO and shareable privately."
+        "step3Body": "Once your avatar is ready, family or friends log into their ATTO account, choose \"Post Avatar Message,\" type what you want to say, and your avatar delivers it as a 10-second video — visible to everyone on ATTO and shareable privately.",
+        "packHeader": "Pack",
+        "priceHeader": "Price",
+        "perClipHeader": "Per clip"
       }
     }
   },

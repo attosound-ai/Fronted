@@ -1,14 +1,13 @@
 {
   "accountType": {
-    "title": "Como quer começar?",
-    "subtitle": "Escolha a que te descreve. Os dados do artista ficam para o final.",
+    "title": "Vamos começar",
     "representative": {
-      "title": "Represento um artista",
-      "description": "Você administra a conta de um artista com a permissão dele e a configura por ele."
+      "title": "Represento um criador",
+      "description": "Você administra a conta de um criador com o consentimento dele e a configura por ele."
     },
     "listener": {
       "title": "Minha própria conta",
-      "description": "Ouça, siga e apoie. Se você é o artista, valida isso no final."
+      "description": "Explore, ouça, siga e apoie."
     }
   },
   "basicInfo": {
@@ -85,10 +84,10 @@
     "inmateGateBack": "Voltar"
   },
   "creatorInmate": {
-    "title": "Você é o artista?",
-    "subtitle": "Opcional. Se você é o artista, busque seus dados para a conta ficar verificada como criador. Se não, pule e termine.",
+    "title": "Você é o criador?",
+    "subtitle": "Opcional. Se você é o criador, busque seus dados para a conta ficar verificada como criador. Se não, pule e termine.",
     "validate": "Validar e terminar",
-    "skip": "Pular, não sou o artista"
+    "skip": "Pular, não sou o criador"
   },
   "creatorAccountSetup": {
     "title": "Configure a conta do criador",
@@ -245,7 +244,10 @@
         "step2Heading": "Etapa 2 — Envie as fotos pelo correio para a ATTO",
         "step2Body": "Não envie as fotos por e-mail ou outras plataformas. Nossa equipe fará o upload e criará seu avatar — normalmente em 1 a 3 dias.",
         "step3Heading": "Etapa 3 — Sua família publica mensagens",
-        "step3Body": "Quando seu avatar estiver pronto, familiares ou amigos entram na conta do ATTO, escolhem \"Publicar mensagem do avatar\", digitam o que você quer dizer e seu avatar entrega como um vídeo de 10 segundos — visível para todos no ATTO e compartilhável de forma privada."
+        "step3Body": "Quando seu avatar estiver pronto, familiares ou amigos entram na conta do ATTO, escolhem \"Publicar mensagem do avatar\", digitam o que você quer dizer e seu avatar entrega como um vídeo de 10 segundos — visível para todos no ATTO e compartilhável de forma privada.",
+        "packHeader": "Pacote",
+        "priceHeader": "Preço",
+        "perClipHeader": "Por clipe"
       }
     }
   },

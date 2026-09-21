@@ -14,6 +14,8 @@ interface ChatChannelHandlers {
   onReactionRemoved?: MessageHandler;
   onMessageEdited?: MessageHandler;
   onMessageDeleted?: MessageHandler;
+  onMessagePinned?: MessageHandler;
+  onMessageUnpinned?: MessageHandler;
 }
 
 interface UserChannelHandlers {
@@ -278,24 +280,45 @@ class PhoenixSocketManager {
     socket?.disconnect();
   }
 
+  /**
+   * Bind (or rebind) every chat event on a channel. Each event is cleared
+   * first: joining the same conversation twice used to leave two live
+   * bindings behind, and every incoming message was then handled twice.
+   */
+  private bindChatHandlers(channel: Channel, handlers: ChatChannelHandlers): void {
+    const bindings: [string, MessageHandler | undefined][] = [
+      ['new_message', handlers.onMessage],
+      ['typing', handlers.onTyping],
+      ['messages_read', handlers.onMessagesRead],
+      ['message_history', handlers.onMessageHistory],
+      ['reaction_added', handlers.onReactionAdded],
+      ['reaction_removed', handlers.onReactionRemoved],
+      ['message_edited', handlers.onMessageEdited],
+      ['message_deleted', handlers.onMessageDeleted],
+      ['message_pinned', handlers.onMessagePinned],
+      ['message_unpinned', handlers.onMessageUnpinned],
+    ];
+    for (const [event, handler] of bindings) {
+      channel.off(event);
+      if (handler) channel.on(event, handler);
+    }
+  }
+
   private createChatChannel(
     socket: Socket,
     conversationId: string,
     handlers: ChatChannelHandlers
   ): Channel {
-    const channel = socket.channel(`chat:${conversationId}`, {});
+    // A channel left over from an older socket keeps receiving until it is
+    // told to go, so it is retired before the new one is built.
+    const stale = this.channels.get(conversationId);
+    if (stale && stale.socket !== socket) {
+      stale.leave();
+      this.channels.delete(conversationId);
+    }
 
-    if (handlers.onMessage) channel.on('new_message', handlers.onMessage);
-    if (handlers.onTyping) channel.on('typing', handlers.onTyping);
-    if (handlers.onMessagesRead) channel.on('messages_read', handlers.onMessagesRead);
-    if (handlers.onMessageHistory)
-      channel.on('message_history', handlers.onMessageHistory);
-    if (handlers.onReactionAdded) channel.on('reaction_added', handlers.onReactionAdded);
-    if (handlers.onReactionRemoved)
-      channel.on('reaction_removed', handlers.onReactionRemoved);
-    if (handlers.onMessageEdited) channel.on('message_edited', handlers.onMessageEdited);
-    if (handlers.onMessageDeleted)
-      channel.on('message_deleted', handlers.onMessageDeleted);
+    const channel = socket.channel(`chat:${conversationId}`, {});
+    this.bindChatHandlers(channel, handlers);
 
     channel
       .join()
@@ -322,8 +345,16 @@ class PhoenixSocketManager {
     this.chatChannelSpecs.set(conversationId, handlers);
     if (!this.socket) return null;
 
+    // Any live channel for this conversation on this socket is reused, in
+    // whatever state it is: a second `socket.channel(...)` for the same
+    // topic would receive every broadcast a second time. Joining while one
+    // is still joining is the common case (a screen that remounts).
     const existing = this.channels.get(conversationId);
-    if (existing?.state === 'joined' && existing.socket === this.socket) return existing;
+    if (existing && existing.socket === this.socket && existing.state !== 'closed') {
+      this.bindChatHandlers(existing, handlers);
+      if (existing.state !== 'joined' && existing.state !== 'joining') existing.join();
+      return existing;
+    }
 
     return this.createChatChannel(this.socket, conversationId, handlers);
   }

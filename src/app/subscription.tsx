@@ -291,7 +291,7 @@ export default function SubscriptionScreen() {
           <Text style={styles.emptySubtitle}>
             {t('creatorOnly.subtitle', {
               defaultValue:
-                'Listening, browsing and messaging are free. Subscription plans are reserved for creator accounts (artists with a registered inmate number).',
+                'Listening, browsing and messaging are free. Subscription plans are reserved for creator accounts (creators with a registered inmate number).',
             })}
           </Text>
         </View>

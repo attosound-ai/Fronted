@@ -25,18 +25,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Application from 'expo-application';
 import { AppState, StyleSheet } from 'react-native';
 import { useFonts } from 'expo-font';
-
-// Patched Archivo TTFs with corrected hhea/OS-2 metrics so iOS does not
-// clip descenders (y, g, p, j). The original @expo-google-fonts/archivo
-// build has hhea.descender=-210 while glyphs extend to -410, causing
-// clipping in TextInputs and tight layouts. See assets/fonts/README.
-const Archivo_400Regular = require('../../assets/fonts/Archivo_400Regular.ttf');
-const Archivo_500Medium = require('../../assets/fonts/Archivo_500Medium.ttf');
-const Archivo_600SemiBold = require('../../assets/fonts/Archivo_600SemiBold.ttf');
-const Archivo_700Bold = require('../../assets/fonts/Archivo_700Bold.ttf');
-// Italic comes straight from the upstream package: it only appears inline in
-// chat bubbles, where the descender clipping the patched faces fix is moot.
-const Archivo_400Regular_Italic = require('@expo-google-fonts/archivo/400Regular_Italic/Archivo_400Regular_Italic.ttf');
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
@@ -65,6 +53,23 @@ import { AccountSwitchBlockedSheet } from '@/components/ui/AccountSwitchBlockedS
 import { ActiveCallIndicator } from '@/components/call/ActiveCallIndicator';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
+
+// QueryClient is extracted to a shared module so stores can import it
+// for cache invalidation (e.g., on account switch).
+import { queryClient, queryPersister } from '@/lib/queryClient';
+import { COLORS } from '@/constants/theme';
+
+// Patched Archivo TTFs with corrected hhea/OS-2 metrics so iOS does not
+// clip descenders (y, g, p, j). The original @expo-google-fonts/archivo
+// build has hhea.descender=-210 while glyphs extend to -410, causing
+// clipping in TextInputs and tight layouts. See assets/fonts/README.
+const Archivo_400Regular = require('../../assets/fonts/Archivo_400Regular.ttf');
+const Archivo_500Medium = require('../../assets/fonts/Archivo_500Medium.ttf');
+const Archivo_600SemiBold = require('../../assets/fonts/Archivo_600SemiBold.ttf');
+const Archivo_700Bold = require('../../assets/fonts/Archivo_700Bold.ttf');
+// Italic comes straight from the upstream package: it only appears inline in
+// chat bubbles, where the descender clipping the patched faces fix is moot.
+const Archivo_400Regular_Italic = require('@expo-google-fonts/archivo/400Regular_Italic/Archivo_400Regular_Italic.ttf');
 
 // --- Sentry native-init gate — prevents the "Sentry went dark" class of bug ---
 // Builds at/after this number compile the native Sentry bootstrap
@@ -143,11 +148,6 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
-
-// QueryClient is extracted to a shared module so stores can import it
-// for cache invalidation (e.g., on account switch).
-import { queryClient, queryPersister } from '@/lib/queryClient';
-import { COLORS } from '@/constants/theme';
 
 /** Bridges the PostHog instance into the analytics singleton + global error handler. */
 function AnalyticsInitializer() {
@@ -477,6 +477,18 @@ function RootLayout() {
                             headerShown: false,
                             presentation: 'modal',
                             animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
+                          name="chat-camera"
+                          options={{
+                            // The camera is a card over the conversation, the
+                            // way ChatGPT opens it: the route only has to see
+                            // through, the card animates itself.
+                            headerShown: false,
+                            presentation: 'transparentModal',
+                            animation: 'none',
+                            contentStyle: { backgroundColor: 'transparent' },
                           }}
                         />
                         <Stack.Screen

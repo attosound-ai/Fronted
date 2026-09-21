@@ -20,9 +20,9 @@
         "aps-environment": "production"
       },
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Atto needs microphone access for voice calls",
-        "NSPhotoLibraryUsageDescription": "ATTO needs access to your photo library to set your profile picture",
-        "NSCameraUsageDescription": "ATTO needs camera access to take a profile photo",
+        "NSMicrophoneUsageDescription": "ATTO needs the microphone for calls, voice notes and recording in the studio",
+        "NSPhotoLibraryUsageDescription": "ATTO needs your photo library to share photos and videos in chats and to set your profile picture",
+        "NSCameraUsageDescription": "ATTO needs the camera to take photos, record video notes in chats and set your profile photo",
         "UIBackgroundModes": [
           "voip",
           "audio",
@@ -95,6 +95,14 @@
         }
       ],
       "expo-image-picker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ATTO needs the camera to take photos, record video notes in chats and set your profile photo",
+          "microphonePermission": "ATTO needs the microphone for calls, voice notes and recording in the studio",
+          "recordAudioAndroid": true
+        }
+      ],
       "expo-contacts",
       "expo-asset",
       "expo-audio",

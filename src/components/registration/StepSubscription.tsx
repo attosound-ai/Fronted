@@ -142,7 +142,7 @@ ${anglesHtml}
   <p>${t('subscription.avatar.pdf.step3Body')}</p>
   <h2>${t('subscription.avatar.valuePacks')}</h2>
   <table>
-    <tr><th>Pack</th><th>Price</th><th>Per clip</th></tr>
+    <tr><th>${t('subscription.avatar.pdf.packHeader')}</th><th>${t('subscription.avatar.pdf.priceHeader')}</th><th>${t('subscription.avatar.pdf.perClipHeader')}</th></tr>
 ${packsHtml}
   </table>
   <p class="tip">${t('subscription.avatar.tip')}</p>

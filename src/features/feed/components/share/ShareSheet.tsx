@@ -6,6 +6,8 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { showToast } from '@/components/ui/Toast';
 import type { FeedPost } from '@/types/post';
+import { SendToChatRow } from '@/features/messages/components/SendToChatRow';
+import type { SharedPost } from '@/features/messages/types';
 
 interface ShareSheetProps {
   visible: boolean;
@@ -36,8 +38,27 @@ export function ShareSheet({ visible, onClose, post, onShareTracked }: ShareShee
     onClose();
   };
 
+  // The post as a chat card carries only what the card draws.
+  const sharedPost: SharedPost = {
+    id: post.id,
+    type: post.type,
+    title: post.title,
+    description: post.description,
+    authorId: post.author?.id != null ? String(post.author.id) : undefined,
+    authorName: post.author?.username,
+    authorAvatar: post.author?.avatar ?? undefined,
+    coverUrl: post.coverUrl,
+    thumbnailUrl: post.thumbnailUrl,
+    audioUrl: post.audioUrl,
+    videoUrl: post.videoUrl,
+    imageUrl: post.images?.[0],
+    duration: post.duration,
+  };
+
   return (
     <BottomSheet visible={visible} onClose={onClose} title={t('post.share')}>
+      {/* Chats first: sending a post to someone is what people reach for. */}
+      <SendToChatRow post={sharedPost} onSent={() => onShareTracked?.()} />
       <TouchableOpacity style={styles.option} onPress={handleShareExternal}>
         <View style={styles.iconCircle}>
           <Share2 size={22} color="#FFF" strokeWidth={2.25} />

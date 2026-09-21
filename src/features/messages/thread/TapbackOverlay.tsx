@@ -14,6 +14,7 @@ import Animated, {
   ZoomIn,
   ZoomOut,
 } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import { Plus } from 'lucide-react-native';
 
@@ -48,6 +49,7 @@ const GAP = 10;
  * each emoji a beat after the previous one, and a tap outside closes it.
  */
 export function TapbackOverlay({ anchor, mine, onPick, onMore, onClose }: Props) {
+  const { t } = useTranslation('messages');
   const { width, height } = useWindowDimensions();
   useEffect(() => {
     if (anchor) void haptic('medium');
@@ -77,7 +79,7 @@ export function TapbackOverlay({ anchor, mine, onPick, onMore, onClose }: Props)
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
-          accessibilityLabel="Close"
+          accessibilityLabel={t('actions.close')}
         />
         <Animated.View
           entering={ZoomIn.duration(200).easing(Easing.out(Easing.back(1.4)))}
@@ -126,7 +128,7 @@ export function TapbackOverlay({ anchor, mine, onPick, onMore, onClose }: Props)
             <Pressable
               onPress={onMore}
               accessibilityRole="button"
-              accessibilityLabel="More"
+              accessibilityLabel={t('actions.more')}
               style={({ pressed }) => [
                 styles.emojiButton,
                 styles.more,

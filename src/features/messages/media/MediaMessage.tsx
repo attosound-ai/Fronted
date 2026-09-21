@@ -6,6 +6,7 @@ import { COLORS } from '@/constants/theme';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { VoiceNoteBubble } from './VoiceNoteBubble';
 import { VideoMessagePlayer } from '../components/VideoMessagePlayer';
+import { SharedPostCard } from './SharedPostCard';
 import type { AttoMessage } from '../utils/messageAdapter';
 
 /** Widest a media bubble gets; WhatsApp and Telegram sit around 240 pt. */
@@ -57,6 +58,17 @@ function MediaMessageInner({ message, isOwn }: MediaMessageProps) {
       );
     case 'video_note':
       return <VideoNote url={url} />;
+    case 'post': {
+      const post = meta.post;
+      if (!post) return null;
+      return (
+        <SharedPostCard
+          post={post}
+          caption={typeof meta.caption === 'string' ? meta.caption : null}
+          onLight={isOwn}
+        />
+      );
+    }
     case 'audio':
       return (
         <View style={styles.audio}>

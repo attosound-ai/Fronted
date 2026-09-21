@@ -38,9 +38,18 @@ import Animated, {
   LinearTransition,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Maximize2, Mic, Plus, SendHorizontal, Smile } from 'lucide-react-native';
+import {
+  Camera,
+  Maximize2,
+  Mic,
+  Plus,
+  SendHorizontal,
+  Smile,
+  Trash2,
+} from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
@@ -51,8 +60,8 @@ import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useAttachSheet } from '../hooks/useAttachSheet';
 import { useVoiceNote } from '../media/useVoiceNote';
 import type { OutgoingMedia } from '../media/chatMedia';
-import { Trash2 } from 'lucide-react-native';
 import { TAPBACK_EMOJI } from '../thread/TapbackOverlay';
+import { AttachMenuButton, type AttachAction } from './AttachMenu';
 
 export interface ChatComposerHandle {
   /** Empty the field through the native command (keyboard stays up). */
@@ -78,12 +87,20 @@ interface ChatComposerProps {
   onTextActivity?: (text: string) => void;
   /** Reply or edit preview rendered inside the capsule above the field. */
   preview?: ReactNode;
-  /** The "+" button: the screen opens the attach menu (iMessage style). */
+  /** The "+" native menu opened: the screen only records it. */
   onAttachPress?: () => void;
+  /** An option picked in the "+" native menu. */
+  onAttachPick?: (action: AttachAction) => void;
   /** A recorded voice note ready to send. */
   onSendMedia?: (media: OutgoingMedia) => void;
   /** Hold the send button: the screen opens the effect picker with this text. */
   onSendWithEffect?: (text: string) => void;
+  /** The camera button beside the mic (WhatsApp keeps one there). */
+  onCameraPress?: () => void;
+  /** Holding the camera records a round video note. */
+  onVideoNotePress?: () => void;
+  /** True while the attach menu is open: the plus turns into a close mark. */
+  attachOpen?: boolean;
 }
 
 /** Field height bounds in points: one line, and about six lines. */
@@ -115,8 +132,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       onTextActivity,
       preview,
       onAttachPress,
+      onAttachPick,
       onSendMedia,
       onSendWithEffect,
+      onCameraPress,
+      onVideoNotePress,
+      attachOpen = false,
     },
     ref
   ) {
@@ -197,6 +218,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       }),
       [clear]
     );
+
+    // A plus turned 45 degrees is a close mark: the same button says "open"
+    // and "close" without swapping icons.
+    const [menuOpen, setMenuOpen] = useState(false);
+    const plusOpen = attachOpen || menuOpen;
+    const plusTurn = useSharedValue(0);
+    useEffect(() => {
+      plusTurn.value = withSpring(plusOpen ? 1 : 0, {
+        damping: 18,
+        stiffness: 260,
+        mass: 0.6,
+      });
+    }, [plusOpen, plusTurn]);
+    const plusStyle = useAnimatedStyle(() => ({
+      transform: [{ rotate: `${plusTurn.value * 45}deg` }],
+    }));
 
     // Send grows from a dot inside the capsule; the mic slides out to the
     // right and fades. Both driven by one progress value, on the UI thread.
@@ -345,16 +382,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           </Animated.View>
         ) : null}
         <Animated.View style={styles.row} layout={LinearTransition.duration(SEND_IN_MS)}>
-          <GlassSurface radius={22} style={styles.roundButton}>
-            <Pressable
-              onPress={onAttachPress ?? openAttach}
-              style={styles.roundButtonInner}
-              accessibilityRole="button"
-              accessibilityLabel={t('composer.attach')}
-            >
-              <Plus size={24} color={COLORS.white} strokeWidth={2.25} />
-            </Pressable>
-          </GlassSurface>
+          {/* The list is the system's own UIMenu: our part is the glass
+              circle it grows from, and the plus that turns into an X. */}
+          <AttachMenuButton
+            style={styles.roundButton}
+            accessibilityLabel={t('composer.attach')}
+            onOpenChange={(open) => {
+              setMenuOpen(open);
+              if (open) (onAttachPress ?? openAttach)();
+            }}
+            onPick={(action) => onAttachPick?.(action)}
+          >
+            <GlassSurface radius={22} style={styles.roundButton}>
+              <View style={styles.roundButtonInner}>
+                <Animated.View style={plusStyle}>
+                  <Plus size={24} color={COLORS.white} strokeWidth={2.25} />
+                </Animated.View>
+              </View>
+            </GlassSurface>
+          </AttachMenuButton>
 
           <GlassSurface radius={24} style={styles.capsule}>
             {preview}
@@ -393,6 +439,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   style={[styles.input, tall && styles.inputTall]}
                   keyboardAppearance="dark"
                   autoCapitalize="sentences"
+                  // Autocorrection and the QuickType bar stay on, like every other
+                  // messenger: the delegate patch clamps the stale ranges they used
+                  // to crash on.
+                  autoCorrect
+                  spellCheck
                   maxFontSizeMultiplier={1.0}
                   textAlignVertical="center"
                   underlineColorAndroid="transparent"
@@ -448,6 +499,30 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
               ) : null}
             </View>
           </GlassSurface>
+
+          {!hasText ? (
+            <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
+              <GlassSurface radius={22} style={styles.roundButton}>
+                <Pressable
+                  onPress={() => {
+                    void haptic('light');
+                    onCameraPress?.();
+                  }}
+                  onLongPress={() => {
+                    void haptic('medium');
+                    onVideoNotePress?.();
+                  }}
+                  delayLongPress={380}
+                  style={styles.roundButtonInner}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('composer.camera')}
+                  accessibilityHint={t('composer.cameraHint')}
+                >
+                  <Camera size={22} color={COLORS.white} strokeWidth={2.25} />
+                </Pressable>
+              </GlassSurface>
+            </Animated.View>
+          ) : null}
 
           {!hasText ? (
             <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>

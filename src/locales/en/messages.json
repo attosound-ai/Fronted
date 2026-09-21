@@ -62,7 +62,8 @@
     "slideToCancel": "‹ Slide to cancel",
     "play": "Play",
     "pause": "Pause",
-    "speed": "Playback speed"
+    "speed": "Playback speed",
+    "previewPost": "🎵 Post"
   },
   "newMessage": {
     "headerTitle": "New Message",
@@ -99,7 +100,10 @@
     "copy": "Copy",
     "edit": "Edit",
     "editing": "Editing",
-    "title": "Message"
+    "title": "Message",
+    "close": "Close",
+    "more": "More reactions",
+    "replyingTo": "Replying to {{name}}"
   },
   "listActions": {
     "pin": "Pin",
@@ -144,7 +148,9 @@
     "bold": "Bold",
     "italic": "Italic",
     "strike": "Strikethrough",
-    "code": "Code"
+    "code": "Code",
+    "camera": "Camera",
+    "cameraHint": "Hold to record a video note"
   },
   "attachMenu": {
     "camera": "Camera",
@@ -180,5 +186,52 @@
       "celebration": "CELEBRATION"
     },
     "sendWith": "SEND WITH {{name}}"
+  },
+  "camera": {
+    "photo": "Photo",
+    "videoNote": "Video note",
+    "retake": "Retake",
+    "send": "Send",
+    "close": "Close camera",
+    "flash": "Flash",
+    "flip": "Flip camera",
+    "capture": "Take photo",
+    "stop": "Stop recording",
+    "tapToStop": "Tap to stop",
+    "more": "More"
+  },
+  "pinned": {
+    "title": "Pinned message",
+    "titleCount": "Pinned messages ({{count}})",
+    "open": "Go to the pinned message",
+    "unpin": "Unpin",
+    "pin": "Pin",
+    "pinned": "Pinned",
+    "unpinned": "Unpinned"
+  },
+  "sharedPost": {
+    "audio": "Audio",
+    "video": "Video",
+    "photo": "Photo",
+    "untitled": "Post",
+    "shareTitle": "Send to a chat",
+    "sent": "Sent",
+    "search": "Search",
+    "searchPeople": "Find someone",
+    "searchPlaceholder": "Search by username",
+    "existingChat": "You already have a chat",
+    "close": "Close",
+    "back15": "Back 15 seconds",
+    "forward15": "Forward 15 seconds",
+    "timeline": "Timeline",
+    "notePlaceholder": "Write a message..."
+  },
+  "mediaLimits": {
+    "title": "Cannot send this",
+    "videoTooLong": "That video is longer than {{minutes}} minutes. Trim it and send it again.",
+    "videoTooBig": "That video weighs {{actual}} MB after compressing and the limit is {{mb}} MB. Try a shorter clip.",
+    "fileTooBig": "That file weighs {{actual}} MB and the limit is {{mb}} MB.",
+    "audioTooLong": "That audio is longer than {{minutes}} minutes.",
+    "generic": "This file cannot be sent."
   }
 }

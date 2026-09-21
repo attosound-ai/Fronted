@@ -1,14 +1,13 @@
 {
   "accountType": {
-    "title": "¿Cómo quieres empezar?",
-    "subtitle": "Elige la que te describe. Los datos del artista van al final.",
+    "title": "Empecemos",
     "representative": {
-      "title": "Represento a un artista",
-      "description": "Administras la cuenta de un artista con su permiso y la configuras por él."
+      "title": "Represento a un creador",
+      "description": "Administras la cuenta de un creador con su consentimiento y la configuras por él."
     },
     "listener": {
       "title": "Mi propia cuenta",
-      "description": "Escucha, sigue y apoya. Si eres el artista, lo validas al final."
+      "description": "Explora, escucha, sigue y apoya."
     }
   },
   "basicInfo": {
@@ -85,10 +84,10 @@
     "inmateGateBack": "Atrás"
   },
   "creatorInmate": {
-    "title": "¿Eres el artista?",
-    "subtitle": "Opcional. Si eres el artista, búscate para que tu cuenta quede verificada como creador. Si no, sáltalo y termina.",
+    "title": "¿Eres el creador?",
+    "subtitle": "Opcional. Si eres el creador, búscate para que tu cuenta quede verificada como creador. Si no, sáltalo y termina.",
     "validate": "Validar y terminar",
-    "skip": "Saltar, no soy el artista"
+    "skip": "Saltar, no soy el creador"
   },
   "creatorAccountSetup": {
     "title": "Configura la cuenta del creador",
@@ -245,7 +244,10 @@
         "step2Heading": "Paso 2 — Envía las fotos por correo a ATTO",
         "step2Body": "No envíes las fotos por correo electrónico ni por otras plataformas. Nuestro equipo las subirá y creará tu avatar, normalmente en 1 a 3 días.",
         "step3Heading": "Paso 3 — Tu familia publica mensajes",
-        "step3Body": "Cuando tu avatar esté listo, tus familiares o amigos inician sesión en su cuenta de ATTO, eligen «Publicar mensaje de avatar», escriben lo que quieres decir y tu avatar lo entrega como un video de 10 segundos, visible para todos en ATTO y que se puede compartir en privado."
+        "step3Body": "Cuando tu avatar esté listo, tus familiares o amigos inician sesión en su cuenta de ATTO, eligen «Publicar mensaje de avatar», escriben lo que quieres decir y tu avatar lo entrega como un video de 10 segundos, visible para todos en ATTO y que se puede compartir en privado.",
+        "packHeader": "Paquete",
+        "priceHeader": "Precio",
+        "perClipHeader": "Por clip"
       }
     }
   },

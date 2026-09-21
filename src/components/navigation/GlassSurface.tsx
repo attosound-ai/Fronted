@@ -17,7 +17,12 @@
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { ReactNode } from 'react';
 import { BlurView } from 'expo-blur';
-import { GlassView, isLiquidGlassAvailable, type GlassStyle } from 'expo-glass-effect';
+import {
+  GlassContainer,
+  GlassView,
+  isLiquidGlassAvailable,
+  type GlassStyle,
+} from 'expo-glass-effect';
 
 type Tier = 'glass' | 'blur' | 'solid';
 
@@ -100,3 +105,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
   },
 });
+
+/**
+ * Wraps several sibling `GlassSurface`s. On iOS 26 a `UIGlassEffect` only
+ * renders when it belongs to a glass container, so a column of glass pills
+ * shows just the first one without this. `spacing` is how close two pills
+ * have to be before their glass merges.
+ */
+export function GlassGroup({
+  children,
+  style,
+  spacing,
+}: {
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  spacing?: number;
+}) {
+  if (GLASS_TIER !== 'glass') return <View style={style}>{children}</View>;
+  return (
+    <GlassContainer style={style} spacing={spacing}>
+      {children}
+    </GlassContainer>
+  );
+}

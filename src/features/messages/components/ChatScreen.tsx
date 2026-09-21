@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Alert, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Alert, Keyboard, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -53,7 +53,12 @@ import {
 import { ChatWallpaperLayer } from './ChatWallpaperLayer';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
-import { AttachMenu, type AttachAction } from './AttachMenu';
+import { type AttachAction } from './AttachMenu';
+import { TopFadeBlur } from './TopFadeBlur';
+import { PinnedBar } from './PinnedBar';
+import { ReplyFocus } from './ReplyFocus';
+import { usePinnedMessages } from '../hooks/usePinnedMessages';
+import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
@@ -64,7 +69,12 @@ import {
   type MessageEffect,
 } from '../effects/effectCatalog';
 import { MediaMessage } from '../media/MediaMessage';
-import { uploadChatMedia, type OutgoingMedia } from '../media/chatMedia';
+import {
+  CHAT_MEDIA_LIMITS,
+  MediaRejectedError,
+  uploadChatMedia,
+  type OutgoingMedia,
+} from '../media/chatMedia';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Contacts from 'expo-contacts';
@@ -87,6 +97,38 @@ interface ChatScreenProps {
   participantAvatar?: string | null;
   /** Rendered inline in iPad split-view (hides back button, skips router.back) */
   inline?: boolean;
+}
+
+/**
+ * One clear line per refusal: what happened and what would fit, never a
+ * bare error code.
+ */
+function mediaLimitMessage(
+  error: MediaRejectedError,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  switch (error.reason) {
+    case 'video_too_long':
+      return t('mediaLimits.videoTooLong', {
+        minutes: Math.round(CHAT_MEDIA_LIMITS.videoMaxDurationMs / 60000),
+      });
+    case 'video_too_big':
+      return t('mediaLimits.videoTooBig', {
+        mb: Math.round(CHAT_MEDIA_LIMITS.videoMaxBytes / (1024 * 1024)),
+        actual: Math.round((error.detail.bytes ?? 0) / (1024 * 1024)),
+      });
+    case 'file_too_big':
+      return t('mediaLimits.fileTooBig', {
+        mb: Math.round(CHAT_MEDIA_LIMITS.fileMaxBytes / (1024 * 1024)),
+        actual: Math.round((error.detail.bytes ?? 0) / (1024 * 1024)),
+      });
+    case 'audio_too_long':
+      return t('mediaLimits.audioTooLong', {
+        minutes: Math.round(CHAT_MEDIA_LIMITS.audioMaxDurationMs / 60000),
+      });
+    default:
+      return t('mediaLimits.generic');
+  }
 }
 
 export function ChatScreen({
@@ -372,12 +414,20 @@ export function ChatScreen({
       queryClient.setQueryData(
         chatKey,
         (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
-          if (!old?.pages?.length) return old;
+          // An empty cache used to swallow the row in silence (after a
+          // reload the message only came back on the next fetch): seed the
+          // first page instead of walking away.
+          const base = old?.pages?.length
+            ? old
+            : {
+                pages: [{ messages: [], nextCursor: null, hasMore: false }],
+                pageParams: [undefined],
+              };
           return {
-            ...old,
+            ...base,
             pages: [
               {
-                ...old.pages[0],
+                ...base.pages[0],
                 messages: [
                   {
                     conversationId,
@@ -394,10 +444,10 @@ export function ChatScreen({
                     createdAt: new Date().toISOString(),
                     status: 'sending' as const,
                   },
-                  ...old.pages[0].messages,
+                  ...base.pages[0].messages,
                 ],
               },
-              ...old.pages.slice(1),
+              ...base.pages.slice(1),
             ],
           };
         }
@@ -478,6 +528,14 @@ export function ChatScreen({
     ]
   );
 
+  // Pinned messages: the bar under the header and the menu state. Both
+  // sides stay in step through the channel (see useRealtimeChat).
+  const { pinned, pin, unpin } = usePinnedMessages(conversationId);
+  const pinnedIds = useMemo(
+    () => new Set(pinned.map((m) => String(m.messageId))),
+    [pinned]
+  );
+
   const handleMenuAction = useCallback(
     (actionKey: string, msg: AttoMessage) => {
       const eventProps = {
@@ -498,6 +556,14 @@ export function ChatScreen({
           break;
         case 'thread':
           openThread(String(msg._id));
+          break;
+        case 'pin':
+          pin(String(msg._id));
+          showToast(t('pinned.pinned'));
+          break;
+        case 'unpin':
+          unpin(String(msg._id));
+          showToast(t('pinned.unpinned'));
           break;
         case 'copy':
           Clipboard.setStringAsync(msg.text);
@@ -534,7 +600,7 @@ export function ChatScreen({
           break;
       }
     },
-    [conversationId, deleteMessage, t]
+    [conversationId, deleteMessage, t, pin, unpin]
   );
 
   const handleBack = useCallback(() => {
@@ -605,8 +671,6 @@ export function ChatScreen({
   }, []);
 
   // ── Attachments and voice notes ─────────────────────────────────────
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [toolbarHeight, setToolbarHeight] = useState(80);
 
   /**
    * Optimistic media message: the local file shows in the bubble at once
@@ -635,12 +699,20 @@ export function ChatScreen({
       queryClient.setQueryData(
         chatKey,
         (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
-          if (!old?.pages?.length) return old;
+          // An empty cache used to swallow the row in silence (after a
+          // reload the message only came back on the next fetch): seed the
+          // first page instead of walking away.
+          const base = old?.pages?.length
+            ? old
+            : {
+                pages: [{ messages: [], nextCursor: null, hasMore: false }],
+                pageParams: [undefined],
+              };
           return {
-            ...old,
+            ...base,
             pages: [
               {
-                ...old.pages[0],
+                ...base.pages[0],
                 messages: [
                   {
                     conversationId,
@@ -654,10 +726,10 @@ export function ChatScreen({
                     createdAt: new Date().toISOString(),
                     status: 'sending' as const,
                   },
-                  ...old.pages[0].messages,
+                  ...base.pages[0].messages,
                 ],
               },
-              ...old.pages.slice(1),
+              ...base.pages.slice(1),
             ],
           };
         }
@@ -677,6 +749,22 @@ export function ChatScreen({
                   m.messageId === tempId || m.clientKey === tempId
                     ? { ...m, ...patch }
                     : m
+                ),
+              })),
+            };
+          }
+        );
+      const dropTemp = () =>
+        queryClient.setQueryData(
+          chatKey,
+          (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.filter(
+                  (m) => m.messageId !== tempId && m.clientKey !== tempId
                 ),
               })),
             };
@@ -718,6 +806,26 @@ export function ChatScreen({
         });
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
       } catch (error) {
+        // A refusal we can explain (too long, too heavy) gets its own line
+        // and takes the row out of the thread, instead of a red tick with
+        // no reason.
+        if (error instanceof MediaRejectedError) {
+          dropTemp();
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_REJECTED, {
+            conversation_id: conversationId,
+            kind: media.kind,
+            reason: error.reason,
+            ...error.detail,
+          });
+          Alert.alert(
+            t('mediaLimits.title'),
+            mediaLimitMessage(
+              error,
+              t as unknown as (key: string, options?: Record<string, unknown>) => string
+            )
+          );
+          return;
+        }
         patchTemp({ status: 'failed' });
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_FAILED, {
           conversation_id: conversationId,
@@ -726,12 +834,35 @@ export function ChatScreen({
         });
       }
     },
-    [conversationId, userId, queryClient]
+    [conversationId, userId, queryClient, t]
   );
+
+  // The camera is our own screen (ChatGPT's chrome, WhatsApp's round video
+  // note), not the system picker: it opens as a route and leaves the capture
+  // in the store.
+  const openCamera = useCallback(
+    (mode: CameraMode) => {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CAMERA_OPENED, {
+        conversation_id: conversationId,
+        mode,
+      });
+      // The card sits over the conversation: the keyboard has to go first.
+      Keyboard.dismiss();
+      useCameraStore.getState().open(conversationId, mode);
+      router.push('/chat-camera');
+    },
+    [conversationId]
+  );
+
+  const cameraResult = useCameraStore((s) => s.result);
+  useEffect(() => {
+    if (!cameraResult || cameraResult.conversationId !== conversationId) return;
+    useCameraStore.getState().consume();
+    void handleSendMedia(cameraResult.media);
+  }, [cameraResult, conversationId, handleSendMedia]);
 
   const handleAttachPick = useCallback(
     async (action: AttachAction) => {
-      setAttachOpen(false);
       analytics.capture(ANALYTICS_EVENTS.MESSAGES.ATTACH_MENU_PICKED, {
         conversation_id: conversationId,
         action,
@@ -751,17 +882,7 @@ export function ChatScreen({
       });
       try {
         if (action === 'camera') {
-          const perm = await ImagePicker.requestCameraPermissionsAsync();
-          if (!perm.granted) return Alert.alert(t('media.permissionCamera'));
-          const res = await ImagePicker.launchCameraAsync({
-            mediaTypes: ['images', 'videos'],
-            quality: 0.85,
-          });
-          const asset = res.assets?.[0];
-          if (!res.canceled && asset)
-            void handleSendMedia(
-              fromAsset(asset, asset.type === 'video' ? 'video' : 'image')
-            );
+          openCamera('photo');
         } else if (action === 'photos') {
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!perm.granted) return Alert.alert(t('media.permissionPhotos'));
@@ -779,17 +900,7 @@ export function ChatScreen({
             }
           }
         } else if (action === 'video_note') {
-          const perm = await ImagePicker.requestCameraPermissionsAsync();
-          if (!perm.granted) return Alert.alert(t('media.permissionCamera'));
-          const res = await ImagePicker.launchCameraAsync({
-            mediaTypes: ['videos'],
-            cameraType: ImagePicker.CameraType.front,
-            videoMaxDuration: 60,
-            videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
-          });
-          const asset = res.assets?.[0];
-          if (!res.canceled && asset)
-            void handleSendMedia(fromAsset(asset, 'video_note'));
+          openCamera('video_note');
         } else if (action === 'voice') {
           Alert.alert(t('composer.voiceNote'), t('media.recordingHint'));
         } else if (action === 'file') {
@@ -835,7 +946,7 @@ export function ChatScreen({
         });
       }
     },
-    [conversationId, handleSendMedia, t]
+    [conversationId, handleSendMedia, openCamera, t]
   );
 
   // Reply and edit previews sit inside the composer's glass capsule (Telegram).
@@ -860,25 +971,6 @@ export function ChatScreen({
           </TouchableOpacity>
         </View>
       )}
-      {replyMessage && !editingMessage && (
-        <View style={styles.replyPreview}>
-          <View style={styles.replyPreviewBar} />
-          <View style={styles.replyPreviewContent}>
-            <Text style={styles.replyPreviewName}>
-              {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
-            </Text>
-            <Text style={styles.replyPreviewText} numberOfLines={1}>
-              {replyMessage.text}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setReplyMessage(null)}
-            style={styles.replyPreviewClose}
-          >
-            <X size={18} color="#888" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      )}
     </>
   );
 
@@ -893,10 +985,7 @@ export function ChatScreen({
       8 * keyboardProgress.value,
   }));
   const inputToolbar = (
-    <Animated.View
-      style={[styles.inputToolbarOuter, toolbarInset]}
-      onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
-    >
+    <Animated.View style={[styles.inputToolbarOuter, toolbarInset]}>
       <ChatComposer
         ref={composerRef}
         conversationId={conversationId}
@@ -923,10 +1012,12 @@ export function ChatScreen({
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.ATTACH_MENU_OPENED, {
             conversation_id: conversationId,
           });
-          setAttachOpen((open) => !open);
         }}
+        onAttachPick={(action) => void handleAttachPick(action)}
         onSendMedia={handleSendMedia}
         onSendWithEffect={(text) => setEffectDraft(text)}
+        onCameraPress={() => void handleAttachPick('camera')}
+        onVideoNotePress={() => void handleAttachPick('video_note')}
       />
     </Animated.View>
   );
@@ -957,6 +1048,18 @@ export function ChatScreen({
           actionTitle: t('thread.menu'),
           icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'text.bubble' } },
         },
+        {
+          actionKey: pinnedIds.has(String(_msg._id)) ? 'unpin' : 'pin',
+          actionTitle: pinnedIds.has(String(_msg._id))
+            ? t('pinned.unpin')
+            : t('pinned.pin'),
+          icon: {
+            type: 'IMAGE_SYSTEM',
+            imageValue: {
+              systemName: pinnedIds.has(String(_msg._id)) ? 'pin.slash' : 'pin',
+            },
+          },
+        },
       ];
       if (isOwn) {
         items.push({
@@ -973,7 +1076,7 @@ export function ChatScreen({
       }
       return items;
     },
-    [t]
+    [pinnedIds, t]
   );
 
   const handleSwipeReply = useCallback(
@@ -1045,16 +1148,28 @@ export function ChatScreen({
           threadRef.current?.scrollToBottom(true);
         }}
       />
-      <AttachMenu
-        visible={attachOpen}
-        bottom={toolbarHeight + 4}
-        onClose={() => setAttachOpen(false)}
-        onPick={(action) => void handleAttachPick(action)}
-      />
       <WallpaperPickerSheet
         visible={wallpaperPickerVisible}
         onClose={() => setWallpaperPickerVisible(false)}
         conversationId={conversationId}
+      />
+      {/* Telegram's blurred top band, under the header pills. It grows when
+          the pinned bar is up so the band still ends below everything. */}
+      <TopFadeBlur height={insets.top + (pinned.length ? 164 : 108)} />
+      <PinnedBar
+        pinned={pinned}
+        top={insets.top + 56}
+        onOpen={(message) => {
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.PINNED_BAR_TAPPED, {
+            conversation_id: conversationId,
+            message_id: message.messageId,
+          });
+          threadRef.current?.scrollToMessage?.(message.messageId);
+        }}
+        onUnpin={(message) => {
+          unpin(message.messageId);
+          showToast(t('pinned.unpinned'));
+        }}
       />
       <ChatHeader
         onOpenWallpaper={() => setWallpaperPickerVisible(true)}
@@ -1090,6 +1205,16 @@ export function ChatScreen({
           readAt={readAt}
           bottomInset={0}
           topInset={0}
+        />
+        {/* iMessage: answering one message takes the rest out of focus and
+            floats it over the composer. */}
+        <ReplyFocus
+          message={editingMessage ? null : replyMessage}
+          isOwn={replyMessage ? String(replyMessage.user._id) === userId : false}
+          senderIsCreator={
+            replyMessage ? creatorIds.has(String(replyMessage.user._id)) : false
+          }
+          onCancel={() => setReplyMessage(null)}
         />
         {inputToolbar}
       </KeyboardAvoidingView>

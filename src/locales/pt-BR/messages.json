@@ -55,7 +55,10 @@
     "copy": "Copiar",
     "edit": "Editar",
     "editing": "Editando",
-    "title": "Mensagem"
+    "title": "Mensagem",
+    "close": "Fechar",
+    "more": "Mais reações",
+    "replyingTo": "Respondendo a {{name}}"
   },
   "chatHeader": {
     "backAccessibilityLabel": "Voltar",
@@ -88,7 +91,8 @@
     "slideToCancel": "‹ Deslize para cancelar",
     "play": "Reproduzir",
     "pause": "Pausar",
-    "speed": "Velocidade"
+    "speed": "Velocidade",
+    "previewPost": "🎵 Publicação"
   },
   "wallpaperPicker": {
     "title": "Plano de fundo do chat",
@@ -144,7 +148,9 @@
     "bold": "Negrito",
     "italic": "Itálico",
     "strike": "Tachado",
-    "code": "Código"
+    "code": "Código",
+    "camera": "Câmera",
+    "cameraHint": "Segure para gravar um vídeo curto"
   },
   "attachMenu": {
     "camera": "Câmera",
@@ -180,5 +186,52 @@
       "celebration": "CELEBRAÇÃO"
     },
     "sendWith": "ENVIAR COM {{name}}"
+  },
+  "camera": {
+    "photo": "Foto",
+    "videoNote": "Nota de vídeo",
+    "retake": "Repetir",
+    "send": "Enviar",
+    "close": "Fechar a câmera",
+    "flash": "Flash",
+    "flip": "Girar a câmera",
+    "capture": "Tirar foto",
+    "stop": "Parar a gravação",
+    "tapToStop": "Toque para parar",
+    "more": "Mais"
+  },
+  "pinned": {
+    "title": "Mensagem fixada",
+    "titleCount": "Mensagens fixadas ({{count}})",
+    "open": "Ir para a mensagem fixada",
+    "unpin": "Desafixar",
+    "pin": "Fixar",
+    "pinned": "Fixada",
+    "unpinned": "Desafixada"
+  },
+  "sharedPost": {
+    "audio": "Áudio",
+    "video": "Vídeo",
+    "photo": "Foto",
+    "untitled": "Publicação",
+    "shareTitle": "Enviar para um chat",
+    "sent": "Enviado",
+    "search": "Buscar",
+    "searchPeople": "Encontrar alguém",
+    "searchPlaceholder": "Busque pelo nome de usuário",
+    "existingChat": "Você já tem um chat",
+    "close": "Fechar",
+    "back15": "Voltar 15 segundos",
+    "forward15": "Avançar 15 segundos",
+    "timeline": "Linha do tempo",
+    "notePlaceholder": "Escreva uma mensagem..."
+  },
+  "mediaLimits": {
+    "title": "Não dá para enviar",
+    "videoTooLong": "Esse vídeo dura mais de {{minutes}} minutos. Corte e envie de novo.",
+    "videoTooBig": "Esse vídeo pesa {{actual}} MB depois de comprimir e o limite é {{mb}} MB. Tente um clipe mais curto.",
+    "fileTooBig": "Esse arquivo pesa {{actual}} MB e o limite é {{mb}} MB.",
+    "audioTooLong": "Esse áudio dura mais de {{minutes}} minutos.",
+    "generic": "Este arquivo não pode ser enviado."
   }
 }

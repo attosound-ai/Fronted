@@ -134,6 +134,23 @@ export const messageService = {
     await apiClient.delete(`/messages/${chatId}/${messageId}`);
   },
 
+  // ── Pinned messages ────────────────────────────
+
+  async getPinned(chatId: string): Promise<ChatMessage[]> {
+    const response = await apiClient.get<ApiSuccessResponse<BackendMessagesResponse>>(
+      `/messages/${chatId}/pinned`
+    );
+    return (response.data.data.messages ?? []).map(mapMessage);
+  },
+
+  async pinMessage(chatId: string, messageId: string): Promise<void> {
+    await apiClient.post(`/messages/${chatId}/${messageId}/pin`);
+  },
+
+  async unpinMessage(chatId: string, messageId: string): Promise<void> {
+    await apiClient.delete(`/messages/${chatId}/${messageId}/pin`);
+  },
+
   // ── Reactions ──────────────────────────────────
 
   async getReactions(chatId: string, messageId: string): Promise<Reaction[]> {

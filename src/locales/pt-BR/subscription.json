@@ -78,7 +78,7 @@
   "title": "Assinatura",
   "creatorOnly": {
     "title": "As assinaturas são apenas para criadores",
-    "subtitle": "Ouvir, navegar e enviar mensagens é gratuito. Os planos de assinatura são reservados para contas de criadores (artistas com um número de detento registrado)."
+    "subtitle": "Ouvir, navegar e enviar mensagens é gratuito. Os planos de assinatura são reservados para contas de criadores (criadores com um número de detento registrado)."
   },
   "pendingBanner": {
     "title": "Agendado: mudança para {{plan}}",

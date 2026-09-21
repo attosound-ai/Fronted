@@ -114,11 +114,34 @@ export interface MessageMetadata {
   bytes?: number;
   /** iMessage style effect played once on arrival. */
   effect?: { kind: 'bubble' | 'screen'; name: string };
+  /** A post shared into the chat: enough to draw and play the card. */
+  post?: SharedPost;
+  /** A note written with the shared post, shown under the card. */
+  caption?: string;
   [key: string]: unknown;
+}
+
+/** The part of a feed post a chat card needs, carried in the metadata. */
+export interface SharedPost {
+  id: string;
+  type: string;
+  title?: string;
+  description?: string;
+  authorId?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  coverUrl?: string;
+  thumbnailUrl?: string;
+  audioUrl?: string;
+  videoUrl?: string;
+  imageUrl?: string;
+  /** Seconds, as the feed reports it. */
+  duration?: number;
 }
 
 export type MessageContentType =
   | 'text'
+  | 'post'
   | 'audio'
   | 'video_note'
   | 'image'

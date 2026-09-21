@@ -78,7 +78,7 @@
   "title": "Suscripción",
   "creatorOnly": {
     "title": "Las suscripciones son solo para creadores",
-    "subtitle": "Escuchar, navegar y enviar mensajes es gratis. Los planes de suscripción están reservados para cuentas de creadores (artistas con un número de recluso registrado)."
+    "subtitle": "Escuchar, navegar y enviar mensajes es gratis. Los planes de suscripción están reservados para cuentas de creadores (creadores con un número de recluso registrado)."
   },
   "pendingBanner": {
     "title": "Programado: cambio a {{plan}}",

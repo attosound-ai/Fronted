@@ -116,16 +116,28 @@ export function useRealtimeChat(conversationId: string) {
       onMessage: (payload) => {
         const msg = mapBackendMessage(payload as unknown as BackendMessage);
         prependMessage(msg);
+        // How long the message took from the server stamp to this screen:
+        // the number to watch when real time feels slow.
+        const stamped = msg.createdAt ? Date.parse(msg.createdAt) : NaN;
+        const deliveryMs = Number.isNaN(stamped) ? null : Date.now() - stamped;
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_RECEIVED_REALTIME, {
           conversation_id: conversationId,
           message_id: msg.messageId,
           sender_id: msg.senderId,
           has_reply: !!msg.replyToId,
+          content_type: msg.contentType ?? 'text',
+          delivery_ms: deliveryMs,
+          own_echo: String(msg.senderId) === String(useAuthStore.getState().user?.id),
         });
       },
       onTyping: (payload) => {
         const { user_id, is_typing } = payload as { user_id: string; is_typing: boolean };
         setTyping(conversationId, user_id, is_typing);
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.TYPING_RECEIVED, {
+          conversation_id: conversationId,
+          user_id,
+          is_typing,
+        });
       },
       onMessagesRead: (payload) => {
         // chat-service broadcasts `messages_read` to every subscriber on the
@@ -201,6 +213,36 @@ export function useRealtimeChat(conversationId: string) {
           isEdited: true,
           editedAt: edited_at,
         }));
+      },
+      onMessagePinned: (payload) => {
+        const { message_id, pinned_by } = payload as {
+          message_id?: string;
+          pinned_by?: string;
+        };
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.PINNED_REALTIME, {
+          conversation_id: conversationId,
+          message_id: message_id ?? null,
+          actor_id: pinned_by ?? null,
+          action: 'pinned',
+        });
+        void queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.MESSAGES.PINNED(conversationId),
+        });
+      },
+      onMessageUnpinned: (payload) => {
+        const { message_id, unpinned_by } = payload as {
+          message_id?: string;
+          unpinned_by?: string;
+        };
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.PINNED_REALTIME, {
+          conversation_id: conversationId,
+          message_id: message_id ?? null,
+          actor_id: unpinned_by ?? null,
+          action: 'unpinned',
+        });
+        void queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.MESSAGES.PINNED(conversationId),
+        });
       },
       onMessageDeleted: (payload) => {
         const { message_id, deleted_at, deleted_by } = payload as {

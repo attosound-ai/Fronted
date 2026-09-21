@@ -261,6 +261,11 @@ export default function ComposerExpandedScreen() {
           style={styles.input}
           keyboardAppearance="dark"
           autoCapitalize="sentences"
+          // Autocorrection and the QuickType bar stay on, like every other
+          // messenger: the delegate patch clamps the stale ranges they used
+          // to crash on.
+          autoCorrect
+          spellCheck
           placeholder={t('chat.inputPlaceholder')}
           placeholderTextColor={COLORS.gray[500]}
           maxFontSizeMultiplier={1.2}

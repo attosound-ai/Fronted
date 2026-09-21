@@ -28,6 +28,7 @@ import { GOLD } from '@/constants/gold';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { COLORS } from '@/constants/theme';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import type { AttoMessage } from '../utils/messageAdapter';
 import { ReactionBar } from '../components/ReactionBar';
 import {
@@ -311,6 +312,17 @@ function MessageRowInner({
 
   const isMedia = isMediaContentType(message.contentType);
   const isVisual = isVisualContentType(message.contentType);
+  // WhatsApp and Telegram hang a video note as a bare circle: no bubble, no
+  // tail, no colour behind it. Only the time rides on its lower edge.
+  const isVideoNote = message.contentType === 'video_note';
+  // A photo, a video or a video note is shown on its own, the way Telegram
+  // does it: no frame of colour around it, just the rounded picture. A reply
+  // keeps its bubble, since the quote above the picture needs the ground.
+  // (`message.text` carries the media url for these, never a caption.)
+  const isBareVisual = isVisual && !message.replyToId;
+  // A shared post keeps its bubble, but the cover has to reach the bubble's
+  // own edges: the padding moves inside the card.
+  const isPostCard = message.contentType === 'post';
   // Width the floating time needs on the last text line: the meta text plus
   // room for the ticks (about three figure spaces at 11 pt).
   const metaSpacer =
@@ -318,6 +330,38 @@ function MessageRowInner({
     (message.isEdited ? `${labels.edited} ` : '') +
     formatTime(message.createdAt) +
     (isOwn ? '\u2007\u2007\u2007' : '');
+
+  // The time and ticks: over a picture they sit on glass (white), elsewhere
+  // they take the bubble's own ink.
+  const onGlass = isVisual && !isVideoNote;
+  const onDarkMeta = onGlass || isVideoNote;
+  const metaContent = (
+    <>
+      {message.isEdited ? (
+        <RNText
+          style={[
+            styles.edited,
+            (isOwn || senderIsCreator) && !onDarkMeta && styles.metaOwn,
+            onGlass && styles.metaOnGlass,
+          ]}
+          maxFontSizeMultiplier={1.0}
+        >
+          {labels.edited}
+        </RNText>
+      ) : null}
+      <RNText
+        style={[
+          styles.time,
+          (isOwn || senderIsCreator) && !onDarkMeta && styles.metaOwn,
+          onGlass && styles.metaOnGlass,
+        ]}
+        maxFontSizeMultiplier={1.0}
+      >
+        {formatTime(message.createdAt)}
+      </RNText>
+      {isOwn ? <Ticks message={message} onDark={onDarkMeta} /> : null}
+    </>
+  );
 
   const bubble = message.isDeleted ? (
     <View style={[styles.bubble, styles.bubbleDeleted, cornerStyle]}>
@@ -344,16 +388,25 @@ function MessageRowInner({
       </RNText>
     </View>
   ) : (
-    <View style={[styles.bubble, isVisual && styles.bubbleVisual]}>
+    <View
+      style={[
+        styles.bubble,
+        isVisual && styles.bubbleVisual,
+        isBareVisual && styles.bubbleBare,
+        isPostCard && styles.bubblePost,
+      ]}
+    >
       {/* Bubble and tail are ONE vector shape with one fill, so no seam can
           appear where the tail meets the corner (a separate tail svg left a
-          visible line on the phone). */}
-      <BubbleShape
-        size={bubbleSize}
-        corners={corners}
-        tail={tailed ? (isOwn ? 'right' : 'left') : null}
-        fill={senderIsCreator ? 'gold' : isOwn ? COLORS.white : '#262626'}
-      />
+          visible line on the phone). A video note carries no shape at all. */}
+      {isBareVisual ? null : (
+        <BubbleShape
+          size={bubbleSize}
+          corners={corners}
+          tail={tailed ? (isOwn ? 'right' : 'left') : null}
+          fill={senderIsCreator ? 'gold' : isOwn ? COLORS.white : '#262626'}
+        />
+      )}
       {message.replyToId && message.replyToContent ? (
         <View
           style={[
@@ -423,30 +476,24 @@ function MessageRowInner({
           </RNText>
         </RNText>
       ) : null}
-      <View
-        style={[
-          styles.meta,
-          message.text && !isMedia ? styles.metaFloating : null,
-          isVisual ? styles.metaOverMedia : null,
-          message.contentType === 'audio' ? styles.metaCorner : null,
-        ]}
-      >
-        {message.isEdited ? (
-          <RNText
-            style={[styles.edited, (isOwn || senderIsCreator) && styles.metaOwn]}
-            maxFontSizeMultiplier={1.0}
-          >
-            {labels.edited}
-          </RNText>
-        ) : null}
-        <RNText
-          style={[styles.time, (isOwn || senderIsCreator) && styles.metaOwn]}
-          maxFontSizeMultiplier={1.0}
+      {/* Over a picture the time rides on liquid glass in white; on a
+          bubble it keeps the bubble's own colour. */}
+      {onGlass ? (
+        <GlassSurface radius={11} style={styles.metaGlass}>
+          <View style={styles.metaGlassInner}>{metaContent}</View>
+        </GlassSurface>
+      ) : (
+        <View
+          style={[
+            styles.meta,
+            message.text && !isMedia ? styles.metaFloating : null,
+            isVideoNote ? styles.metaUnderCircle : null,
+            message.contentType === 'audio' ? styles.metaCorner : null,
+          ]}
         >
-          {formatTime(message.createdAt)}
-        </RNText>
-        {isOwn ? <Ticks message={message} /> : null}
-      </View>
+          {metaContent}
+        </View>
+      )}
     </View>
   );
 
@@ -607,38 +654,35 @@ function BubbleShape({
   const tr = Math.min(corners.topRight, w / 2, h / 2);
   const br = Math.min(corners.bottomRight, w / 2, h / 2);
   const bl = Math.min(corners.bottomLeft, w / 2, h / 2);
-  const d = [
-    `M${tl} 0`,
-    `H${w - tr}`,
-    `A${tr} ${tr} 0 0 1 ${w} ${tr}`,
-    `V${h - br}`,
-    `A${br} ${br} 0 0 1 ${w - br} ${h}`,
-    `H${bl}`,
-    `A${bl} ${bl} 0 0 1 0 ${h - bl}`,
-    `V${tl}`,
-    `A${tl} ${tl} 0 0 1 ${tl} 0`,
-    'Z',
-  ];
+  // ONE closed outline, tail included. Two subpaths that merely touch leave
+  // a hairline where they antialias against each other (plain to see on a
+  // 2x screen like the iPad), so the bottom edge flows into the tail and
+  // comes back into the corner arc without ever lifting the pen.
+  const d: string[] = [`M${tl} 0`, `H${w - tr}`, `A${tr} ${tr} 0 0 1 ${w} ${tr}`];
   if (tail === 'right') {
-    // Starts on the corner arc and returns along the bottom edge.
     d.push(
-      `M${w - 19} ${h - 0.5}`,
-      `L${w - br} ${h}`,
-      `A${br} ${br} 0 0 0 ${w - 11.3} ${h - 1.3}`,
+      `V${h - br}`,
+      // Down the corner to where the tail leaves the bubble.
+      `A${br} ${br} 0 0 1 ${w - 11.3} ${h - 1.3}`,
+      // Out to the point, hanging under the corner.
       `Q${w - 9.5} ${h + 4} ${w - 9} ${h + TAIL_DROP - 0.5}`,
+      // And back in along the inner side, onto the bottom edge.
       `Q${w - 19} ${h + 3.25} ${w - 21} ${h}`,
-      'Z'
+      `H${bl}`
     );
-  } else if (tail === 'left') {
-    d.push(
-      `M19 ${h - 0.5}`,
-      `L${bl} ${h}`,
-      `A${bl} ${bl} 0 0 1 11.3 ${h - 1.3}`,
-      `Q9.5 ${h + 4} 9 ${h + TAIL_DROP - 0.5}`,
-      `Q19 ${h + 3.25} 21 ${h}`,
-      'Z'
-    );
+  } else {
+    d.push(`V${h - br}`, `A${br} ${br} 0 0 1 ${w - br} ${h}`);
+    if (tail === 'left') {
+      d.push(
+        `H21`,
+        `Q19 ${h + 3.25} 9 ${h + TAIL_DROP - 0.5}`,
+        `Q9.5 ${h + 4} 11.3 ${h - 1.3}`
+      );
+    } else {
+      d.push(`H${bl}`);
+    }
   }
+  d.push(`A${bl} ${bl} 0 0 1 0 ${h - bl}`, `V${tl}`, `A${tl} ${tl} 0 0 1 ${tl} 0`, 'Z');
   return (
     <Svg
       width={w}
@@ -672,17 +716,20 @@ function BubbleShape({
   );
 }
 
-function Ticks({ message }: { message: AttoMessage }) {
+function Ticks({ message, onDark }: { message: AttoMessage; onDark?: boolean }) {
+  // A video note carries its ticks on the wallpaper, not on a light bubble.
+  const strong = onDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)';
+  const weak = onDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
   if (message.status === 'failed') {
     return <AlertCircle size={13} color="#B91C1C" strokeWidth={2.25} />;
   }
   if (message.pending || message.status === 'sending') {
-    return <Clock size={12} color="rgba(0,0,0,0.4)" strokeWidth={2.25} />;
+    return <Clock size={12} color={weak} strokeWidth={2.25} />;
   }
   if (message.received) {
-    return <TickMarks double color="rgba(0,0,0,0.75)" />;
+    return <TickMarks double color={strong} />;
   }
-  return <TickMarks double={false} color="rgba(0,0,0,0.4)" />;
+  return <TickMarks double={false} color={weak} />;
 }
 
 /**
@@ -826,6 +873,39 @@ const styles = StyleSheet.create({
   // sit at that line's right end instead of taking another line.
   metaCorner: { position: 'absolute', right: 12, bottom: 5, marginTop: 0 },
   bubbleVisual: { paddingHorizontal: 3, paddingTop: 3, paddingBottom: 3, minWidth: 0 },
+  // A video note is only the circle: no padding, no background, no shape.
+  bubbleBare: { padding: 0, minWidth: 0, backgroundColor: 'transparent' },
+  // A post card brings its own padding so its cover can bleed to the edge.
+  bubblePost: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 8, minWidth: 0 },
+  // A video note has no bubble to hold the time: WhatsApp hangs it under
+  // the circle, on the wallpaper, where it is always legible.
+  metaUnderCircle: {
+    position: 'relative',
+    right: 0,
+    bottom: 0,
+    marginTop: 4,
+    marginRight: 2,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  // The glass pill that carries the time over a picture.
+  metaGlass: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    borderRadius: 11,
+    overflow: 'hidden',
+  },
+  metaGlassInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  metaOnGlass: { color: COLORS.white },
+  metaPostCard: { paddingRight: 12, marginTop: 4 },
   // Time and ticks over a photo or video, WhatsApp style pill.
   metaOverMedia: {
     position: 'absolute',

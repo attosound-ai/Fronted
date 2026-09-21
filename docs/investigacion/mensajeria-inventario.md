@@ -370,3 +370,12 @@ Conclusión: la burbuja de ATTO es más alta que las dos porque pone la hora en 
 | Mención @ | ❌ | ✅ tecleando @ | ❌ | ✅ | ✅ (editor) |
 | Lista | ❌ | ❌ | ❌ | ✅ | ✅ (editor) |
 | Formato (negrita, cursiva, código) | ✅ tecleando | ✅ menú | ❌ | ✅ barra | pendiente |
+
+### 9.9 Verificado en el iPhone (21 sep, 02:30 a 02:55)
+- Composer de vidrio: más, cápsula con emoji y enviar dentro, micrófono fuera; transición vacío → texto en unos 170 ms (fotogramas 810 a 976 ms de `atto_type2`), inversa al borrar. Hoja nativa de adjuntos con seis opciones. Tira de doce emojis.
+- El campo crece con el texto (en Fabric `onContentSizeChange` nunca dispara; el campo se auto dimensiona y `onLayout` enciende el botón de expandir a partir de dos líneas).
+- Editor expandido: cerrar, deshacer y rehacer, barra inferior con clip, @, lista, negrita, cursiva, tachado, código, emoji y enviar; la barra sigue al teclado por `useReanimatedKeyboardAnimation` (el KeyboardAvoidingView del controlador medía mal dentro de la ruta modal).
+- Formato en burbuja: negrita, cursiva (cara Archivo_400Regular_Italic cargada, iOS no sintetiza cursiva de familias propias), tachado y código con fondo.
+- Racha de tres mensajes: esquinas interiores y colita solo en el último; ventana de agrupación 5 minutos. David vio las esquinas interiores de 5 pt como "aplastadas": ahora 12 pt.
+- Envío: sin muelle (220 ms ease out) y las filas anteriores suben con animación de layout de 220 ms. La fila optimista y su copia del servidor comparten `clientKey` para que no se remonte (antes se veía una copia fantasma un fotograma).
+- Goma de WhatsApp (medida por futem-app-71 en Android congelando el gesto): arranca en el umbral (67 pt), recorrido extra 93 pt, coeficiente 1.02; misma fórmula que Telegram (0.40, 100 pt). Zona muerta de 14 pt antes de que la burbuja siga al dedo (nuestro activeOffsetX de 12 pt hace lo mismo). El recorte de 180 pt de Telegram es un cinturón aparte, no parte de la fórmula.

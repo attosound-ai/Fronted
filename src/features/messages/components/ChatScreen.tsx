@@ -189,14 +189,20 @@ export function ChatScreen({
   );
   const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
   const activeWallpaper = useMemo(() => {
-    if (selectedWallpaperId === CHAT_WALLPAPER_NONE_ID) {
-      return null;
-    }
-    if (!selectedWallpaperId) {
-      return wallpapersCatalogue[0] ?? null;
-    }
-    return wallpapersCatalogue.find((w) => w.id === selectedWallpaperId) ?? null;
-  }, [selectedWallpaperId, wallpapersCatalogue]);
+    if (selectedWallpaperId === CHAT_WALLPAPER_NONE_ID) return null;
+    // A choice that points at a wallpaper the admin retired falls back to
+    // the global choice, then to the catalogue default, never to black.
+    const pick = (id: string | null | undefined) =>
+      id && id !== CHAT_WALLPAPER_NONE_ID
+        ? (wallpapersCatalogue.find((w) => w.id === id) ?? null)
+        : null;
+    return (
+      pick(selectedWallpaperId) ??
+      (globalWallpaperId === CHAT_WALLPAPER_NONE_ID ? null : pick(globalWallpaperId)) ??
+      wallpapersCatalogue[0] ??
+      null
+    );
+  }, [selectedWallpaperId, globalWallpaperId, wallpapersCatalogue]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const sentMessageIds = useRef(new Set<string>()).current;

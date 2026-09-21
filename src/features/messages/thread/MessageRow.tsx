@@ -739,7 +739,8 @@ const styles = StyleSheet.create({
   },
   textOwn: { color: COLORS.black },
   spanBold: { fontFamily: 'Archivo_700Bold' },
-  spanItalic: { fontStyle: 'italic' },
+  // iOS does not synthesise italics for a custom family: use the real face.
+  spanItalic: { fontFamily: 'Archivo_400Regular_Italic' },
   spanStrike: { textDecorationLine: 'line-through' },
   spanCode: {
     fontFamily: 'Menlo',

@@ -34,6 +34,9 @@ const Archivo_400Regular = require('../../assets/fonts/Archivo_400Regular.ttf');
 const Archivo_500Medium = require('../../assets/fonts/Archivo_500Medium.ttf');
 const Archivo_600SemiBold = require('../../assets/fonts/Archivo_600SemiBold.ttf');
 const Archivo_700Bold = require('../../assets/fonts/Archivo_700Bold.ttf');
+// Italic comes straight from the upstream package: it only appears inline in
+// chat bubbles, where the descender clipping the patched faces fix is moot.
+const Archivo_400Regular_Italic = require('@expo-google-fonts/archivo/400Regular_Italic/Archivo_400Regular_Italic.ttf');
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
@@ -222,6 +225,7 @@ function RootLayout() {
     Archivo_500Medium,
     Archivo_600SemiBold,
     Archivo_700Bold,
+    Archivo_400Regular_Italic,
   });
   // JS launch splash (admin logo) shown the moment the native splash hides.
   const [splashDone, setSplashDone] = useState(false);

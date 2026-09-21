@@ -15,7 +15,8 @@ export interface ThreadItem {
 }
 
 /** Bubbles closer than this from the same author share a group. */
-export const GROUP_GAP_MS = 60_000;
+// Telegram merges consecutive messages of one author within five minutes.
+export const GROUP_GAP_MS = 5 * 60_000;
 /** Corner radius of a bubble edge that faces the outside of its group. */
 export const RADIUS_OUTER = 18;
 /** Corner radius of an edge that touches a neighbour in the group. */

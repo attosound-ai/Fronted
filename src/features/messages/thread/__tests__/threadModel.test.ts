@@ -44,8 +44,9 @@ test('consecutive messages from one author within a minute form one group', () =
   ]);
 });
 
-test('a change of author or a pause over a minute starts a new group', () => {
-  const items = [m('d', 'b', 100), m('c', 'a', 90), m('b', 'a', 10), m('a', 'a', 0)];
+test('a change of author or a pause over the group window starts a new group', () => {
+  // 'c' sits 6 minutes after 'b': past the 5 minute window (Telegram's).
+  const items = [m('d', 'b', 400), m('c', 'a', 370), m('b', 'a', 10), m('a', 'a', 0)];
   assert.deepEqual(groupPositions(items), [
     { first: true, last: true },
     { first: true, last: true },

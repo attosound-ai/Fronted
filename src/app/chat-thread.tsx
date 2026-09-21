@@ -61,11 +61,11 @@ export default function ChatThreadScreen() {
   );
 
   const renderMedia = useCallback(
-    (msg: AttoMessage) =>
+    (msg: AttoMessage, onLight: boolean) =>
       msg.contentType && msg.contentType !== 'text' ? (
-        <MediaMessage message={msg} isOwn={String(msg.user._id) === userId} />
+        <MediaMessage message={msg} isOwn={onLight} />
       ) : null,
-    [userId]
+    []
   );
 
   const labels = useMemo(

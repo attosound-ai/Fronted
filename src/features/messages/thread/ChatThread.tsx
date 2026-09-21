@@ -90,7 +90,7 @@ export interface ChatThreadProps {
   /** When the other side last read our messages, as an ISO time, for the Read label. */
   readAt: string | null;
   onToggleReaction: (message: AttoMessage, emoji: string) => void;
-  renderMedia?: (message: AttoMessage) => React.ReactNode;
+  renderMedia?: (message: AttoMessage, onLight: boolean) => React.ReactNode;
   /** Space kept clear at the bottom (composer height) so the last bubble is never covered. */
   bottomInset: number;
   /** Extra top space for the floating day pill and the header. */

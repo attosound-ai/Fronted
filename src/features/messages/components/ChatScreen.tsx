@@ -17,6 +17,7 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
 import type { MenuItem } from '../thread/MessageRow';
 import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
@@ -62,12 +63,7 @@ import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
-import {
-  effectFromMetadata,
-  hasEffectPlayed,
-  markEffectPlayed,
-  type MessageEffect,
-} from '../effects/effectCatalog';
+import { effectFromMetadata, type MessageEffect } from '../effects/effectCatalog';
 import { MediaMessage } from '../media/MediaMessage';
 import {
   CHAT_MEDIA_LIMITS,
@@ -103,6 +99,9 @@ interface ChatScreenProps {
  * One clear line per refusal: what happened and what would fit, never a
  * bare error code.
  */
+/** A screen effect only fires for a message that just arrived. */
+const SCREEN_EFFECT_FRESH_MS = 60_000;
+
 function mediaLimitMessage(
   error: MediaRejectedError,
   t: (key: string, options?: Record<string, unknown>) => string
@@ -639,16 +638,31 @@ export function ChatScreen({
   }, [conversationId]);
 
   // ── Effects (iMessage style) ────────────────────────────────────────
+  // Only a message that just landed carries its effect; older ones are
+  // history and stay quiet (iMessage never replays on reopen).
   // Hold the send button to pick one; it rides in the message metadata and
   // plays once, for both sides, when the message shows up.
   const [effectDraft, setEffectDraft] = useState<string | null>(null);
   const [screenEffect, setScreenEffect] = useState<ActiveScreenEffect | null>(null);
+  // Everything already in the thread when the chat opens counts as seen:
+  // iMessage plays an effect when the message arrives, never again on the
+  // way back into the conversation.
+  const effectsSeeded = useRef(false);
   useEffect(() => {
+    if (!messages.length) return;
+    if (!effectsSeeded.current) {
+      effectsSeeded.current = true;
+      for (const msg of messages) markEffectPlayed(msg.messageId);
+      return;
+    }
     for (const msg of messages) {
       const effect = effectFromMetadata(msg.metadata);
       if (!effect || effect.kind !== 'screen') continue;
       if (hasEffectPlayed(msg.messageId)) continue;
       markEffectPlayed(msg.messageId);
+      const stamped = msg.createdAt ? Date.parse(String(msg.createdAt)) : NaN;
+      const age = Number.isNaN(stamped) ? Infinity : Date.now() - stamped;
+      if (!(age >= 0 && age < SCREEN_EFFECT_FRESH_MS)) continue;
       setScreenEffect({ name: effect.name, messageId: msg.messageId, text: msg.content });
       break;
     }
@@ -1119,11 +1133,13 @@ export function ChatScreen({
   );
 
   const renderThreadMedia = useCallback(
-    (msg: AttoMessage) => {
+    // `onLight` comes from the row: a creator's bubble is gold on both
+    // sides, so the media's own ink follows the bubble, not who sent it.
+    (msg: AttoMessage, onLight: boolean) => {
       if (!msg.contentType || msg.contentType === 'text') return null;
-      return <MediaMessage message={msg} isOwn={String(msg.user._id) === userId} />;
+      return <MediaMessage message={msg} isOwn={onLight} />;
     },
-    [userId]
+    []
   );
 
   if (!user) return null;

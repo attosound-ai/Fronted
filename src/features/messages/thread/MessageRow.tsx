@@ -42,11 +42,8 @@ import {
 import { hasMarkdown, parseMarkdown } from './markdown';
 import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
 import { BubbleEffect } from '../effects/BubbleEffect';
-import {
-  effectFromMetadata,
-  hasEffectPlayed,
-  markEffectPlayed,
-} from '../effects/effectCatalog';
+import { effectFromMetadata } from '../effects/effectCatalog';
+import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -105,7 +102,8 @@ export interface MessageRowProps {
   onReplayEffect?: (message: AttoMessage) => void;
   onToggleReaction: (message: AttoMessage, emoji: string) => void;
   onPressQuote?: (replyToId: string) => void;
-  renderMedia?: (message: AttoMessage) => React.ReactNode;
+  /** `onLight` is true when the bubble under the media is white or gold. */
+  renderMedia?: (message: AttoMessage, onLight: boolean) => React.ReactNode;
 }
 
 // Quick and crisp, no visible overshoot: the reference apps settle in about
@@ -115,6 +113,8 @@ export interface MessageRowProps {
 /** Tail geometry: 24 pt of the width sit under the bubble, 8 pt curl past its edge. */
 // iMessage geometry, measured on a real sent bubble at 3x: the tail hangs
 // this far below the bubble's bottom edge (see BubbleShape).
+/** An effect only plays for a message that just landed. */
+const EFFECT_FRESH_MS = 60_000;
 const TAIL_DROP = 8;
 // The reaction pill hangs from the bottom edge on the inner side (the tail
 // owns the outer corner), overlapping the bubble by a few points so it never
@@ -302,6 +302,14 @@ function MessageRowInner({
   const [playEffectOnMount] = useState(() => {
     if (!effect || effect.kind !== 'bubble') return false;
     if (hasEffectPlayed(effectId)) return false;
+    // An effect belongs to the moment the message lands. Anything older than
+    // a minute is history: opening the conversation again must be quiet, the
+    // way iMessage is.
+    const age = Date.now() - new Date(message.createdAt).getTime();
+    if (!justSent && !(age >= 0 && age < EFFECT_FRESH_MS)) {
+      markEffectPlayed(effectId);
+      return false;
+    }
     markEffectPlayed(effectId);
     return true;
   });
@@ -445,7 +453,7 @@ function MessageRowInner({
           </View>
         </View>
       ) : null}
-      {renderMedia?.(message)}
+      {renderMedia?.(message, isOwn || senderIsCreator)}
       {message.text && !isMedia ? (
         <RNText
           style={[styles.text, (isOwn || senderIsCreator) && styles.textOwn]}

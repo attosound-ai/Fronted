@@ -47,6 +47,8 @@ export function toGiftedMessage(
     clientKey: msg.clientKey,
     metadata: msg.metadata ?? null,
     threadId: msg.threadId ?? null,
+    // Media messages keep the url in `text` for the renderer; the bubble
+    // shows the media, not the string (see MessageRow).
     text: msg.isDeleted ? '' : msg.content,
     createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
     user,

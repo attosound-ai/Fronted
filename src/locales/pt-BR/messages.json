@@ -70,7 +70,22 @@
   },
   "media": {
     "audioUnavailable": "Áudio indisponível",
-    "videoUnavailable": "Vídeo indisponível"
+    "videoUnavailable": "Vídeo indisponível",
+    "previewAudio": "🎤 Mensagem de voz",
+    "previewVideoNote": "🎥 Vídeo curto",
+    "previewImage": "📷 Foto",
+    "previewVideo": "📹 Vídeo",
+    "previewFile": "📎 Arquivo",
+    "previewContact": "👤 Contato",
+    "previewLocation": "📍 Localização",
+    "permissionMic": "Permita o microfone nos Ajustes para gravar mensagens de voz.",
+    "permissionCamera": "Permita a câmera nos Ajustes.",
+    "permissionPhotos": "Permita o acesso às fotos nos Ajustes.",
+    "permissionContacts": "Permita os contatos nos Ajustes.",
+    "sendFailed": "Não foi possível enviar. Toque para tentar de novo.",
+    "recordingHint": "Deslize para cancelar",
+    "recordingCancel": "Cancelar",
+    "slideToCancel": "‹ Deslize para cancelar"
   },
   "wallpaperPicker": {
     "title": "Plano de fundo do chat",
@@ -120,5 +135,17 @@
     "italic": "Itálico",
     "strike": "Tachado",
     "code": "Código"
+  },
+  "attachMenu": {
+    "camera": "Câmera",
+    "photos": "Fotos",
+    "videoNote": "Vídeo curto",
+    "voice": "Mensagem de voz",
+    "file": "Arquivo",
+    "contact": "Contato",
+    "projectAudio": "Áudio de um projeto ATTO",
+    "location": "Localização",
+    "soon": "Em breve",
+    "close": "Fechar menu"
   }
 }

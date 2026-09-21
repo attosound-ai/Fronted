@@ -44,7 +44,22 @@
   },
   "media": {
     "audioUnavailable": "Audio unavailable",
-    "videoUnavailable": "Video unavailable"
+    "videoUnavailable": "Video unavailable",
+    "previewAudio": "🎤 Voice note",
+    "previewVideoNote": "🎥 Video note",
+    "previewImage": "📷 Photo",
+    "previewVideo": "📹 Video",
+    "previewFile": "📎 File",
+    "previewContact": "👤 Contact",
+    "previewLocation": "📍 Location",
+    "permissionMic": "Allow the microphone in Settings to record voice notes.",
+    "permissionCamera": "Allow the camera in Settings.",
+    "permissionPhotos": "Allow photo access in Settings.",
+    "permissionContacts": "Allow contacts in Settings.",
+    "sendFailed": "Could not send. Tap to retry.",
+    "recordingHint": "Slide to cancel",
+    "recordingCancel": "Cancel",
+    "slideToCancel": "‹ Slide to cancel"
   },
   "newMessage": {
     "headerTitle": "New Message",
@@ -120,5 +135,17 @@
     "italic": "Italic",
     "strike": "Strikethrough",
     "code": "Code"
+  },
+  "attachMenu": {
+    "camera": "Camera",
+    "photos": "Photos",
+    "videoNote": "Video note",
+    "voice": "Voice note",
+    "file": "File",
+    "contact": "Contact",
+    "projectAudio": "ATTO project audio",
+    "location": "Location",
+    "soon": "Soon",
+    "close": "Close menu"
   }
 }

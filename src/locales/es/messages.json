@@ -44,7 +44,22 @@
   },
   "media": {
     "audioUnavailable": "Audio no disponible",
-    "videoUnavailable": "Video no disponible"
+    "videoUnavailable": "Video no disponible",
+    "previewAudio": "🎤 Nota de voz",
+    "previewVideoNote": "🎥 Nota de video",
+    "previewImage": "📷 Foto",
+    "previewVideo": "📹 Video",
+    "previewFile": "📎 Archivo",
+    "previewContact": "👤 Contacto",
+    "previewLocation": "📍 Ubicación",
+    "permissionMic": "Permite el micrófono en Ajustes para grabar notas de voz.",
+    "permissionCamera": "Permite la cámara en Ajustes.",
+    "permissionPhotos": "Permite el acceso a fotos en Ajustes.",
+    "permissionContacts": "Permite los contactos en Ajustes.",
+    "sendFailed": "No se pudo enviar. Toca para reintentar.",
+    "recordingHint": "Desliza para cancelar",
+    "recordingCancel": "Cancelar",
+    "slideToCancel": "‹ Desliza para cancelar"
   },
   "newMessage": {
     "headerTitle": "Nuevo mensaje",
@@ -120,5 +135,17 @@
     "italic": "Cursiva",
     "strike": "Tachado",
     "code": "Código"
+  },
+  "attachMenu": {
+    "camera": "Cámara",
+    "photos": "Fotos",
+    "videoNote": "Nota de video",
+    "voice": "Nota de voz",
+    "file": "Archivo",
+    "contact": "Contacto",
+    "projectAudio": "Audio de un proyecto ATTO",
+    "location": "Ubicación",
+    "soon": "Pronto",
+    "close": "Cerrar menú"
   }
 }

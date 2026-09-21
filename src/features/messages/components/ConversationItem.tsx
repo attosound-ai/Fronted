@@ -3,6 +3,7 @@ import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { BellOff, Pin } from 'lucide-react-native';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { stripMarkdown } from '../thread/markdown';
+import { previewFromServer } from '../media/chatMedia';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -105,7 +106,12 @@ function ConversationItemInner({
                 {draft}
               </>
             ) : (
-              stripMarkdown(conversation.lastMessage || '')
+              stripMarkdown(
+                previewFromServer(
+                  conversation.lastMessage,
+                  t as unknown as (key: string) => string
+                )
+              )
             )}
           </Text>
           <View style={styles.trailing}>

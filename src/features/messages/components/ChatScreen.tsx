@@ -53,6 +53,12 @@ import {
 import { ChatWallpaperLayer } from './ChatWallpaperLayer';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
+import { AttachMenu, type AttachAction } from './AttachMenu';
+import { MediaMessage } from '../media/MediaMessage';
+import { uploadChatMedia, type OutgoingMedia } from '../media/chatMedia';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Contacts from 'expo-contacts';
 import * as Clipboard from 'expo-clipboard';
 import { AudioMessagePlayer } from './AudioMessagePlayer';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
@@ -501,16 +507,6 @@ export function ChatScreen({
 
   // ── Custom renderers ──
 
-  const renderMessageAudio = useCallback((props: { currentMessage?: AttoMessage }) => {
-    if (!props.currentMessage?.audio) return null;
-    return <AudioMessagePlayer audioUrl={props.currentMessage.audio} />;
-  }, []);
-
-  const renderMessageVideo = useCallback((props: { currentMessage?: AttoMessage }) => {
-    if (!props.currentMessage?.video) return null;
-    return <VideoMessagePlayer videoUrl={props.currentMessage.video} />;
-  }, []);
-
   // Typing indicator, driven by the composer's keystrokes.
   const handleTypingActivity = useCallback(
     (text: string) => {
@@ -594,7 +590,10 @@ export function ChatScreen({
       8 * keyboardProgress.value,
   }));
   const inputToolbar = (
-    <Animated.View style={[styles.inputToolbarOuter, toolbarInset]}>
+    <Animated.View
+      style={[styles.inputToolbarOuter, toolbarInset]}
+      onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
+    >
       <ChatComposer
         ref={composerRef}
         conversationId={conversationId}
@@ -702,11 +701,224 @@ export function ChatScreen({
 
   const renderThreadMedia = useCallback(
     (msg: AttoMessage) => {
-      if (msg.contentType === 'audio') return renderMessageAudio({ currentMessage: msg });
-      if (msg.contentType === 'video') return renderMessageVideo({ currentMessage: msg });
-      return null;
+      if (!msg.contentType || msg.contentType === 'text') return null;
+      return <MediaMessage message={msg} isOwn={String(msg.user._id) === userId} />;
     },
-    [renderMessageAudio, renderMessageVideo]
+    [userId]
+  );
+
+  // ── Attachments and voice notes ─────────────────────────────────────
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [toolbarHeight, setToolbarHeight] = useState(80);
+
+  /**
+   * Optimistic media message: the local file shows in the bubble at once
+   * (status sending), then the upload and the send replace it with the
+   * hosted copy. Failures keep the row with status failed.
+   */
+  const handleSendMedia = useCallback(
+    async (media: OutgoingMedia) => {
+      const tempId = `temp-${Date.now()}`;
+      const chatKey = QUERY_KEYS.MESSAGES.CHAT(conversationId);
+      const localContent =
+        media.kind === 'contact'
+          ? JSON.stringify(media.contact ?? {})
+          : (media.uri ?? '');
+      const localMetadata = {
+        durationMs: media.durationMs,
+        waveform: media.waveform,
+        width: media.width,
+        height: media.height,
+        fileName: media.fileName,
+        bytes: media.bytes,
+        contact: media.contact,
+      };
+      sentMessageIds.add(tempId);
+      setJustSentId(tempId);
+      queryClient.setQueryData(
+        chatKey,
+        (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+          if (!old?.pages?.length) return old;
+          return {
+            ...old,
+            pages: [
+              {
+                ...old.pages[0],
+                messages: [
+                  {
+                    conversationId,
+                    messageId: tempId,
+                    clientKey: tempId,
+                    senderId: userId,
+                    content: localContent,
+                    contentType: media.kind,
+                    metadata: localMetadata,
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    status: 'sending' as const,
+                  },
+                  ...old.pages[0].messages,
+                ],
+              },
+              ...old.pages.slice(1),
+            ],
+          };
+        }
+      );
+      const patchTemp = (patch: Record<string, unknown>) =>
+        queryClient.setQueryData(
+          chatKey,
+          (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.map((m) =>
+                  m.messageId === tempId ? { ...m, ...patch } : m
+                ),
+              })),
+            };
+          }
+        );
+      threadRef.current?.scrollToBottom(true);
+      try {
+        const { content, metadata } = await uploadChatMedia(media, conversationId);
+        const sent = await messageService.sendMessage({
+          conversationId,
+          content,
+          contentType: media.kind,
+          metadata,
+        });
+        sentMessageIds.add(sent.messageId);
+        patchTemp({ messageId: sent.messageId, content, metadata, status: 'sent' });
+        setJustSentId((cur) => (cur === tempId ? sent.messageId : cur));
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_SENT, {
+          conversation_id: conversationId,
+          kind: media.kind,
+          duration_ms: media.durationMs ?? null,
+          bytes: metadata.bytes ?? null,
+        });
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
+      } catch (error) {
+        patchTemp({ status: 'failed' });
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_FAILED, {
+          conversation_id: conversationId,
+          kind: media.kind,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [conversationId, userId, queryClient]
+  );
+
+  const handleAttachPick = useCallback(
+    async (action: AttachAction) => {
+      setAttachOpen(false);
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.ATTACH_MENU_PICKED, {
+        conversation_id: conversationId,
+        action,
+      });
+      const fromAsset = (
+        asset: ImagePicker.ImagePickerAsset,
+        kind: OutgoingMedia['kind']
+      ): OutgoingMedia => ({
+        kind,
+        uri: asset.uri,
+        mime: asset.mimeType ?? undefined,
+        fileName: asset.fileName ?? undefined,
+        bytes: asset.fileSize,
+        width: asset.width,
+        height: asset.height,
+        durationMs: asset.duration ? Math.round(asset.duration) : undefined,
+      });
+      try {
+        if (action === 'camera') {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) return Alert.alert(t('media.permissionCamera'));
+          const res = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images', 'videos'],
+            quality: 0.85,
+          });
+          const asset = res.assets?.[0];
+          if (!res.canceled && asset)
+            void handleSendMedia(
+              fromAsset(asset, asset.type === 'video' ? 'video' : 'image')
+            );
+        } else if (action === 'photos') {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) return Alert.alert(t('media.permissionPhotos'));
+          const res = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images', 'videos'],
+            quality: 0.85,
+            allowsMultipleSelection: true,
+            selectionLimit: 5,
+          });
+          if (!res.canceled) {
+            for (const asset of res.assets ?? []) {
+              void handleSendMedia(
+                fromAsset(asset, asset.type === 'video' ? 'video' : 'image')
+              );
+            }
+          }
+        } else if (action === 'video_note') {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) return Alert.alert(t('media.permissionCamera'));
+          const res = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['videos'],
+            cameraType: ImagePicker.CameraType.front,
+            videoMaxDuration: 60,
+            videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+          });
+          const asset = res.assets?.[0];
+          if (!res.canceled && asset)
+            void handleSendMedia(fromAsset(asset, 'video_note'));
+        } else if (action === 'voice') {
+          Alert.alert(t('composer.voiceNote'), t('media.recordingHint'));
+        } else if (action === 'file') {
+          const res = await DocumentPicker.getDocumentAsync({
+            copyToCacheDirectory: true,
+            multiple: false,
+          });
+          const asset = res.assets?.[0];
+          if (!res.canceled && asset) {
+            void handleSendMedia({
+              kind: 'file',
+              uri: asset.uri,
+              mime: asset.mimeType,
+              fileName: asset.name,
+              bytes: asset.size,
+            });
+          }
+        } else if (action === 'contact') {
+          const perm = await Contacts.requestPermissionsAsync();
+          if (!perm.granted) return Alert.alert(t('media.permissionContacts'));
+          const picked = await Contacts.presentContactPickerAsync();
+          if (picked) {
+            void handleSendMedia({
+              kind: 'contact',
+              contact: {
+                name:
+                  picked.name ??
+                  [picked.firstName, picked.lastName].filter(Boolean).join(' '),
+                phone: picked.phoneNumbers?.[0]?.number ?? undefined,
+                email: picked.emails?.[0]?.email ?? undefined,
+              },
+            });
+          }
+        } else {
+          Alert.alert(t('composer.comingSoonTitle'), t('composer.comingSoonBody'));
+        }
+      } catch (error) {
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_FAILED, {
+          conversation_id: conversationId,
+          kind: action,
+          stage: 'pick',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [conversationId, handleSendMedia, t]
   );
 
   if (!user) return null;
@@ -721,6 +933,12 @@ export function ChatScreen({
     <View style={styles.container}>
       {wallpaperLayer}
 
+      <AttachMenu
+        visible={attachOpen}
+        bottom={toolbarHeight + 4}
+        onClose={() => setAttachOpen(false)}
+        onPick={(action) => void handleAttachPick(action)}
+      />
       <WallpaperPickerSheet
         visible={wallpaperPickerVisible}
         onClose={() => setWallpaperPickerVisible(false)}

@@ -38,6 +38,7 @@ import {
   type GroupPosition,
 } from './threadModel';
 import { hasMarkdown, parseMarkdown } from './markdown';
+import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -270,6 +271,8 @@ function MessageRowInner({
   };
   const hasReactions = !!message.reactions && message.reactions.length > 0;
 
+  const isMedia = isMediaContentType(message.contentType);
+  const isVisual = isVisualContentType(message.contentType);
   // Width the floating time needs on the last text line: the meta text plus
   // room for the ticks (about three figure spaces at 11 pt).
   const metaSpacer =
@@ -303,7 +306,7 @@ function MessageRowInner({
       </RNText>
     </View>
   ) : (
-    <View style={styles.bubble}>
+    <View style={[styles.bubble, isVisual && styles.bubbleVisual]}>
       {/* Bubble and tail are ONE vector shape with one fill, so no seam can
           appear where the tail meets the corner (a separate tail svg left a
           visible line on the phone). */}
@@ -352,7 +355,7 @@ function MessageRowInner({
         </View>
       ) : null}
       {renderMedia?.(message)}
-      {message.text ? (
+      {message.text && !isMedia ? (
         <RNText
           style={[styles.text, (isOwn || senderIsCreator) && styles.textOwn]}
           maxFontSizeMultiplier={1.2}
@@ -382,7 +385,13 @@ function MessageRowInner({
           </RNText>
         </RNText>
       ) : null}
-      <View style={[styles.meta, message.text ? styles.metaFloating : null]}>
+      <View
+        style={[
+          styles.meta,
+          message.text && !isMedia ? styles.metaFloating : null,
+          isVisual ? styles.metaOverMedia : null,
+        ]}
+      >
         {message.isEdited ? (
           <RNText
             style={[styles.edited, (isOwn || senderIsCreator) && styles.metaOwn]}
@@ -736,6 +745,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     gap: 4,
     marginTop: 2,
+  },
+  bubbleVisual: { paddingHorizontal: 3, paddingTop: 3, paddingBottom: 3, minWidth: 0 },
+  // Time and ticks over a photo or video, WhatsApp style pill.
+  metaOverMedia: {
+    position: 'absolute',
+    right: 9,
+    bottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 0,
   },
   // Over the spacer at the end of the last text line.
   metaFloating: {

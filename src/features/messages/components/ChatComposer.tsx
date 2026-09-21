@@ -19,11 +19,19 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text as RNText,
+  TextInput,
+  View,
+} from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
@@ -42,6 +50,11 @@ import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useAttachSheet } from '../hooks/useAttachSheet';
+import { useVoiceNote } from '../media/useVoiceNote';
+import type { OutgoingMedia } from '../media/chatMedia';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
+import { Trash2 } from 'lucide-react-native';
 import { TAPBACK_EMOJI } from '../thread/TapbackOverlay';
 
 export interface ChatComposerHandle {
@@ -68,6 +81,10 @@ interface ChatComposerProps {
   onTextActivity?: (text: string) => void;
   /** Reply or edit preview rendered inside the capsule above the field. */
   preview?: ReactNode;
+  /** The "+" button: the screen opens the attach menu (iMessage style). */
+  onAttachPress?: () => void;
+  /** A recorded voice note ready to send. */
+  onSendMedia?: (media: OutgoingMedia) => void;
 }
 
 /** Field height bounds in points: one line, and about six lines. */
@@ -80,6 +97,13 @@ const EASE_OUT = Easing.out(Easing.cubic);
 const EASE_IN = Easing.in(Easing.cubic);
 const QUICK_EMOJI = [...TAPBACK_EMOJI, '🔥', '🙏', '🎵', '👏', '😍', '🎤'];
 
+function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   function ChatComposer(
     {
@@ -91,6 +115,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       onSend,
       onTextActivity,
       preview,
+      onAttachPress,
+      onSendMedia,
     },
     ref
   ) {
@@ -226,7 +252,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       clear();
     }, [clear, conversationId, draftRef, onSend]);
 
-    const { openAttach, notYet } = useAttachSheet(conversationId);
+    const { openAttach } = useAttachSheet(conversationId);
 
     const toggleEmoji = useCallback(() => {
       haptic('selection');
@@ -249,10 +275,55 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       [conversationId, draftRef, replaceText]
     );
 
-    const pressMic = useCallback(() => {
-      haptic('medium');
-      notYet('voice_note');
-    }, [notYet]);
+    // Press and hold to record (WhatsApp, Telegram): the pan activates on
+    // touch down, sliding left past CANCEL_PX throws the note away, lifting
+    // the finger sends it. Telemetry covers every outcome.
+    const voice = useVoiceNote(conversationId);
+    const [cancelArmed, setCancelArmed] = useState(false);
+    const startVoice = useCallback(async () => {
+      const ok = await voice.start();
+      if (!ok) Alert.alert(t('media.permissionMic'));
+      else haptic('medium');
+    }, [voice, t]);
+    const endVoice = useCallback(
+      async (cancel: boolean) => {
+        setCancelArmed(false);
+        const media = cancel ? await voice.cancel() : await voice.stop();
+        if (media) {
+          haptic('light');
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.VOICE_NOTE_SENT, {
+            conversation_id: conversationId,
+            duration_ms: media.durationMs ?? null,
+            bars: media.waveform?.length ?? 0,
+          });
+          onSendMedia?.(media);
+        }
+      },
+      [voice, conversationId, onSendMedia]
+    );
+    const CANCEL_PX = 90;
+    const micGesture = useMemo(
+      () =>
+        Gesture.Pan()
+          .manualActivation(true)
+          .onTouchesDown((_e, state) => {
+            state.activate();
+          })
+          .onStart(() => {
+            runOnJS(startVoice)();
+          })
+          .onUpdate((e) => {
+            const armed = e.translationX < -CANCEL_PX;
+            runOnJS(setCancelArmed)(armed);
+          })
+          .onEnd((e) => {
+            runOnJS(endVoice)(e.translationX < -CANCEL_PX);
+          })
+          .onFinalize((_e, success) => {
+            if (!success) runOnJS(endVoice)(true);
+          }),
+      [startVoice, endVoice]
+    );
 
     return (
       <View style={styles.column}>
@@ -278,7 +349,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
         <Animated.View style={styles.row} layout={LinearTransition.duration(SEND_IN_MS)}>
           <GlassSurface radius={22} style={styles.roundButton}>
             <Pressable
-              onPress={openAttach}
+              onPress={onAttachPress ?? openAttach}
               style={styles.roundButtonInner}
               accessibilityRole="button"
               accessibilityLabel={t('composer.attach')}
@@ -289,7 +360,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
           <GlassSurface radius={24} style={styles.capsule}>
             {preview}
-            <View style={styles.fieldRow}>
+            {voice.recording ? (
+              <Animated.View entering={FadeIn.duration(120)} style={styles.recordingRow}>
+                <View style={[styles.recDot, { opacity: 0.5 + 0.5 * voice.level }]} />
+                <RNText style={styles.recTime} maxFontSizeMultiplier={1.0}>
+                  {formatDuration(voice.durationMs)}
+                </RNText>
+                <RNText
+                  style={[styles.recHint, cancelArmed && styles.recHintArmed]}
+                  maxFontSizeMultiplier={1.0}
+                  numberOfLines={1}
+                >
+                  {cancelArmed ? t('media.recordingCancel') : t('media.slideToCancel')}
+                </RNText>
+                {cancelArmed ? (
+                  <Trash2 size={18} color="#FF453A" strokeWidth={2.25} />
+                ) : null}
+              </Animated.View>
+            ) : null}
+            <View style={[styles.fieldRow, voice.recording && styles.hidden]}>
               <Animated.View
                 style={styles.inputWrapper}
                 layout={LinearTransition.duration(160)}
@@ -357,16 +446,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
           {!hasText ? (
             <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
-              <GlassSurface radius={22} style={styles.roundButton}>
-                <Pressable
-                  onPress={pressMic}
-                  style={styles.roundButtonInner}
+              <GestureDetector gesture={micGesture}>
+                <View
+                  style={[styles.roundButton, voice.recording && styles.micRecording]}
                   accessibilityRole="button"
                   accessibilityLabel={t('composer.voiceNote')}
+                  accessibilityHint={t('media.recordingHint')}
                 >
-                  <Mic size={22} color={COLORS.white} strokeWidth={2.25} />
-                </Pressable>
-              </GlassSurface>
+                  <GlassSurface radius={22} style={styles.roundButton}>
+                    <View style={styles.roundButtonInner}>
+                      <Mic
+                        size={22}
+                        color={voice.recording ? '#FF453A' : COLORS.white}
+                        strokeWidth={2.25}
+                      />
+                    </View>
+                  </GlassSurface>
+                </View>
+              </GestureDetector>
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -473,4 +570,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emojiGlyph: { fontSize: 26 },
+  hidden: { position: 'absolute', opacity: 0, height: 0, overflow: 'hidden' },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF453A' },
+  recTime: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontFamily: 'Archivo_500Medium',
+    fontVariant: ['tabular-nums'],
+    minWidth: 40,
+  },
+  recHint: {
+    flex: 1,
+    color: COLORS.gray[400],
+    fontSize: 14,
+    fontFamily: 'Archivo_400Regular',
+    textAlign: 'center',
+  },
+  recHintArmed: { color: '#FF453A' },
+  micRecording: { transform: [{ scale: 1.15 }] },
 });

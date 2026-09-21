@@ -671,8 +671,12 @@ export function ChatScreen({
               ...old,
               pages: old.pages.map((page) => ({
                 ...page,
+                // Match on the client key too: the channel echo may have
+                // already swapped the temp id for the server one.
                 messages: page.messages.map((m) =>
-                  m.messageId === tempId ? { ...m, ...patch } : m
+                  m.messageId === tempId || m.clientKey === tempId
+                    ? { ...m, ...patch }
+                    : m
                 ),
               })),
             };

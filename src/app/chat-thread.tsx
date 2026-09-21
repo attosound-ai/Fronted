@@ -109,7 +109,7 @@ export default function ChatThreadScreen() {
   );
 
   const row = useCallback(
-    (item: AttoMessage, isRoot: boolean) => (
+    (item: AttoMessage) => (
       <MessageRow
         message={item}
         isOwn={String(item.user._id) === userId}
@@ -127,7 +127,7 @@ export default function ChatThreadScreen() {
         dimmed={false}
         timesReveal={timesReveal}
         onTimesRevealed={() => {}}
-        readLabel={isRoot ? null : null}
+        readLabel={null}
       />
     ),
     [justSentId, labels, renderMedia, timesReveal, userId]
@@ -167,7 +167,7 @@ export default function ChatThreadScreen() {
           ListHeaderComponent={
             <View>
               {rootRows.map((item) => (
-                <View key={String(item._id)}>{row(item, true)}</View>
+                <View key={String(item._id)}>{row(item)}</View>
               ))}
               {/* The rule that counts what came after, exactly where Slack
                   puts it. */}
@@ -181,7 +181,7 @@ export default function ChatThreadScreen() {
               </View>
             </View>
           }
-          renderItem={({ item }) => row(item, false)}
+          renderItem={({ item }) => row(item)}
           ListEmptyComponent={
             !isLoading && !root ? (
               <Text style={styles.empty}>{t('thread.rootMissing')}</Text>

@@ -47,6 +47,7 @@ import {
   useChatWallpaperStore,
 } from '@/stores/chatWallpaperStore';
 import { ChatWallpaperLayer } from './ChatWallpaperLayer';
+import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import * as Clipboard from 'expo-clipboard';
 import { AudioMessagePlayer } from './AudioMessagePlayer';
@@ -108,7 +109,38 @@ export function ChatScreen({
   // draft ref mirrors it and survives toolbar remounts, and `composerGeneration`
   // forces a remount whenever we need to REPLACE the content (edit mode).
   const composerRef = useRef<ChatComposerHandle>(null);
-  const draftRef = useRef('');
+  // The unsent draft comes back when the chat is reopened (WhatsApp and
+  // Telegram keep it per conversation and flag it in the list).
+  const setStoredDraft = useConversationPrefsStore((s) => s.setDraft);
+  const draftRef = useRef(
+    useConversationPrefsStore.getState().drafts[conversationId] ?? ''
+  );
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistDraft = useCallback(
+    (text: string) => {
+      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+      draftSaveTimer.current = setTimeout(() => {
+        const had = !!useConversationPrefsStore.getState().drafts[conversationId];
+        setStoredDraft(conversationId, text);
+        if (!!text.trim() !== had) {
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.DRAFT_SAVED, {
+            conversation_id: conversationId,
+            has_text: !!text.trim(),
+            length: text.trim().length,
+          });
+        }
+      }, 400);
+    },
+    [conversationId, setStoredDraft]
+  );
+  useEffect(
+    () => () => {
+      // Leaving the screen: flush whatever the field holds right now.
+      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+      setStoredDraft(conversationId, draftRef.current);
+    },
+    [conversationId, setStoredDraft]
+  );
   const [composerGeneration, setComposerGeneration] = useState(0);
   // The message this device just sent slides in from the composer (iMessage).
   const [justSentId, setJustSentId] = useState<string | null>(null);
@@ -223,6 +255,9 @@ export function ChatScreen({
     async (newMessages: IMessage[] = []) => {
       const content = (newMessages[0]?.text ?? '').trim();
       if (!content) return;
+      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+      draftRef.current = '';
+      setStoredDraft(conversationId, '');
 
       // Stop typing indicator on send
       if (isTypingRef.current) {
@@ -458,6 +493,8 @@ export function ChatScreen({
   // Typing indicator, driven by the composer's keystrokes.
   const handleTypingActivity = useCallback(
     (text: string) => {
+      draftRef.current = text;
+      persistDraft(text);
       if (text.length > 0 && !isTypingRef.current) {
         isTypingRef.current = true;
         sendTyping(true);
@@ -470,7 +507,7 @@ export function ChatScreen({
         }
       }, 2000);
     },
-    [sendTyping]
+    [sendTyping, persistDraft]
   );
 
   const cancelEditing = useCallback(() => {

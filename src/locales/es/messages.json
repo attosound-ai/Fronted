@@ -82,5 +82,15 @@
     "edit": "Editar",
     "editing": "Editando",
     "title": "Mensaje"
+  },
+  "listActions": {
+    "pin": "Fijar",
+    "unpin": "Soltar",
+    "mute": "Silenciar",
+    "unmute": "Activar",
+    "archive": "Archivar",
+    "draftPrefix": "Borrador:",
+    "pinnedSection": "Fijados",
+    "archivedCount": "{{count}} archivados"
   }
 }

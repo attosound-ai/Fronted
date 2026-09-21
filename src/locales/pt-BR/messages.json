@@ -82,5 +82,15 @@
     "scopeAllChats": "Todas as conversas",
     "subtitleThisChat": "Escolha um fundo só para esta conversa.",
     "followGlobalLabel": "Igual às demais"
+  },
+  "listActions": {
+    "pin": "Fixar",
+    "unpin": "Desafixar",
+    "mute": "Silenciar",
+    "unmute": "Ativar",
+    "archive": "Arquivar",
+    "draftPrefix": "Rascunho:",
+    "pinnedSection": "Fixadas",
+    "archivedCount": "{{count}} arquivadas"
   }
 }

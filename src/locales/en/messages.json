@@ -82,5 +82,15 @@
     "edit": "Edit",
     "editing": "Editing",
     "title": "Message"
+  },
+  "listActions": {
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "archive": "Archive",
+    "draftPrefix": "Draft:",
+    "pinnedSection": "Pinned",
+    "archivedCount": "{{count}} archived"
   }
 }

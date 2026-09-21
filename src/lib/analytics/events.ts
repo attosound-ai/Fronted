@@ -499,6 +499,11 @@ export const ANALYTICS_EVENTS = {
     HEADER_PROFILE_OPENED: 'messages_header_profile_opened',
     HEADER_MENU_ACTION: 'messages_header_menu_action',
     WALLPAPER_CHANGED: 'messages_wallpaper_changed',
+    LIST_SWIPE_ACTION: 'messages_list_swipe_action',
+    CONVERSATION_PINNED: 'messages_conversation_pinned',
+    CONVERSATION_MUTED: 'messages_conversation_muted',
+    CONVERSATION_ARCHIVED: 'messages_conversation_archived',
+    DRAFT_SAVED: 'messages_draft_saved',
     WALLPAPER_PICKER_OPENED: 'messages_wallpaper_picker_opened',
     WALLPAPER_RENDERED: 'messages_wallpaper_rendered',
     // Conversation lifecycle

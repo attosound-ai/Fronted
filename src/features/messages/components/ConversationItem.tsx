@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { BellOff, Pin } from 'lucide-react-native';
+import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -29,6 +31,13 @@ function ConversationItemInner({
   const { avatarUri, username, role } = useParticipantProfile(conversation.participantId);
   const name =
     username || conversation.participantName || t('conversation.fallbackUserName');
+  const isPinned = useConversationPrefsStore(
+    (s) => !!s.pinned[conversation.conversationId]
+  );
+  const isMuted = useConversationPrefsStore(
+    (s) => !!s.muted[conversation.conversationId]
+  );
+  const draft = useConversationPrefsStore((s) => s.drafts[conversation.conversationId]);
 
   return (
     <TouchableOpacity
@@ -80,19 +89,36 @@ function ConversationItemInner({
           <Text
             variant="caption"
             numberOfLines={1}
-            style={styles.preview}
+            style={[styles.preview, !!draft && styles.previewDraft]}
             maxFontSizeMultiplier={1.0}
           >
-            {conversation.lastMessage || ''}
+            {draft ? (
+              <>
+                <Text
+                  variant="caption"
+                  style={styles.draftLabel}
+                  maxFontSizeMultiplier={1.0}
+                >
+                  {t('listActions.draftPrefix')}{' '}
+                </Text>
+                {draft}
+              </>
+            ) : (
+              conversation.lastMessage || ''
+            )}
           </Text>
-          {conversation.unreadCount > 0 && (
-            <CounterBadge
-              count={conversation.unreadCount}
-              color={COLORS.white}
-              textColor="#000000"
-              fontWeight="semibold"
-            />
-          )}
+          <View style={styles.trailing}>
+            {isMuted && <BellOff size={14} color={COLORS.gray[500]} strokeWidth={2} />}
+            {isPinned && <Pin size={14} color={COLORS.gray[500]} strokeWidth={2} />}
+            {conversation.unreadCount > 0 && (
+              <CounterBadge
+                count={conversation.unreadCount}
+                color={isMuted ? COLORS.gray[700] : COLORS.white}
+                textColor={isMuted ? COLORS.white : '#000000'}
+                fontWeight="semibold"
+              />
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -112,7 +138,7 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   selected: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   content: {
     flex: 1,
@@ -146,5 +172,17 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.gray[500],
     marginRight: SPACING.sm,
+  },
+  previewDraft: {
+    color: COLORS.gray[400],
+  },
+  draftLabel: {
+    color: COLORS.white,
+    fontFamily: 'Archivo_600SemiBold',
+  },
+  trailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
 });

@@ -19,6 +19,13 @@ import { COLORS, SPACING } from '@/constants/theme';
 import { Text } from '@/components/ui/Text';
 import { MessagesSkeleton } from '@/components/ui/Skeleton';
 import { useConversations } from '../hooks/useConversations';
+import {
+  isArchived,
+  orderConversations,
+  useConversationPrefsStore,
+} from '../stores/conversationPrefsStore';
+import { ConversationSwipeRow } from './ConversationSwipeRow';
+import { useMemo } from 'react';
 import { ConversationsHeader } from './ConversationsHeader';
 import { ConversationItem } from './ConversationItem';
 import { EmptyConversations } from './EmptyConversations';
@@ -41,7 +48,26 @@ export function ConversationList({
 }: ConversationListProps = {}) {
   const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
-  const { conversations, isLoading, isRefreshing, error, refresh } = useConversations();
+  const {
+    conversations: rawConversations,
+    isLoading,
+    isRefreshing,
+    error,
+    refresh,
+  } = useConversations();
+  const pinned = useConversationPrefsStore((s) => s.pinned);
+  const archived = useConversationPrefsStore((s) => s.archived);
+  // Pinned first, archived hidden until something new arrives in them.
+  const conversations = useMemo(
+    () =>
+      orderConversations(
+        rawConversations.filter(
+          (c) => !isArchived(archived, c.conversationId, c.lastMessageAt)
+        ),
+        pinned
+      ),
+    [rawConversations, pinned, archived]
+  );
   const header = useCollapsibleHeader();
 
   const handleConversationPress = useCallback(
@@ -64,11 +90,13 @@ export function ConversationList({
 
   const renderItem = useCallback(
     ({ item }: { item: ChatConversation }) => (
-      <ConversationItem
-        conversation={item}
-        onPress={handleConversationPress}
-        isSelected={item.conversationId === selectedConversationId}
-      />
+      <ConversationSwipeRow conversation={item}>
+        <ConversationItem
+          conversation={item}
+          onPress={handleConversationPress}
+          isSelected={item.conversationId === selectedConversationId}
+        />
+      </ConversationSwipeRow>
     ),
     [handleConversationPress, selectedConversationId]
   );

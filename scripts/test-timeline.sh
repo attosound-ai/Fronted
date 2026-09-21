@@ -17,6 +17,7 @@ TEST_FILES=(
   "src/features/feed/utils/__tests__/splashLogo.test.ts"
   "src/features/messages/thread/__tests__/threadModel.test.ts"
   "src/features/timeline/utils/__tests__/gainSlider.test.ts"
+  "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"
 )
 FILES_JSON=""
 for f in "${TEST_FILES[@]}"; do

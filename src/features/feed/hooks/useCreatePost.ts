@@ -8,6 +8,7 @@ import { authStorage } from '@/lib/auth/storage';
 import { getTokenUserId } from '@/lib/auth/jwt';
 import type { PostType } from '@/types/post';
 import type { PickedMedia } from '../types';
+import { buildPostMetadata } from '../utils/coverArt';
 
 /**
  * The identity a post will be attributed to is the TOKEN's subject (the
@@ -41,6 +42,8 @@ interface CreatePostParams {
   media: PickedMedia[];
   caption: string;
   poemText: string;
+  /** Local image to publish as the audio post's cover. Optional by design. */
+  coverUri?: string;
   onProgress?: (progress: number) => void;
 }
 
@@ -61,6 +64,7 @@ export function useCreatePost() {
       media,
       caption,
       poemText,
+      coverUri,
       onProgress,
     }: CreatePostParams) => {
       // Who this post will belong to. Checked BEFORE the (slow) media upload so
@@ -83,17 +87,42 @@ export function useCreatePost() {
         filePaths.push(publicId);
       }
 
+      // The cover is uploaded like any other image, after the audio so a
+      // failure here cannot cost the take. An audio post without a cover is a
+      // normal post, so a cover that fails to upload is reported and the post
+      // still goes out.
+      let coverPublicId: string | undefined;
+      if (coverUri && postType === 'audio') {
+        const tCover = Date.now();
+        try {
+          coverPublicId = await mediaService.upload(
+            coverUri,
+            'cover.jpg',
+            'image/jpeg',
+            'content'
+          );
+          analytics.capture(ANALYTICS_EVENTS.FEED.POST_COVER, {
+            outcome: 'uploaded',
+            ms: Date.now() - tCover,
+          });
+        } catch (error: unknown) {
+          analytics.capture(ANALYTICS_EVENTS.FEED.POST_COVER, {
+            outcome: 'failed',
+            ms: Date.now() - tCover,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
       // Build metadata. Persisting the media's native dimensions lets the feed
       // render the correct aspect ratio immediately, instead of starting at a
       // 1:1 box and snapping once the player decodes the first frame.
-      const metadata: Record<string, string> = {};
-      if (media[0]?.duration) {
-        metadata.duration = String(media[0].duration);
-      }
-      if (media[0]?.width && media[0]?.height) {
-        metadata.width = String(media[0].width);
-        metadata.height = String(media[0].height);
-      }
+      const metadata = buildPostMetadata({
+        durationSec: media[0]?.duration,
+        width: media[0]?.width,
+        height: media[0]?.height,
+        coverPublicId,
+      });
 
       // Create the post via API
       const textContent = postType === 'text' ? poemText : caption;
@@ -135,6 +164,7 @@ export function useCreatePost() {
         author_id: authorId,
         ui_user_id: userId ?? null,
         post_id: (newPost as { id?: string | number } | undefined)?.id ?? null,
+        has_cover: !!variables.coverUri,
       });
     },
   });

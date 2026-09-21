@@ -7,8 +7,12 @@ import { cloudinaryHlsUrl, cloudinaryVideoMp4 } from '@/lib/media/cloudinaryUrl'
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
-import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import {
+  useCallAwareVideoAudio,
+  effectiveVideoMuted,
+} from '@/hooks/useCallAwareVideoAudio';
 import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
+import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -109,6 +113,30 @@ export function VideoMedia({
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
+  // The MP4 rendition (extractable audio), NOT the HLS stream: both the engine
+  // session and the legacy injector pull this video's audio from it.
+  const injectVideoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
+
+  // Engine call (Sep 15 2026): while `playback.engineVideo` is latched the
+  // player stays muted and its audio plays through the engine session. Auto
+  // claim: visible + focused + global sound on → this video owns the session.
+  useCallPlaybackVideo(
+    player,
+    post.id,
+    'feed_video',
+    injectVideoUrl
+      ? {
+          type: 'file',
+          kind: 'video',
+          uri: injectVideoUrl,
+          isVideo: true,
+          loop: true,
+          postId: post.id,
+        }
+      : null,
+    { claimPolicy: 'auto', active: isVisible && isFocused, loop: true }
+  );
+
   // First-frame readiness (drives the poster) + transparent HLS→MP4 fallback
   // + load/error telemetry tagged to the feed surface.
   const isReady = useVideoStream(player, videoUrl, isVisible && isFocused, {
@@ -119,9 +147,8 @@ export function VideoMedia({
   // Playback position + duration for the time readout and progress bar.
   const { position, duration } = useVideoProgress(player);
 
-  // Transmittable into a live call (📡): register the MP4 (extractable audio),
-  // NOT the HLS stream, so the injector can pull this video's audio on demand.
-  const injectVideoUrl = cloudinaryVideoMp4(post.videoUrl) ?? null;
+  // Transmittable into a live call (📡): register the MP4 so the injector can
+  // pull this video's audio on demand.
   useRegisterNowPlaying(
     injectVideoUrl
       ? { kind: 'video', uri: injectVideoUrl, isVideo: true, postId: post.id }
@@ -170,7 +197,7 @@ export function VideoMedia({
   // Keep this player's audio in sync whenever the shared mute state flips —
   // this is what makes one video's toggle apply to every other mounted video.
   useEffect(() => {
-    if (player) player.muted = isMuted;
+    if (player) player.muted = effectiveVideoMuted(isMuted);
   }, [isMuted, player]);
 
   if (!videoUrl) {

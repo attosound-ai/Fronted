@@ -29,6 +29,8 @@ export interface FeedPost {
   videoUrl?: string;
   images?: string[];
   thumbnailUrl?: string;
+  /** Cover art of an audio post, when its author attached one. */
+  coverUrl?: string;
   duration?: number;
   mediaWidth?: number;
   mediaHeight?: number;

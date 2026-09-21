@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 11,
-    color: '#999',
+    color: '#FFFFFF',
     fontFamily: 'Archivo_400Regular',
     flexShrink: 1,
     textAlign: 'center',

@@ -31,9 +31,17 @@ async function fileSizeBytes(uri: string): Promise<number | null> {
   }
 }
 
-/** Error thrown when a video is still too large after compression. */
+/**
+ * Thrown when the media is too large for the upload target. `bytes` is the
+ * actual file size (or -1 if unknown); `maxBytes` is the target's limit when we
+ * could parse it from the server response — so the UI can show both and suggest
+ * compressing.
+ */
 export class MediaTooLargeError extends Error {
-  constructor(public bytes: number) {
+  constructor(
+    public bytes: number,
+    public maxBytes?: number
+  ) {
     super('MEDIA_TOO_LARGE');
     this.name = 'MediaTooLargeError';
   }
@@ -184,10 +192,33 @@ async function uploadToCloudinary(
           reject(new Error('Invalid response from Cloudinary'));
         }
       } else if (xhr.status === 413) {
-        // Payload Too Large — the file exceeds Cloudinary's request limit.
+        // Payload Too Large: the file exceeds Cloudinary's request limit.
         reject(new MediaTooLargeError(-1));
       } else {
-        reject(new Error(`Cloudinary upload failed (${xhr.status})`));
+        const body = (xhr.responseText || '').slice(0, 600);
+        // Cloudinary returns 400 (not 413) when a file exceeds the per-file
+        // limit for its resource type. RAW (how audio uploads) has a much
+        // smaller cap than video, so a long WAV lands here. Parse the exact
+        // "Got X. Maximum is Y" so the user sees both, and route it through the
+        // typed too-large path.
+        if (xhr.status === 400 && /too large|maximum is|file size/i.test(body)) {
+          const got = body.match(/got\s+(\d+)/i);
+          const max = body.match(/maximum(?:\s+is)?\s+(\d+)/i);
+          reject(
+            new MediaTooLargeError(
+              got ? Number(got[1]) : -1,
+              max ? Number(max[1]) : undefined
+            )
+          );
+          return;
+        }
+        const err = new Error(`Cloudinary upload failed (${xhr.status})`) as Error & {
+          httpStatus?: number;
+          cloudinaryBody?: string;
+        };
+        err.httpStatus = xhr.status;
+        err.cloudinaryBody = body;
+        reject(err);
       }
     };
 
@@ -243,6 +274,12 @@ async function upload(
     }
   }
 
+  // Size of what we're actually uploading, for EVERY context (video already
+  // has finalBytes from compression; audio/image/etc. are stat'd here). This is
+  // the key field for diagnosing size-driven failures — e.g. long WAV audio
+  // uploaded as Cloudinary `raw`, whose per-file limit is far below video's.
+  const uploadBytes = finalBytes ?? (await fileSizeBytes(uploadUri));
+
   try {
     const params = await getSignedParams(context, resourceType);
     const result = await uploadToCloudinary(
@@ -255,7 +292,9 @@ async function upload(
     );
     analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
       context,
+      resource_type: resourceType,
       outcome: 'uploaded',
+      file_bytes: uploadBytes,
       original_bytes: originalBytes,
       final_bytes: finalBytes,
       compressed,
@@ -265,9 +304,18 @@ async function upload(
     const is413 =
       error instanceof MediaTooLargeError ||
       (error instanceof Error && error.message.includes('413'));
+    // Enriched failure telemetry: the actual HTTP status and the verbatim
+    // Cloudinary error body (previously discarded) — so a bare "400" always
+    // carries its real reason (e.g. "File size too large. Got X. Maximum is Y"),
+    // plus the resource_type and the byte size to correlate.
+    const detail = error as Error & { httpStatus?: number; cloudinaryBody?: string };
     analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
       context,
+      resource_type: resourceType,
       outcome: is413 ? 'rejected_413' : 'failed',
+      http_status: detail.httpStatus ?? null,
+      cloudinary_error: detail.cloudinaryBody ?? null,
+      file_bytes: uploadBytes,
       original_bytes: originalBytes,
       final_bytes: finalBytes,
       compressed,
@@ -275,7 +323,7 @@ async function upload(
     });
     // Normalize a raw 413 into the typed error so the UI shows the clear message.
     if (is413 && !(error instanceof MediaTooLargeError)) {
-      throw new MediaTooLargeError(finalBytes ?? -1);
+      throw new MediaTooLargeError(uploadBytes ?? finalBytes ?? -1);
     }
     throw error;
   }

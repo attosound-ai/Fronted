@@ -45,6 +45,7 @@ import { Heart } from 'lucide-react-native';
 import { FeedSkeleton } from '@/components/ui/Skeleton';
 import { useAds } from '../hooks/useAds';
 import { injectAds } from '../utils/injectAds';
+import { resolveCoverUrl } from '../utils/coverArt';
 import { useFeedFilterStore } from '@/stores/feedFilterStore';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import type { Post } from '@/types';
@@ -91,6 +92,7 @@ function toFeedPost(post: Post): FeedPost {
         ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
           post.metadata?.thumbnailUrl)
         : post.metadata?.thumbnailUrl,
+    coverUrl: resolveCoverUrl(type, post.metadata, (id) => cloudinaryUrl(id, 'feed')),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
     mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,

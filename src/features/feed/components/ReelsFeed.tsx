@@ -26,7 +26,11 @@ import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import {
+  useCallAwareVideoAudio,
+  effectiveVideoMuted,
+} from '@/hooks/useCallAwareVideoAudio';
+import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import {
   Bookmark,
   ChevronLeft,
@@ -74,6 +78,7 @@ import { ReelsSkeleton } from '@/components/ui/Skeleton';
 import type { FeedPost, PostType } from '@/types/post'; // PostType used in toFeedPost helper
 import type { Post } from '@/types';
 import { COLORS } from '@/constants/theme';
+import { resolveCoverUrl } from '../utils/coverArt';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -120,6 +125,7 @@ function toFeedPost(post: Post): FeedPost {
         ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
           post.metadata?.thumbnailUrl)
         : post.metadata?.thumbnailUrl,
+    coverUrl: resolveCoverUrl(type, post.metadata, (id) => cloudinaryUrl(id, 'feed')),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
     mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,
@@ -206,6 +212,27 @@ function ReelItem({
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
+  // Engine call (Sep 15 2026): while `playback.engineVideo` is latched the
+  // player stays muted and its audio plays through the engine session. Auto
+  // claim while active, focused, not tap paused and the global sound is on.
+  // AdReelItem deliberately has no such hook: ads never claim the session.
+  useCallPlaybackVideo(
+    player,
+    post.id,
+    'reels_viewer',
+    videoUrl
+      ? {
+          type: 'file',
+          kind: 'reel',
+          uri: videoUrl,
+          isVideo: true,
+          loop: true,
+          postId: post.id,
+        }
+      : null,
+    { claimPolicy: 'auto', active: isActive && isFocused && !userPaused, loop: true }
+  );
+
   // Tracks first-frame readiness + transparently falls back HLS→MP4 on error,
   // and reports load-time / error telemetry tagged to this reel.
   const isReady = useVideoStream(player, videoUrl, isActive && isFocused, {
@@ -262,7 +289,7 @@ function ReelItem({
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
-    if (player) player.muted = isMuted;
+    if (player) player.muted = effectiveVideoMuted(isMuted);
   }, [isMuted, player]);
 
   return (
@@ -514,7 +541,7 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
-    if (player) player.muted = isMuted;
+    if (player) player.muted = effectiveVideoMuted(isMuted);
   }, [isMuted, player]);
 
   return (

@@ -129,6 +129,9 @@ function FeedPostCardInner({
             style={[
               styles.creatorPostWrapper,
               isAudio ? styles.creatorAudioPostWrapper : null,
+              // A cover post is one black stage from the header down: the
+              // grey band over a black player read as two mismatched halves.
+              isAudio && post.coverUrl ? styles.coverAudioPostWrapper : null,
             ]}
           >
             {header}
@@ -216,6 +219,9 @@ const styles = StyleSheet.create({
   },
   creatorAudioPostWrapper: {
     backgroundColor: '#1A1A1A',
+  },
+  coverAudioPostWrapper: {
+    backgroundColor: '#000000',
   },
   creatorTopBorder: {
     height: 1,

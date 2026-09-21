@@ -4,6 +4,11 @@ interface PendingAudio {
   uri: string;
   fileName: string;
   durationMs: number;
+  /**
+   * Local image the editor's exporter picked as the cover. The composer
+   * prefills it, and the person can still change or drop it before posting.
+   */
+  coverUri?: string;
 }
 
 interface CreatePostStore {

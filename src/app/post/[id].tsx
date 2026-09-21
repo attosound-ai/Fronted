@@ -34,6 +34,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { Post } from '@/types';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import { COLORS } from '@/constants/theme';
+import { resolveCoverUrl } from '@/features/feed/utils/coverArt';
 
 // ── Post → FeedPost conversion ───────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ function toFeedPost(post: Post): FeedPost {
         ? (cloudinaryPoster(files[0], type === 'reel' ? 'reel' : 'video') ??
           post.metadata?.thumbnailUrl)
         : post.metadata?.thumbnailUrl,
+    coverUrl: resolveCoverUrl(type, post.metadata, (id) => cloudinaryUrl(id, 'feed')),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
     mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,

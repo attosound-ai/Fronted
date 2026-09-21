@@ -11,6 +11,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { XCircle, Plus, Music, PlayCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
+import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import type { PostType } from '@/types/post';
 import type { PickedMedia } from '../../types';
 import { COLORS } from '@/constants/theme';
@@ -113,6 +114,17 @@ function VideoPreview({
   });
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Engine call (Sep 15 2026): while `playback.engineVideo` is latched the
+  // preview's audio plays through the engine session and the player stays
+  // muted. Explicit claim: only the tap below starts it, never visibility.
+  const engine = useCallPlaybackVideo(
+    player,
+    media.uri,
+    'compose_preview',
+    { type: 'file', kind: 'preview', uri: media.uri, isVideo: true, loop: true },
+    { claimPolicy: 'explicit', active: false, loop: true }
+  );
+
   // Mirror the player's actual state so the overlay reflects reality
   // even if play/pause comes from somewhere other than our tap handler
   // (e.g. interruption, error, audio session preemption).
@@ -124,12 +136,18 @@ function VideoPreview({
   }, [player]);
 
   const togglePlay = useCallback(() => {
+    // Engine mode: drive the session; the hook mirrors play/pause onto the
+    // muted player, so the playingChange listener above still tracks it.
+    if (engine.engineMode) {
+      void engine.toggle();
+      return;
+    }
     if (player.playing) {
       player.pause();
     } else {
       player.play();
     }
-  }, [player]);
+  }, [player, engine]);
 
   const isReel = variant === 'reel';
 

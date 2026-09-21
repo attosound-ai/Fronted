@@ -15,7 +15,10 @@ import { Text } from '@/components/ui/Text';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
-import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import {
+  useCallAwareVideoAudio,
+  effectiveVideoMuted,
+} from '@/hooks/useCallAwareVideoAudio';
 import { useIsFocused } from '@react-navigation/native';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
@@ -56,6 +59,9 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
   });
 
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
+  // No useCallPlaybackVideo here on purpose: during an engine call ads are silent
+  // (the hook above keeps the player muted for the whole call) and are never
+  // transmitted, they cannot claim the engine session.
   useCallAwareVideoAudio(player);
 
   // Ads register as nowPlaying too, so the user CAN transmit a sponsored video if
@@ -102,7 +108,7 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
 
   // Sync this player whenever the shared mute state flips.
   useEffect(() => {
-    if (player) player.muted = isMuted;
+    if (player) player.muted = effectiveVideoMuted(isMuted);
   }, [isMuted, player]);
 
   const handleLike = () => {

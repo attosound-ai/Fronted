@@ -1,5 +1,6 @@
 import type { FeedPost, PostAuthor } from '@/types/post';
 import { AudioMedia } from './AudioMedia';
+import { AudioCoverMedia } from './AudioCoverMedia';
 import { ImageMedia } from './ImageMedia';
 import { VideoMedia } from './VideoMedia';
 import { ReelMedia } from './ReelMedia';
@@ -46,7 +47,9 @@ export function PostMedia({
 }: PostMediaProps) {
   switch (post.type) {
     case 'audio':
-      return <AudioMedia post={post} />;
+      // With cover art the post reads as a record; without one it keeps the
+      // waveform row it always had.
+      return post.coverUrl ? <AudioCoverMedia post={post} /> : <AudioMedia post={post} />;
     case 'image':
       return <ImageMedia post={post} onDoubleTap={onDoubleTap} />;
     case 'video':

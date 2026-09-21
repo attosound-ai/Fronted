@@ -25,6 +25,8 @@ import { ShareSheet } from '@/features/feed/components/share/ShareSheet';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import type { Post } from '@/types';
 import { COLORS } from '@/constants/theme';
+import { resolveCoverUrl } from '@/features/feed/utils/coverArt';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 
 // ---------------------------------------------------------------------------
 // Post → FeedPost helpers (mirrors FeedList.tsx)
@@ -54,6 +56,7 @@ function toFeedPost(post: Post): FeedPost {
     audioUrl: type === 'audio' ? files[0] : undefined,
     videoUrl: type === 'video' || type === 'reel' ? files[0] : undefined,
     thumbnailUrl: post.metadata?.thumbnailUrl,
+    coverUrl: resolveCoverUrl(type, post.metadata, (id) => cloudinaryUrl(id, 'feed')),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     description: post.textContent ?? post.content,
     likesCount: post.likesCount,
@@ -182,9 +185,7 @@ export default function BookmarksScreen() {
       <View style={styles.empty}>
         <Bookmark size={52} color="#444" strokeWidth={2.25} />
         <Text style={styles.emptyTitle}>{t('bookmarks.emptyTitle')}</Text>
-        <Text style={styles.emptySubtitle}>
-          {t('bookmarks.emptySubtitle')}
-        </Text>
+        <Text style={styles.emptySubtitle}>{t('bookmarks.emptySubtitle')}</Text>
       </View>
     );
   }, [isLoading]);

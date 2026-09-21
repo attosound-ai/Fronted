@@ -51,6 +51,11 @@
     "attachReel": "Reel",
     "attachProject": "Song",
     "errorTitle": "Upload failed",
+    "tooLargeAudio": "That audio is too large to upload. Record a shorter version or compress it, then try again.",
+    "tooLargeVideo": "That video is too large to upload, even after compressing. Trim it or export it at a lower quality, then try again.",
+    "tooLargeFile": "That file is too large to upload. Compress it, then try again.",
+    "uploadSizeWithMax": "It is {{size}} MB and the limit is {{max}} MB.",
+    "uploadSize": "It is {{size}} MB.",
     "uploadingText": "Uploading... {{progress}}%",
     "reelFromLibrary": "From Library",
     "reelRecord": "Record",
@@ -61,7 +66,13 @@
     "replaceAttachment": "Replace current attachment?",
     "replaceButton": "Replace",
     "takePhoto": "Camera",
-    "recordVideo": "Record"
+    "recordVideo": "Record",
+    "coverTitle": "Cover art",
+    "coverHint": "Optional. A square image shows in the feed.",
+    "coverSet": "Ready. Tap the image to change it.",
+    "coverAdd": "Add cover art",
+    "coverChange": "Change cover art",
+    "coverRemove": "Remove cover art"
   },
   "verification": {
     "bannerTitle": "Authorization pending",

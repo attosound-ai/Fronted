@@ -12,6 +12,8 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { MediaTooLargeError } from '@/lib/media/mediaService';
 import { useCreatePostStore } from '@/stores/createPostStore';
+import { CoverArtPicker } from '@/features/feed/components/create/CoverArtPicker';
+import * as ImagePicker from 'expo-image-picker';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +28,7 @@ import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMe
 import { ProjectPickerSheet } from '@/features/projects/components/ProjectPickerSheet';
 import { useCreatePost } from '@/features/feed/hooks/useCreatePost';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { markAction } from '@/lib/telemetry/actionMarks';
 import { useMediaPickers } from '@/features/feed/hooks/useMediaPickers';
 import { haptic } from '@/lib/haptics/hapticService';
 import type { PostType } from '@/types/post';
@@ -92,6 +95,9 @@ export default function CreatePostScreen() {
     pickDocumentVideo,
     pickDocumentAudio,
   } = useMediaPickers();
+  // Optional cover art for an audio post. It starts as whatever the editor's
+  // exporter picked and the person can change or drop it before posting.
+  const [coverUri, setCoverUri] = useState<string | null>(null);
   const pendingAudio = useCreatePostStore((s) => s.pendingAudio);
   const clearPendingAudio = useCreatePostStore((s) => s.clearPendingAudio);
 
@@ -108,6 +114,7 @@ export default function CreatePostScreen() {
             duration: pendingAudio.durationMs / 1000,
           },
         ]);
+        if (pendingAudio.coverUri) setCoverUri(pendingAudio.coverUri);
         clearPendingAudio();
       }
     }, [pendingAudio, clearPendingAudio])
@@ -116,6 +123,20 @@ export default function CreatePostScreen() {
   const clearAttachment = () => {
     setMedia([]);
     setAttachmentType(null);
+    // The cover belongs to the audio; dropping the audio drops it too.
+    setCoverUri(null);
+  };
+
+  const pickCover = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setCoverUri(result.assets[0].uri);
+    analytics.capture(ANALYTICS_EVENTS.FEED.POST_COVER, { outcome: 'picked' });
   };
 
   const confirmReplaceAttachment = (action: () => void) => {
@@ -293,9 +314,26 @@ export default function CreatePostScreen() {
         media,
         caption: isTextOnly ? '' : textContent,
         poemText: isTextOnly ? textContent : '',
+        coverUri: postType === 'audio' && coverUri ? coverUri : undefined,
         onProgress: setUploadProgress,
       });
-      router.replace('/(tabs)/'); // Explicit index route to land on feed tab
+      // This screen is a native modal, often stacked on the project editor.
+      // A replace() from inside a modal leaves the modal presented and mounts
+      // a second copy of the tabs in it (the same fault that drew the app
+      // inside the call modal, Sep 20 2026). dismissTo pops everything above
+      // the tabs and lands on the feed in ONE action.
+      const canDismiss = router.canDismiss();
+      markAction('post_published');
+      analytics.capture(ANALYTICS_EVENTS.FEED.POST_PUBLISH_NAV, {
+        method: canDismiss ? 'dismiss_to' : 'replace',
+        post_type: postType,
+        has_cover: postType === 'audio' && !!coverUri,
+      });
+      if (canDismiss) {
+        router.dismissTo('/');
+      } else {
+        router.replace('/');
+      }
       // Scroll feed to top and show published banner after navigation settles
       setTimeout(() => {
         DeviceEventEmitter.emit('feedScrollToTop');
@@ -310,14 +348,33 @@ export default function CreatePostScreen() {
       const isTooLarge =
         err instanceof MediaTooLargeError ||
         (err instanceof Error && err.message.includes('413'));
-      const message = isTooLarge
-        ? t(
-            'create.videoTooLarge',
-            'This video is too large to upload, even after compressing. Please trim it or export it at a lower quality and try again.'
-          )
-        : err instanceof Error
-          ? err.message
-          : t('common:errors.generic');
+      let message: string;
+      if (isTooLarge) {
+        // Exact size + limit when we have them, so the user knows how much to cut.
+        let detail = '';
+        if (err instanceof MediaTooLargeError && err.bytes > 0) {
+          const size = (err.bytes / 1048576).toFixed(1);
+          detail =
+            err.maxBytes && err.maxBytes > 0
+              ? ' ' +
+                t('create.uploadSizeWithMax', {
+                  size,
+                  max: (err.maxBytes / 1048576).toFixed(0),
+                })
+              : ' ' + t('create.uploadSize', { size });
+        }
+        const kindKey =
+          attachmentType === 'audio'
+            ? 'create.tooLargeAudio'
+            : attachmentType === 'video' || attachmentType === 'reel'
+              ? 'create.tooLargeVideo'
+              : 'create.tooLargeFile';
+        message = (t(kindKey) + detail).trim();
+      } else {
+        // Keep raw Cloudinary/HTTP noise out of the user's face; the exact
+        // status + body are captured in telemetry (MEDIA_UPLOAD event).
+        message = t('common:errors.generic');
+      }
       // Outcome telemetry: a failed publish must be visible in PostHog, not just
       // a local Alert the user dismisses and we never hear about.
       analytics.capture(ANALYTICS_EVENTS.FEED.POST_CREATE_FAILED, {
@@ -406,6 +463,18 @@ export default function CreatePostScreen() {
             media={media}
             onRemoveMedia={handleRemoveMedia}
             onAddMore={handleAddMoreImages}
+          />
+        )}
+
+        {/* Cover art, audio only and always optional. */}
+        {attachmentType === 'audio' && media.length > 0 && (
+          <CoverArtPicker
+            uri={coverUri}
+            onPick={() => void pickCover()}
+            onRemove={() => {
+              setCoverUri(null);
+              analytics.capture(ANALYTICS_EVENTS.FEED.POST_COVER, { outcome: 'removed' });
+            }}
           />
         )}
       </ScrollView>

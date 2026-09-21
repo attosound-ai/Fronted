@@ -9,8 +9,12 @@ import { videoPlaybackToggled } from '@/lib/telemetry/videoTelemetry';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useVideoStream } from '@/hooks/useVideoStream';
 import { useVideoProgress } from '@/hooks/useVideoProgress';
-import { useCallAwareVideoAudio } from '@/hooks/useCallAwareVideoAudio';
+import {
+  useCallAwareVideoAudio,
+  effectiveVideoMuted,
+} from '@/hooks/useCallAwareVideoAudio';
 import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
+import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import { VideoPoster } from '@/components/ui/VideoPoster';
 import { VideoProgressBar } from '@/components/ui/VideoProgressBar';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
@@ -74,6 +78,26 @@ export function ReelMedia({
   // During a call, mix instead of stealing the audio session (keeps the call's mic).
   useCallAwareVideoAudio(player);
 
+  // Engine call (Sep 15 2026): while `playback.engineVideo` is latched the
+  // player stays muted and its audio plays through the engine session. Auto
+  // claim while visible, focused, not tap paused and the global sound is on.
+  useCallPlaybackVideo(
+    player,
+    post.id,
+    'reel',
+    videoUrl
+      ? {
+          type: 'file',
+          kind: 'reel',
+          uri: videoUrl,
+          isVideo: true,
+          loop: true,
+          postId: post.id,
+        }
+      : null,
+    { claimPolicy: 'auto', active: isVisible && isFocused && !userPaused, loop: true }
+  );
+
   // First-frame readiness (drives the poster) + load/error telemetry.
   const isReady = useVideoStream(player, videoUrl, isVisible && isFocused, {
     surface: 'reel_media',
@@ -129,7 +153,7 @@ export function ReelMedia({
   // Sync this player whenever the shared mute state flips so one video's
   // toggle applies to every other mounted video.
   useEffect(() => {
-    if (player) player.muted = isMuted;
+    if (player) player.muted = effectiveVideoMuted(isMuted);
   }, [isMuted, player]);
 
   if (!videoUrl) {

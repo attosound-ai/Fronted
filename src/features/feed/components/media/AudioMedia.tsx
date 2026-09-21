@@ -9,6 +9,7 @@ import {
 import { Pause, Play } from 'lucide-react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { useAudioPlayback } from '../../hooks/useAudioPlayback';
+import { useCallPlayback } from '@/lib/callAudio/session/useCallPlayback';
 import { useNowPlayingStore } from '@/stores/nowPlayingStore';
 import { useVideoSoundStore } from '@/stores/videoSoundStore';
 import { claimFeedAudio, releaseFeedAudio } from '@/stores/feedAudioStore';
@@ -21,6 +22,23 @@ interface AudioMediaProps {
 export function AudioMedia({ post }: AudioMediaProps) {
   const waveformWidth = useRef(0);
 
+  // Engine call (Sep 15 2026): while `engine.engineMode` is latched this post
+  // plays through the native session; useAudioPlayback branches on the handle
+  // and leaves its expo player without a source.
+  const engine = useCallPlayback(
+    post.id,
+    'feed_audio',
+    post.audioUrl
+      ? {
+          type: 'file',
+          kind: 'post',
+          uri: post.audioUrl,
+          title: post.title,
+          postId: post.id,
+        }
+      : null
+  );
+
   const {
     isPlaying,
     isLoaded,
@@ -32,7 +50,7 @@ export function AudioMedia({ post }: AudioMediaProps) {
     togglePlayPause,
     seekToFraction,
     pause,
-  } = useAudioPlayback(post.audioUrl);
+  } = useAudioPlayback(post.audioUrl, engine);
 
   // Remember the last-played feed audio so the in-call "transmit" button can push
   // THIS track into the call (it's a global call-bar control, not per-card).
@@ -51,16 +69,21 @@ export function AudioMedia({ post }: AudioMediaProps) {
   // SINGLE-AUDIBLE-OWNER (build 160). When this audio post starts, become the
   // one allowed audio (stopping any other audio post) and silence feed videos
   // so an unmuted autoplaying video can't play over it — the overlap the client
-  // filmed. On stop/unmount, release ownership.
+  // filmed. On stop/unmount, release ownership. In engine mode the stop callback
+  // pauses the session instead of the (sourceless) expo player.
   useEffect(() => {
     if (isPlaying) {
-      claimFeedAudio(post.id, () => pause());
+      if (engine.engineMode) {
+        claimFeedAudio(post.id, () => void engine.pause());
+      } else {
+        claimFeedAudio(post.id, () => pause());
+      }
       useVideoSoundStore.getState().setMuted(true);
     } else {
       releaseFeedAudio(post.id);
     }
     return () => releaseFeedAudio(post.id);
-  }, [isPlaying, post.id, pause]);
+  }, [isPlaying, post.id, pause, engine.engineMode, engine.pause]);
 
   const showLoading = !isLoaded || isBuffering;
 

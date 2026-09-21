@@ -4,17 +4,13 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  FlatList,
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import Animated, {
-  useAnimatedScrollHandler,
-  useAnimatedProps,
-  useDerivedValue,
-} from 'react-native-reanimated';
 import { X, SendHorizontal, Pencil } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { BottomSheet, useBottomSheetScroll } from '@/components/ui/BottomSheet';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { useComments, type Comment } from '../../hooks/useComments';
 import { useCommentActions } from '../../hooks/useCommentActions';
@@ -45,24 +41,9 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
 
   usePostChannel(visible ? postId : null);
 
-  const sheetScroll = useBottomSheetScroll();
-
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      if (sheetScroll) {
-        sheetScroll.contentScrollY.value = event.contentOffset.y;
-      }
-    },
-  });
-
-  const scrollEnabled = useDerivedValue(() => {
-    return sheetScroll ? !sheetScroll.isDragging.value : true;
-  });
-
-  const animatedScrollProps = useAnimatedProps(() => ({
-    scrollEnabled: scrollEnabled.value,
-  }));
-
+  // Scroll versus dismiss coordination is handled natively by the sheet
+  // (UISheetPresentationController / BottomSheetDialog), so the list needs no
+  // gesture plumbing of its own anymore.
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; username: string } | null>(null);
   const [editing, setEditing] = useState<{ id: string; originalText: string } | null>(
@@ -126,7 +107,7 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
             {t('post.noCommentsYet')}
           </Text>
         ) : (
-          <Animated.FlatList
+          <FlatList
             data={comments}
             renderItem={renderComment}
             keyExtractor={(item: Comment) => item.id}
@@ -136,10 +117,8 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
               isFetchingMore ? <ActivityIndicator color="#FFF" size="small" /> : null
             }
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             style={styles.list}
-            onScroll={scrollHandler}
-            scrollEventThrottle={16}
-            animatedProps={animatedScrollProps}
           />
         )}
       </View>

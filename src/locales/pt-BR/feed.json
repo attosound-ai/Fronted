@@ -51,6 +51,11 @@
     "attachReel": "Reel",
     "attachProject": "Música",
     "errorTitle": "Erro ao publicar",
+    "tooLargeAudio": "Esse áudio é muito pesado para enviar. Grave uma versão mais curta ou comprima, e tente de novo.",
+    "tooLargeVideo": "Esse vídeo é muito pesado para enviar, mesmo após comprimir. Corte ou exporte em qualidade menor, e tente de novo.",
+    "tooLargeFile": "Esse arquivo é muito pesado para enviar. Comprima e tente de novo.",
+    "uploadSizeWithMax": "Tem {{size}} MB e o limite é {{max}} MB.",
+    "uploadSize": "Tem {{size}} MB.",
     "uploadingText": "Enviando... {{progress}}%",
     "reelFromLibrary": "Da Biblioteca",
     "reelRecord": "Gravar",
@@ -61,7 +66,13 @@
     "replaceAttachment": "Substituir o anexo atual?",
     "replaceButton": "Substituir",
     "takePhoto": "Câmera",
-    "recordVideo": "Gravar"
+    "recordVideo": "Gravar",
+    "coverTitle": "Capa",
+    "coverHint": "Opcional. Uma imagem quadrada aparece no feed.",
+    "coverSet": "Pronta. Toque na imagem para trocar.",
+    "coverAdd": "Adicionar capa",
+    "coverChange": "Trocar capa",
+    "coverRemove": "Remover capa"
   },
   "verification": {
     "bannerTitle": "Autorização pendente",

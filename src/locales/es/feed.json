@@ -51,6 +51,11 @@
     "attachReel": "Reel",
     "attachProject": "Canción",
     "errorTitle": "Error al publicar",
+    "tooLargeAudio": "Ese audio es muy pesado para subir. Graba una versión más corta o comprímelo, y vuelve a intentar.",
+    "tooLargeVideo": "Ese video es muy pesado para subir, incluso tras comprimir. Recórtalo o expórtalo en menor calidad, y vuelve a intentar.",
+    "tooLargeFile": "Ese archivo es muy pesado para subir. Comprímelo y vuelve a intentar.",
+    "uploadSizeWithMax": "Pesa {{size}} MB y el límite es {{max}} MB.",
+    "uploadSize": "Pesa {{size}} MB.",
     "uploadingText": "Subiendo... {{progress}}%",
     "reelFromLibrary": "Desde la biblioteca",
     "reelRecord": "Grabar",
@@ -61,7 +66,13 @@
     "replaceAttachment": "¿Reemplazar el archivo adjunto actual?",
     "replaceButton": "Reemplazar",
     "takePhoto": "Cámara",
-    "recordVideo": "Grabar"
+    "recordVideo": "Grabar",
+    "coverTitle": "Carátula",
+    "coverHint": "Opcional. Una imagen cuadrada se muestra en el feed.",
+    "coverSet": "Lista. Toca la imagen para cambiarla.",
+    "coverAdd": "Agregar carátula",
+    "coverChange": "Cambiar carátula",
+    "coverRemove": "Quitar carátula"
   },
   "verification": {
     "bannerTitle": "Autorización pendiente",

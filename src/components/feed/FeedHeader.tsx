@@ -53,6 +53,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useDeviceLayout } from '@/hooks/useDeviceLayout';
 import { useCreatorLogos } from '@/features/feed/hooks/useCreatorLogos';
 import { useLogoVote } from '@/features/feed/hooks/useLogoVote';
+import { useAppLogo } from '@/features/feed/hooks/useAppLogo';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { COLORS } from '@/constants/theme';
 
@@ -97,6 +98,16 @@ export function FeedHeader() {
   const isCreatorWithPlan = user?.role === 'creator' && hasRecordUpload;
   const { logos: creatorLogos } = useCreatorLogos();
   const { mutate: castVote } = useLogoVote();
+  // Main header wordmark: admin-settable from atto-web (served by
+  // content-service). Falls back to the bundled default when unset/offline.
+  // When a CUSTOM logo is set we treat it as the COMPLETE wordmark (it bakes in
+  // "SOUND"), so the app stops drawing its own "sound" subtext — otherwise it
+  // would double up. With no custom logo, everything renders exactly as before
+  // (bundled ATTO image + app-drawn "sound"), so production is unchanged until
+  // a logo is actually uploaded.
+  const customLogoUri = useAppLogo();
+  const attoLogoUri = customLogoUri ?? ATTO_LOGO_URI;
+  const showSoundSubtext = !customLogoUri;
 
   // Day-based logo: rotates to next logo each calendar day
   const [todayIndex, setTodayIndex] = useState(() =>
@@ -399,14 +410,16 @@ export function FeedHeader() {
               />
             ) : (
               <Image
-                source={{ uri: ATTO_LOGO_URI }}
-                style={styles.logo}
+                source={{ uri: attoLogoUri }}
+                style={customLogoUri ? styles.customLogo : styles.logo}
                 resizeMode="contain"
               />
             )}
-            <Text style={styles.logoSubtext} allowFontScaling={false}>
-              sound
-            </Text>
+            {showSoundSubtext && (
+              <Text style={styles.logoSubtext} allowFontScaling={false}>
+                sound
+              </Text>
+            )}
           </TouchableOpacity>
 
           {!isTablet && (
@@ -467,7 +480,7 @@ export function FeedHeader() {
       />
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
       <FullscreenImageViewer
-        uri={creatorsOnly && todayLogoUri ? todayLogoUri : ATTO_LOGO_URI}
+        uri={creatorsOnly && todayLogoUri ? todayLogoUri : attoLogoUri}
         logo={creatorsOnly ? todayLogo : undefined}
         onVote={
           creatorsOnly
@@ -544,11 +557,23 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    // Fixed height so the header never reflows when the logo swaps between the
+    // bundled default (image + drawn "sound") and a taller custom wordmark.
+    height: 44,
     overflow: 'hidden',
   },
   logo: {
     width: 100,
     height: 28,
+  },
+  // A custom admin logo bakes the full wordmark (ATTO + SOUND) into one image,
+  // so it needs the vertical room the bundled ATTO + app-drawn "sound" used to
+  // occupy together (~42px), else it shrinks to fit the short 28px box. Sized
+  // to the combined wordmark's wide aspect so it fills the header like before.
+  customLogo: {
+    width: 118,
+    height: 41,
   },
   creatorLogo: {
     width: 100,

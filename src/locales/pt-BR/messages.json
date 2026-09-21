@@ -114,6 +114,10 @@
     "comingSoonBody": "Enviar isso pelo chat está em desenvolvimento. Mensagens de texto já funcionam.",
     "mention": "Mencionar",
     "list": "Lista",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "bold": "Negrito",
+    "italic": "Itálico",
+    "strike": "Tachado",
+    "code": "Código"
   }
 }

@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { BellOff, Pin } from 'lucide-react-native';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
+import { stripMarkdown } from '../thread/markdown';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -104,7 +105,7 @@ function ConversationItemInner({
                 {draft}
               </>
             ) : (
-              conversation.lastMessage || ''
+              stripMarkdown(conversation.lastMessage || '')
             )}
           </Text>
           <View style={styles.trailing}>

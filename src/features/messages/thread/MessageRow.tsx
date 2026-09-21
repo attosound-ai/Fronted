@@ -39,6 +39,7 @@ import {
   replySwipeTrigger,
   type GroupPosition,
 } from './threadModel';
+import { hasMarkdown, parseMarkdown } from './markdown';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -379,7 +380,22 @@ function MessageRowInner({
           maxFontSizeMultiplier={1.2}
           selectable={false}
         >
-          {message.text}
+          {hasMarkdown(message.text)
+            ? parseMarkdown(message.text).map((span, i) => (
+                <RNText
+                  key={i}
+                  style={[
+                    span.bold && styles.spanBold,
+                    span.italic && styles.spanItalic,
+                    span.strike && styles.spanStrike,
+                    span.code && styles.spanCode,
+                    span.code && (isOwn || senderIsCreator) && styles.spanCodeOwn,
+                  ]}
+                >
+                  {span.text}
+                </RNText>
+              ))
+            : message.text}
           {/* Invisible copy of the meta so the last line reserves its width:
               the time floats into that gap when it fits, or the spacer wraps
               and the time takes the new line (WhatsApp and Telegram). */}
@@ -722,6 +738,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
   },
   textOwn: { color: COLORS.black },
+  spanBold: { fontFamily: 'Archivo_700Bold' },
+  spanItalic: { fontStyle: 'italic' },
+  spanStrike: { textDecorationLine: 'line-through' },
+  spanCode: {
+    fontFamily: 'Menlo',
+    fontSize: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  spanCodeOwn: { backgroundColor: 'rgba(0,0,0,0.1)' },
   meta: {
     flexDirection: 'row',
     alignItems: 'center',

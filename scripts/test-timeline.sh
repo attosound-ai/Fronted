@@ -18,6 +18,7 @@ TEST_FILES=(
   "src/features/messages/thread/__tests__/threadModel.test.ts"
   "src/features/timeline/utils/__tests__/gainSlider.test.ts"
   "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"
+  "src/features/messages/thread/__tests__/markdown.test.ts"
 )
 FILES_JSON=""
 for f in "${TEST_FILES[@]}"; do

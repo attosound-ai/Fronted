@@ -5,11 +5,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import {
   AtSign,
+  Bold,
+  Code,
+  Italic,
   List,
   Paperclip,
   Redo2,
   SendHorizontal,
   Smile,
+  Strikethrough,
   Undo2,
   X,
 } from 'lucide-react-native';
@@ -22,6 +26,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useComposerExpandStore } from '@/features/messages/stores/composerExpandStore';
 import { useAttachSheet } from '@/features/messages/hooks/useAttachSheet';
 import { TAPBACK_EMOJI } from '@/features/messages/thread/TapbackOverlay';
+import { wrapSelection } from '@/features/messages/thread/markdown';
 
 /** Snapshots are taken after this pause in typing (one undo step per burst). */
 const HISTORY_DEBOUNCE_MS = 500;
@@ -157,6 +162,31 @@ export default function ComposerExpandedScreen() {
     [conversationId, snapshot]
   );
 
+  // Slack's formatting bar: wrap the selection (or drop a marker pair at the
+  // caret) with the WhatsApp spelling the bubbles render.
+  const selection = useRef({ start: 0, end: 0 });
+  const format = useCallback(
+    (kind: 'bold' | 'italic' | 'strike' | 'code') => {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.COMPOSER_INSERT, {
+        conversation_id: conversationId,
+        kind,
+        selection_length: Math.abs(selection.current.end - selection.current.start),
+      });
+      const { text } = wrapSelection(
+        textRef.current,
+        selection.current.start,
+        selection.current.end,
+        kind
+      );
+      textRef.current = text;
+      setHasText(text.trim().length > 0);
+      snapshot();
+      setGeneration((g) => g + 1);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [conversationId, snapshot]
+  );
+
   const handleSend = useCallback(() => {
     if (!textRef.current.trim()) return;
     haptic('light');
@@ -216,6 +246,9 @@ export default function ComposerExpandedScreen() {
           ref={inputRef}
           defaultValue={textRef.current}
           onChangeText={handleChangeText}
+          onSelectionChange={(e) => {
+            selection.current = e.nativeEvent.selection;
+          }}
           multiline
           style={styles.input}
           keyboardAppearance="dark"
@@ -268,6 +301,38 @@ export default function ComposerExpandedScreen() {
                 <List size={20} color={COLORS.white} strokeWidth={2.25} />
               </Pressable>
               <Pressable
+                onPress={() => format('bold')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.bold')}
+              >
+                <Bold size={19} color={COLORS.white} strokeWidth={2.5} />
+              </Pressable>
+              <Pressable
+                onPress={() => format('italic')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.italic')}
+              >
+                <Italic size={19} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
+                onPress={() => format('strike')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.strike')}
+              >
+                <Strikethrough size={19} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
+                onPress={() => format('code')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.code')}
+              >
+                <Code size={19} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
                 onPress={() => setEmojiOpen((o) => !o)}
                 style={styles.iconButton}
                 accessibilityRole="button"
@@ -318,7 +383,7 @@ const styles = StyleSheet.create({
   glassButton: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
   historyPill: { height: 44, borderRadius: 22, overflow: 'hidden' },
   historyRow: { flexDirection: 'row', alignItems: 'center' },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1 },
   input: {
     flex: 1,

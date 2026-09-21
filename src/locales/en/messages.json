@@ -114,6 +114,10 @@
     "comingSoonBody": "Sending this from the chat is in development. Text messages work today.",
     "mention": "Mention",
     "list": "List",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strike": "Strikethrough",
+    "code": "Code"
   }
 }

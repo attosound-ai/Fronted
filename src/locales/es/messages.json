@@ -92,5 +92,8 @@
     "draftPrefix": "Borrador:",
     "pinnedSection": "Fijados",
     "archivedCount": "{{count}} archivados"
+  },
+  "thread": {
+    "newMessages": "Mensajes nuevos"
   }
 }

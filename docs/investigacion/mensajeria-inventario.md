@@ -325,3 +325,16 @@ Filas de píxeles de `ref-im2.png` (1290 x 2796): borde derecho máximo en x 122
 - Con dos o más líneas: los botones de la izquierda se apilan en una cápsula VERTICAL (IA arriba, clip abajo) pegada al borde izquierdo, el campo crece hacia arriba y aparece un icono de expandir (cuatro esquinas) arriba a la derecha del campo.
 - Tocar expandir abre un editor a pantalla completa: botón cerrar arriba a la izquierda, deshacer y rehacer en una cápsula arriba a la derecha, el texto ocupa toda la pantalla, y una barra inferior con IA, más, lista, tabla, clip, emoji y el botón de enviar azul.
 - Pendiente: estudiarlo en vivo (transición de una a dos líneas, animación de la cápsula vertical, apertura del editor) cuando el teléfono vuelva a estar libre. Entra en la fase 1 del composer.
+
+## 10. Estado al cierre de la sesión del 21 de septiembre (madrugada)
+
+Hecho en código (commits `0b20366`, `8d9ec98`, `bc8244e` y siguientes en front; `f2785e8` en backend; `186352c` en atto-web desplegado):
+- Hilo nativo con agrupación, colita medida de iMessage (con degradado continuo en burbujas doradas), deslizar para responder, arrastre para ver horas, Tapback, menú nativo, leído con hora, línea de "Mensajes nuevos".
+- Reacciones colgando del lado interior, sin tapar hora ni ticks; "Read" debajo.
+- Cabecera con avatar dentro de la cápsula de vidrio; pulsación larga con menú nativo (perfil, fondo del chat).
+- Fondos: tres clases (imagen, degradado, patrón), giro del degradado al enviar, fondo por conversación, página de administración y catálogo sembrado (Studio, Hearts, Signal, Night, Ember, Graphite).
+- Lista: deslizar para fijar, silenciar y archivar; fijados primero; borradores por conversación con etiqueta en la lista.
+
+Pendiente de verificar en el iPhone (el teléfono estuvo ocupado por otra sesión): colita nueva en mensajes propios y recibidos, reacción interior, giro del fondo al enviar, menú de la cabecera, acciones de deslizar en la lista, borrador en la lista, línea de mensajes nuevos.
+
+Pendiente de construir: composer multilínea de Telegram (cápsula vertical de botones, expandir a editor completo), medios y notas de voz, hilos de Slack, búsqueda, presencia, `read_at` por mensaje en el backend, Dockerfile de chat-service (`COPY mix.exs mix.lock ./`).

@@ -500,6 +500,7 @@ export const ANALYTICS_EVENTS = {
     HEADER_MENU_ACTION: 'messages_header_menu_action',
     WALLPAPER_CHANGED: 'messages_wallpaper_changed',
     LIST_SWIPE_ACTION: 'messages_list_swipe_action',
+    UNREAD_DIVIDER_SHOWN: 'messages_unread_divider_shown',
     CONVERSATION_PINNED: 'messages_conversation_pinned',
     CONVERSATION_MUTED: 'messages_conversation_muted',
     CONVERSATION_ARCHIVED: 'messages_conversation_archived',

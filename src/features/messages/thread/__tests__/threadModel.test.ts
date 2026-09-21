@@ -10,6 +10,7 @@ import {
   needsDayPill,
   RADIUS_INNER,
   RADIUS_OUTER,
+  unreadDividerIndex,
   REPLY_SWIPE_MAX_PX,
   REPLY_SWIPE_TRIGGER_PX,
   replySwipeTranslation,
@@ -126,4 +127,19 @@ test('swipe to reply follows the finger then rubber bands to a cap', () => {
   assert.equal(replySwipeTranslation(REPLY_SWIPE_TRIGGER_PX), REPLY_SWIPE_TRIGGER_PX);
   assert.ok(replySwipeTranslation(200) < 200);
   assert.equal(replySwipeTranslation(10_000), REPLY_SWIPE_MAX_PX);
+});
+
+test('unread divider sits above the oldest unread received message', () => {
+  const items = [
+    { senderId: 'them' }, // newest
+    { senderId: 'me' },
+    { senderId: 'them' },
+    { senderId: 'them' },
+    { senderId: 'me' },
+  ];
+  assert.equal(unreadDividerIndex(items, 'me', 0), null);
+  assert.equal(unreadDividerIndex(items, 'me', 1), 0);
+  assert.equal(unreadDividerIndex(items, 'me', 2), 2);
+  assert.equal(unreadDividerIndex(items, 'me', 3), 3);
+  assert.equal(unreadDividerIndex(items, 'me', 4), null);
 });

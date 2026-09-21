@@ -53,7 +53,7 @@ import * as Clipboard from 'expo-clipboard';
 import { AudioMessagePlayer } from './AudioMessagePlayer';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
 
-import type { ChatMessagesPage } from '../types';
+import type { ChatConversation, ChatMessagesPage } from '../types';
 
 interface ChatScreenProps {
   /**
@@ -148,6 +148,16 @@ export function ChatScreen({
     null
   );
   const threadRef = useRef<ChatThreadHandle>(null);
+  // Unread count at open time, from the list cache, for the "new messages"
+  // line. Frozen in a ref so marking as read does not move the line.
+  const initialUnreadRef = useRef<number | null>(null);
+  if (initialUnreadRef.current === null) {
+    const cached = queryClient.getQueryData<ChatConversation[]>(
+      QUERY_KEYS.MESSAGES.CONVERSATIONS()
+    );
+    initialUnreadRef.current =
+      cached?.find((c) => c.conversationId === conversationId)?.unreadCount ?? 0;
+  }
   // Creators' bubbles wear the creator gold (David, Sep 21 2026).
   const participantProfile = useParticipantProfile(participantId || '');
   const creatorIds = useMemo(() => {
@@ -707,6 +717,7 @@ export function ChatScreen({
           ref={threadRef}
           messages={giftedMessages}
           currentUserId={userId}
+          initialUnreadCount={initialUnreadRef.current ?? 0}
           justSentId={justSentId}
           creatorIds={creatorIds}
           isParticipantTyping={isParticipantTyping}

@@ -181,3 +181,24 @@ export function replySwipeTranslation(dragPx: number): number {
   const extra = dragPx - REPLY_SWIPE_TRIGGER_PX;
   return Math.min(REPLY_SWIPE_MAX_PX, REPLY_SWIPE_TRIGGER_PX + extra * 0.35);
 }
+
+/**
+ * Where the "new messages" divider goes: above the oldest of the `unread`
+ * most recent messages from the other side. Items are newest first, so this
+ * is the index of the unread th received message counting from 0. Returns
+ * null when there is nothing unread or the list is shorter than that.
+ */
+export function unreadDividerIndex(
+  items: readonly Pick<ThreadItem, 'senderId'>[],
+  currentUserId: string,
+  unread: number
+): number | null {
+  if (unread <= 0) return null;
+  let seen = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].senderId === currentUserId) continue;
+    seen += 1;
+    if (seen === unread) return i;
+  }
+  return null;
+}

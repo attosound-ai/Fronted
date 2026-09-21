@@ -38,6 +38,7 @@ import { MessageRow, sentFromComposer, type MenuItem } from './MessageRow';
 import {
   dayLabel,
   groupPositions,
+  unreadDividerIndex,
   needsDayPill,
   shouldShowJumpPill,
   type ThreadItem,
@@ -49,6 +50,12 @@ export interface ChatThreadHandle {
 }
 
 export interface ChatThreadProps {
+  /**
+   * Unread count when the chat was opened: draws the "new messages" line
+   * above the oldest unread message (WhatsApp, Telegram). Fixed for the
+   * life of the screen so the line does not jump when marking as read.
+   */
+  initialUnreadCount?: number;
   /** Newest first, the way the inverted list draws them. */
   messages: AttoMessage[];
   currentUserId: string;
@@ -94,6 +101,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
     {
       messages,
       currentUserId,
+      initialUnreadCount = 0,
       justSentId,
       creatorIds,
       isParticipantTyping,
@@ -145,6 +153,19 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       [messages]
     );
     const positions = useMemo(() => groupPositions(items), [items]);
+    const dividerIndex = useMemo(
+      () => unreadDividerIndex(items, currentUserId, initialUnreadCount),
+      [items, currentUserId, initialUnreadCount]
+    );
+    const dividerReported = useRef(false);
+    useEffect(() => {
+      if (dividerIndex === null || dividerReported.current) return;
+      dividerReported.current = true;
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.UNREAD_DIVIDER_SHOWN, {
+        unread_count: initialUnreadCount,
+        index: dividerIndex,
+      });
+    }, [dividerIndex, initialUnreadCount]);
     const readLabelId = useMemo(() => {
       const m = messages.find(
         (x) => String(x.user._id) === currentUserId && !x.isDeleted && x.received
@@ -291,11 +312,22 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
                 </View>
               </View>
             ) : null}
+            {dividerIndex === index ? (
+              <View style={styles.unreadRow}>
+                <View style={styles.unreadLine} />
+                <RNText style={styles.unreadText} maxFontSizeMultiplier={1.1}>
+                  {t('thread.newMessages')}
+                </RNText>
+                <View style={styles.unreadLine} />
+              </View>
+            ) : null}
             {body}
           </View>
         );
       },
       [
+        dividerIndex,
+        t,
         currentUserId,
         positions,
         items,
@@ -449,6 +481,23 @@ function TypingBubble() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  unreadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+  },
+  unreadLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  unreadText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 12,
+    fontFamily: 'Archivo_600SemiBold',
+  },
   dayRow: { alignItems: 'center', marginVertical: 10 },
   dayPill: {
     paddingHorizontal: 10,

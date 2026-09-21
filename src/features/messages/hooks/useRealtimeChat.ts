@@ -5,8 +5,13 @@ import { phoenixSocket } from '@/lib/api/phoenixSocket';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '../stores/chatStore';
-import type { BackendMessage, BackendReaction, Reaction } from '../types';
-import type { ChatMessage, ChatMessagesPage } from '../types';
+import type {
+  BackendMessage,
+  BackendReaction,
+  Reaction,
+  ChatMessage,
+  ChatMessagesPage,
+} from '../types';
 
 function mapBackendMessage(m: BackendMessage): ChatMessage {
   return {
@@ -136,6 +141,12 @@ export function useRealtimeChat(conversationId: string) {
         if (readerId && myId != null && String(readerId) === String(myId)) {
           return;
         }
+        // The other side just read us: stamp it for the "Read 12:17" label.
+        useChatStore.getState().setReadAt(conversationId, new Date().toISOString());
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.READ_RECEIPT, {
+          conversation_id: conversationId,
+          reader_id: readerId ?? null,
+        });
         queryClient.setQueryData(
           QUERY_KEYS.MESSAGES.CHAT(conversationId),
           (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
@@ -194,11 +205,7 @@ export function useRealtimeChat(conversationId: string) {
         }));
       },
       onMessageDeleted: (payload) => {
-        const {
-          message_id,
-          deleted_at,
-          deleted_by,
-        } = payload as {
+        const { message_id, deleted_at, deleted_by } = payload as {
           message_id: string;
           deleted_at?: string;
           deleted_by?: string;
@@ -219,8 +226,12 @@ export function useRealtimeChat(conversationId: string) {
         conversation_id: conversationId,
       });
     } else {
+      // No socket right now (token refresh in flight, app just resumed). The
+      // subscription is registered in the socket manager and is created the
+      // moment a socket opens, so this is transient and needs no remount.
       analytics.capture(ANALYTICS_EVENTS.MESSAGES.CHANNEL_JOIN_FAILED, {
         conversation_id: conversationId,
+        will_join_on_connect: true,
       });
     }
 
@@ -238,7 +249,7 @@ export function useRealtimeChat(conversationId: string) {
     queryClient,
   ]);
 
-  /** Send a message via WebSocket (falls back to REST in useChat if this fails). */
+  /** Send a message via WebSocket (falls back to REST in ChatScreen if this fails). */
   const sendViaSocket = useCallback(
     async (
       content: string,

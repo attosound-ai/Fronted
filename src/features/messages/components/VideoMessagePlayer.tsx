@@ -6,11 +6,13 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, TouchableOpacity, Pressable, StyleSheet, Dimensions } from 'react-native';
+import type { VideoPlayer } from 'expo-video';
 import { Play } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
+import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import {
   videoLoadStarted,
   videoLoadCompleted,
@@ -94,6 +96,23 @@ function VideoViewWrapper({
     }
   );
 
+  // Engine call (Sep 15 2026): while `playback.engineVideo` is latched the
+  // player stays muted and the message's audio plays through the engine session
+  // (from the MP4 rendition, the session cannot read HLS). Explicit claim: the
+  // tap overlay below starts it; the native controls are hidden in that mode.
+  const engine = useCallPlaybackVideo(
+    player as VideoPlayer,
+    videoUrl,
+    'chat_video',
+    {
+      type: 'file',
+      kind: 'message',
+      uri: hlsToMp4Fallback(videoUrl) ?? videoUrl,
+      isVideo: true,
+    },
+    { claimPolicy: 'explicit', active: false }
+  );
+
   // If the adaptive (HLS) source can't be delivered, fall back to optimized MP4.
   // Also reports load-time / error telemetry tagged to the chat surface.
   const triedFallback = useRef(false);
@@ -141,6 +160,26 @@ function VideoViewWrapper({
     });
     return () => sub.remove();
   }, [player, videoUrl]);
+
+  if (engine.engineMode) {
+    return (
+      <View style={styles.container}>
+        <VideoView
+          player={player}
+          style={styles.video}
+          contentFit="cover"
+          nativeControls={false}
+        />
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => void engine.toggle()}>
+          {!engine.isPlaying && (
+            <View style={styles.placeholder}>
+              <Play size={24} color={COLORS.white} fill={COLORS.white} />
+            </View>
+          )}
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TouchableOpacity, Pressable, StyleSheet } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Play, Pause } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,7 @@ import { COLORS, SPACING } from '@/constants/theme';
 import { useCallStore } from '@/stores/callStore';
 import { reclaimAudioSession } from '@/hooks/useTwilioVoice';
 import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
+import { useCallPlayback } from '@/lib/callAudio/session/useCallPlayback';
 
 interface AudioMessagePlayerProps {
   audioUrl: string;
@@ -21,15 +22,26 @@ interface AudioMessagePlayerProps {
 
 export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
   const { t } = useTranslation('messages');
-  const player = useAudioPlayer(audioUrl, { keepAudioSessionActive: true });
+  // Engine call (Sep 15 2026): while `engine.engineMode` is latched the voice
+  // note plays through the native session and the expo player gets no source.
+  const engine = useCallPlayback(audioUrl, 'chat_audio', {
+    type: 'file',
+    kind: 'message',
+    uri: audioUrl,
+  });
+  const engineMode = engine.engineMode;
+  const player = useAudioPlayer(engineMode ? null : audioUrl, {
+    keepAudioSessionActive: true,
+  });
   const status = useAudioPlayerStatus(player);
   const [loadError, setLoadError] = useState(false);
+  const trackWidth = useRef(0);
 
-  const isPlaying = status.playing;
+  const isPlaying = engineMode ? engine.isPlaying : status.playing;
   // Make this chat audio transmittable into a live call (📡).
   useRegisterNowPlaying({ kind: 'message', uri: audioUrl }, isPlaying);
-  const duration = status.duration * 1000; // seconds → ms
-  const position = status.currentTime * 1000;
+  const duration = engineMode ? engine.durationMs : status.duration * 1000; // seconds → ms
+  const position = engineMode ? engine.positionMs : status.currentTime * 1000;
 
   // expo-audio's AudioStatus has no typed `error` field; read it defensively so
   // a runtime load error still surfaces without a type error.
@@ -39,6 +51,12 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
   }, [statusError]);
 
   const togglePlayback = useCallback(async () => {
+    // Engine mode: the session already lives inside the call's audio unit, so
+    // there is no audio mode to set and nothing to reclaim afterwards.
+    if (engineMode) {
+      void engine.toggle();
+      return;
+    }
     try {
       if (isPlaying) {
         player.pause();
@@ -66,7 +84,17 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
     } catch {
       setLoadError(true);
     }
-  }, [isPlaying, player]);
+  }, [isPlaying, player, engineMode, engine]);
+
+  // Engine mode only: tap the track to seek (the session supports random access).
+  const seekOnTrack = useCallback(
+    (locationX: number) => {
+      if (trackWidth.current <= 0 || duration <= 0) return;
+      const fraction = Math.max(0, Math.min(1, locationX / trackWidth.current));
+      void engine.seek(fraction * duration);
+    },
+    [engine, duration]
+  );
 
   const formatTime = (ms: number) => {
     const totalSec = Math.floor(ms / 1000);
@@ -96,9 +124,22 @@ export function AudioMessagePlayer({ audioUrl }: AudioMessagePlayerProps) {
       </TouchableOpacity>
 
       <View style={styles.waveform}>
-        <View style={styles.track}>
-          <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
-        </View>
+        {engineMode ? (
+          <Pressable
+            style={styles.track}
+            hitSlop={8}
+            onLayout={(e) => {
+              trackWidth.current = e.nativeEvent.layout.width;
+            }}
+            onPress={(e) => seekOnTrack(e.nativeEvent.locationX)}
+          >
+            <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
+          </Pressable>
+        ) : (
+          <View style={styles.track}>
+            <View style={[styles.trackFill, { width: `${progress * 100}%` }]} />
+          </View>
+        )}
         <Text style={styles.time}>{formatTime(isPlaying ? position : duration)}</Text>
       </View>
     </View>

@@ -12,12 +12,19 @@ import { COLORS, SPACING } from '@/constants/theme';
 import type { Reaction } from '../types';
 
 interface ReactionBarProps {
+  /** Compact: no outer padding, for a bar anchored to a bubble corner. */
+  compact?: boolean;
   reactions: Reaction[];
   currentUserId: string;
   onToggle: (emoji: string) => void;
 }
 
-function ReactionBarInner({ reactions, currentUserId, onToggle }: ReactionBarProps) {
+function ReactionBarInner({
+  reactions,
+  currentUserId,
+  onToggle,
+  compact,
+}: ReactionBarProps) {
   if (reactions.length === 0) return null;
 
   // Group by emoji: { "❤️": { count: 3, isMine: true }, ... }
@@ -33,7 +40,7 @@ function ReactionBarInner({ reactions, currentUserId, onToggle }: ReactionBarPro
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.containerCompact]}>
       {Array.from(grouped.entries()).map(([emoji, { count, isMine }]) => (
         <TouchableOpacity
           key={emoji}
@@ -59,19 +66,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: SPACING.md,
   },
+  containerCompact: { marginTop: 0, paddingHorizontal: 0 },
+  // A hairline of the chat background separates the pill from the bubble it
+  // overlaps, the way WhatsApp cuts its reaction out of the bubble.
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.gray[800],
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderRadius: 13,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     gap: 3,
+    borderWidth: 1.5,
+    borderColor: COLORS.black,
   },
+  // Mine stays dark (a white pill vanishes on a white bubble) and is marked
+  // by its ring instead.
   pillActive: {
-    backgroundColor: '#1E3A5F',
-    borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: COLORS.white,
   },
   emoji: {
     fontSize: 14,

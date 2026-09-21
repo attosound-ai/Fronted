@@ -5,6 +5,8 @@ interface ChatState {
   activeConversationId: string | null;
   isSocketConnected: boolean;
   typingUsers: Record<string, Set<string>>; // conversationId → Set<userId>
+  /** When the other side last read the conversation (ISO), for the Read label. */
+  readAt: Record<string, string>;
   totalUnread: number;
 }
 
@@ -15,12 +17,16 @@ interface ChatActions {
   setTyping: (conversationId: string, userId: string, isTyping: boolean) => void;
   clearTyping: (conversationId: string) => void;
   setTotalUnread: (count: number) => void;
+  setReadAt: (conversationId: string, at: string) => void;
 }
 
 export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   activeConversationId: null,
   isSocketConnected: false,
   typingUsers: {},
+  readAt: {},
+  setReadAt: (conversationId, at) =>
+    set((state) => ({ readAt: { ...state.readAt, [conversationId]: at } })),
   totalUnread: 0,
 
   setActiveConversation: (id) => set({ activeConversationId: id }),

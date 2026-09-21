@@ -6,50 +6,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  View,
-  Alert,
-  ImageBackground,
-  TouchableOpacity,
-  Pressable,
-  StyleSheet,
-  Text as RNText,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  withSequence,
-  withDelay,
-} from 'react-native-reanimated';
+import { View, Alert, ImageBackground, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  GiftedChat,
-  Bubble,
-  InputToolbar,
-  Composer,
-  Send,
-  Day,
-  LinkParser,
-} from 'react-native-gifted-chat';
-import type {
-  IMessage,
-  BubbleProps,
-  InputToolbarProps,
-  ComposerProps,
-  SendProps,
-} from 'react-native-gifted-chat';
-import { SendHorizontal, Check, CheckCheck, Clock, X, Pencil } from 'lucide-react-native';
-import { Platform } from 'react-native';
-
-const ContextMenuView =
-  Platform.OS === 'ios'
-    ? require('react-native-ios-context-menu').ContextMenuView
-    : ({ children }: { children: React.ReactNode }) => <>{children}</>;
+import type { IMessage } from 'react-native-gifted-chat';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
+import type { MenuItem } from '../thread/MessageRow';
+import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
+import { X, Pencil } from 'lucide-react-native';
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
@@ -60,6 +27,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 
 import { useChat } from '../hooks/useChat';
+import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import { useRealtimeChat } from '../hooks/useRealtimeChat';
 import { useReactions } from '../hooks/useReactions';
 import { useMessageActions } from '../hooks/useMessageActions';
@@ -70,9 +38,8 @@ import { useNotificationStore } from '@/stores/notificationStore';
 import { toGiftedMessages, type AttoMessage } from '../utils/messageAdapter';
 
 import { ChatHeader } from './ChatHeader';
+import { ChatComposer, type ChatComposerHandle } from './ChatComposer';
 import { ReactionPicker } from './ReactionPicker';
-import { TypingIndicator } from './TypingIndicator';
-import { ReactionBar } from './ReactionBar';
 import { useChatWallpapers } from '../hooks/useChatWallpapers';
 import {
   CHAT_WALLPAPER_NONE_ID,
@@ -83,83 +50,6 @@ import { AudioMessagePlayer } from './AudioMessagePlayer';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
 
 import type { ChatMessagesPage } from '../types';
-
-// Text component used by LinkParser inside chat bubbles. Caps font scaling
-// so iOS Larger Text / Android Display Size can't blow the bubble layout
-// past what the bubble can fit. Defined at module scope so React doesn't
-// remount the parsed text tree on every render.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CappedText(props: any) {
-  return <RNText {...props} maxFontSizeMultiplier={1.0} />;
-}
-
-/** Typing indicator with bouncing dots */
-function TypingFooter({ name }: { name: string }) {
-  const { t } = useTranslation('messages');
-  return (
-    <View style={typingStyles.container}>
-      <Text style={typingStyles.name}>{name}</Text>
-      <Text style={typingStyles.label}>{t('typing.suffix')}</Text>
-      <View style={typingStyles.dots}>
-        {[0, 1, 2].map((i) => (
-          <TypingDot key={i} delay={i * 150} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function TypingDot({ delay }: { delay: number }) {
-  const translateY = useSharedValue(0);
-
-  useEffect(() => {
-    translateY.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(withTiming(-6, { duration: 300 }), withTiming(0, { duration: 300 })),
-        -1
-      )
-    );
-  }, [delay, translateY]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  return <Animated.View style={[typingStyles.dot, animatedStyle]} />;
-}
-
-const typingStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  name: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'Archivo_600SemiBold',
-  },
-  label: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'Archivo_400Regular',
-  },
-  dots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 2,
-    marginTop: 1,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#9CA3AF',
-  },
-});
 
 interface ChatScreenProps {
   /**
@@ -210,7 +100,28 @@ export function ChatScreen({
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
-  const [inputText, setInputText] = useState('');
+
+  // Composer state. The native field owns the text (see ChatComposer); the
+  // draft ref mirrors it and survives toolbar remounts, and `composerGeneration`
+  // forces a remount whenever we need to REPLACE the content (edit mode).
+  const composerRef = useRef<ChatComposerHandle>(null);
+  const draftRef = useRef('');
+  const [composerGeneration, setComposerGeneration] = useState(0);
+  // The message this device just sent slides in from the composer (iMessage).
+  const [justSentId, setJustSentId] = useState<string | null>(null);
+  const [tapback, setTapback] = useState<{ message: AttoMessage; rect: Anchor } | null>(
+    null
+  );
+  const threadRef = useRef<ChatThreadHandle>(null);
+  // Creators' bubbles wear the creator gold (David, Sep 21 2026).
+  const participantProfile = useParticipantProfile(participantId || '');
+  const creatorIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (user?.role === 'creator') ids.add(userId);
+    if (participantProfile.role === 'creator' && participantId)
+      ids.add(String(participantId));
+    return ids;
+  }, [user?.role, userId, participantProfile.role, participantId]);
 
   // Chat wallpaper — remote-managed, user picks from the settings gear
   // on the messages tab (ConversationsHeader).
@@ -231,10 +142,10 @@ export function ChatScreen({
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const sentMessageIds = useRef(new Set<string>()).current;
-  const lastTapRef = useRef<Record<string, number>>({});
 
   // Typing state
   const typingUsers = useChatStore((s) => s.typingUsers[conversationId]);
+  const readAt = useChatStore((s) => s.readAt[conversationId] ?? null);
   const isParticipantTyping = typingUsers ? typingUsers.size > 0 : false;
 
   // Force refetch on mount
@@ -319,21 +230,22 @@ export function ChatScreen({
           });
         }
         setEditingMessage(null);
-        setInputText('');
+        composerRef.current?.clear();
         return;
       }
 
-      // Clear input and reply preview immediately
-      setInputText('');
+      // The composer already cleared itself; drop the reply preview now.
       const currentReply = replyMessage;
       setReplyMessage(null);
 
       // Optimistic insert
       const tempId = `temp-${Date.now()}`;
       sentMessageIds.add(tempId);
+      setJustSentId(tempId);
       const chatKey = QUERY_KEYS.MESSAGES.CHAT(conversationId);
 
       const replaceTempWith = (realId: string, status: 'sent' | 'failed') => {
+        setJustSentId((cur) => (cur === tempId ? realId || tempId : cur));
         queryClient.setQueryData(
           chatKey,
           (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
@@ -444,6 +356,7 @@ export function ChatScreen({
       conversationId,
       userId,
       sendViaSocket,
+      sendTyping,
       queryClient,
       sentMessageIds,
       editingMessage,
@@ -477,8 +390,11 @@ export function ChatScreen({
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_COPIED, eventProps);
           break;
         case 'edit':
+          // Load the message into the composer by remounting the native
+          // field with the new draft (never through a controlled value).
+          draftRef.current = msg.text;
+          setComposerGeneration((g) => g + 1);
           setEditingMessage(msg);
-          setInputText(msg.text);
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_STARTED, eventProps);
           break;
         case 'delete':
@@ -513,214 +429,6 @@ export function ChatScreen({
 
   // ── Custom renderers ──
 
-  // gifted-chat v3 ignores `textProps` on Bubble (its internal MessageText
-  // and Time don't forward the prop), so we render the text and timestamp
-  // ourselves and apply `maxFontSizeMultiplier` directly. Without this the
-  // bubble grows uncontrollably under iOS Larger Text / Android Display
-  // Size accessibility settings.
-  const renderMessageText = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (textProps: any) => {
-      const position: 'left' | 'right' = textProps?.position ?? 'left';
-      const text: string = textProps?.currentMessage?.text ?? '';
-      const isRight = position === 'right';
-      return (
-        <View style={styles.messageTextContainer}>
-          <LinkParser
-            text={text}
-            textStyle={isRight ? styles.textRight : styles.textLeft}
-            linkStyle={isRight ? styles.linkRight : styles.linkLeft}
-            TextComponent={CappedText}
-          />
-        </View>
-      );
-    },
-    []
-  );
-
-  const renderTime = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (timeProps: any) => {
-      const position: 'left' | 'right' = timeProps?.position ?? 'left';
-      const createdAt = timeProps?.currentMessage?.createdAt;
-      if (!createdAt) return null;
-      const formatted = new Intl.DateTimeFormat(undefined, {
-        hour: 'numeric',
-        minute: '2-digit',
-      }).format(new Date(createdAt));
-      return (
-        <RNText
-          style={position === 'right' ? styles.timeRight : styles.timeLeft}
-          maxFontSizeMultiplier={1.0}
-        >
-          {formatted}
-        </RNText>
-      );
-    },
-    []
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- GiftedChat generic props are overly strict with extended IMessage types
-  const renderBubble = useCallback(
-    (props: BubbleProps<AttoMessage>) => {
-      const msg = props.currentMessage;
-      if (!msg) return null;
-
-      if (msg.isDeleted) {
-        return (
-          <View style={styles.deletedBubble}>
-            <Text style={styles.deletedText}>
-              {t('chat.messageDeleted', { defaultValue: 'Message deleted' })}
-            </Text>
-          </View>
-        );
-      }
-
-      const isOwn = msg.user._id === userId;
-
-      const menuItems: Array<{
-        actionKey: string;
-        actionTitle: string;
-        icon?: { type: string; imageValue: { systemName: string } };
-        menuAttributes?: string[];
-      }> = [
-        {
-          actionKey: 'react',
-          actionTitle: t('actions.react', { defaultValue: 'React' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'face.smiling' } },
-        },
-        {
-          actionKey: 'reply',
-          actionTitle: t('actions.reply', { defaultValue: 'Reply' }),
-          icon: {
-            type: 'IMAGE_SYSTEM',
-            imageValue: { systemName: 'arrowshape.turn.up.left' },
-          },
-        },
-        {
-          actionKey: 'copy',
-          actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
-        },
-      ];
-      if (isOwn) {
-        menuItems.push({
-          actionKey: 'edit',
-          actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
-        });
-        menuItems.push({
-          actionKey: 'delete',
-          actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'trash' } },
-          menuAttributes: ['destructive'],
-        });
-      }
-
-      return (
-        <View>
-          <ContextMenuView
-            menuConfig={{ menuTitle: '', menuItems }}
-            shouldWaitForMenuToHide={false}
-            onMenuWillShow={() => haptic('heavy')}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onPressMenuItem={({ nativeEvent }: any) =>
-              handleMenuAction(nativeEvent.actionKey, msg)
-            }
-          >
-            <View>
-              <Bubble
-                {...(props as any)}
-                containerStyle={{
-                  left: { marginLeft: 8 },
-                  right: { marginRight: 8 },
-                }}
-                wrapperStyle={{
-                  left: styles.bubbleLeft,
-                  right: styles.bubbleRight,
-                }}
-                textStyle={{
-                  left: styles.textLeft,
-                  right: styles.textRight,
-                }}
-                timeTextStyle={{
-                  left: styles.timeLeft,
-                  right: styles.timeRight,
-                }}
-                renderMessageText={renderMessageText}
-                renderTime={renderTime}
-                isCustomViewBottom={false}
-                renderCustomView={() => {
-                  if (!msg.replyToId || !msg.replyToContent) return null;
-                  return (
-                    <View
-                      style={[
-                        styles.replyQuote,
-                        isOwn ? styles.replyQuoteOwn : styles.replyQuoteOther,
-                      ]}
-                    >
-                      <View style={styles.replyQuoteBar} />
-                      <View style={styles.replyQuoteContent}>
-                        <Text style={styles.replyQuoteName} numberOfLines={1}>
-                          {msg.replyToSender || t('chat.you', { defaultValue: 'You' })}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.replyQuoteText,
-                            isOwn && { color: 'rgba(0,0,0,0.5)' },
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {msg.replyToContent}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                }}
-                renderTicks={(message: AttoMessage) => {
-                  if (message.user._id !== userId) return null;
-                  return (
-                    <View style={styles.tickContainer}>
-                      {message.pending && (
-                        <Clock size={12} color="rgba(0,0,0,0.4)" strokeWidth={2.25} />
-                      )}
-                      {message.sent && !message.received && !message.pending && (
-                        <Check size={13} color="rgba(0,0,0,0.4)" strokeWidth={2.25} />
-                      )}
-                      {message.received && (
-                        <CheckCheck size={13} color="#000" strokeWidth={2.25} />
-                      )}
-                    </View>
-                  );
-                }}
-              />
-              {msg.isEdited && (
-                <Text
-                  style={[
-                    styles.editedLabel,
-                    isOwn ? styles.editedRight : styles.editedLeft,
-                  ]}
-                >
-                  {t('chat.edited', { defaultValue: 'edited' })}
-                </Text>
-              )}
-              {msg.reactions && msg.reactions.length > 0 && (
-                <ReactionBar
-                  reactions={msg.reactions}
-                  currentUserId={userId}
-                  onToggle={(emoji) =>
-                    toggleReaction(msg._id as string, emoji, msg.reactions)
-                  }
-                />
-              )}
-            </View>
-          </ContextMenuView>
-        </View>
-      );
-    },
-    [userId, toggleReaction, handleMenuAction, t, renderMessageText, renderTime]
-  );
-
   const renderMessageAudio = useCallback((props: { currentMessage?: AttoMessage }) => {
     if (!props.currentMessage?.audio) return null;
     return <AudioMessagePlayer audioUrl={props.currentMessage.audio} />;
@@ -731,19 +439,43 @@ export function ChatScreen({
     return <VideoMessagePlayer videoUrl={props.currentMessage.video} />;
   }, []);
 
-  const hasText = inputText.trim().length > 0;
+  // Typing indicator, driven by the composer's keystrokes.
+  const handleTypingActivity = useCallback(
+    (text: string) => {
+      if (text.length > 0 && !isTypingRef.current) {
+        isTypingRef.current = true;
+        sendTyping(true);
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        if (isTypingRef.current) {
+          isTypingRef.current = false;
+          sendTyping(false);
+        }
+      }, 2000);
+    },
+    [sendTyping]
+  );
 
-  const renderInputToolbar = useCallback(
-    (props: InputToolbarProps<AttoMessage>) => (
-      <View
-        style={[styles.inputToolbarOuter, { paddingBottom: Math.max(insets.bottom, 16) }]}
-      >
+  const cancelEditing = useCallback(() => {
+    composerRef.current?.clear();
+    setEditingMessage(null);
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_CANCELLED, {
+      conversation_id: conversationId,
+    });
+  }, [conversationId]);
+
+  const inputToolbar = (
+    <View
+      style={[styles.inputToolbarOuter, { paddingBottom: Math.max(insets.bottom, 16) }]}
+    >
+      <View style={styles.inputToolbarCapsule}>
         {editingMessage && (
           <View style={styles.replyPreview}>
             <View style={[styles.replyPreviewBar, styles.editPreviewBarColor]} />
             <View style={styles.replyPreviewContent}>
               <View style={styles.editPreviewHeader}>
-                <Pencil size={13} color="#F59E0B" strokeWidth={2} />
+                <Pencil size={13} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.editPreviewLabel}>
                   {t('actions.editing', { defaultValue: 'Editing' })}
                 </Text>
@@ -752,13 +484,7 @@ export function ChatScreen({
                 {editingMessage.text}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => {
-                setEditingMessage(null);
-                setInputText('');
-              }}
-              style={styles.replyPreviewClose}
-            >
+            <TouchableOpacity onPress={cancelEditing} style={styles.replyPreviewClose}>
               <X size={18} color="#888" strokeWidth={2} />
             </TouchableOpacity>
           </View>
@@ -782,50 +508,120 @@ export function ChatScreen({
             </TouchableOpacity>
           </View>
         )}
-        <View style={styles.inputToolbarCapsule}>
-          <View style={styles.composerWrapper}>
-            <Composer
-              {...(props as any)}
-              textInputStyle={styles.composerInput}
-              placeholderTextColor="#8E8E93"
-              placeholder={
-                editingMessage
-                  ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
-                  : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
-              }
-              // Must merge — overwriting drops the onChangeText/ref that
-              // GiftedChat injects, breaking controlled input (every
-              // keystroke would re-render with the stale `text` prop and
-              // erase what the user typed).
-              textInputProps={{
-                ...((props as any).textInputProps ?? {}),
-                maxFontSizeMultiplier: 1.0,
-              }}
-            />
-          </View>
-          <Send {...props} containerStyle={styles.sendContainer}>
-            <View style={[styles.sendButton, !hasText && styles.sendButtonDisabled]}>
-              <SendHorizontal
-                size={16}
-                color={hasText ? '#000' : '#888'}
-                strokeWidth={2.5}
-              />
-            </View>
-          </Send>
+        <View style={styles.composerRow}>
+          <ChatComposer
+            ref={composerRef}
+            conversationId={conversationId}
+            draftRef={draftRef}
+            generation={composerGeneration}
+            focusOnGeneration={editingMessage != null}
+            placeholder={
+              editingMessage
+                ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
+                : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
+            }
+            // Hand the text to GiftedChat so it stamps user/id/createdAt and
+            // scrolls to bottom before our handleSend runs. `false` = we clear
+            // the field ourselves (GiftedChat never touches the native input).
+            // GiftedChat injects `onSend` at runtime but leaves it out of the
+            // InputToolbarProps type, hence the narrow cast with a fallback.
+            onSend={(text) => {
+              void handleSend([{ text } as IMessage]);
+              threadRef.current?.scrollToBottom(true);
+            }}
+            onTextActivity={handleTypingActivity}
+          />
         </View>
       </View>
-    ),
-    [insets.bottom, editingMessage, replyMessage, hasText, t]
+    </View>
   );
 
-  const renderComposer = useCallback(() => null, []);
-  const renderSend = useCallback(() => null, []);
+  const menuItemsFor = useCallback(
+    (_msg: AttoMessage, isOwn: boolean): MenuItem[] => {
+      const items: MenuItem[] = [
+        {
+          actionKey: 'react',
+          actionTitle: t('actions.react', { defaultValue: 'React' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'face.smiling' } },
+        },
+        {
+          actionKey: 'reply',
+          actionTitle: t('actions.reply', { defaultValue: 'Reply' }),
+          icon: {
+            type: 'IMAGE_SYSTEM',
+            imageValue: { systemName: 'arrowshape.turn.up.left' },
+          },
+        },
+        {
+          actionKey: 'copy',
+          actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
+        },
+      ];
+      if (isOwn) {
+        items.push({
+          actionKey: 'edit',
+          actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
+        });
+        items.push({
+          actionKey: 'delete',
+          actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'trash' } },
+          menuAttributes: ['destructive'],
+        });
+      }
+      return items;
+    },
+    [t]
+  );
 
-  // Cap date label scaling so "Today" / "FRI 8:10 PM" stay compact at AX5.
-  const renderDay = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (dayProps: any) => <Day {...dayProps} textProps={{ maxFontSizeMultiplier: 1.0 }} />,
-    []
+  const handleSwipeReply = useCallback(
+    (msg: AttoMessage) => {
+      setReplyMessage(msg);
+      composerRef.current?.focus();
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.REPLY_STARTED, {
+        conversation_id: conversationId,
+        message_id: msg._id,
+        action: 'swipe',
+      });
+    },
+    [conversationId]
+  );
+
+  const handleDoubleTapReact = useCallback(
+    (msg: AttoMessage, rect: Anchor) => {
+      setTapback({ message: msg, rect });
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.TAPBACK_OPENED, {
+        conversation_id: conversationId,
+        message_id: msg._id,
+        anchor_y: Math.round(rect.y),
+        existing_reactions: msg.reactions?.length ?? 0,
+      });
+    },
+    [conversationId]
+  );
+  const tapbackMine = useMemo(() => {
+    const set = new Set<string>();
+    tapback?.message.reactions?.forEach((r) => {
+      if (String(r.userId) === userId) set.add(r.emoji);
+    });
+    return set;
+  }, [tapback, userId]);
+
+  const handleToggleReaction = useCallback(
+    (msg: AttoMessage, emoji: string) =>
+      toggleReaction(msg._id as string, emoji, msg.reactions),
+    [toggleReaction]
+  );
+
+  const renderThreadMedia = useCallback(
+    (msg: AttoMessage) => {
+      if (msg.contentType === 'audio') return renderMessageAudio({ currentMessage: msg });
+      if (msg.contentType === 'video') return renderMessageVideo({ currentMessage: msg });
+      return null;
+    },
+    [renderMessageAudio, renderMessageVideo]
   );
 
   if (!user) return null;
@@ -848,7 +644,9 @@ export function ChatScreen({
           style={[
             StyleSheet.absoluteFillObject,
             {
-              backgroundColor: `rgba(0,0,0,${activeWallpaper.overlayOpacity ?? 0.7})`,
+              // The catalogue value is a ceiling, not a floor: at 0.7 the pattern
+              // was barely there. Cap the veil so the wallpaper always reads.
+              backgroundColor: `rgba(0,0,0,${Math.min(activeWallpaper.overlayOpacity ?? 0.35, 0.45)})`,
             },
           ]}
         />
@@ -867,91 +665,63 @@ export function ChatScreen({
         hideBack={inline}
       />
 
-      <GiftedChat<AttoMessage>
-        messages={giftedMessages}
-        onSend={handleSend}
-        user={{ _id: userId, name: user.username, avatar: user.avatar ?? undefined }}
-        // Keyboard
-        keyboardAvoidingViewProps={{ keyboardVerticalOffset: -(insets.bottom - 8) }}
-        // Input — controlled mode for edit support
-        text={inputText}
-        isSendButtonAlwaysVisible
-        minInputToolbarHeight={56}
-        textInputProps={{
-          placeholderTextColor: COLORS.gray[500],
-          placeholder: editingMessage
-            ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
-            : t('chat.inputPlaceholder', { defaultValue: 'Message...' }),
-          onChangeText: (text: string) => {
-            setInputText(text);
-            if (text.length > 0 && !isTypingRef.current) {
-              isTypingRef.current = true;
-              sendTyping(true);
-            }
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-            typingTimeoutRef.current = setTimeout(() => {
-              if (isTypingRef.current) {
-                isTypingRef.current = false;
-                sendTyping(false);
-              }
-            }, 2000);
-          },
-        }}
-        // Appearance
-        renderBubble={renderBubble}
-        renderInputToolbar={renderInputToolbar}
-        renderComposer={renderComposer}
-        renderSend={renderSend}
-        renderMessageAudio={renderMessageAudio}
-        renderMessageVideo={renderMessageVideo}
-        renderDay={renderDay}
-        renderAvatar={null}
-        // Interactions
-        onPressMessage={(_context: unknown, message: IMessage) => {
-          const msgId = String(message._id);
-          const now = Date.now();
-          const last = lastTapRef.current[msgId] ?? 0;
-          lastTapRef.current[msgId] = now;
-          if (now - last < 400) {
-            haptic('medium');
-            setSelectedMessage(message as AttoMessage);
-            setEmojiPickerVisible(true);
+      <KeyboardAvoidingView behavior="padding" style={styles.threadArea}>
+        <ChatThread
+          ref={threadRef}
+          messages={giftedMessages}
+          currentUserId={userId}
+          justSentId={justSentId}
+          creatorIds={creatorIds}
+          isParticipantTyping={isParticipantTyping}
+          participantName={participantName}
+          hasMore={hasMore}
+          isFetchingMore={isFetchingMore}
+          onLoadMore={loadMore}
+          menuItemsFor={menuItemsFor}
+          onMenuAction={handleMenuAction}
+          onReply={handleSwipeReply}
+          onDoubleTap={handleDoubleTapReact}
+          onToggleReaction={handleToggleReaction}
+          renderMedia={renderThreadMedia}
+          focusedId={replyMessage ? String(replyMessage._id) : null}
+          readAt={readAt}
+          bottomInset={0}
+          topInset={0}
+        />
+        {inputToolbar}
+      </KeyboardAvoidingView>
+
+      <TapbackOverlay
+        anchor={tapback?.rect ?? null}
+        mine={tapbackMine}
+        onPick={(emoji) => {
+          if (tapback) {
+            toggleReaction(
+              tapback.message._id as string,
+              emoji,
+              tapback.message.reactions
+            );
+            analytics.capture(ANALYTICS_EVENTS.MESSAGES.TAPBACK_PICKED, {
+              conversation_id: conversationId,
+              message_id: tapback.message._id,
+              emoji,
+              already_mine: tapbackMine.has(emoji),
+            });
           }
+          setTapback(null);
         }}
-        isTyping={isParticipantTyping}
-        renderFooter={() =>
-          isParticipantTyping ? <TypingFooter name={participantName} /> : null
-        }
-        // Pagination
-        loadEarlierMessagesProps={{
-          isAvailable: hasMore,
-          onPress: loadMore,
-          isLoading: isFetchingMore,
+        onMore={() => {
+          if (tapback) setSelectedMessage(tapback.message);
+          setTapback(null);
+          setEmojiPickerVisible(true);
         }}
-        // Behavior
-        isScrollToBottomEnabled
-        scrollToBottomOffset={200}
-        // Reply
-        reply={{
-          message: replyMessage
-            ? {
-                _id: replyMessage._id,
-                text: replyMessage.text,
-                user: replyMessage.user,
-              }
-            : null,
-          onClear: () => setReplyMessage(null),
-          swipe: {
-            isEnabled: true,
-            onSwipe: (msg) => setReplyMessage(msg as AttoMessage),
-          },
+        onClose={() => {
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.TAPBACK_DISMISSED, {
+            conversation_id: conversationId,
+            message_id: tapback?.message._id ?? null,
+          });
+          setTapback(null);
         }}
-        // Locale
-        locale="en"
-        // Style overrides — transparent over wallpaper so the pattern shows through.
-        messagesContainerStyle={
-          activeWallpaper ? styles.messagesContainerTransparent : styles.messagesContainer
-        }
       />
 
       <ReactionPicker
@@ -973,6 +743,9 @@ export function ChatScreen({
 }
 
 const styles = StyleSheet.create({
+  threadArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.black,
@@ -1060,8 +833,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 2,
   },
-  inputToolbarCapsule: {
+  composerRow: {
     flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  inputToolbarCapsule: {
+    flexDirection: 'column',
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
@@ -1074,56 +851,23 @@ const styles = StyleSheet.create({
     minHeight: 52,
     gap: 6,
   },
-  composerWrapper: {
-    flex: 1,
-  },
-  composerInput: {
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    borderWidth: 0,
-    paddingHorizontal: 14,
-    paddingTop: 6,
-    paddingBottom: 6,
-    maxHeight: 120,
-    color: COLORS.white,
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 13,
-    lineHeight: 18,
-    marginLeft: 0,
-    marginRight: 0,
-  },
-  inputPrimary: {},
-  // Send button — inside the capsule
-  sendContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#444',
-  },
   // Reply preview
   replyPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    marginBottom: 6,
+    // Lives INSIDE the capsule (Telegram): no box of its own, just the bar.
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    marginBottom: 2,
+    marginHorizontal: 10,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   replyPreviewBar: {
     width: 3,
     height: '100%',
-    backgroundColor: '#3B82F6',
+    // Black and white app: no blue accents in the reply preview.
+    backgroundColor: COLORS.white,
     borderRadius: 2,
     marginRight: 10,
   },
@@ -1131,7 +875,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   replyPreviewName: {
-    color: '#3B82F6',
+    color: COLORS.white,
     fontSize: 13,
     fontFamily: 'Archivo_600SemiBold',
     marginBottom: 2,
@@ -1146,7 +890,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   editPreviewBarColor: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   editPreviewHeader: {
     flexDirection: 'row',
@@ -1154,7 +898,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   editPreviewLabel: {
-    color: '#F59E0B',
+    color: COLORS.white,
     fontSize: 13,
     fontFamily: 'Archivo_600SemiBold',
   },

@@ -67,7 +67,7 @@ export const messageService = {
     const seen = new Map<string, ChatConversation>();
     for (const conv of all) {
       const existing = seen.get(conv.participantId);
-      if (!existing || conv.updatedAt > existing.updatedAt) {
+      if (!existing || (conv.updatedAt ?? '') > (existing.updatedAt ?? '')) {
         seen.set(conv.participantId, conv);
       }
     }

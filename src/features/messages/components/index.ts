@@ -5,5 +5,4 @@ export { EmptyConversations } from './EmptyConversations';
 export { ChatScreen } from './ChatScreen';
 export { ChatHeader } from './ChatHeader';
 export { MessageBubble } from './MessageBubble';
-export { ChatInputBar } from './ChatInputBar';
 export { NewMessageScreen } from './NewMessageScreen';

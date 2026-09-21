@@ -59,7 +59,8 @@
   },
   "chatHeader": {
     "backAccessibilityLabel": "Voltar",
-    "voiceCallAccessibilityLabel": "Chamada de voz"
+    "voiceCallAccessibilityLabel": "Chamada de voz",
+    "openProfileAccessibilityLabel": "Abrir o perfil de {{name}}"
   },
   "typing": {
     "suffix": " está digitando",

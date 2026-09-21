@@ -9,6 +9,9 @@ import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 import { makeVoIPCall } from '@/hooks/useTwilioVoice';
 import { useCallStore } from '@/stores/callStore';
 import { useScreenTopInset } from '@/hooks/useInCallChrome';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
+import { router } from 'expo-router';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 interface ChatHeaderProps {
   participantName: string;
@@ -34,47 +37,71 @@ export function ChatHeader({
   return (
     <View style={[styles.container, { paddingTop: topInset + SPACING.xs }]}>
       {!hideBack && (
-        <TouchableOpacity
-          onPress={onBack}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel={t('chatHeader.backAccessibilityLabel')}
-        >
-          <ChevronLeft size={28} color={COLORS.white} strokeWidth={2.25} />
-        </TouchableOpacity>
+        <GlassSurface radius={22} style={styles.glassButton}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel={t('chatHeader.backAccessibilityLabel')}
+          >
+            <ChevronLeft size={26} color={COLORS.white} strokeWidth={2.25} />
+          </TouchableOpacity>
+        </GlassSurface>
       )}
 
-      <View style={styles.nameRow}>
-        <Text
-          variant="h3"
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.6}
-          maxFontSizeMultiplier={1.15}
-          style={styles.name}
+      <GlassSurface radius={20} style={styles.namePill}>
+        <TouchableOpacity
+          style={styles.nameRow}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t('chatHeader.openProfileAccessibilityLabel', { name })}
+          onPress={() => {
+            analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_PROFILE_OPENED, {
+              participant_id: participantId,
+            });
+            router.push({
+              pathname: '/user/[id]',
+              params: { id: participantId, username: name, avatar: avatarUri ?? '' },
+            });
+          }}
         >
-          {name}
-        </Text>
-        {role === 'creator' && <CreatorBadge size="sm" />}
-      </View>
+          <Avatar
+            uri={avatarUri}
+            size="sm"
+            fallbackText={name}
+            creatorRing={role === 'creator'}
+            style={styles.pillAvatar}
+          />
+          <Text
+            variant="h3"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+            maxFontSizeMultiplier={1.15}
+            style={styles.name}
+          >
+            {name}
+          </Text>
+          {role === 'creator' && <CreatorBadge size="sm" />}
+        </TouchableOpacity>
+      </GlassSurface>
 
       <View style={styles.rightContainer}>
-        <TouchableOpacity
-          onPress={() => makeVoIPCall(participantId, name)}
-          disabled={isInCall}
-          style={[styles.callButton, isInCall && styles.callButtonDisabled]}
-          accessibilityRole="button"
-          accessibilityLabel={t('chatHeader.voiceCallAccessibilityLabel')}
-        >
-          <Phone size={22} color={isInCall ? '#555' : COLORS.white} strokeWidth={2.25} />
-        </TouchableOpacity>
-
-        <Avatar
-          uri={avatarUri}
-          size="sm"
-          fallbackText={name}
-          creatorRing={role === 'creator'}
-        />
+        <GlassSurface radius={22} style={styles.glassButton}>
+          <TouchableOpacity
+            onPress={() => makeVoIPCall(participantId, name)}
+            disabled={isInCall}
+            style={[styles.callButton, isInCall && styles.callButtonDisabled]}
+            accessibilityRole="button"
+            accessibilityLabel={t('chatHeader.voiceCallAccessibilityLabel')}
+          >
+            <Phone
+              size={20}
+              color={isInCall ? '#555' : COLORS.white}
+              strokeWidth={2.25}
+            />
+          </TouchableOpacity>
+        </GlassSurface>
       </View>
     </View>
   );
@@ -89,9 +116,17 @@ const styles = StyleSheet.create({
     zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: SPACING.sm,
     paddingBottom: SPACING.sm,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    // The wallpaper shows through; the glass buttons sit on it like the feed.
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  glassButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
   },
   // Flush under the green call bar → same green so the top chrome reads as one.
   containerInCall: {
@@ -105,24 +140,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexShrink: 0,
   },
+  // Telegram puts the title in a glass pill so it reads over any wallpaper.
+  // Telegram puts the title in a glass pill so it reads over any wallpaper;
+  // the avatar lives inside it (one component, no duplicate on the right)
+  // and the whole pill opens the profile.
+  namePill: {
+    flexShrink: 1,
+    maxWidth: '66%',
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginHorizontal: SPACING.sm,
+  },
   nameRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
+    paddingLeft: 6,
+    paddingRight: 14,
   },
+  pillAvatar: { flexShrink: 0 },
   name: {
     color: COLORS.white,
     textAlign: 'center',
   },
+  // Same width as the back button so the pill sits centred between them.
   rightContainer: {
     width: 44,
     height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: SPACING.xs,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
     flexShrink: 0,
   },
   callButton: {

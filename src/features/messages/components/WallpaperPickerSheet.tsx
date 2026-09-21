@@ -49,18 +49,12 @@ export function WallpaperPickerSheet({ visible, onClose }: WallpaperPickerSheetP
   );
 
   return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      title={t('wallpaperPicker.title')}
-    >
+    <BottomSheet visible={visible} onClose={onClose} title={t('wallpaperPicker.title')}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.subtitle}>
-          {t('wallpaperPicker.subtitle')}
-        </Text>
+        <Text style={styles.subtitle}>{t('wallpaperPicker.subtitle')}</Text>
 
         <View style={styles.grid}>
           {/* "None" option — explicit opt-out from wallpaper. */}
@@ -84,11 +78,7 @@ export function WallpaperPickerSheet({ visible, onClose }: WallpaperPickerSheetP
           <Text style={styles.statusText}>{t('wallpaperPicker.loading')}</Text>
         )}
 
-        {isError && (
-          <Text style={styles.errorText}>
-            {t('wallpaperPicker.error')}
-          </Text>
-        )}
+        {isError && <Text style={styles.errorText}>{t('wallpaperPicker.error')}</Text>}
       </ScrollView>
     </BottomSheet>
   );
@@ -104,10 +94,7 @@ interface NoneTileProps {
 
 function NoneTile({ label, isSelected, onPress }: NoneTileProps) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.tile, isSelected && styles.tileSelected]}
-    >
+    <Pressable onPress={onPress} style={[styles.tile, isSelected && styles.tileSelected]}>
       <View style={styles.noneTileInner}>
         <X size={28} color="#666" strokeWidth={1.75} />
       </View>
@@ -132,10 +119,7 @@ function WallpaperTile({ wallpaper, isSelected, onPress }: WallpaperTileProps) {
   const overlayOpacity = wallpaper.overlayOpacity ?? 0.5;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.tile, isSelected && styles.tileSelected]}
-    >
+    <Pressable onPress={onPress} style={[styles.tile, isSelected && styles.tileSelected]}>
       <ImageBackground
         source={{ uri: previewUri }}
         style={styles.tilePreview}

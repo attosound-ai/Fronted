@@ -33,7 +33,8 @@
   },
   "chatHeader": {
     "backAccessibilityLabel": "Go back",
-    "voiceCallAccessibilityLabel": "Voice call"
+    "voiceCallAccessibilityLabel": "Voice call",
+    "openProfileAccessibilityLabel": "Open {{name}} profile"
   },
   "typing": {
     "suffix": " is typing",

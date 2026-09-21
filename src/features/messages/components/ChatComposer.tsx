@@ -19,7 +19,6 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -52,8 +51,6 @@ import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useAttachSheet } from '../hooks/useAttachSheet';
 import { useVoiceNote } from '../media/useVoiceNote';
 import type { OutgoingMedia } from '../media/chatMedia';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 import { Trash2 } from 'lucide-react-native';
 import { TAPBACK_EMOJI } from '../thread/TapbackOverlay';
 
@@ -301,29 +298,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       },
       [voice, conversationId, onSendMedia]
     );
+    // Plain responder events (press in, touch move, press out): a manual
+    // activation pan never fired for synthesized touches on the phone.
     const CANCEL_PX = 90;
-    const micGesture = useMemo(
-      () =>
-        Gesture.Pan()
-          .manualActivation(true)
-          .onTouchesDown((_e, state) => {
-            state.activate();
-          })
-          .onStart(() => {
-            runOnJS(startVoice)();
-          })
-          .onUpdate((e) => {
-            const armed = e.translationX < -CANCEL_PX;
-            runOnJS(setCancelArmed)(armed);
-          })
-          .onEnd((e) => {
-            runOnJS(endVoice)(e.translationX < -CANCEL_PX);
-          })
-          .onFinalize((_e, success) => {
-            if (!success) runOnJS(endVoice)(true);
-          }),
-      [startVoice, endVoice]
+    const touchStartX = useRef(0);
+    const touchLastX = useRef(0);
+    const onMicPressIn = useCallback(
+      (e: { nativeEvent: { pageX: number } }) => {
+        touchStartX.current = e.nativeEvent.pageX;
+        touchLastX.current = e.nativeEvent.pageX;
+        void startVoice();
+      },
+      [startVoice]
     );
+    const onMicTouchMove = useCallback((e: { nativeEvent: { pageX: number } }) => {
+      touchLastX.current = e.nativeEvent.pageX;
+      const armed = touchLastX.current < touchStartX.current - CANCEL_PX;
+      setCancelArmed((prev) => (prev === armed ? prev : armed));
+    }, []);
+    const onMicPressOut = useCallback(() => {
+      void endVoice(touchLastX.current < touchStartX.current - CANCEL_PX);
+    }, [endVoice]);
 
     return (
       <View style={styles.column}>
@@ -446,24 +441,26 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
           {!hasText ? (
             <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
-              <GestureDetector gesture={micGesture}>
-                <View
-                  style={[styles.roundButton, voice.recording && styles.micRecording]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('composer.voiceNote')}
-                  accessibilityHint={t('media.recordingHint')}
-                >
-                  <GlassSurface radius={22} style={styles.roundButton}>
-                    <View style={styles.roundButtonInner}>
-                      <Mic
-                        size={22}
-                        color={voice.recording ? '#FF453A' : COLORS.white}
-                        strokeWidth={2.25}
-                      />
-                    </View>
-                  </GlassSurface>
-                </View>
-              </GestureDetector>
+              <Pressable
+                onPressIn={onMicPressIn}
+                onTouchMove={onMicTouchMove}
+                onPressOut={onMicPressOut}
+                delayLongPress={100000}
+                style={[styles.roundButton, voice.recording && styles.micRecording]}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.voiceNote')}
+                accessibilityHint={t('media.recordingHint')}
+              >
+                <GlassSurface radius={22} style={styles.roundButton}>
+                  <View style={styles.roundButtonInner}>
+                    <Mic
+                      size={22}
+                      color={voice.recording ? '#FF453A' : COLORS.white}
+                      strokeWidth={2.25}
+                    />
+                  </View>
+                </GlassSurface>
+              </Pressable>
             </Animated.View>
           ) : null}
         </Animated.View>

@@ -535,178 +535,6 @@ export function ChatScreen({
     });
   }, [conversationId]);
 
-  // Reply and edit previews sit inside the composer's glass capsule (Telegram).
-  const composerPreview = (
-    <>
-      {editingMessage && (
-        <View style={styles.replyPreview}>
-          <View style={[styles.replyPreviewBar, styles.editPreviewBarColor]} />
-          <View style={styles.replyPreviewContent}>
-            <View style={styles.editPreviewHeader}>
-              <Pencil size={13} color="#FFFFFF" strokeWidth={2} />
-              <Text style={styles.editPreviewLabel}>
-                {t('actions.editing', { defaultValue: 'Editing' })}
-              </Text>
-            </View>
-            <Text style={styles.replyPreviewText} numberOfLines={1}>
-              {editingMessage.text}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={cancelEditing} style={styles.replyPreviewClose}>
-            <X size={18} color="#888" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      )}
-      {replyMessage && !editingMessage && (
-        <View style={styles.replyPreview}>
-          <View style={styles.replyPreviewBar} />
-          <View style={styles.replyPreviewContent}>
-            <Text style={styles.replyPreviewName}>
-              {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
-            </Text>
-            <Text style={styles.replyPreviewText} numberOfLines={1}>
-              {replyMessage.text}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setReplyMessage(null)}
-            style={styles.replyPreviewClose}
-          >
-            <X size={18} color="#888" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
-  );
-
-  // The toolbar has no background of its own: the wallpaper runs under it
-  // and the composer's glass floats on top (iOS 26 Messages, Telegram).
-  // Telegram and iMessage sit the composer right on the keyboard: the home
-  // indicator inset only applies while the keyboard is down.
-  const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
-  const toolbarInset = useAnimatedStyle(() => ({
-    paddingBottom:
-      Math.max(insets.bottom, 12) * (1 - keyboardProgress.value) +
-      8 * keyboardProgress.value,
-  }));
-  const inputToolbar = (
-    <Animated.View
-      style={[styles.inputToolbarOuter, toolbarInset]}
-      onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
-    >
-      <ChatComposer
-        ref={composerRef}
-        conversationId={conversationId}
-        draftRef={draftRef}
-        generation={composerGeneration}
-        focusOnGeneration={editingMessage != null}
-        placeholder={
-          editingMessage
-            ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
-            : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
-        }
-        // Hand the text to GiftedChat so it stamps user/id/createdAt and
-        // scrolls to bottom before our handleSend runs. `false` = we clear
-        // the field ourselves (GiftedChat never touches the native input).
-        // GiftedChat injects `onSend` at runtime but leaves it out of the
-        // InputToolbarProps type, hence the narrow cast with a fallback.
-        onSend={(text) => {
-          void handleSend([{ text } as IMessage]);
-          threadRef.current?.scrollToBottom(true);
-        }}
-        onTextActivity={handleTypingActivity}
-        preview={composerPreview}
-      />
-    </Animated.View>
-  );
-
-  const menuItemsFor = useCallback(
-    (_msg: AttoMessage, isOwn: boolean): MenuItem[] => {
-      const items: MenuItem[] = [
-        {
-          actionKey: 'react',
-          actionTitle: t('actions.react', { defaultValue: 'React' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'face.smiling' } },
-        },
-        {
-          actionKey: 'reply',
-          actionTitle: t('actions.reply', { defaultValue: 'Reply' }),
-          icon: {
-            type: 'IMAGE_SYSTEM',
-            imageValue: { systemName: 'arrowshape.turn.up.left' },
-          },
-        },
-        {
-          actionKey: 'copy',
-          actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
-        },
-      ];
-      if (isOwn) {
-        items.push({
-          actionKey: 'edit',
-          actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
-        });
-        items.push({
-          actionKey: 'delete',
-          actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
-          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'trash' } },
-          menuAttributes: ['destructive'],
-        });
-      }
-      return items;
-    },
-    [t]
-  );
-
-  const handleSwipeReply = useCallback(
-    (msg: AttoMessage) => {
-      setReplyMessage(msg);
-      composerRef.current?.focus();
-      analytics.capture(ANALYTICS_EVENTS.MESSAGES.REPLY_STARTED, {
-        conversation_id: conversationId,
-        message_id: msg._id,
-        action: 'swipe',
-      });
-    },
-    [conversationId]
-  );
-
-  const handleDoubleTapReact = useCallback(
-    (msg: AttoMessage, rect: Anchor) => {
-      setTapback({ message: msg, rect });
-      analytics.capture(ANALYTICS_EVENTS.MESSAGES.TAPBACK_OPENED, {
-        conversation_id: conversationId,
-        message_id: msg._id,
-        anchor_y: Math.round(rect.y),
-        existing_reactions: msg.reactions?.length ?? 0,
-      });
-    },
-    [conversationId]
-  );
-  const tapbackMine = useMemo(() => {
-    const set = new Set<string>();
-    tapback?.message.reactions?.forEach((r) => {
-      if (String(r.userId) === userId) set.add(r.emoji);
-    });
-    return set;
-  }, [tapback, userId]);
-
-  const handleToggleReaction = useCallback(
-    (msg: AttoMessage, emoji: string) =>
-      toggleReaction(msg._id as string, emoji, msg.reactions),
-    [toggleReaction]
-  );
-
-  const renderThreadMedia = useCallback(
-    (msg: AttoMessage) => {
-      if (!msg.contentType || msg.contentType === 'text') return null;
-      return <MediaMessage message={msg} isOwn={String(msg.user._id) === userId} />;
-    },
-    [userId]
-  );
-
   // ── Attachments and voice notes ─────────────────────────────────────
   const [attachOpen, setAttachOpen] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(80);
@@ -919,6 +747,185 @@ export function ChatScreen({
       }
     },
     [conversationId, handleSendMedia, t]
+  );
+
+  // Reply and edit previews sit inside the composer's glass capsule (Telegram).
+  const composerPreview = (
+    <>
+      {editingMessage && (
+        <View style={styles.replyPreview}>
+          <View style={[styles.replyPreviewBar, styles.editPreviewBarColor]} />
+          <View style={styles.replyPreviewContent}>
+            <View style={styles.editPreviewHeader}>
+              <Pencil size={13} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.editPreviewLabel}>
+                {t('actions.editing', { defaultValue: 'Editing' })}
+              </Text>
+            </View>
+            <Text style={styles.replyPreviewText} numberOfLines={1}>
+              {editingMessage.text}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={cancelEditing} style={styles.replyPreviewClose}>
+            <X size={18} color="#888" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      )}
+      {replyMessage && !editingMessage && (
+        <View style={styles.replyPreview}>
+          <View style={styles.replyPreviewBar} />
+          <View style={styles.replyPreviewContent}>
+            <Text style={styles.replyPreviewName}>
+              {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
+            </Text>
+            <Text style={styles.replyPreviewText} numberOfLines={1}>
+              {replyMessage.text}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setReplyMessage(null)}
+            style={styles.replyPreviewClose}
+          >
+            <X size={18} color="#888" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
+  // The toolbar has no background of its own: the wallpaper runs under it
+  // and the composer's glass floats on top (iOS 26 Messages, Telegram).
+  // Telegram and iMessage sit the composer right on the keyboard: the home
+  // indicator inset only applies while the keyboard is down.
+  const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+  const toolbarInset = useAnimatedStyle(() => ({
+    paddingBottom:
+      Math.max(insets.bottom, 12) * (1 - keyboardProgress.value) +
+      8 * keyboardProgress.value,
+  }));
+  const inputToolbar = (
+    <Animated.View
+      style={[styles.inputToolbarOuter, toolbarInset]}
+      onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
+    >
+      <ChatComposer
+        ref={composerRef}
+        conversationId={conversationId}
+        draftRef={draftRef}
+        generation={composerGeneration}
+        focusOnGeneration={editingMessage != null}
+        placeholder={
+          editingMessage
+            ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
+            : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
+        }
+        // Hand the text to GiftedChat so it stamps user/id/createdAt and
+        // scrolls to bottom before our handleSend runs. `false` = we clear
+        // the field ourselves (GiftedChat never touches the native input).
+        // GiftedChat injects `onSend` at runtime but leaves it out of the
+        // InputToolbarProps type, hence the narrow cast with a fallback.
+        onSend={(text) => {
+          void handleSend([{ text } as IMessage]);
+          threadRef.current?.scrollToBottom(true);
+        }}
+        onTextActivity={handleTypingActivity}
+        preview={composerPreview}
+        onAttachPress={() => {
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.ATTACH_MENU_OPENED, {
+            conversation_id: conversationId,
+          });
+          setAttachOpen((open) => !open);
+        }}
+        onSendMedia={handleSendMedia}
+      />
+    </Animated.View>
+  );
+
+  const menuItemsFor = useCallback(
+    (_msg: AttoMessage, isOwn: boolean): MenuItem[] => {
+      const items: MenuItem[] = [
+        {
+          actionKey: 'react',
+          actionTitle: t('actions.react', { defaultValue: 'React' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'face.smiling' } },
+        },
+        {
+          actionKey: 'reply',
+          actionTitle: t('actions.reply', { defaultValue: 'Reply' }),
+          icon: {
+            type: 'IMAGE_SYSTEM',
+            imageValue: { systemName: 'arrowshape.turn.up.left' },
+          },
+        },
+        {
+          actionKey: 'copy',
+          actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
+        },
+      ];
+      if (isOwn) {
+        items.push({
+          actionKey: 'edit',
+          actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
+        });
+        items.push({
+          actionKey: 'delete',
+          actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'trash' } },
+          menuAttributes: ['destructive'],
+        });
+      }
+      return items;
+    },
+    [t]
+  );
+
+  const handleSwipeReply = useCallback(
+    (msg: AttoMessage) => {
+      setReplyMessage(msg);
+      composerRef.current?.focus();
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.REPLY_STARTED, {
+        conversation_id: conversationId,
+        message_id: msg._id,
+        action: 'swipe',
+      });
+    },
+    [conversationId]
+  );
+
+  const handleDoubleTapReact = useCallback(
+    (msg: AttoMessage, rect: Anchor) => {
+      setTapback({ message: msg, rect });
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.TAPBACK_OPENED, {
+        conversation_id: conversationId,
+        message_id: msg._id,
+        anchor_y: Math.round(rect.y),
+        existing_reactions: msg.reactions?.length ?? 0,
+      });
+    },
+    [conversationId]
+  );
+  const tapbackMine = useMemo(() => {
+    const set = new Set<string>();
+    tapback?.message.reactions?.forEach((r) => {
+      if (String(r.userId) === userId) set.add(r.emoji);
+    });
+    return set;
+  }, [tapback, userId]);
+
+  const handleToggleReaction = useCallback(
+    (msg: AttoMessage, emoji: string) =>
+      toggleReaction(msg._id as string, emoji, msg.reactions),
+    [toggleReaction]
+  );
+
+  const renderThreadMedia = useCallback(
+    (msg: AttoMessage) => {
+      if (!msg.contentType || msg.contentType === 'text') return null;
+      return <MediaMessage message={msg} isOwn={String(msg.user._id) === userId} />;
+    },
+    [userId]
   );
 
   if (!user) return null;

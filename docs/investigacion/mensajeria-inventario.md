@@ -338,3 +338,14 @@ Hecho en código (commits `0b20366`, `8d9ec98`, `bc8244e` y siguientes en front;
 Pendiente de verificar en el iPhone (el teléfono estuvo ocupado por otra sesión): colita nueva en mensajes propios y recibidos, reacción interior, giro del fondo al enviar, menú de la cabecera, acciones de deslizar en la lista, borrador en la lista, línea de mensajes nuevos.
 
 Pendiente de construir: composer multilínea de Telegram (cápsula vertical de botones, expandir a editor completo), medios y notas de voz, hilos de Slack, búsqueda, presencia, `read_at` por mensaje en el backend, Dockerfile de chat-service (`COPY mix.exs mix.lock ./`).
+
+### 9.6 Medidas de burbujas (capturas a 3x, 21 sep)
+| | iMessage (enviado "Hola") | Telegram ("Hola prueba" / "Otra") | ATTO (dorado, una línea) |
+|---|---|---|---|
+| Alto de burbuja | 41 pt (más 8 pt de colita por debajo) | 31 pt / 36 pt | 57 pt (la hora va en su propia fila dentro de la burbuja) |
+| Relleno lateral | 15,7 pt | 11,7 pt | 12 pt |
+| Altura de mayúscula del texto | 13,7 pt (fuente de unos 17 pt) | | |
+| Separación entre burbujas agrupadas | | 2,3 pt | 2 pt |
+| Colita | cuelga 8 pt bajo la base, punta 9 pt hacia dentro | 10 pt de alto, sale 4,7 pt del borde, punta sobre la base | igual que iMessage |
+
+Conclusión: la burbuja de ATTO es más alta que las dos porque pone la hora en una segunda fila; WhatsApp y Telegram la meten en la misma línea del texto cuando cabe (la hora flota a la derecha del último renglón). Es la siguiente mejora de densidad: hora en línea con el texto cuando el último renglón deja sitio.

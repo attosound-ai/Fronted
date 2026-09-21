@@ -279,6 +279,14 @@ function MessageRowInner({
   };
   const hasReactions = !!message.reactions && message.reactions.length > 0;
 
+  // Width the floating time needs on the last text line: the meta text plus
+  // room for the ticks (about three figure spaces at 11 pt).
+  const metaSpacer =
+    '\u2007' +
+    (message.isEdited ? `${labels.edited} ` : '') +
+    formatTime(message.createdAt) +
+    (isOwn ? '\u2007\u2007\u2007' : '');
+
   const bubble = message.isDeleted ? (
     <View style={[styles.bubble, styles.bubbleDeleted, cornerStyle]}>
       <RNText style={styles.deletedText} maxFontSizeMultiplier={1.1}>
@@ -371,9 +379,15 @@ function MessageRowInner({
           selectable={false}
         >
           {message.text}
+          {/* Invisible copy of the meta so the last line reserves its width:
+              the time floats into that gap when it fits, or the spacer wraps
+              and the time takes the new line (WhatsApp and Telegram). */}
+          <RNText style={styles.metaSpacer} maxFontSizeMultiplier={1.0}>
+            {metaSpacer}
+          </RNText>
         </RNText>
       ) : null}
-      <View style={styles.meta}>
+      <View style={[styles.meta, message.text ? styles.metaFloating : null]}>
         {message.isEdited ? (
           <RNText
             style={[styles.edited, (isOwn || senderIsCreator) && styles.metaOwn]}
@@ -682,6 +696,18 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     gap: 4,
     marginTop: 2,
+  },
+  // Over the spacer at the end of the last text line.
+  metaFloating: {
+    position: 'absolute',
+    right: 12,
+    bottom: 6,
+    marginTop: 0,
+  },
+  metaSpacer: {
+    color: 'transparent',
+    fontSize: 11,
+    fontFamily: 'Archivo_400Regular',
   },
   time: {
     color: 'rgba(255,255,255,0.55)',

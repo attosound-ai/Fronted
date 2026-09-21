@@ -82,6 +82,8 @@ interface ChatComposerProps {
   onAttachPress?: () => void;
   /** A recorded voice note ready to send. */
   onSendMedia?: (media: OutgoingMedia) => void;
+  /** Hold the send button: the screen opens the effect picker with this text. */
+  onSendWithEffect?: (text: string) => void;
 }
 
 /** Field height bounds in points: one line, and about six lines. */
@@ -114,6 +116,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       preview,
       onAttachPress,
       onSendMedia,
+      onSendWithEffect,
     },
     ref
   ) {
@@ -424,6 +427,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                 <Animated.View style={[styles.sendSlot, sendStyle]}>
                   <Pressable
                     onPress={handleSend}
+                    onLongPress={() => {
+                      const content = draftRef.current.trim();
+                      if (!content || !onSendWithEffect) return;
+                      void haptic('medium');
+                      onSendWithEffect(content);
+                    }}
+                    delayLongPress={320}
                     hitSlop={6}
                     accessibilityRole="button"
                     accessibilityLabel={t('chat.sendAccessibilityLabel')}

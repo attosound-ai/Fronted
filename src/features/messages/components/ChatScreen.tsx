@@ -55,6 +55,14 @@ import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import { AttachMenu, type AttachAction } from './AttachMenu';
 import { countThreadReplies } from '../hooks/useThread';
+import { SendEffectPicker } from '../effects/SendEffectPicker';
+import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
+import {
+  effectFromMetadata,
+  hasEffectPlayed,
+  markEffectPlayed,
+  type MessageEffect,
+} from '../effects/effectCatalog';
 import { MediaMessage } from '../media/MediaMessage';
 import { uploadChatMedia, type OutgoingMedia } from '../media/chatMedia';
 import * as ImagePicker from 'expo-image-picker';
@@ -297,7 +305,7 @@ export function ChatScreen({
   // ── Handlers ──
 
   const handleSend = useCallback(
-    async (newMessages: IMessage[] = []) => {
+    async (newMessages: IMessage[] = [], effect?: MessageEffect) => {
       const content = (newMessages[0]?.text ?? '').trim();
       if (!content) return;
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
@@ -381,6 +389,7 @@ export function ChatScreen({
                     replyToContent: currentReply?.text,
                     replyToSender: currentReply?.user.name || undefined,
                     contentType: 'text',
+                    metadata: effect ? { effect } : undefined,
                     isRead: false,
                     createdAt: new Date().toISOString(),
                     status: 'sending' as const,
@@ -412,7 +421,12 @@ export function ChatScreen({
 
       // Send via WebSocket, replace temp on success
       try {
-        const serverMsg = await sendViaSocket(content, 'text', replyTo);
+        const serverMsg = await sendViaSocket(
+          content,
+          'text',
+          replyTo,
+          effect ? { metadata: { effect } } : undefined
+        );
         replaceTempWith(serverMsg.messageId, 'sent');
         analytics.capture(
           isReply
@@ -430,6 +444,7 @@ export function ChatScreen({
             conversationId,
             content,
             contentType: 'text',
+            metadata: effect ? { effect } : undefined,
           });
           replaceTempWith(restMsg.messageId, 'sent');
           analytics.capture(
@@ -556,6 +571,38 @@ export function ChatScreen({
       conversation_id: conversationId,
     });
   }, [conversationId]);
+
+  // ── Effects (iMessage style) ────────────────────────────────────────
+  // Hold the send button to pick one; it rides in the message metadata and
+  // plays once, for both sides, when the message shows up.
+  const [effectDraft, setEffectDraft] = useState<string | null>(null);
+  const [screenEffect, setScreenEffect] = useState<ActiveScreenEffect | null>(null);
+  useEffect(() => {
+    for (const msg of messages) {
+      const effect = effectFromMetadata(msg.metadata);
+      if (!effect || effect.kind !== 'screen') continue;
+      if (hasEffectPlayed(msg.messageId)) continue;
+      markEffectPlayed(msg.messageId);
+      setScreenEffect({ name: effect.name, messageId: msg.messageId, text: msg.content });
+      break;
+    }
+  }, [messages]);
+  const replayEffect = useCallback((message: AttoMessage) => {
+    const effect = effectFromMetadata(message.metadata);
+    if (!effect) return;
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.EFFECT_REPLAYED, {
+      kind: effect.kind,
+      name: effect.name,
+      message_id: String(message._id),
+    });
+    if (effect.kind === 'screen') {
+      setScreenEffect({
+        name: effect.name,
+        messageId: String(message._id),
+        text: message.text,
+      });
+    }
+  }, []);
 
   // ── Attachments and voice notes ─────────────────────────────────────
   const [attachOpen, setAttachOpen] = useState(false);
@@ -875,6 +922,7 @@ export function ChatScreen({
           setAttachOpen((open) => !open);
         }}
         onSendMedia={handleSendMedia}
+        onSendWithEffect={(text) => setEffectDraft(text)}
       />
     </Animated.View>
   );
@@ -983,6 +1031,17 @@ export function ChatScreen({
     <View style={styles.container}>
       {wallpaperLayer}
 
+      <ScreenEffectOverlay effect={screenEffect} onDone={() => setScreenEffect(null)} />
+      <SendEffectPicker
+        text={effectDraft}
+        onCancel={() => setEffectDraft(null)}
+        onSend={(text, effect) => {
+          setEffectDraft(null);
+          composerRef.current?.clear();
+          void handleSend([{ text } as IMessage], effect);
+          threadRef.current?.scrollToBottom(true);
+        }}
+      />
       <AttachMenu
         visible={attachOpen}
         bottom={toolbarHeight + 4}
@@ -1010,6 +1069,7 @@ export function ChatScreen({
           initialUnreadCount={initialUnreadRef.current ?? 0}
           threadCounts={threadCounts}
           onOpenThread={openThread}
+          onReplayEffect={replayEffect}
           justSentId={justSentId}
           creatorIds={creatorIds}
           isParticipantTyping={isParticipantTyping}

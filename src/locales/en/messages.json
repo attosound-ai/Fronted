@@ -157,5 +157,27 @@
     "location": "Location",
     "soon": "Soon",
     "close": "Close menu"
+  },
+  "effects": {
+    "title": "Send with effect",
+    "bubbleTab": "Bubble",
+    "screenTab": "Screen",
+    "close": "Close",
+    "replay": "Replay",
+    "hint": "Hold send for effects",
+    "names": {
+      "slam": "Slam",
+      "loud": "Loud",
+      "gentle": "Gentle",
+      "invisible": "Invisible Ink",
+      "echo": "Echo",
+      "spotlight": "Spotlight",
+      "balloons": "Balloons",
+      "confetti": "Confetti",
+      "love": "Love",
+      "lasers": "Lasers",
+      "fireworks": "Fireworks",
+      "celebration": "Celebration"
+    }
   }
 }

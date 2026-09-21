@@ -252,13 +252,15 @@ export function useRealtimeChat(conversationId: string) {
     async (
       content: string,
       contentType = 'text',
-      replyTo?: { id: string; content: string; sender: string }
+      replyTo?: { id: string; content: string; sender: string },
+      extra?: { metadata?: Record<string, unknown>; threadId?: string }
     ) => {
       const resp = await phoenixSocket.pushMessage(
         conversationId,
         content,
         contentType,
-        replyTo
+        replyTo,
+        extra
       );
       return mapBackendMessage(resp as unknown as BackendMessage);
     },

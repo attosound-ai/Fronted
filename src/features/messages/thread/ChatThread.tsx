@@ -58,6 +58,8 @@ export interface ChatThreadProps {
   /** Replies per thread root, for the footer under a bubble. */
   threadCounts?: Map<string, number>;
   onOpenThread?: (messageId: string) => void;
+  /** Replay the message's iMessage style effect. */
+  onReplayEffect?: (message: AttoMessage) => void;
   /**
    * Unread count when the chat was opened: draws the "new messages" line
    * above the oldest unread message (WhatsApp, Telegram). Fixed for the
@@ -112,6 +114,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       initialUnreadCount = 0,
       threadCounts,
       onOpenThread,
+      onReplayEffect,
       justSentId,
       creatorIds,
       isParticipantTyping,
@@ -203,6 +206,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
         replies: (count: number) => t('thread.replies', { count }),
+        replay: t('effects.replay'),
       }),
       [t]
     );
@@ -306,6 +310,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
             threadReplies={threadCounts?.get(String(item._id)) ?? 0}
             onOpenThread={onOpenThread}
+            onReplayEffect={onReplayEffect}
           />
         );
         const body =
@@ -361,6 +366,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         readLabelId,
         threadCounts,
         onOpenThread,
+        onReplayEffect,
         readLabelText,
       ]
     );

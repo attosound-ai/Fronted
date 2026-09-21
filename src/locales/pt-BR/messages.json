@@ -157,5 +157,27 @@
     "location": "Localização",
     "soon": "Em breve",
     "close": "Fechar menu"
+  },
+  "effects": {
+    "title": "Enviar com efeito",
+    "bubbleTab": "Balão",
+    "screenTab": "Tela",
+    "close": "Fechar",
+    "replay": "Repetir",
+    "hint": "Segure enviar para os efeitos",
+    "names": {
+      "slam": "Impacto",
+      "loud": "Alto",
+      "gentle": "Suave",
+      "invisible": "Tinta invisível",
+      "echo": "Eco",
+      "spotlight": "Holofote",
+      "balloons": "Balões",
+      "confetti": "Confete",
+      "love": "Amor",
+      "lasers": "Lasers",
+      "fireworks": "Fogos",
+      "celebration": "Celebração"
+    }
   }
 }

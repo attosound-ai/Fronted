@@ -74,6 +74,7 @@ export default function ChatThreadScreen() {
       deleted: t('actions.deleted', { defaultValue: 'Message deleted' }),
       edited: t('actions.edited', { defaultValue: 'edited' }),
       replies: (count: number) => t('thread.replies', { count }),
+      replay: t('effects.replay'),
     }),
     [t]
   );

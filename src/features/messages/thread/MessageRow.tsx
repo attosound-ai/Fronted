@@ -40,6 +40,12 @@ import {
 } from './threadModel';
 import { hasMarkdown, parseMarkdown } from './markdown';
 import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
+import { BubbleEffect } from '../effects/BubbleEffect';
+import {
+  effectFromMetadata,
+  hasEffectPlayed,
+  markEffectPlayed,
+} from '../effects/effectCatalog';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -74,6 +80,7 @@ export interface MessageRowProps {
     edited: string;
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
+    replay: string;
   };
   onMenuAction: (actionKey: string, message: AttoMessage) => void;
   onReply: (message: AttoMessage) => void;
@@ -93,6 +100,8 @@ export interface MessageRowProps {
   /** Slack style thread footer under the bubble. */
   threadReplies?: number;
   onOpenThread?: (messageId: string) => void;
+  /** Screen effects replay from the chat screen, which owns the overlay. */
+  onReplayEffect?: (message: AttoMessage) => void;
   onToggleReaction: (message: AttoMessage, emoji: string) => void;
   onPressQuote?: (replyToId: string) => void;
   renderMedia?: (message: AttoMessage) => React.ReactNode;
@@ -156,6 +165,7 @@ function MessageRowInner({
   readLabel,
   threadReplies = 0,
   onOpenThread,
+  onReplayEffect,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
   // Bubble size, only tracked for creator bubbles: the tail continues the
@@ -282,6 +292,22 @@ function MessageRowInner({
     borderBottomRightRadius: corners.bottomRight,
   };
   const hasReactions = !!message.reactions && message.reactions.length > 0;
+
+  // An effect plays once, the first time the bubble appears. The identity is
+  // the client key so the optimistic row and its server copy count as one.
+  const effect = effectFromMetadata(message.metadata);
+  const effectId = String(message.clientKey ?? message._id);
+  const [replayKey, setReplayKey] = useState(0);
+  const [playEffectOnMount] = useState(() => {
+    if (!effect || effect.kind !== 'bubble') return false;
+    if (hasEffectPlayed(effectId)) return false;
+    markEffectPlayed(effectId);
+    return true;
+  });
+  const replay = useCallback(() => {
+    if (effect?.kind === 'bubble') setReplayKey((k) => k + 1);
+    else onReplayEffect?.(message);
+  }, [effect, message, onReplayEffect]);
 
   const isMedia = isMediaContentType(message.contentType);
   const isVisual = isVisualContentType(message.contentType);
@@ -431,7 +457,18 @@ function MessageRowInner({
         collapsable={false}
         onLayout={onBubbleLayout}
       >
-        {bubble}
+        {effect?.kind === 'bubble' ? (
+          <BubbleEffect
+            key={replayKey}
+            name={effect.name}
+            messageId={effectId}
+            play={playEffectOnMount || replayKey > 0}
+          >
+            {bubble}
+          </BubbleEffect>
+        ) : (
+          bubble
+        )}
         {hasReactions ? (
           <View
             style={[
@@ -449,6 +486,19 @@ function MessageRowInner({
         ) : null}
       </View>
       {hasReactions ? <View style={styles.reactionsSpace} /> : null}
+      {effect ? (
+        <Pressable
+          onPress={replay}
+          hitSlop={6}
+          style={styles.replayButton}
+          accessibilityRole="button"
+          accessibilityLabel={labels.replay}
+        >
+          <RNText style={styles.replayText} maxFontSizeMultiplier={1.1}>
+            {labels.replay}
+          </RNText>
+        </Pressable>
+      ) : null}
       {threadReplies > 0 ? (
         <Pressable
           onPress={() => onOpenThread?.(String(message._id))}
@@ -846,6 +896,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     marginTop: TAIL_DROP + 2,
     marginRight: 4,
+  },
+  replayButton: { marginTop: 3, paddingHorizontal: 6 },
+  replayText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontFamily: 'Archivo_600SemiBold',
   },
   threadFooter: {
     flexDirection: 'row',

@@ -516,6 +516,12 @@ export const ANALYTICS_EVENTS = {
     MEDIA_MESSAGE_SENT: 'messages_media_message_sent',
     MEDIA_MESSAGE_FAILED: 'messages_media_message_failed',
     MEDIA_OPENED: 'messages_media_opened',
+    EFFECT_PICKER_OPENED: 'messages_effect_picker_opened',
+    EFFECT_PREVIEWED: 'messages_effect_previewed',
+    EFFECT_SENT: 'messages_effect_sent',
+    EFFECT_PLAYED: 'messages_effect_played',
+    EFFECT_REPLAYED: 'messages_effect_replayed',
+    INVISIBLE_INK_REVEALED: 'messages_invisible_ink_revealed',
     ATTACH_MENU_OPENED: 'messages_attach_menu_opened',
     ATTACH_MENU_PICKED: 'messages_attach_menu_picked',
 

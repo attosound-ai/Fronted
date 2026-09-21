@@ -343,7 +343,8 @@ class PhoenixSocketManager {
     conversationId: string,
     content: string,
     contentType = 'text',
-    replyTo?: { id: string; content: string; sender: string }
+    replyTo?: { id: string; content: string; sender: string },
+    extra?: { metadata?: Record<string, unknown>; threadId?: string }
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const channel = this.channels.get(conversationId);
@@ -354,12 +355,15 @@ class PhoenixSocketManager {
         return;
       }
 
-      const payload: Record<string, string> = { content, content_type: contentType };
+      const payload: Record<string, unknown> = { content, content_type: contentType };
       if (replyTo) {
         payload.reply_to_id = replyTo.id;
         payload.reply_to_content = replyTo.content;
         payload.reply_to_sender = replyTo.sender;
       }
+      // Media details and iMessage style effects ride along as JSON.
+      if (extra?.metadata) payload.metadata = extra.metadata;
+      if (extra?.threadId) payload.thread_id = extra.threadId;
 
       channel
         .push('new_message', payload)

@@ -1,4 +1,16 @@
 {
+  "accountType": {
+    "title": "How do you want to start?",
+    "subtitle": "Pick the one that describes you. You can add the artist details at the end.",
+    "representative": {
+      "title": "Represent an artist",
+      "description": "You manage an artist's account with their permission and set it up for them."
+    },
+    "listener": {
+      "title": "My own account",
+      "description": "Listen, follow and support. If you are the artist, you will validate that at the end."
+    }
+  },
   "basicInfo": {
     "title": "Create your account",
     "nameLabel": "Name",
@@ -73,8 +85,10 @@
     "inmateGateBack": "Back"
   },
   "creatorInmate": {
-    "title": "Verify your identity",
-    "subtitle": "Enter your inmate number so we can verify your identity and set up your creator profile."
+    "title": "Are you the artist?",
+    "subtitle": "Optional. If you are the artist, look yourself up so your account is verified as a creator. If not, skip this and finish.",
+    "validate": "Validate and finish",
+    "skip": "Skip, I am not the artist"
   },
   "creatorAccountSetup": {
     "title": "Set up the creator account",
@@ -325,5 +339,12 @@
       "hip_hop_dance": "Hip-Hop Dance",
       "improv": "Improv"
     }
+  },
+  "abandon": {
+    "title": "Cancel this signup?",
+    "message": "Your progress will be discarded and you can start again from the beginning.",
+    "keep": "Keep going",
+    "confirm": "Cancel signup",
+    "action": "Cancel signup"
   }
 }

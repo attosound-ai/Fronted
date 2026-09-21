@@ -29,6 +29,7 @@ import {
   ProfileCreatorSection,
   ProfileRepresentativeSection,
   ProfileBridgeNumberSection,
+  ProfilePlanPickerSection,
   ProfileActionsSection,
   LogoutBottomSheet,
 } from '@/features/profile';
@@ -158,7 +159,10 @@ export default function ProfileScreen() {
                 {user.role === 'representative' && (
                   <ProfileRepresentativeSection user={user} />
                 )}
-                {hasEntitlement('bridge_number') && <ProfileBridgeNumberSection />}
+                {user.role === 'creator' && hasEntitlement('bridge_number') && (
+                  <ProfileBridgeNumberSection />
+                )}
+                <ProfilePlanPickerSection />
                 <ProfileSubscriptionSection />
                 <ProfileSettingsSection />
                 <ProfileSupportSection />

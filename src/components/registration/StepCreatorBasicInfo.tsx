@@ -9,6 +9,7 @@ import { PhoneInput } from '@/components/ui/PhoneInput';
 import { StepProps } from '@/types/registration';
 import { isValidEmail } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { authService } from '@/lib/api/authService';
 import { COLORS } from '@/constants/theme';
 
@@ -25,6 +26,8 @@ export function StepCreatorBasicInfo({
   apiError,
 }: StepProps) {
   const { t } = useTranslation(['registration', 'common']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const [emailStatus, setEmailStatus] = useState<AvailabilityStatus>('idle');
   const [phoneStatus, setPhoneStatus] = useState<AvailabilityStatus>('idle');
   const emailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -197,6 +200,7 @@ export function StepCreatorBasicInfo({
           </Text>
           <View style={[styles.inputWrapper, { borderColor: emailBorder }]}>
             <TextInput
+              ref={firstFieldRef}
               value={state.creatorEmail}
               onChangeText={(v) =>
                 dispatch({ type: 'UPDATE_FIELD', field: 'creatorEmail', value: v.trim() })

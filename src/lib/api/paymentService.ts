@@ -8,6 +8,15 @@ import type {
 } from '@/types';
 import type { CheckoutResponse, PlanId, SubscriptionPlan } from '@/types/registration';
 
+export interface PaywallConfig {
+  /** True while at least one feature is granted only by a paid plan. */
+  required: boolean;
+  /** Testing period: any account may pick any plan with no payment. */
+  freeSwitching?: boolean;
+  freePlan: string;
+  paidFeatures: string[];
+}
+
 export interface BridgeNumberResult {
   bridgeNumber: string | null;
   status: 'assigned' | 'provisioning' | 'failed';
@@ -20,7 +29,11 @@ export interface BridgeNumberResult {
  * Does NOT manage state or Stripe SDK — that is the component's job.
  */
 export const paymentService = {
-  async createCheckout(planId: string, email: string, forUserId?: string): Promise<CheckoutResponse> {
+  async createCheckout(
+    planId: string,
+    email: string,
+    forUserId?: string
+  ): Promise<CheckoutResponse> {
     const response = await apiClient.post<ApiResponse<CheckoutResponse>>(
       API_ENDPOINTS.PAYMENTS.CHECKOUT,
       { planId, email, ...(forUserId && { forUserId }) }
@@ -44,6 +57,20 @@ export const paymentService = {
     return response.data.data;
   },
 
+  /**
+   * Ask for the number a plan grants without a payment. Provisioning used to
+   * start only from a completed payment, so with the paywall off nobody ever
+   * requested one. Safe to repeat. Rejects with 403 when the plan has none.
+   */
+  async claimBridgeNumber(forUserId?: number): Promise<BridgeNumberResult> {
+    const response = await apiClient.post<ApiResponse<BridgeNumberResult>>(
+      API_ENDPOINTS.PAYMENTS.BRIDGE_NUMBER_CLAIM,
+      undefined,
+      { params: forUserId ? { for_user_id: forUserId } : undefined }
+    );
+    return response.data.data;
+  },
+
   async getMySubscription(): Promise<UserSubscription> {
     const response = await apiClient.get<ApiResponse<UserSubscription>>(
       API_ENDPOINTS.PAYMENTS.MY_SUBSCRIPTION
@@ -53,6 +80,28 @@ export const paymentService = {
 
   async cancelSubscription(): Promise<void> {
     await apiClient.delete(API_ENDPOINTS.PAYMENTS.MY_SUBSCRIPTION);
+  },
+
+  /**
+   * Whether the app must show the subscription screen at all. The admin
+   * dashboard decides which features each plan grants; the screen only makes
+   * sense while some feature needs a paid plan. Failures are the caller's to
+   * handle (default to showing the screen, never to skipping a payment).
+   */
+  async getPaywall(): Promise<PaywallConfig> {
+    const response = await apiClient.get<ApiResponse<PaywallConfig>>(
+      API_ENDPOINTS.PAYMENTS.PAYWALL
+    );
+    return response.data.data;
+  },
+
+  /** Move to any active plan with no payment (only while the server allows it). */
+  async selectPlan(plan: string, forUserId?: number): Promise<UserSubscription> {
+    const response = await apiClient.post<ApiResponse<UserSubscription>>(
+      API_ENDPOINTS.PAYMENTS.SELECT_PLAN,
+      { plan, ...(forUserId ? { forUserId: String(forUserId) } : {}) }
+    );
+    return response.data.data;
   },
 
   async getPlans(): Promise<SubscriptionPlan[]> {
@@ -82,7 +131,10 @@ export const paymentService = {
     return response.data.data;
   },
 
-  async startPlanChange(targetPlan: PlanId, email: string): Promise<PlanChangeStartResult> {
+  async startPlanChange(
+    targetPlan: PlanId,
+    email: string
+  ): Promise<PlanChangeStartResult> {
     const response = await apiClient.post<ApiResponse<PlanChangeStartResult>>(
       API_ENDPOINTS.PAYMENTS.CHANGE_PLAN,
       { targetPlan, email }

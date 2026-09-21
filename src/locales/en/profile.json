@@ -95,7 +95,11 @@
     "planConnectPro": "Connect Pro",
     "renewsLabel": "Renews {{date}}",
     "upgradePlan": "Upgrade Plan",
-    "manageSubscription": "Manage Subscription"
+    "manageSubscription": "Manage Subscription",
+    "pickerTitle": "Plan",
+    "pickerNote": "Testing period: pick any plan, no payment needed.",
+    "pickerChanged": "Plan changed to {{plan}}",
+    "pickerFailed": "Could not change the plan. Try again."
   },
   "settings": {
     "sectionTitle": "Settings",
@@ -203,6 +207,10 @@
     "roleCreator": "Creator account",
     "roleListener": "Listener",
     "endCallFirst": "End the current call before switching accounts",
+    "onCallTitle": "You're on a call",
+    "onCallBody": "To switch to {{username}}, the current call has to end first. Ending it will hang up the call for both sides.",
+    "endCallAndSwitch": "End call & switch",
+    "stayOnCall": "Stay on the call",
     "title": "Switch account",
     "activeNow": "Active now",
     "addAccount": "Add account"

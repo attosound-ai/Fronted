@@ -1,3 +1,4 @@
+export { AccountTypeSheet } from './AccountTypeSheet';
 export { StepBasicInfo } from './StepBasicInfo';
 export { StepName } from './StepName';
 export { StepDateOfBirth } from './StepDateOfBirth';

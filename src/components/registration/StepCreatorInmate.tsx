@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, StyleSheet, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,7 @@ import { authService } from '@/lib/api/authService';
 import { isValidInmateNumber } from '@/utils/validators';
 import { getErrorMessage } from '@/utils/formatters';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { COLORS } from '@/constants/theme';
 
 const AVAILABLE_STATES: SelectOption[] = [{ label: 'Connecticut', value: 'CT' }];
@@ -28,25 +29,39 @@ function InmateCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+interface Props extends StepProps {
+  /** Finish without an artist: the account stays a standard one. */
+  onSkip?: () => void | Promise<void>;
+}
+
 /**
- * StepCreatorInmate — Collects inmate number + state for direct creator registration.
- * Simplified version of StepConsentForm (no relationship, consent, or creator name).
+ * StepCreatorInmate — the last screen of an own account: an OPTIONAL artist
+ * check. Typing an inmate number and state looks the person up and, once
+ * confirmed, turns the account into a creator. Skipping finishes the signup
+ * as the standard account it already is, which is what tells the two apart
+ * (David, Sep 19 2026). The fields are only validated when something was
+ * typed, so an empty form is never an error.
  */
 export function StepCreatorInmate({
   state,
   dispatch,
   onNext,
+  onSkip,
   onBack,
   isLoading,
   apiError,
-}: StepProps) {
+}: Props) {
   const { t } = useTranslation(['registration', 'common']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [inmateData, setInmateData] = useState<InmateLookupResponse | null>(null);
   const [showInmateModal, setShowInmateModal] = useState(false);
+
+  const hasInput = !!(state.inmateNumber || '').trim() || !!state.inmateState;
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -113,6 +128,7 @@ export function StepCreatorInmate({
           <View style={styles.inlineRow}>
             <View style={styles.inlineField}>
               <Input
+                ref={firstFieldRef}
                 label={t('consentForm.inmateNumberLabel')}
                 value={state.inmateNumber || ''}
                 onChangeText={(value) => {
@@ -163,11 +179,24 @@ export function StepCreatorInmate({
 
         <View style={styles.buttonWrapper}>
           <Button
-            title={t('common:buttons.continue')}
+            title={t('creatorInmate.validate')}
             onPress={handleContinue}
-            disabled={isLoading || lookupLoading}
-            loading={isLoading || lookupLoading}
+            disabled={isLoading || lookupLoading || !hasInput}
+            loading={lookupLoading}
           />
+          {onSkip && (
+            <Button
+              title={t('creatorInmate.skip')}
+              variant="secondary"
+              onPress={() => {
+                haptic('light');
+                void onSkip();
+              }}
+              disabled={isLoading || lookupLoading}
+              loading={isLoading}
+              style={styles.skipButton}
+            />
+          )}
         </View>
       </KeyboardAwareScrollView>
 
@@ -308,6 +337,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
     fontSize: 14,
     color: '#FFFFFF',
+  },
+  skipButton: {
+    marginTop: 12,
   },
   buttonWrapper: {
     marginTop: 14,

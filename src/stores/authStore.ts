@@ -10,7 +10,6 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { getErrorMessage } from '@/utils/formatters';
 import { queryClient } from '@/lib/queryClient';
 import { persistSentryUserForNative } from '@/lib/telemetry/sentryNativeUser';
-import { useSubscriptionStore } from './subscriptionStore';
 import type {
   User,
   LoginDTO,
@@ -20,6 +19,14 @@ import type {
   TwoFactorMethod,
 } from '@/types';
 import { useAccountStore } from './accountStore';
+
+// subscriptionStore imports this store, so a static import here was a require
+// cycle (warned on every launch). Resolve it at call time instead.
+function subscriptionStore() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('./subscriptionStore') as typeof import('./subscriptionStore'))
+    .useSubscriptionStore;
+}
 
 interface Pending2FA {
   tempToken: string;
@@ -122,8 +129,8 @@ async function adoptServerIdentity(me: User, reason: string): Promise<void> {
   useAuthStore.setState({ user: me, tokens, isAuthenticated: true, isLoading: false });
 
   queryClient.clear();
-  useSubscriptionStore.getState().clear();
-  void useSubscriptionStore.getState().fetchSubscription();
+  subscriptionStore().getState().clear();
+  void subscriptionStore().getState().fetchSubscription();
 
   analytics.identify(me);
   Sentry.setUser({
@@ -193,7 +200,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
       try {
         const [freshUser] = await Promise.all([
           authService.getMe(),
-          useSubscriptionStore.getState().fetchSubscription(),
+          subscriptionStore().getState().fetchSubscription(),
           useAccountStore.getState().loadAccounts(),
         ]);
         if (isStale()) return;
@@ -346,7 +353,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
         username: user.username,
       });
       analytics.capture(ANALYTICS_EVENTS.AUTH.LOGIN_SUCCESS);
-      useSubscriptionStore.getState().fetchSubscription();
+      subscriptionStore().getState().fetchSubscription();
     } catch (error: unknown) {
       const message = getErrorMessage(error, i18n.t('common:toasts.invalidCredentials'));
       set({ isAuthenticating: false, error: message });
@@ -470,7 +477,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     } finally {
       analytics.reset();
       Sentry.setUser(null);
-      useSubscriptionStore.getState().clear();
+      subscriptionStore().getState().clear();
       await useAccountStore.getState().clearAll();
       await authStorage.clearAll();
       set({ ...initialState, isLoading: false });

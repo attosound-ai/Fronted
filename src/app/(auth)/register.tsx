@@ -1,12 +1,11 @@
 import { useReducer, useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { Alert, BackHandler, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 
-import { TouchableOpacity } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, X } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useSignupStore } from '@/stores/signupStore';
 import { authStorage } from '@/lib/auth/storage';
@@ -15,6 +14,7 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { mediaService } from '@/lib/media/mediaService';
+import { paymentService } from '@/lib/api/paymentService';
 import { showToast } from '@/components/ui/Toast';
 import { ProgressBar } from '@/components/ui';
 import { Text } from '@/components/ui/Text';
@@ -22,6 +22,7 @@ import type { Role, SignupDraftPatch } from '@/types';
 import type { RegistrationWizardState, RegistrationAction } from '@/types/registration';
 
 import {
+  AccountTypeSheet,
   StepBasicInfo,
   StepName,
   StepDateOfBirth,
@@ -44,6 +45,7 @@ import { getErrorMessage } from '@/utils/formatters';
 import { COLORS } from '@/constants/theme';
 
 const initialWizardState: RegistrationWizardState = {
+  accountType: null,
   identifierMode: 'email',
   name: '',
   email: '',
@@ -130,8 +132,22 @@ const SERVER_STEP_TO_LOCAL: Record<string, number> = {
 
 export default function RegisterScreen() {
   const { t, i18n } = useTranslation(['common', 'registration']);
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode, role: roleParam } = useLocalSearchParams<{
+    mode?: string;
+    role?: string;
+  }>();
   const isCreatorMode = mode === 'creator';
+
+  // The account type chosen in the Welcome sheet arrives as a route param.
+  // `mode=creator` (adding a managed creator from an existing account) is a
+  // representative flow by definition, so it needs no sheet.
+  const paramRole: Role | null = isCreatorMode
+    ? 'representative'
+    : roleParam === 'creator' ||
+        roleParam === 'representative' ||
+        roleParam === 'listener'
+      ? roleParam
+      : null;
 
   // ── Signup store (server-authoritative draft + scoped JWT) ───────────────
   const hasHydrated = useSignupStore((s) => s.hasHydrated);
@@ -146,6 +162,7 @@ export default function RegisterScreen() {
   const signupComplete = useSignupStore((s) => s.complete);
   const signupRefresh = useSignupStore((s) => s.refresh);
   const signupClear = useSignupStore((s) => s.clear);
+  const signupAbandon = useSignupStore((s) => s.abandon);
 
   // ── Auth store ───────────────────────────────────────────────────────────
   const adoptCompletedSignup = useAuthStore((s) => s.adoptCompletedSignup);
@@ -154,11 +171,59 @@ export default function RegisterScreen() {
   // ── Local wizard state ───────────────────────────────────────────────────
   const initialStep = isCreatorMode ? 8 : 1;
   const [currentStep, setCurrentStep] = useState(initialStep);
-  const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
+  const [state, dispatch] = useReducer(
+    wizardReducer,
+    initialWizardState,
+    (init): RegistrationWizardState => ({
+      ...init,
+      accountType: paramRole,
+      isRepresentative: paramRole ? paramRole === 'representative' : null,
+    })
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [showRepQuestion, setShowRepQuestion] = useState(false);
-  const [creatorAvatarPublicId, setCreatorAvatarPublicId] = useState<string | undefined>();
+  // Set when the user dismisses the fallback sheet inside the wizard without picking.
+  const [roleSheetDismissed, setRoleSheetDismissed] = useState(false);
+
+  // Does signup still need the subscription screen? The admin dashboard
+  // decides which features each plan grants; when the free plan grants
+  // everything there is nothing to sell and the screen is skipped. Defaults
+  // to true so a failed fetch can never skip a payment by accident.
+  const [paywallRequired, setPaywallRequired] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    paymentService
+      .getPaywall()
+      .then((cfg) => {
+        if (!cancelled) setPaywallRequired(cfg.required);
+      })
+      .catch(() => {
+        // Keep the safe default.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Where a creator branch lands once the account exists and nothing is left
+  // to sell. The subscription screen is skipped, the bridge number is not:
+  // a free plan that grants everything grants the number too, and with no
+  // payment to trigger it the number step is what claims it. Skipping both
+  // left new creators without a number and without ever seeing the screen.
+  const [claimBridgeNumber, setClaimBridgeNumber] = useState(false);
+  const finishWithoutPaywall = () => {
+    useSubscriptionStore.getState().fetchSubscription();
+    setClaimBridgeNumber(true);
+    setCurrentStep(16);
+  };
+  // A resumed signup can land on the subscription step before the paywall
+  // answer arrives. With nothing to sell, move on to the number.
+  useEffect(() => {
+    if (currentStep === 15 && !paywallRequired) finishWithoutPaywall();
+  }, [currentStep, paywallRequired]);
+  const [creatorAvatarPublicId, setCreatorAvatarPublicId] = useState<
+    string | undefined
+  >();
   const [creatorUserId, setCreatorUserId] = useState<number | null>(null);
 
   // Seed local state from the persisted signup draft after MMKV hydrates.
@@ -178,29 +243,42 @@ export default function RegisterScreen() {
     if (storedDraft?.username) fields.username = storedDraft.username;
     if (storedDraft?.dateOfBirth) fields.dateOfBirth = storedDraft.dateOfBirth;
     if (storedDraft?.email) fields.email = storedDraft.email;
-    if (storedDraft?.phoneCountryCode) fields.phoneCountryCode = storedDraft.phoneCountryCode;
+    if (storedDraft?.phoneCountryCode)
+      fields.phoneCountryCode = storedDraft.phoneCountryCode;
     if (storedDraft?.phoneNumber) fields.phoneNumber = storedDraft.phoneNumber;
     if (storedDraft?.inmateNumber) fields.inmateNumber = storedDraft.inmateNumber;
     if (storedDraft?.creatorName) fields.creatorName = storedDraft.creatorName;
     if (storedDraft?.inmateState) fields.inmateState = storedDraft.inmateState;
     if (storedDraft?.relationship) {
-      fields.relationship = storedDraft.relationship as RegistrationWizardState['relationship'];
+      fields.relationship =
+        storedDraft.relationship as RegistrationWizardState['relationship'];
     }
-    if (storedDraft?.consentToRecording != null) fields.consentToRecording = storedDraft.consentToRecording;
+    if (storedDraft?.consentToRecording != null)
+      fields.consentToRecording = storedDraft.consentToRecording;
     if (storedDraft?.selectedPlan) {
-      fields.selectedPlan = storedDraft.selectedPlan as RegistrationWizardState['selectedPlan'];
+      fields.selectedPlan =
+        storedDraft.selectedPlan as RegistrationWizardState['selectedPlan'];
     }
     if (storedDraft?.bridgeNumber) fields.bridgeNumber = storedDraft.bridgeNumber;
     if (storedDraft?.creatorEmail) fields.creatorEmail = storedDraft.creatorEmail;
-    if (storedDraft?.creatorUsername) fields.creatorUsername = storedDraft.creatorUsername;
-    if (storedDraft?.creatorDisplayName) fields.creatorDisplayName = storedDraft.creatorDisplayName;
-    if (storedDraft?.creatorPhoneCountryCode) fields.creatorPhoneCountryCode = storedDraft.creatorPhoneCountryCode;
-    if (storedDraft?.creatorPhoneNumber) fields.creatorPhoneNumber = storedDraft.creatorPhoneNumber;
+    if (storedDraft?.creatorUsername)
+      fields.creatorUsername = storedDraft.creatorUsername;
+    if (storedDraft?.creatorDisplayName)
+      fields.creatorDisplayName = storedDraft.creatorDisplayName;
+    if (storedDraft?.creatorPhoneCountryCode)
+      fields.creatorPhoneCountryCode = storedDraft.creatorPhoneCountryCode;
+    if (storedDraft?.creatorPhoneNumber)
+      fields.creatorPhoneNumber = storedDraft.creatorPhoneNumber;
     if (storedDraft?.creatorTypes?.length) fields.creatorTypes = storedDraft.creatorTypes;
-    if (storedDraft?.creatorGenres?.length) fields.creatorGenres = storedDraft.creatorGenres;
+    if (storedDraft?.creatorGenres?.length)
+      fields.creatorGenres = storedDraft.creatorGenres;
     if (storedIdentifierType === 'phone') fields.identifierMode = 'phone';
-    if (storedDraft?.role === 'representative') fields.isRepresentative = true;
+    if (storedDraft?.role === 'representative') {
+      fields.accountType = 'representative';
+      fields.isRepresentative = true;
+    }
     if (storedDraft?.role === 'listener' || storedDraft?.role === 'creator') {
+      fields.accountType = storedDraft.role;
       fields.isRepresentative = false;
     }
 
@@ -222,17 +300,53 @@ export default function RegisterScreen() {
 
     // Re-sync with the server in the background — what we persisted in MMKV
     // might be stale (e.g. user completed step 6 on another device).
-    signupRefresh().catch(() => { /* errors already surfaced via store.error */ });
+    signupRefresh().catch(() => {
+      /* errors already surfaced via store.error */
+    });
 
     // Place the user on whichever step the server says they're on.
-    if (storedNextStep && SERVER_STEP_TO_LOCAL[storedNextStep] !== undefined) {
+    if (storedNextStep === 'creator_info' && storedDraft?.role === 'representative') {
+      // The server only knows "inmate number missing". A representative
+      // collects it on the consent form after the intro, never on the
+      // creator's own identity step.
+      setCurrentStep(8);
+    } else if (storedNextStep && SERVER_STEP_TO_LOCAL[storedNextStep] !== undefined) {
       setCurrentStep(SERVER_STEP_TO_LOCAL[storedNextStep]);
+    } else if (
+      storedNextStep === 'complete' &&
+      (storedDraft?.role === 'creator' || storedDraft?.role === 'listener')
+    ) {
+      // NextStepFor only tracks the representative branch past the role, so an
+      // own account comes back as 'complete' while the client still owes the
+      // optional artist check (and, for a creator, the subscription).
+      setCurrentStep(storedDraft?.inmateNumber ? 15 : 7);
     }
-  }, [hasHydrated, sessionId, storedDraft, storedNextStep, storedIdentifier, storedIdentifierType, signupRefresh]);
+  }, [
+    hasHydrated,
+    sessionId,
+    storedDraft,
+    storedNextStep,
+    storedIdentifier,
+    storedIdentifierType,
+    signupRefresh,
+  ]);
 
   useEffect(() => {
     setApiError(null);
   }, [currentStep]);
+
+  // A resumed session the server no longer has (abandoned elsewhere, expired,
+  // or cancelled from another device): the background refresh clears the
+  // store, and the wizard must not sit on a step that belongs to nobody.
+  // promoteToUser also clears the store, so that path is flagged and ignored.
+  const resumedSessionRef = useRef(!!useSignupStore.getState().sessionId);
+  const completedRef = useRef(false);
+  useEffect(() => {
+    if (resumedSessionRef.current && !sessionId && !completedRef.current) {
+      resumedSessionRef.current = false;
+      router.replace('/(auth)/welcome');
+    }
+  }, [sessionId]);
 
   const { dial: detectedDial } = useCountryByIP();
   useEffect(() => {
@@ -255,7 +369,7 @@ export default function RegisterScreen() {
           return true;
         }
         if (currentStep === 1) {
-          router.back();
+          leaveWizard();
           return true;
         }
         return false;
@@ -280,6 +394,9 @@ export default function RegisterScreen() {
       }
       if (s === 7) return 6;
       if (s === 8) return 6;
+      // The number step closes the signup: the account and its number exist,
+      // and behind it sits a subscription screen that may have been skipped.
+      if (s === 16) return s;
       if (s === 15) {
         const grouped = getGenresForSelectedTypes(state.creatorTypes);
         return grouped.length === 0 ? 13 : 14;
@@ -292,6 +409,7 @@ export default function RegisterScreen() {
   // Used by all three "finish" paths (listener, creator, representative).
   const promoteToUser = useCallback(async () => {
     const result = await signupComplete();
+    completedRef.current = true;
     await adoptCompletedSignup(result.user, result.tokens, result.linkedAccount);
     signupClear();
     // Wipe the wizard-only password cache from SecureStore now that the
@@ -302,6 +420,43 @@ export default function RegisterScreen() {
     }
     return result;
   }, [signupComplete, adoptCompletedSignup, signupClear]);
+
+  // ── Profile photo upload that does not give up on the first hiccup ───────
+  // Sep 19 2026: David's own photo was dropped because the signing request
+  // timed out once (15 s) and the wizard moved on with a small toast. One
+  // silent retry first; if that fails too, the user decides between trying
+  // again and continuing without a photo, instead of finding out later.
+  const uploadAvatarOrAsk = async (
+    uri: string,
+    fileName: string
+  ): Promise<string | undefined> => {
+    for (;;) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await mediaService.upload(uri, fileName, 'image/jpeg', 'avatar');
+        } catch (uploadError: unknown) {
+          console.warn(
+            `[Register] Avatar upload attempt ${attempt + 1} failed:`,
+            uploadError
+          );
+        }
+      }
+      const choice = await new Promise<'retry' | 'skip'>((resolve) => {
+        Alert.alert(t('errors.avatarUploadTitle'), t('errors.avatarUploadMessage'), [
+          {
+            text: t('errors.avatarUploadSkip'),
+            style: 'cancel',
+            onPress: () => resolve('skip'),
+          },
+          { text: t('errors.avatarUploadRetry'), onPress: () => resolve('retry') },
+        ]);
+      });
+      if (choice === 'skip') {
+        showToast(t('errors.avatarUploadSkipped'));
+        return undefined;
+      }
+    }
+  };
 
   // ── Step 4 → Start signup session (server sends OTP) ─────────────────────
   const handleCredentialsNext = async () => {
@@ -374,6 +529,10 @@ export default function RegisterScreen() {
       if (state.name) draft.displayName = state.name;
       if (state.dateOfBirth) draft.dateOfBirth = state.dateOfBirth;
       if (state.password) draft.password = state.password;
+      // The account type was picked before step 1, so ship it with the verify.
+      // The server's NextStepFor then knows the branch from the first sync and
+      // never sends the wizard back to a 'role' step halfway through.
+      if (state.accountType) draft.role = state.accountType;
 
       await signupVerifyOtp(state.otpCode, draft);
       dispatch({ type: 'UPDATE_FIELD', field: 'otpVerified', value: true });
@@ -394,17 +553,7 @@ export default function RegisterScreen() {
     try {
       let avatarPublicId: string | undefined;
       if (state.avatarUri) {
-        try {
-          avatarPublicId = await mediaService.upload(
-            state.avatarUri,
-            'avatar.jpg',
-            'image/jpeg',
-            'avatar'
-          );
-        } catch (uploadError: unknown) {
-          console.warn('[Register] Avatar upload failed, continuing without it:', uploadError);
-          showToast(t('errors.avatarUploadSkipped'));
-        }
+        avatarPublicId = await uploadAvatarOrAsk(state.avatarUri, 'avatar.jpg');
       }
 
       await signupPatch({
@@ -412,12 +561,16 @@ export default function RegisterScreen() {
         ...(avatarPublicId && { avatar: avatarPublicId }),
       });
       analytics.capture(ANALYTICS_EVENTS.REGISTRATION.PROFILE_SETUP);
-      setShowRepQuestion(true);
+      // The role was answered in the bottom sheet before step 1. Branch on it
+      // instead of interrupting the user with the old question here.
+      await continueWithRole();
     } catch (error: unknown) {
       // Username conflict shows the specific message; others fall back.
       const msg = getErrorMessage(error, t('errors.profileUpdateFailed'));
       if (msg.toLowerCase().includes('username')) {
-        setApiError(t('errors.usernameTaken', { defaultValue: 'Username already taken' }));
+        setApiError(
+          t('errors.usernameTaken', { defaultValue: 'Username already taken' })
+        );
       } else {
         setApiError(msg);
       }
@@ -426,28 +579,61 @@ export default function RegisterScreen() {
     }
   };
 
-  // ── Rep question modal → branch based on role choice ─────────────────────
-  const handleRepChoice = async (choice: 'representative' | 'creator' | 'listener') => {
-    dispatch({
-      type: 'UPDATE_FIELD',
-      field: 'isRepresentative',
-      value: choice === 'representative',
-    });
-    setShowRepQuestion(false);
-    analytics.capture(ANALYTICS_EVENTS.REGISTRATION.ROLE_SELECTED, { role: choice });
+  // ── Branch on the account type picked in the opening sheet ───────────────
+  // Runs right after the profile step. Never throws: it reports its own
+  // failure through `apiError` so the caller's catch only sees patch errors.
+  const continueWithRole = async () => {
+    const role = state.accountType;
+    if (!role) {
+      // Can't happen: the sheet blocks step 1 until a role exists. Ask again
+      // rather than completing the signup as the wrong kind of account.
+      setRoleSheetDismissed(false);
+      return;
+    }
     try {
-      if (choice === 'listener') {
-        // Listeners finish here — patch role + complete + adopt.
-        setIsLoading(true);
-        await signupPatch({ role: 'listener' });
-        await promoteToUser();
-        router.replace('/(tabs)');
+      // An own account starts as a standard one and ends on the optional
+      // inmate step: validating an artist there is what turns it into a
+      // creator, skipping leaves it standard (David, Sep 19 2026).
+      await signupPatch({
+        role: role === 'representative' ? 'representative' : 'listener',
+      });
+      setCurrentStep(role === 'representative' ? 8 : 7);
+    } catch (error: unknown) {
+      setApiError(getErrorMessage(error, t('errors.registrationFailed')));
+    }
+  };
+
+  // ── Account type picked in the sheet (fallback path inside the wizard) ────
+  const handleAccountTypeSelect = (role: Role) => {
+    dispatch({
+      type: 'UPDATE_FIELDS',
+      fields: { accountType: role, isRepresentative: role === 'representative' },
+    });
+    analytics.capture(ANALYTICS_EVENTS.REGISTRATION.ROLE_SELECTED, {
+      role,
+      at: 'wizard',
+    });
+  };
+
+  // ── Step 7 → The optional artist check that closes an own account ────────
+  // With a validated inmate the account is promoted to creator and follows the
+  // creator path (paywall when the plan requires it). Skipped, it completes as
+  // the standard account it already is.
+  const handleCreatorInmateNext = async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      await signupPatch({ role: 'creator', inmateNumber: state.inmateNumber });
+      analytics.capture(ANALYTICS_EVENTS.REGISTRATION.ROLE_SELECTED, {
+        role: 'creator',
+        at: 'inmate_step',
+      });
+      await promoteToUser();
+      if (!paywallRequired) {
+        finishWithoutPaywall();
         return;
       }
-      // Creator / representative: just record the role, then advance the wizard.
-      await signupPatch({ role: choice });
-      if (choice === 'representative') setCurrentStep(8);
-      else setCurrentStep(7);
+      setCurrentStep(15);
     } catch (error: unknown) {
       setApiError(getErrorMessage(error, t('errors.registrationFailed')));
     } finally {
@@ -455,14 +641,16 @@ export default function RegisterScreen() {
     }
   };
 
-  // ── Step 7 → Creator confirms inmate number, then finalize as creator ────
-  const handleCreatorInmateNext = async () => {
+  const handleSkipInmate = async () => {
     setIsLoading(true);
     setApiError(null);
     try {
-      await signupPatch({ inmateNumber: state.inmateNumber });
+      analytics.capture(ANALYTICS_EVENTS.REGISTRATION.ROLE_SELECTED, {
+        role: 'listener',
+        at: 'inmate_step_skipped',
+      });
       await promoteToUser();
-      setCurrentStep(15);
+      router.replace('/(tabs)');
     } catch (error: unknown) {
       setApiError(getErrorMessage(error, t('errors.registrationFailed')));
     } finally {
@@ -532,18 +720,11 @@ export default function RegisterScreen() {
     try {
       let avatarPublicId: string | undefined;
       if (state.creatorAvatarUri) {
-        try {
-          avatarPublicId = await mediaService.upload(
-            state.creatorAvatarUri,
-            'creator-avatar.jpg',
-            'image/jpeg',
-            'avatar'
-          );
-          setCreatorAvatarPublicId(avatarPublicId);
-        } catch (uploadError: unknown) {
-          console.warn('[Register] Creator avatar upload failed:', uploadError);
-          showToast(t('errors.avatarUploadSkipped'));
-        }
+        avatarPublicId = await uploadAvatarOrAsk(
+          state.creatorAvatarUri,
+          'creator-avatar.jpg'
+        );
+        if (avatarPublicId) setCreatorAvatarPublicId(avatarPublicId);
       }
       await signupPatch({
         creatorUsername: state.creatorUsername,
@@ -588,8 +769,17 @@ export default function RegisterScreen() {
         role: 'representative',
       });
       const result = await promoteToUser();
-      if (result.linkedAccount?.user?.id) {
-        setCreatorUserId(result.linkedAccount.user.id);
+      // A representative MUST come back with its managed creator. If it doesn't,
+      // the server failed to create the creator — never drop the user into the
+      // app with an orphaned representative (Sep 2026 incident). Surface it so
+      // they can retry instead of silently continuing.
+      if (!result.linkedAccount?.user?.id) {
+        throw new Error('CREATOR_ACCOUNT_NOT_CREATED');
+      }
+      setCreatorUserId(result.linkedAccount.user.id);
+      if (!paywallRequired) {
+        finishWithoutPaywall();
+        return;
       }
       setCurrentStep(15);
     } catch (error: unknown) {
@@ -617,7 +807,14 @@ export default function RegisterScreen() {
 
     switch (currentStep) {
       case 1:
-        return <StepBasicInfo {...commonProps} onNext={goNext} />;
+        return (
+          <StepBasicInfo
+            {...commonProps}
+            onNext={goNext}
+            // No keyboard under the account type sheet.
+            autoFocus={!needsAccountType}
+          />
+        );
       case 2:
         return <StepName {...commonProps} onNext={goNext} />;
       case 3:
@@ -627,24 +824,27 @@ export default function RegisterScreen() {
       case 5:
         return <StepOtpVerification {...commonProps} onNext={handleOtpNext} />;
       case 6:
+        return <StepProfileSetup {...commonProps} onNext={handleProfileNext} />;
+      case 7:
         return (
-          <StepProfileSetup
+          <StepCreatorInmate
             {...commonProps}
-            onNext={handleProfileNext}
-            showRepQuestion={showRepQuestion}
-            onRepChoice={handleRepChoice}
+            onNext={handleCreatorInmateNext}
+            onSkip={handleSkipInmate}
           />
         );
-      case 7:
-        return <StepCreatorInmate {...commonProps} onNext={handleCreatorInmateNext} />;
       case 8:
         return <StepHowItWorks {...commonProps} onNext={goNext} />;
       case 9:
         return <StepConsentForm {...commonProps} onNext={handleConsentNext} />;
       case 10:
-        return <StepCreatorBasicInfo {...commonProps} onNext={handleCreatorBasicInfoNext} />;
+        return (
+          <StepCreatorBasicInfo {...commonProps} onNext={handleCreatorBasicInfoNext} />
+        );
       case 11:
-        return <StepCreatorPassword {...commonProps} onNext={handleCreatorPasswordNext} />;
+        return (
+          <StepCreatorPassword {...commonProps} onNext={handleCreatorPasswordNext} />
+        );
       case 12:
         return <StepCreatorProfile {...commonProps} onNext={handleCreatorProfileNext} />;
       case 13:
@@ -666,6 +866,7 @@ export default function RegisterScreen() {
             {...commonProps}
             onNext={handleBridgeNumberNext}
             forUserId={creatorUserId ?? undefined}
+            claimWithoutPayment={claimBridgeNumber}
           />
         );
       default:
@@ -673,13 +874,52 @@ export default function RegisterScreen() {
     }
   };
 
+  // Leave a signup that was started earlier. The app resumes a pending
+  // signup on every launch (index.tsx), so without this a half finished
+  // registration held the phone hostage: the welcome screen never came back
+  // and "back" on step 1 had nowhere to go.
+  const handleAbandon = () => {
+    Alert.alert(t('registration:abandon.title'), t('registration:abandon.message'), [
+      { text: t('registration:abandon.keep'), style: 'cancel' },
+      {
+        text: t('registration:abandon.confirm'),
+        style: 'destructive',
+        onPress: async () => {
+          await signupAbandon();
+          void authStorage.removeSignupPassword().catch(() => {});
+          router.replace('/(auth)/welcome');
+        },
+      },
+    ]);
+  };
+
+  const leaveWizard = () => {
+    if (sessionId) {
+      handleAbandon();
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(auth)/welcome');
+    }
+  };
+
   const handleBackPress = () => {
     if (currentStep > 1) {
       goBack();
     } else {
-      router.back();
+      leaveWizard();
     }
   };
+
+  // Once the account exists (subscription and bridge number steps) there is
+  // nothing to abandon any more; those steps have their own skip.
+  const canAbandon = !!sessionId && currentStep < 15 && !isCreatorMode;
+
+  // Compute step title (memoised so renders stay cheap during typing).
+  // Declared BEFORE the hydration guard below: a hook that sits after an
+  // early return changes the hook count between renders the moment the guard
+  // flips, which React rejects outright.
+  const titleKey = useMemo(() => STEP_TITLE_KEYS[currentStep], [currentStep]);
 
   // Don't render the wizard until MMKV has hydrated — otherwise the first
   // paint may show step 1 while the persisted session is loading, and we'd
@@ -688,8 +928,18 @@ export default function RegisterScreen() {
     return <View style={styles.container} />;
   }
 
-  // Compute step title (memoised so renders stay cheap during typing).
-  const titleKey = useMemo(() => STEP_TITLE_KEYS[currentStep], [currentStep]);
+  // Normally the role arrives as a route param from the Welcome sheet. It can
+  // still be missing here: a deep link into /register, or a session started
+  // before the sheet existed. Ask over step 1 rather than guessing. Derived
+  // instead of an effect so the sheet never flashes while the draft seeds.
+  const roleFromDraft =
+    storedDraft?.role === 'creator' ||
+    storedDraft?.role === 'representative' ||
+    storedDraft?.role === 'listener'
+      ? storedDraft.role
+      : null;
+  const needsAccountType =
+    !isCreatorMode && !state.accountType && !roleFromDraft && !roleSheetDismissed;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -718,8 +968,32 @@ export default function RegisterScreen() {
             </Text>
           )
         )}
+        {canAbandon ? (
+          <TouchableOpacity
+            onPress={handleAbandon}
+            style={styles.closeButton}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={t('registration:abandon.action')}
+            hitSlop={8}
+          >
+            <X size={22} color="#FFFFFF" strokeWidth={2.25} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {renderStep()}
+
+      <AccountTypeSheet
+        visible={needsAccountType}
+        onClose={() => setRoleSheetDismissed(true)}
+        onSelect={handleAccountTypeSelect}
+        onCancel={() => {
+          // A resumed signup lands here through a Redirect, with no screen
+          // behind it to go back to.
+          if (router.canGoBack()) router.back();
+          else router.replace('/(auth)/welcome');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -745,7 +1019,13 @@ const styles = StyleSheet.create({
   progressBarWrapper: {
     flex: 1,
     marginLeft: 8,
-    marginRight: 48,
+    marginRight: 8,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   topBarTitle: {
     flex: 1,

@@ -11,6 +11,10 @@ import { useAuthStore } from '@/stores/authStore';
  * Auto-sends OTP when bridge phone is available.
  * OTP fields are always visible — no manual "send" step.
  */
+/** Minimum gap between automatic code sends to the same number. */
+const AUTO_SEND_WINDOW_MS = 10 * 60 * 1000;
+const lastAutoSendAt = new Map<string, number>();
+
 export function useVerification() {
   const setUser = useAuthStore((s) => s.setUser);
   const user = useAuthStore((s) => s.user);
@@ -22,9 +26,16 @@ export function useVerification() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isFetchingBridge, setIsFetchingBridge] = useState(true);
 
-  // Fetch bridge phone and auto-send OTP on mount (only when authenticated)
+  // Only an unverified representative ever verifies. The banner that uses
+  // this hook returns null for everyone else, but hooks run before that early
+  // return, so without this gate EVERY signed in account with a bridge number
+  // asked for an SMS on every feed mount (253 failed sends in three weeks).
+  const needsVerification =
+    isAuthenticated && user?.role === 'representative' && !user?.profileVerified;
+
+  // Fetch bridge phone and auto-send OTP on mount (only when it applies)
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!needsVerification) {
       setIsFetchingBridge(false);
       return;
     }
@@ -68,10 +79,16 @@ export function useVerification() {
       .then(async (bridge) => {
         if (cancelled || !bridge) return;
         setBridgePhone(bridge);
+        // One automatic code per number per window: the feed remounts on
+        // every tab switch and resume, and each send is a real SMS.
+        const last = lastAutoSendAt.get(bridge) ?? 0;
+        if (Date.now() - last < AUTO_SEND_WINDOW_MS) return;
+        lastAutoSendAt.set(bridge, Date.now());
         try {
           await verificationService.sendVerificationOtp({ bridgePhone: bridge });
         } catch {
-          // Silently fail
+          // Let the next mount try again instead of waiting out the window.
+          lastAutoSendAt.delete(bridge);
         }
       })
       .finally(() => {
@@ -81,7 +98,7 @@ export function useVerification() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [needsVerification, user?.role]);
 
   const handleOtpChange = useCallback(
     (code: string) => {

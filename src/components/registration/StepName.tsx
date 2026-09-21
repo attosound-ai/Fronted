@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { View, StyleSheet, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { AlertCircle } from 'lucide-react-native';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Text, Button } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { COLORS } from '@/constants/theme';
 
 /**
@@ -31,6 +32,8 @@ export function StepName({
   apiError,
 }: StepProps) {
   const { t } = useTranslation(['registration', 'common']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const [error, setError] = useState('');
 
   const handleNext = () => {
@@ -75,6 +78,7 @@ export function StepName({
         <View style={styles.form}>
           <View style={styles.inputContainer}>
             <TextInput
+              ref={firstFieldRef}
               value={state.name ?? ''}
               onChangeText={(value: string) => {
                 dispatch({ type: 'UPDATE_FIELD', field: 'name', value });

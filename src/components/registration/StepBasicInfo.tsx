@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { AlertCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import { Text, Button, Input, PhoneInput } from '@/components/ui';
 import { StepProps } from '@/types/registration';
 import { isValidEmail, isValidPhoneNumber } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { apiClient } from '@/lib/api/client';
 import { COLORS } from '@/constants/theme';
 
@@ -25,13 +26,16 @@ export function StepBasicInfo({
   onBack,
   isLoading,
   apiError,
-}: StepProps) {
+  autoFocus = true,
+}: StepProps & { autoFocus?: boolean }) {
   const { t } = useTranslation(['registration', 'common']);
   const { t: tv } = useTranslation('validation');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [checking, setChecking] = useState(false);
 
   const isEmailMode = state.identifierMode === 'email';
+  const emailRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(emailRef, autoFocus && isEmailMode);
 
   const handleToggleMode = () => {
     const nextMode = isEmailMode ? 'phone' : 'email';
@@ -142,6 +146,7 @@ export function StepBasicInfo({
         <View style={styles.form}>
           {isEmailMode ? (
             <Input
+              ref={emailRef}
               label={t('basicInfo.emailLabel')}
               value={state.email}
               onChangeText={(value) => {
@@ -157,6 +162,7 @@ export function StepBasicInfo({
             />
           ) : (
             <PhoneInput
+              autoFocus={autoFocus}
               label={t('basicInfo.phoneLabel')}
               countryCode={state.phoneCountryCode}
               onCountryCodeChange={(value) =>

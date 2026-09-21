@@ -51,6 +51,7 @@ import type { FeedPost, PostType } from '@/types/post';
 import type { Post } from '@/types';
 import type { FeedResponse } from '@/features/feed/types';
 import { COLORS } from '@/constants/theme';
+import { resolveCoverUrl } from '@/features/feed/utils/coverArt';
 
 function resolvePostType(post: Post): PostType {
   if (post.contentType) return post.contentType as PostType;
@@ -87,6 +88,7 @@ function toFeedPost(post: Post): FeedPost {
       (type === 'reel' ? cloudinaryUrl(files[0], 'reel_thumb', 'video') : undefined) ??
       (type === 'video' ? cloudinaryUrl(files[0], 'video_thumb', 'video') : undefined) ??
       undefined,
+    coverUrl: resolveCoverUrl(type, post.metadata, (id) => cloudinaryUrl(id, 'feed')),
     duration: post.metadata?.duration ? Number(post.metadata.duration) : undefined,
     mediaWidth: post.metadata?.width ? Number(post.metadata.width) : undefined,
     mediaHeight: post.metadata?.height ? Number(post.metadata.height) : undefined,

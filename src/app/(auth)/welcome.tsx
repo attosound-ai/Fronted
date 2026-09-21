@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/Button';
+import { AccountTypeSheet } from '@/components/registration/AccountTypeSheet';
 import { COLORS } from '@/constants/theme';
 import { haptic } from '@/lib/haptics/hapticService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
+import type { Role } from '@/types';
 
 /**
  * Welcome screen.
@@ -28,6 +32,9 @@ export default function WelcomeScreen() {
   const { t } = useTranslation('auth');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  // The account type question is now the FIRST thing signup asks (it used to
+  // come after five filled in screens), so it lives here on Welcome.
+  const [showAccountType, setShowAccountType] = useState(false);
 
   // Belt-and-suspenders for the (auth)/_layout bounce: a logged-in user must
   // never sit on the logged-out welcome screen (Aug 1: stranded here after
@@ -65,11 +72,23 @@ export default function WelcomeScreen() {
             variant="outline"
             onPress={() => {
               haptic('light');
-              router.push('/(auth)/register');
+              setShowAccountType(true);
             }}
           />
         </View>
       </SafeAreaView>
+
+      <AccountTypeSheet
+        visible={showAccountType}
+        onClose={() => setShowAccountType(false)}
+        onSelect={(role: Role) => {
+          analytics.capture(ANALYTICS_EVENTS.REGISTRATION.ROLE_SELECTED, {
+            role,
+            at: 'welcome',
+          });
+          router.push(`/(auth)/register?role=${role}`);
+        }}
+      />
     </View>
   );
 }

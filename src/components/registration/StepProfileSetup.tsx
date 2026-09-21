@@ -9,14 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import {
-  AlertCircle,
-  ArrowLeft,
-  Camera,
-  Images,
-  CheckCircle,
-  XCircle,
-} from 'lucide-react-native';
+import { AlertCircle, Camera, Images, CheckCircle, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Text, Button, BottomSheet } from '@/components/ui';
@@ -25,22 +18,20 @@ import { StepProps } from '@/types/registration';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { isNotEmpty, isValidUsername } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { authService } from '@/lib/api/authService';
 import { useAuthStore } from '@/stores/authStore';
 import { COLORS } from '@/constants/theme';
 
-type RoleChoice = 'representative' | 'creator' | 'listener';
-
-interface StepProfileSetupProps extends StepProps {
-  showRepQuestion?: boolean;
-  onRepChoice?: (choice: RoleChoice) => void;
-}
-
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 /**
- * StepProfileSetup - Step 4 of registration wizard
- * Sets up profile picture, display name (nickname), and unique @username
+ * StepProfileSetup: profile picture and unique @username.
+ *
+ * It used to also host the "will you represent a creator?" / "do you have an
+ * inmate number?" sheet. That question now opens the whole flow (see
+ * AccountTypeSheet), so by the time the user gets here the branch is already
+ * decided and this step just hands control back to the wizard.
  */
 export function StepProfileSetup({
   state,
@@ -48,15 +39,14 @@ export function StepProfileSetup({
   onNext,
   isLoading,
   apiError,
-  showRepQuestion,
-  onRepChoice,
-}: StepProfileSetupProps) {
+}: StepProps) {
   const { t } = useTranslation(['registration', 'common', 'validation']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showCropModal, setShowCropModal] = useState(false);
   const [pendingUri, setPendingUri] = useState<string | null>(null);
-  const [repStage, setRepStage] = useState<'role' | 'inmateGate'>('role');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCheckedRef = useRef('');
 
@@ -123,12 +113,6 @@ export function StepProfileSetup({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [state.username, checkUsername]);
-
-  // Reset the role sheet to its first stage whenever it closes so reopening
-  // always starts on the representative question.
-  useEffect(() => {
-    if (!showRepQuestion) setRepStage('role');
-  }, [showRepQuestion]);
 
   const handleUsernameChange = (value: string) => {
     const cleaned = value.toLowerCase().replaceAll(/[^a-z0-9._]/g, '');
@@ -282,6 +266,7 @@ export function StepProfileSetup({
               @
             </Text>
             <TextInput
+              ref={firstFieldRef}
               value={state.username}
               onChangeText={handleUsernameChange}
               placeholder={t('profileSetup.usernamePlaceholder')}
@@ -371,95 +356,6 @@ export function StepProfileSetup({
             </Text>
           </TouchableOpacity>
         </View>
-      </BottomSheet>
-
-      {/* Role / Inmate-number Bottom Sheet (two stages) */}
-      <BottomSheet
-        visible={!!showRepQuestion}
-        onClose={() => {
-          // On the inmate-gate stage, any dismiss (back arrow intercepted by
-          // the sheet's swipe gesture, swipe-down, or backdrop tap) must return
-          // to the role question — never silently complete as a listener.
-          if (repStage === 'inmateGate') {
-            setRepStage('role');
-          } else {
-            onRepChoice?.('listener');
-          }
-        }}
-      >
-        {repStage === 'role' ? (
-          <View style={styles.repContent}>
-            <Text variant="h2" style={styles.repTitle}>
-              {t('profileSetup.repQuestion')}
-            </Text>
-            <Text variant="body" style={styles.repDescription}>
-              {t('profileSetup.repDescription')}
-            </Text>
-            <View style={styles.repButtons}>
-              <Button
-                title={t('profileSetup.yesRepresent')}
-                onPress={() => {
-                  haptic('light');
-                  onRepChoice?.('representative');
-                }}
-                variant="primary"
-                loading={isLoading}
-              />
-              <Button
-                title={t('profileSetup.noForMe')}
-                onPress={() => {
-                  haptic('light');
-                  setRepStage('inmateGate');
-                }}
-                variant="outline"
-                disabled={isLoading}
-              />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.repContent}>
-            <View style={styles.repHeaderRow}>
-              <TouchableOpacity
-                onPress={() => {
-                  haptic('light');
-                  setRepStage('role');
-                }}
-                disabled={isLoading}
-                style={styles.repBackButton}
-                accessibilityRole="button"
-                accessibilityLabel={t('profileSetup.inmateGateBack')}
-                hitSlop={8}
-              >
-                <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2.25} />
-              </TouchableOpacity>
-              <Text variant="h2" style={styles.repTitleInline}>
-                {t('profileSetup.inmateGateQuestion')}
-              </Text>
-            </View>
-            <View style={styles.repButtonsRow}>
-              <Button
-                title={t('profileSetup.inmateGateYes')}
-                onPress={() => {
-                  haptic('light');
-                  onRepChoice?.('creator');
-                }}
-                variant="primary"
-                loading={isLoading}
-                style={styles.repRowButton}
-              />
-              <Button
-                title={t('profileSetup.inmateGateNo')}
-                onPress={() => {
-                  haptic('light');
-                  onRepChoice?.('listener');
-                }}
-                variant="outline"
-                disabled={isLoading}
-                style={styles.repRowButton}
-              />
-            </View>
-          </View>
-        )}
       </BottomSheet>
 
       {/* Crop Modal */}
@@ -646,45 +542,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Archivo_500Medium',
-  },
-  repContent: {
-    gap: 16,
-  },
-  repTitle: {
-    color: '#FFFFFF',
-    textAlign: 'left',
-    marginBottom: 4,
-  },
-  repDescription: {
-    color: '#CCCCCC',
-    textAlign: 'left',
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  repButtons: {
-    gap: 12,
-    marginTop: 8,
-  },
-  repHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  repBackButton: {
-    marginLeft: -4,
-    padding: 4,
-  },
-  repTitleInline: {
-    flex: 1,
-    color: '#FFFFFF',
-    textAlign: 'left',
-  },
-  repButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  repRowButton: {
-    flex: 1,
   },
 });

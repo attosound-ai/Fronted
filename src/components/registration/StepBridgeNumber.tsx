@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { paymentService } from '@/lib/api/paymentService';
 import { haptic } from '@/lib/haptics/hapticService';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { COLORS } from '@/constants/theme';
 
 const POLL_INTERVAL_MS = 3000;
@@ -27,18 +28,26 @@ const MAX_POLL_ATTEMPTS = 40; // ~2 minutes
  * Shows the unique bridge number and allows copying/sharing/saving as contact.
  * Polls the backend if the number hasn't been provisioned yet.
  */
-export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
+export const StepBridgeNumber: React.FC<
+  StepProps & {
+    forUserId?: number;
+    /** No payment happened, so nothing requested the number yet: claim it. */
+    claimWithoutPayment?: boolean;
+  }
+> = ({
   state,
   dispatch,
   onNext,
   isLoading,
   apiError,
   forUserId,
+  claimWithoutPayment = false,
 }) => {
   const { t } = useTranslation(['registration', 'common']);
   const [provisioning, setProvisioning] = useState(!state.bridgeNumber);
   const [provisioningFailed, setProvisioningFailed] = useState(false);
   const pollCount = useRef(0);
+  const claimedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -49,7 +58,19 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
 
     const poll = async () => {
       try {
-        const result = await paymentService.getBridgeNumber(forUserId);
+        // A payment is what normally asks telephony for the number. Without
+        // one (free plan grants it) the first request has to be the claim.
+        const shouldClaim = claimWithoutPayment && !claimedRef.current;
+        const result = shouldClaim
+          ? await paymentService.claimBridgeNumber(forUserId)
+          : await paymentService.getBridgeNumber(forUserId);
+        if (shouldClaim) {
+          claimedRef.current = true;
+          analytics.capture(ANALYTICS_EVENTS.REGISTRATION.BRIDGE_NUMBER_CLAIMED, {
+            status: result.status,
+            for_linked_creator: !!forUserId,
+          });
+        }
         console.log('[BridgeNumber] poll result:', result);
         if (result.status === 'failed') {
           setProvisioningFailed(true);
@@ -66,6 +87,16 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
           return;
         }
       } catch (err) {
+        const httpStatus = (err as { response?: { status?: number } })?.response?.status;
+        if (claimWithoutPayment && !claimedRef.current && httpStatus === 403) {
+          // The plan has no bridge number: there is nothing to show here.
+          analytics.capture(ANALYTICS_EVENTS.REGISTRATION.BRIDGE_NUMBER_CLAIM_FAILED, {
+            http_status: httpStatus,
+            for_linked_creator: !!forUserId,
+          });
+          onNext();
+          return;
+        }
         console.warn('[BridgeNumber] poll error:', err);
         // Network/auth error — keep polling
       }
@@ -90,6 +121,7 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
   const creatorName = state.creatorName || 'ATTO Bridge';
 
   const handleCopy = async () => {
+    if (!bridgeNumber) return;
     try {
       const ExpoClipboard = require('expo-clipboard');
       await ExpoClipboard.setStringAsync(bridgeNumber);
@@ -100,6 +132,7 @@ export const StepBridgeNumber: React.FC<StepProps & { forUserId?: number }> = ({
   };
 
   const handleShare = async () => {
+    if (!bridgeNumber) return;
     try {
       await Share.share({
         message: t('bridgeNumber.shareMessage', { number: bridgeNumber }),

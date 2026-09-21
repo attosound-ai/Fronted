@@ -1,4 +1,16 @@
 {
+  "accountType": {
+    "title": "Como quer começar?",
+    "subtitle": "Escolha a que te descreve. Os dados do artista ficam para o final.",
+    "representative": {
+      "title": "Represento um artista",
+      "description": "Você administra a conta de um artista com a permissão dele e a configura por ele."
+    },
+    "listener": {
+      "title": "Minha própria conta",
+      "description": "Ouça, siga e apoie. Se você é o artista, valida isso no final."
+    }
+  },
   "basicInfo": {
     "title": "Crie sua conta",
     "nameLabel": "Nome",
@@ -73,8 +85,10 @@
     "inmateGateBack": "Voltar"
   },
   "creatorInmate": {
-    "title": "Verifique sua identidade",
-    "subtitle": "Insira seu número de detento para que possamos verificar sua identidade e configurar seu perfil de criador."
+    "title": "Você é o artista?",
+    "subtitle": "Opcional. Se você é o artista, busque seus dados para a conta ficar verificada como criador. Se não, pule e termine.",
+    "validate": "Validar e terminar",
+    "skip": "Pular, não sou o artista"
   },
   "creatorAccountSetup": {
     "title": "Configure a conta do criador",
@@ -325,5 +339,12 @@
       "hip_hop_dance": "Dança Hip-Hop",
       "improv": "Improvisação"
     }
+  },
+  "abandon": {
+    "title": "Cancelar este cadastro?",
+    "message": "Seu progresso será descartado e você poderá começar de novo do início.",
+    "keep": "Continuar",
+    "confirm": "Cancelar cadastro",
+    "action": "Cancelar cadastro"
   }
 }

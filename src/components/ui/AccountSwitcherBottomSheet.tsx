@@ -1,5 +1,5 @@
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { CheckCircle, PlusCircle } from 'lucide-react-native';
@@ -8,7 +8,7 @@ import { Avatar } from './Avatar';
 import { Text } from './Text';
 import { useAccountStore } from '@/stores/accountStore';
 import { useAuthStore } from '@/stores/authStore';
-import { showToast } from './Toast';
+import { useAccountSwitchPromptStore } from '@/stores/accountSwitchPromptStore';
 import type { AccountEntry } from '@/stores/accountStore';
 
 interface AccountSwitcherBottomSheetProps {
@@ -30,8 +30,16 @@ export function AccountSwitcherBottomSheet({
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const switchToAccount = useAccountStore((s) => s.switchToAccount);
+  const syncLinkedAccounts = useAccountStore((s) => s.syncLinkedAccounts);
   const currentUser = useAuthStore((s) => s.user);
   const [switching, setSwitching] = useState<number | null>(null);
+
+  // Opening the switcher is the moment the user expects to see every linked
+  // account. Pull in any the backend links but this device hasn't stored yet
+  // (e.g. a creator created outside this device's signup). Best-effort.
+  useEffect(() => {
+    if (visible) void syncLinkedAccounts();
+  }, [visible, syncLinkedAccounts]);
 
   // The authenticated user is the source of truth for "who is active now".
   // activeAccountId is a SecureStore mirror that may briefly lag behind.
@@ -47,10 +55,15 @@ export function AccountSwitcherBottomSheet({
     try {
       await switchToAccount(entry.user.id);
     } catch (err: unknown) {
-      // Preflight in switchToAccount rejects switches during an active
-      // call to avoid tearing down CallKit / Twilio mid-conversation.
+      // Preflight in switchToAccount rejects switches during an active call to
+      // avoid tearing down CallKit / Twilio mid-conversation. Instead of a
+      // dead-end "end the call first" toast, open the actionable prompt so the
+      // user can choose to end the call and switch, or stay on the call.
       if ((err as { code?: string })?.code === 'CANNOT_SWITCH_DURING_ACTIVE_CALL') {
-        showToast(t('accountSwitcher.endCallFirst'));
+        useAccountSwitchPromptStore.getState().request({
+          targetUserId: entry.user.id,
+          targetUsername: entry.user.username,
+        });
         return;
       }
       throw err;

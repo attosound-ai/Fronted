@@ -27,6 +27,7 @@ import { StepProps } from '@/types/registration';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { isNotEmpty, isValidUsername } from '@/utils/validators';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { authService } from '@/lib/api/authService';
 import { COLORS } from '@/constants/theme';
 
@@ -43,6 +44,8 @@ export function StepCreatorProfile({
   apiError,
 }: StepProps) {
   const { t } = useTranslation(['registration', 'common']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const { height: screenHeight } = useWindowDimensions();
   const baseAvatarSize = screenHeight < 930 ? 220 : 260;
   const { height: kbHeight } = useReanimatedKeyboardAnimation();
@@ -239,6 +242,7 @@ export function StepCreatorProfile({
               @
             </Text>
             <TextInput
+              ref={firstFieldRef}
               value={state.creatorUsername}
               onChangeText={handleUsernameChange}
               placeholder={t('profileSetup.usernamePlaceholder')}

@@ -31,6 +31,7 @@ import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post } from '@/types';
 import type { FeedResponse } from '@/features/feed/types';
 import { COLORS } from '@/constants/theme';
+import { resolveCoverUrl } from '@/features/feed/utils/coverArt';
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -58,6 +59,11 @@ function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) 
   const isAudio = post.contentType === 'audio';
   const isText = post.contentType === 'text';
   const rawPath = post.filePaths?.[0] ?? post.images?.[0] ?? null;
+  // An audio post with cover art shows the artwork here, with a small note so
+  // the tile still reads as audio and not as a photo.
+  const coverUrl = resolveCoverUrl(post.contentType, post.metadata, (id) =>
+    cloudinaryUrl(id, 'thumb', 'image')
+  );
 
   // Resolve the path into a proper CDN URL based on content type
   let firstImage: string | null;
@@ -94,9 +100,23 @@ function PostThumbnail({ post, onPress }: { post: Post; onPress?: () => void }) 
           )}
         </>
       ) : isAudio ? (
-        <View style={[styles.cellImage, styles.cellDark]}>
-          <Music size={28} color="#3B82F6" strokeWidth={2.25} />
-        </View>
+        coverUrl ? (
+          <>
+            <Image
+              source={{ uri: coverUrl }}
+              style={styles.cellImage}
+              resizeMode="cover"
+              accessibilityElementsHidden
+            />
+            <View style={styles.cellTypeBadge} pointerEvents="none">
+              <Music size={12} color="#FFFFFF" strokeWidth={2.5} />
+            </View>
+          </>
+        ) : (
+          <View style={[styles.cellImage, styles.cellDark]}>
+            <Music size={28} color="#3B82F6" strokeWidth={2.25} />
+          </View>
+        )
       ) : (
         <View style={[styles.cellImage, styles.cellDark, styles.cellTextPad]}>
           <Text
@@ -161,9 +181,7 @@ function TabContent({
   return (
     <View
       accessibilityLabel={
-        activeTab === 'posts'
-          ? t('content.postsGridA11y')
-          : t('content.savedGridA11y')
+        activeTab === 'posts' ? t('content.postsGridA11y') : t('content.savedGridA11y')
       }
     >
       <View style={styles.grid}>

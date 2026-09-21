@@ -4,6 +4,7 @@ import { Star, Gem, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { usePaywallRequired } from '@/hooks/usePaywall';
 import { useAuthStore } from '@/stores/authStore';
 
 export function ProfileSubscriptionSection() {
@@ -14,12 +15,16 @@ export function ProfileSubscriptionSection() {
   const resolvedPlan = useSubscriptionStore((s) => s.getResolvedPlan());
   const subscription = useSubscriptionStore((s) => s.subscription);
   const role = useAuthStore((s) => s.user?.role);
+  const paywallRequired = usePaywallRequired();
   const inmateNumber = useAuthStore((s) => s.user?.inmateNumber);
   const isResolved = resolvedPlan !== null;
   const isFree = isResolved && resolvedPlan === 'connect_free';
 
   // Subscriptions are creator-only — listeners and representatives don't pay.
   if (role !== 'creator' || !inmateNumber) return null;
+  // Nothing is paid any more: a plan card with an upgrade button would only
+  // confuse. The section returns once a feature needs a paid plan again.
+  if (!paywallRequired) return null;
 
   const PLAN_LABELS: Record<string, string> = {
     connect_free: t('subscription.planConnectFree'),

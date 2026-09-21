@@ -70,6 +70,12 @@ interface AccountActions {
   switchToAccountForIncomingCall: (userId: number) => Promise<void>;
   removeAccount: (userId: number) => Promise<void>;
   loadAccounts: () => Promise<void>;
+  /**
+   * Ensure every account the backend reports as linked to the authenticated
+   * user is present in the local switcher — fetching tokens for any that are
+   * missing WITHOUT changing the active session. Best-effort and non-switching.
+   */
+  syncLinkedAccounts: () => Promise<void>;
   clearAll: () => Promise<void>;
 }
 
@@ -194,15 +200,47 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         return;
       }
 
-      // Preflight: do not allow switching while a call is active.
-      // Tearing down the Twilio + CallKit + audio session mid-conversation
-      // is fragile and degrades the experience for both sides. The bottom
-      // sheet handler catches this code and surfaces a toast.
+      // First-class switch telemetry (Sep 8 2026 incident): make blocked/failed
+      // switches answerable from PostHog, not only inferable from a Sentry
+      // unhandled rejection. Gated on allowHealRetry so the heal-retry recursion
+      // does not double-count a single user action.
+      if (allowHealRetry) {
+        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_ATTEMPTED, {
+          from_account_id: activeAccountId,
+          to_account_id: userId,
+        });
+      }
+
+      // Preflight: do not allow switching while a call is active. Tearing down
+      // Twilio + CallKit + the audio session mid-conversation is fragile and
+      // degrades the experience for both sides.
+      //
+      // BUT distinguish a REAL active call from an ORPHANED activeCall — a call
+      // that ended without endCall() running. A phantom entry would block
+      // switching forever (the Sep 8 2026 "stuck on wrong account" class). We
+      // trust the native Voice SDK, not just this JS mirror: if the store thinks
+      // a call is active but the SDK holds none, clear the phantom and proceed.
       const { useCallStore } = await import('./callStore');
       if (useCallStore.getState().activeCall != null) {
-        const err = new Error('CANNOT_SWITCH_DURING_ACTIVE_CALL');
-        (err as Error & { code?: string }).code = 'CANNOT_SWITCH_DURING_ACTIVE_CALL';
-        throw err;
+        const { hasLiveNativeCall } = await import('@/hooks/useTwilioVoice');
+        const live = await hasLiveNativeCall();
+        if (live) {
+          analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_BLOCKED, {
+            from_account_id: activeAccountId,
+            to_account_id: userId,
+            reason: 'active_call',
+          });
+          const err = new Error('CANNOT_SWITCH_DURING_ACTIVE_CALL');
+          (err as Error & { code?: string }).code = 'CANNOT_SWITCH_DURING_ACTIVE_CALL';
+          throw err;
+        }
+        // Orphaned: no live native call behind the store entry. Clear it so the
+        // switch is never permanently blocked by stale call state.
+        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_STALE_CALL_CLEARED, {
+          from_account_id: activeAccountId,
+          to_account_id: userId,
+        });
+        useCallStore.getState().endCall();
       }
 
       // Save rollback state
@@ -292,6 +330,9 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           // All errors are non-fatal — cached data is already displayed
         });
 
+        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_SUCCEEDED, {
+          account_id: userId,
+        });
         return; // Skip finally's endFlip — already called above
       } catch (error) {
         // ── Phase C: reconcile-or-rollback ──
@@ -583,7 +624,47 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           await setActiveAccountId(activeId);
         }
         set({ accounts: validEntries, activeAccountId: activeId });
+
+        // Fire-and-forget: pull in any linked account that belongs in the
+        // switcher but has no local tokens yet (e.g. a creator created for this
+        // representative outside this device's signup flow).
+        void get().syncLinkedAccounts();
         return;
+      }
+    },
+
+    syncLinkedAccounts: async () => {
+      const epochAtStart = getSessionEpoch();
+      const { useAuthStore } = await import('./authStore');
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) return;
+
+      let linked: User[];
+      try {
+        linked = await authService.getLinkedAccounts();
+      } catch {
+        return; // offline / transient — next trigger retries
+      }
+      if (getSessionEpoch() !== epochAtStart) return; // session changed — abort
+
+      for (const lu of linked) {
+        const id = Number(lu.id);
+        if (id === Number(currentUser.id)) continue; // that's us
+        if (get().accounts.some((a) => Number(a.user.id) === id)) continue; // already local
+
+        try {
+          // Issues fresh tokens for the linked account. This does NOT apply a
+          // switch — we only persist the entry so it shows in the switcher; the
+          // active session is untouched.
+          const { user, tokens } = await authService.switchAccount(id);
+          if (getSessionEpoch() !== epochAtStart) return; // session changed mid-sync
+          await get().addAccount({ user, tokens });
+          analytics.capture(ANALYTICS_EVENTS.AUTH.LINKED_ACCOUNT_SYNCED, {
+            account_id: id,
+          });
+        } catch {
+          // Not linked anymore / transient failure — skip; next sync retries.
+        }
       }
     },
 

@@ -95,7 +95,11 @@
     "planConnectPro": "Connect Pro",
     "renewsLabel": "Renova em {{date}}",
     "upgradePlan": "Fazer Upgrade do Plano",
-    "manageSubscription": "Gerenciar Assinatura"
+    "manageSubscription": "Gerenciar Assinatura",
+    "pickerTitle": "Plano",
+    "pickerNote": "Período de testes: escolha qualquer plano, sem pagamento.",
+    "pickerChanged": "Plano alterado para {{plan}}",
+    "pickerFailed": "Não foi possível alterar o plano. Tente novamente."
   },
   "settings": {
     "sectionTitle": "Configurações",
@@ -203,6 +207,10 @@
     "roleCreator": "Conta de criador",
     "roleListener": "Ouvinte",
     "endCallFirst": "Encerre a chamada atual antes de trocar de conta",
+    "onCallTitle": "Você está em uma chamada",
+    "onCallBody": "Para trocar para {{username}}, a chamada atual precisa terminar primeiro. Encerrá-la vai desligar a chamada para os dois lados.",
+    "endCallAndSwitch": "Encerrar chamada e trocar",
+    "stayOnCall": "Continuar na chamada",
     "title": "Trocar de conta",
     "activeNow": "Ativa agora",
     "addAccount": "Adicionar conta"

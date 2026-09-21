@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { View, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { StepProps } from '@/types/registration';
 import { isStrongPassword } from '@/utils/validators';
 import { cleanPasswordInput } from '@/utils/passwordInput';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useAutoFocusOnMount } from '@/hooks/useAutoFocusOnMount';
 import { COLORS } from '@/constants/theme';
 
 /**
@@ -22,6 +23,8 @@ export function StepCreatorPassword({
   apiError,
 }: StepProps) {
   const { t } = useTranslation(['registration', 'common', 'validation']);
+  const firstFieldRef = useRef<TextInput>(null);
+  useAutoFocusOnMount(firstFieldRef, true);
   const { t: tv } = useTranslation('validation');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -92,6 +95,7 @@ export function StepCreatorPassword({
         <View>
           <View style={styles.passwordWrapper}>
             <TextInput
+              ref={firstFieldRef}
               value={state.creatorPassword}
               onChangeText={(v) =>
                 dispatch({

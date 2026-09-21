@@ -5,6 +5,11 @@ export type RepresentativeRelationship = 'family' | 'friend' | 'manager';
 
 // All wizard form data accumulated across steps
 export interface RegistrationWizardState {
+  // Step 0: Account type, picked in the bottom sheet BEFORE the wizard opens
+  // (creator | representative | listener). Drives every branch downstream, so
+  // the wizard never has to ask about the role again halfway through.
+  accountType: Role | null;
+
   // Step 1: Identifier (email or phone)
   identifierMode: 'email' | 'phone';
   email: string;
@@ -28,7 +33,7 @@ export interface RegistrationWizardState {
   displayName: string;
   username: string;
 
-  // Step 5: Representative question
+  // Derived from `accountType`. Kept because several steps still read it.
   isRepresentative: boolean | null;
 
   // Step 7: Consent Form (only if isRepresentative === true)

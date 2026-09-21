@@ -10,5 +10,6 @@ export { ProfileActionsSection } from './components/ProfileActionsSection';
 export { LogoutBottomSheet } from './components/LogoutBottomSheet';
 export { EditProfileScreen } from './components/EditProfileScreen';
 export { ProfileBridgeNumberSection } from './components/ProfileBridgeNumberSection';
+export { ProfilePlanPickerSection } from './components/ProfilePlanPickerSection';
 export { useEditProfile } from './hooks/useEditProfile';
 export { useBridgeNumber } from './hooks/useBridgeNumber';

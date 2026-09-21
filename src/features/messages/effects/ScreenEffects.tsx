@@ -64,7 +64,7 @@ function ScreenEffectOverlayInner({ effect, onDone }: ScreenEffectOverlayProps) 
   const seed = seedFromId(effect.messageId);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={styles.overlay} pointerEvents="none">
       {effect.name === 'confetti' && (
         <Fallers
           particles={confettiParticles(seed)}
@@ -500,6 +500,8 @@ function Flash() {
 }
 
 const styles = StyleSheet.create({
+  // Above the thread, the header and every sheet in the chat.
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 1000, elevation: 1000 },
   particle: { position: 'absolute', top: 0, alignItems: 'center' },
   glyph: { position: 'absolute', top: 0 },
   string: { width: 1, backgroundColor: 'rgba(255,255,255,0.4)' },

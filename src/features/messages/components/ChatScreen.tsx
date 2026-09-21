@@ -1031,7 +1031,6 @@ export function ChatScreen({
     <View style={styles.container}>
       {wallpaperLayer}
 
-      <ScreenEffectOverlay effect={screenEffect} onDone={() => setScreenEffect(null)} />
       <SendEffectPicker
         text={effectDraft}
         onCancel={() => setEffectDraft(null)}
@@ -1138,6 +1137,8 @@ export function ChatScreen({
         }}
         onClose={() => setEmojiPickerVisible(false)}
       />
+      {/* Above the thread and the chrome: an effect covers the screen. */}
+      <ScreenEffectOverlay effect={screenEffect} onDone={() => setScreenEffect(null)} />
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
@@ -40,9 +40,14 @@ export function SendEffectPicker({ text, onCancel, onSend }: SendEffectPickerPro
   const [preview, setPreview] = useState<MessageEffect | null>(null);
   // A new key restarts the preview animation on every tap.
   const [previewKey, setPreviewKey] = useState(0);
+  // The picker opens on a long press, so the finger that opened it is still
+  // down. Only a touch that BEGINS on the backdrop dismisses it; the release
+  // of the opening gesture must not (iMessage keeps the picker up).
+  const backdropTouchStarted = useRef(false);
 
   useEffect(() => {
     if (text === null) return;
+    backdropTouchStarted.current = false;
     setTab('bubble');
     setPreview(null);
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.EFFECT_PICKER_OPENED, {
@@ -83,21 +88,16 @@ export function SendEffectPicker({ text, onCancel, onSend }: SendEffectPickerPro
         <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
         <Pressable
           style={StyleSheet.absoluteFill}
-          onPress={onCancel}
+          onPressIn={() => {
+            backdropTouchStarted.current = true;
+          }}
+          onPress={() => {
+            if (!backdropTouchStarted.current) return;
+            backdropTouchStarted.current = false;
+            onCancel();
+          }}
           accessibilityLabel={t('effects.close')}
         />
-
-        {preview?.kind === 'screen' ? (
-          <ScreenEffectOverlay
-            key={previewKey}
-            effect={{
-              name: preview.name as ScreenEffectName,
-              messageId: `preview-${previewKey}`,
-              text,
-            }}
-            onDone={() => {}}
-          />
-        ) : null}
 
         <Animated.View
           entering={FadeIn.duration(180)}
@@ -132,6 +132,18 @@ export function SendEffectPicker({ text, onCancel, onSend }: SendEffectPickerPro
           )}
         </View>
 
+        {preview?.kind === 'screen' ? (
+          <ScreenEffectOverlay
+            key={previewKey}
+            effect={{
+              name: preview.name as ScreenEffectName,
+              messageId: `preview-${previewKey}`,
+              text,
+            }}
+            onDone={() => {}}
+          />
+        ) : null}
+
         <Animated.View entering={FadeInDown.duration(220)} style={styles.sheet}>
           <View style={styles.tabs}>
             <TabButton
@@ -154,30 +166,31 @@ export function SendEffectPicker({ text, onCancel, onSend }: SendEffectPickerPro
               const effect = { kind: tab, name } as MessageEffect;
               const selected = preview?.kind === tab && preview.name === name;
               return (
-                <Pressable
-                  key={name}
-                  onPress={() => previewEffect(effect)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    (pressed || selected) && styles.rowActive,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={effectLabel(name)}
-                >
-                  <Text style={[styles.rowLabel, selected && styles.rowLabelActive]}>
-                    {effectLabel(name)}
-                  </Text>
+                <View key={name} style={[styles.row, selected && styles.rowActive]}>
+                  <Pressable
+                    onPress={() => previewEffect(effect)}
+                    style={styles.rowLabelArea}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={effectLabel(name)}
+                  >
+                    <Text style={[styles.rowLabel, selected && styles.rowLabelActive]}>
+                      {effectLabel(name)}
+                    </Text>
+                  </Pressable>
                   <Pressable
                     onPress={() => send(effect)}
-                    hitSlop={10}
-                    style={styles.sendButton}
+                    hitSlop={14}
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      pressed && styles.sendPressed,
+                    ]}
                     accessibilityRole="button"
-                    accessibilityLabel={t('chat.sendAccessibilityLabel')}
+                    accessibilityLabel={`${effectLabel(name)}, ${t('chat.sendAccessibilityLabel')}`}
                   >
                     <SendHorizontal size={16} color={COLORS.black} strokeWidth={2.5} />
                   </Pressable>
-                </Pressable>
+                </View>
               );
             })}
           </ScrollView>
@@ -281,6 +294,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   rowActive: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  rowLabelArea: { flex: 1, paddingVertical: 2 },
+  sendPressed: { opacity: 0.6 },
   rowLabel: { color: COLORS.white, fontSize: 17, fontFamily: 'Archivo_500Medium' },
   rowLabelActive: { fontFamily: 'Archivo_600SemiBold' },
   sendButton: {

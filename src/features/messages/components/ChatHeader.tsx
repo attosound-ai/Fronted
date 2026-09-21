@@ -169,8 +169,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.sm,
     paddingBottom: SPACING.sm,
-    // The wallpaper shows through; the glass buttons sit on it like the feed.
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    // No band of its own: the wallpaper runs under the header and only the
+    // glass buttons sit on it (Telegram on iOS 26).
+    backgroundColor: 'transparent',
   },
   glassButton: {
     width: 44,

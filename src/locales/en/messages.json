@@ -100,6 +100,20 @@
     "expand": "Expand editor",
     "collapse": "Close editor",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "attach": "Attach",
+    "emoji": "Emoji",
+    "voiceNote": "Voice note",
+    "attachPhoto": "Photo or video",
+    "attachCamera": "Camera",
+    "attachFile": "File",
+    "attachLocation": "Location",
+    "attachContact": "Contact",
+    "attachAudio": "Audio from a project",
+    "comingSoonTitle": "Coming soon",
+    "comingSoonBody": "Sending this from the chat is in development. Text messages work today.",
+    "mention": "Mention",
+    "list": "List",
+    "cancel": "Cancel"
   }
 }

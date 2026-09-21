@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { Redo2, SendHorizontal, Undo2, X } from 'lucide-react-native';
+import {
+  AtSign,
+  List,
+  Paperclip,
+  Redo2,
+  SendHorizontal,
+  Smile,
+  Undo2,
+  X,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { GlassSurface } from '@/components/navigation/GlassSurface';
@@ -11,6 +20,8 @@ import { COLORS } from '@/constants/theme';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useComposerExpandStore } from '@/features/messages/stores/composerExpandStore';
+import { useAttachSheet } from '@/features/messages/hooks/useAttachSheet';
+import { TAPBACK_EMOJI } from '@/features/messages/thread/TapbackOverlay';
 
 /** Snapshots are taken after this pause in typing (one undo step per burst). */
 const HISTORY_DEBOUNCE_MS = 500;
@@ -28,6 +39,8 @@ export default function ComposerExpandedScreen() {
   const initial = useComposerExpandStore((s) => s.text);
   const conversationId = useComposerExpandStore((s) => s.conversationId);
   const finish = useComposerExpandStore((s) => s.finish);
+  const { openAttach } = useAttachSheet(conversationId ?? '');
+  const [emojiOpen, setEmojiOpen] = useState(false);
 
   const textRef = useRef(initial);
   const inputRef = useRef<TextInput>(null);
@@ -125,6 +138,25 @@ export default function ComposerExpandedScreen() {
     [conversationId, finish]
   );
 
+  // Insert at the end (the native field owns the caret; appending is the
+  // deterministic option) and take a history step right away.
+  const insert = useCallback(
+    (fragment: string, kind: string) => {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.COMPOSER_INSERT, {
+        conversation_id: conversationId,
+        kind,
+      });
+      const current = textRef.current;
+      const needsBreak = kind === 'list' && current.length > 0 && !current.endsWith('\n');
+      textRef.current = `${current}${needsBreak ? '\n' : ''}${fragment}`;
+      setHasText(textRef.current.trim().length > 0);
+      snapshot();
+      setGeneration((g) => g + 1);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [conversationId, snapshot]
+  );
+
   const handleSend = useCallback(() => {
     if (!textRef.current.trim()) return;
     haptic('light');
@@ -193,7 +225,62 @@ export default function ComposerExpandedScreen() {
           maxFontSizeMultiplier={1.2}
           accessibilityLabel={t('chat.inputAccessibilityLabel')}
         />
+        {emojiOpen ? (
+          <View style={styles.emojiStrip}>
+            {[...TAPBACK_EMOJI, '🔥', '🙏', '🎵', '👏', '😍', '🎤'].map((emoji) => (
+              <Pressable
+                key={emoji}
+                onPress={() => insert(emoji, 'emoji')}
+                style={styles.emojiChip}
+                accessibilityRole="button"
+                accessibilityLabel={emoji}
+              >
+                <Text style={styles.emojiGlyph}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+          <GlassSurface radius={22} style={styles.toolsPill}>
+            <View style={styles.historyRow}>
+              <Pressable
+                onPress={openAttach}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.attach')}
+              >
+                <Paperclip size={20} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
+                onPress={() => insert('@', 'mention')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.mention')}
+              >
+                <AtSign size={20} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
+                onPress={() => insert('• ', 'list')}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.list')}
+              >
+                <List size={20} color={COLORS.white} strokeWidth={2.25} />
+              </Pressable>
+              <Pressable
+                onPress={() => setEmojiOpen((o) => !o)}
+                style={styles.iconButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.emoji')}
+              >
+                <Smile
+                  size={20}
+                  color={emojiOpen ? COLORS.white : '#AAA'}
+                  strokeWidth={2.25}
+                />
+              </Pressable>
+            </View>
+          </GlassSurface>
           <View style={styles.footerSpacer} />
           <Pressable
             onPress={handleSend}
@@ -250,6 +337,22 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   footerSpacer: { flex: 1 },
+  toolsPill: { height: 44, borderRadius: 22, overflow: 'hidden' },
+  emojiStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  emojiChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emojiGlyph: { fontSize: 26 },
   sendButton: {
     width: 44,
     height: 44,

@@ -1,23 +1,19 @@
 /**
- * ChatComposer — the message input of ChatScreen.
+ * Chat composer, Telegram's layout on iOS 26 with the system's Liquid Glass:
  *
- * Deliberately UNCONTROLLED (no `value` prop). The previous composer fed the
- * JS state back into the native field on every render. On iOS that is what
- * let the native text and the JS value drift apart (dictation into a
- * multiline input, autocorrect candidates, a reset while the keyboard was
- * mid edit) and ended in the fatal NSRangeException captured by Sentry
- * (issue 7725202984): the keyboard asked React Native to edit a range the
- * field no longer had.
+ *   [ + ]  ( field .................. emoji | send )  ( mic )
  *
- * Here the native field owns the text. JS only mirrors it (`draftRef`) to
- * know whether Send is enabled and to hand the content to `onSend`.
- * Programmatic changes go through native commands (`clear()`) or a full
- * remount of the field (`generation`), never through a `value` prop.
+ * The "+" and the mic are glass circles outside the capsule; the field, the
+ * reply or edit preview, the emoji button and the send button live inside the
+ * glass capsule. Empty field: no send, the mic shows. First character (as
+ * measured on Telegram, about 220 ms): the send button grows from a dot at
+ * the capsule's right end while the mic slides right and fades; the capsule
+ * stretches to take the space. Deleting the last character reverses it in
+ * about 175 ms.
  *
- * The draft lives in a ref owned by the parent so it survives GiftedChat
- * remounting the input toolbar (reply / edit banners toggling).
+ * The native field owns its text (uncontrolled, see `draftRef`): replacing
+ * the content deterministically on the New Architecture means a remount.
  */
-
 import {
   forwardRef,
   useCallback,
@@ -25,21 +21,29 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type ReactNode,
 } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { Maximize2, SendHorizontal } from 'lucide-react-native';
+import { Maximize2, Mic, Plus, SendHorizontal, Smile } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useTranslation } from 'react-i18next';
-
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { COLORS } from '@/constants/theme';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useComposerExpandStore } from '../stores/composerExpandStore';
+import { useAttachSheet } from '../hooks/useAttachSheet';
+import { TAPBACK_EMOJI } from '../thread/TapbackOverlay';
 
 export interface ChatComposerHandle {
   /** Empty the field through the native command (keyboard stays up). */
@@ -63,11 +67,19 @@ interface ChatComposerProps {
   onSend: (text: string) => void;
   /** Every keystroke, with the full text (drives the typing indicator). */
   onTextActivity?: (text: string) => void;
+  /** Reply or edit preview rendered inside the capsule above the field. */
+  preview?: ReactNode;
 }
 
 /** Field height bounds in points: one line, and about six lines. */
-const MIN_FIELD_HEIGHT = 34;
+const MIN_FIELD_HEIGHT = 36;
 const MAX_FIELD_HEIGHT = 120;
+/** Telegram: send grows in over about 220 ms, shrinks out in about 175 ms. */
+const SEND_IN_MS = 220;
+const SEND_OUT_MS = 175;
+const EASE_OUT = Easing.out(Easing.cubic);
+const EASE_IN = Easing.in(Easing.cubic);
+const QUICK_EMOJI = [...TAPBACK_EMOJI, '🔥', '🙏', '🎵', '👏', '😍', '🎤'];
 
 export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   function ChatComposer(
@@ -79,6 +91,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       placeholder,
       onSend,
       onTextActivity,
+      preview,
     },
     ref
   ) {
@@ -88,30 +101,41 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     // Two or more lines: Telegram shows an expand button at the top right of
     // the field that opens the full screen editor.
     const [tall, setTall] = useState(false);
+    const [emojiOpen, setEmojiOpen] = useState(false);
     // The editor hands its text back through the store; replacing the field
     // content deterministically means a remount (see `generation`).
-    const [editorGeneration, setEditorGeneration] = useState(0);
+    const [localGeneration, setLocalGeneration] = useState(0);
     const expandResult = useComposerExpandStore((s) => s.result);
     const consumeExpand = useComposerExpandStore((s) => s.consume);
+
+    const replaceText = useCallback(
+      (text: string, focus: boolean) => {
+        draftRef.current = text;
+        setHasText(text.trim().length > 0);
+        onTextActivity?.(text);
+        setLocalGeneration((g) => g + 1);
+        if (focus) {
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }
+      },
+      [draftRef, onTextActivity]
+    );
+
     useEffect(() => {
       if (!expandResult || expandResult.conversationId !== conversationId) return;
       consumeExpand();
       if (expandResult.action === 'send') {
         const content = expandResult.text.trim();
-        draftRef.current = '';
-        setHasText(false);
-        setEditorGeneration((g) => g + 1);
+        replaceText('', false);
         if (content) {
           haptic('light');
           onSend(content);
         }
         return;
       }
-      draftRef.current = expandResult.text;
-      setHasText(expandResult.text.trim().length > 0);
-      onTextActivity?.(expandResult.text);
-      setEditorGeneration((g) => g + 1);
-    }, [expandResult, conversationId, consumeExpand, draftRef, onSend, onTextActivity]);
+      replaceText(expandResult.text, false);
+    }, [expandResult, conversationId, consumeExpand, onSend, replaceText]);
+
     const openExpanded = useCallback(() => {
       haptic('selection');
       useComposerExpandStore.getState().open(conversationId, draftRef.current);
@@ -149,22 +173,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       [clear]
     );
 
-    // The send button pops in with the first character and out with the last
-    // (Telegram, iMessage): scale plus a short spin, on the UI thread.
-    const sendPop = useSharedValue(hasText ? 1 : 0);
+    // Send grows from a dot inside the capsule; the mic slides out to the
+    // right and fades. Both driven by one progress value, on the UI thread.
+    const sendIn = useSharedValue(hasText ? 1 : 0);
     useEffect(() => {
-      sendPop.value = withSpring(hasText ? 1 : 0, {
-        damping: 14,
-        stiffness: 260,
-        mass: 0.6,
+      sendIn.value = withTiming(hasText ? 1 : 0, {
+        duration: hasText ? SEND_IN_MS : SEND_OUT_MS,
+        easing: hasText ? EASE_OUT : EASE_IN,
       });
-    }, [hasText, sendPop]);
+    }, [hasText, sendIn]);
     const sendStyle = useAnimatedStyle(() => ({
-      transform: [
-        { scale: 0.7 + 0.3 * sendPop.value },
-        { rotate: `${-60 + 60 * sendPop.value}deg` },
-      ],
-      opacity: 0.55 + 0.45 * sendPop.value,
+      transform: [{ scale: 0.1 + 0.9 * sendIn.value }],
+      opacity: sendIn.value,
+    }));
+    const micStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: 40 * sendIn.value }, { scale: 1 - 0.3 * sendIn.value }],
+      opacity: 1 - sendIn.value,
     }));
 
     // The field grows one line at a time with a spring, never in a jump.
@@ -218,57 +242,146 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       clear();
     }, [clear, conversationId, draftRef, onSend]);
 
+    const { openAttach, notYet } = useAttachSheet(conversationId);
+
+    const toggleEmoji = useCallback(() => {
+      haptic('selection');
+      setEmojiOpen((open) => {
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.EMOJI_STRIP_TOGGLED, {
+          conversation_id: conversationId,
+          open: !open,
+        });
+        return !open;
+      });
+    }, [conversationId]);
+    const insertEmoji = useCallback(
+      (emoji: string) => {
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.EMOJI_INSERTED, {
+          conversation_id: conversationId,
+          emoji,
+        });
+        replaceText(`${draftRef.current}${emoji}`, true);
+      },
+      [conversationId, draftRef, replaceText]
+    );
+
+    const pressMic = useCallback(() => {
+      haptic('medium');
+      notYet('voice_note');
+    }, [notYet]);
+
     return (
-      <View style={styles.row}>
-        <Animated.View style={[styles.inputWrapper, fieldStyle]}>
-          <TextInput
-            key={`${generation}:${editorGeneration}`}
-            onContentSizeChange={onContentSizeChange}
-            ref={inputRef}
-            defaultValue={draftRef.current}
-            onChangeText={handleChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={COLORS.gray[500]}
-            multiline
-            style={[styles.input, tall && styles.inputTall]}
-            keyboardAppearance="dark"
-            autoCapitalize="sentences"
-            maxFontSizeMultiplier={1.0}
-            textAlignVertical="center"
-            underlineColorAndroid="transparent"
-            accessibilityLabel={t('chat.inputAccessibilityLabel')}
-          />
-          {tall ? (
-            <Pressable
-              onPress={openExpanded}
-              hitSlop={8}
-              style={styles.expandButton}
-              accessibilityRole="button"
-              accessibilityLabel={t('composer.expand')}
-            >
-              <Maximize2 size={15} color={COLORS.gray[400]} strokeWidth={2.25} />
-            </Pressable>
-          ) : null}
-        </Animated.View>
-        <Animated.View style={sendStyle}>
-          <Pressable
-            onPress={handleSend}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('chat.sendAccessibilityLabel')}
-            accessibilityState={{ disabled: !hasText }}
-            style={({ pressed }) => [
-              styles.sendButton,
-              !hasText && styles.sendButtonIdle,
-              pressed && hasText && styles.sendButtonPressed,
-            ]}
+      <View style={styles.column}>
+        {emojiOpen ? (
+          <Animated.View
+            entering={FadeIn.duration(160)}
+            exiting={FadeOut.duration(120)}
+            style={styles.emojiStrip}
           >
-            <SendHorizontal
-              size={16}
-              color={hasText ? '#000' : '#888'}
-              strokeWidth={2.5}
-            />
-          </Pressable>
+            {QUICK_EMOJI.map((emoji) => (
+              <Pressable
+                key={emoji}
+                onPress={() => insertEmoji(emoji)}
+                style={styles.emojiChip}
+                accessibilityRole="button"
+                accessibilityLabel={emoji}
+              >
+                <Animated.Text style={styles.emojiGlyph}>{emoji}</Animated.Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        ) : null}
+        <Animated.View style={styles.row} layout={LinearTransition.duration(SEND_IN_MS)}>
+          <GlassSurface radius={22} style={styles.roundButton}>
+            <Pressable
+              onPress={openAttach}
+              style={styles.roundButtonInner}
+              accessibilityRole="button"
+              accessibilityLabel={t('composer.attach')}
+            >
+              <Plus size={24} color={COLORS.white} strokeWidth={2.25} />
+            </Pressable>
+          </GlassSurface>
+
+          <GlassSurface radius={24} style={styles.capsule}>
+            {preview}
+            <View style={styles.fieldRow}>
+              <Animated.View style={[styles.inputWrapper, fieldStyle]}>
+                <TextInput
+                  key={`${generation}:${localGeneration}`}
+                  onContentSizeChange={onContentSizeChange}
+                  ref={inputRef}
+                  defaultValue={draftRef.current}
+                  onChangeText={handleChangeText}
+                  placeholder={placeholder}
+                  placeholderTextColor={COLORS.gray[500]}
+                  multiline
+                  style={[styles.input, tall && styles.inputTall]}
+                  keyboardAppearance="dark"
+                  autoCapitalize="sentences"
+                  maxFontSizeMultiplier={1.0}
+                  textAlignVertical="center"
+                  underlineColorAndroid="transparent"
+                  accessibilityLabel={t('chat.inputAccessibilityLabel')}
+                />
+                {tall ? (
+                  <Pressable
+                    onPress={openExpanded}
+                    hitSlop={8}
+                    style={styles.expandButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('composer.expand')}
+                  >
+                    <Maximize2 size={15} color={COLORS.gray[400]} strokeWidth={2.25} />
+                  </Pressable>
+                ) : null}
+              </Animated.View>
+              <Pressable
+                onPress={toggleEmoji}
+                hitSlop={6}
+                style={styles.inlineButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.emoji')}
+              >
+                <Smile
+                  size={22}
+                  color={emojiOpen ? COLORS.white : COLORS.gray[400]}
+                  strokeWidth={2}
+                />
+              </Pressable>
+              {hasText ? (
+                <Animated.View style={[styles.sendSlot, sendStyle]}>
+                  <Pressable
+                    onPress={handleSend}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('chat.sendAccessibilityLabel')}
+                    style={({ pressed }) => [
+                      styles.sendButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <SendHorizontal size={17} color={COLORS.black} strokeWidth={2.5} />
+                  </Pressable>
+                </Animated.View>
+              ) : null}
+            </View>
+          </GlassSurface>
+
+          {!hasText ? (
+            <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
+              <GlassSurface radius={22} style={styles.roundButton}>
+                <Pressable
+                  onPress={pressMic}
+                  style={styles.roundButtonInner}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('composer.voiceNote')}
+                >
+                  <Mic size={22} color={COLORS.white} strokeWidth={2.25} />
+                </Pressable>
+              </GlassSurface>
+            </Animated.View>
+          ) : null}
         </Animated.View>
       </View>
     );
@@ -276,11 +389,37 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 );
 
 const styles = StyleSheet.create({
+  column: { gap: 8 },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    gap: 8,
+  },
+  roundButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  roundButtonInner: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  capsule: {
     flex: 1,
-    gap: 6,
+    minHeight: 44,
+    borderRadius: 24,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingLeft: 4,
+    paddingRight: 4,
+    paddingVertical: 4,
   },
   inputWrapper: {
     flex: 1,
@@ -289,8 +428,8 @@ const styles = StyleSheet.create({
   // Sits at the top right of the field once it has two or more lines.
   expandButton: {
     position: 'absolute',
-    top: 6,
-    right: 8,
+    top: 4,
+    right: 2,
     width: 26,
     height: 26,
     alignItems: 'center',
@@ -298,18 +437,30 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'transparent',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     // iOS multiline fields sit their text at the top of the box; with the
     // box exactly one line tall plus symmetric padding, the placeholder and
     // the first line land centred. Keep MIN_FIELD_HEIGHT in step.
-    paddingTop: 7,
-    paddingBottom: 7,
+    paddingTop: 8,
+    paddingBottom: 8,
     color: COLORS.white,
     fontFamily: 'Archivo_400Regular',
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 20,
   },
-  inputTall: { paddingRight: 34 },
+  inputTall: { paddingRight: 30 },
+  inlineButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendSlot: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sendButton: {
     width: 32,
     height: 32,
@@ -317,12 +468,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
   },
-  sendButtonIdle: {
-    backgroundColor: '#444',
+  pressed: { opacity: 0.7 },
+  emojiStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    paddingHorizontal: 4,
   },
-  sendButtonPressed: {
-    opacity: 0.7,
+  emojiChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  emojiGlyph: { fontSize: 26 },
 });

@@ -528,74 +528,79 @@ export function ChatScreen({
     });
   }, [conversationId]);
 
+  // Reply and edit previews sit inside the composer's glass capsule (Telegram).
+  const composerPreview = (
+    <>
+      {editingMessage && (
+        <View style={styles.replyPreview}>
+          <View style={[styles.replyPreviewBar, styles.editPreviewBarColor]} />
+          <View style={styles.replyPreviewContent}>
+            <View style={styles.editPreviewHeader}>
+              <Pencil size={13} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.editPreviewLabel}>
+                {t('actions.editing', { defaultValue: 'Editing' })}
+              </Text>
+            </View>
+            <Text style={styles.replyPreviewText} numberOfLines={1}>
+              {editingMessage.text}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={cancelEditing} style={styles.replyPreviewClose}>
+            <X size={18} color="#888" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      )}
+      {replyMessage && !editingMessage && (
+        <View style={styles.replyPreview}>
+          <View style={styles.replyPreviewBar} />
+          <View style={styles.replyPreviewContent}>
+            <Text style={styles.replyPreviewName}>
+              {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
+            </Text>
+            <Text style={styles.replyPreviewText} numberOfLines={1}>
+              {replyMessage.text}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setReplyMessage(null)}
+            style={styles.replyPreviewClose}
+          >
+            <X size={18} color="#888" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
+  // The toolbar has no background of its own: the wallpaper runs under it
+  // and the composer's glass floats on top (iOS 26 Messages, Telegram).
   const inputToolbar = (
     <View
-      style={[styles.inputToolbarOuter, { paddingBottom: Math.max(insets.bottom, 16) }]}
+      style={[styles.inputToolbarOuter, { paddingBottom: Math.max(insets.bottom, 12) }]}
     >
-      <View style={styles.inputToolbarCapsule}>
-        {editingMessage && (
-          <View style={styles.replyPreview}>
-            <View style={[styles.replyPreviewBar, styles.editPreviewBarColor]} />
-            <View style={styles.replyPreviewContent}>
-              <View style={styles.editPreviewHeader}>
-                <Pencil size={13} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.editPreviewLabel}>
-                  {t('actions.editing', { defaultValue: 'Editing' })}
-                </Text>
-              </View>
-              <Text style={styles.replyPreviewText} numberOfLines={1}>
-                {editingMessage.text}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={cancelEditing} style={styles.replyPreviewClose}>
-              <X size={18} color="#888" strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-        )}
-        {replyMessage && !editingMessage && (
-          <View style={styles.replyPreview}>
-            <View style={styles.replyPreviewBar} />
-            <View style={styles.replyPreviewContent}>
-              <Text style={styles.replyPreviewName}>
-                {replyMessage.user.name || t('chat.you', { defaultValue: 'You' })}
-              </Text>
-              <Text style={styles.replyPreviewText} numberOfLines={1}>
-                {replyMessage.text}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setReplyMessage(null)}
-              style={styles.replyPreviewClose}
-            >
-              <X size={18} color="#888" strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-        )}
-        <View style={styles.composerRow}>
-          <ChatComposer
-            ref={composerRef}
-            conversationId={conversationId}
-            draftRef={draftRef}
-            generation={composerGeneration}
-            focusOnGeneration={editingMessage != null}
-            placeholder={
-              editingMessage
-                ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
-                : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
-            }
-            // Hand the text to GiftedChat so it stamps user/id/createdAt and
-            // scrolls to bottom before our handleSend runs. `false` = we clear
-            // the field ourselves (GiftedChat never touches the native input).
-            // GiftedChat injects `onSend` at runtime but leaves it out of the
-            // InputToolbarProps type, hence the narrow cast with a fallback.
-            onSend={(text) => {
-              void handleSend([{ text } as IMessage]);
-              threadRef.current?.scrollToBottom(true);
-            }}
-            onTextActivity={handleTypingActivity}
-          />
-        </View>
-      </View>
+      <ChatComposer
+        ref={composerRef}
+        conversationId={conversationId}
+        draftRef={draftRef}
+        generation={composerGeneration}
+        focusOnGeneration={editingMessage != null}
+        placeholder={
+          editingMessage
+            ? t('chat.editPlaceholder', { defaultValue: 'Edit message...' })
+            : t('chat.inputPlaceholder', { defaultValue: 'Message...' })
+        }
+        // Hand the text to GiftedChat so it stamps user/id/createdAt and
+        // scrolls to bottom before our handleSend runs. `false` = we clear
+        // the field ourselves (GiftedChat never touches the native input).
+        // GiftedChat injects `onSend` at runtime but leaves it out of the
+        // InputToolbarProps type, hence the narrow cast with a fallback.
+        onSend={(text) => {
+          void handleSend([{ text } as IMessage]);
+          threadRef.current?.scrollToBottom(true);
+        }}
+        onTextActivity={handleTypingActivity}
+        preview={composerPreview}
+      />
     </View>
   );
 
@@ -876,28 +881,10 @@ const styles = StyleSheet.create({
   },
   // Input toolbar — ChatGPT-style capsule
   inputToolbarOuter: {
-    backgroundColor: COLORS.black,
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    paddingBottom: 2,
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  inputToolbarCapsule: {
-    flexDirection: 'column',
-    alignItems: 'center',
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#444',
-    borderRadius: 26,
-    paddingLeft: 4,
-    paddingRight: 8,
+    paddingHorizontal: 10,
     paddingTop: 6,
-    paddingBottom: 6,
-    minHeight: 52,
-    gap: 6,
+    paddingBottom: 2,
   },
   // Reply preview
   replyPreview: {

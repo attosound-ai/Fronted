@@ -100,6 +100,20 @@
     "expand": "Expandir editor",
     "collapse": "Fechar editor",
     "undo": "Desfazer",
-    "redo": "Refazer"
+    "redo": "Refazer",
+    "attach": "Anexar",
+    "emoji": "Emoji",
+    "voiceNote": "Mensagem de voz",
+    "attachPhoto": "Foto ou vídeo",
+    "attachCamera": "Câmera",
+    "attachFile": "Arquivo",
+    "attachLocation": "Localização",
+    "attachContact": "Contato",
+    "attachAudio": "Áudio de um projeto",
+    "comingSoonTitle": "Em breve",
+    "comingSoonBody": "Enviar isso pelo chat está em desenvolvimento. Mensagens de texto já funcionam.",
+    "mention": "Mencionar",
+    "list": "Lista",
+    "cancel": "Cancelar"
   }
 }

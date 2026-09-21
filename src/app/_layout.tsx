@@ -468,6 +468,14 @@ function RootLayout() {
                           }}
                         />
                         <Stack.Screen
+                          name="composer-expanded"
+                          options={{
+                            headerShown: false,
+                            presentation: 'modal',
+                            animation: 'slide_from_bottom',
+                          }}
+                        />
+                        <Stack.Screen
                           name="project/[id]"
                           options={{
                             headerShown: false,

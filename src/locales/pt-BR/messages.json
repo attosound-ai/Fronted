@@ -95,5 +95,11 @@
   },
   "thread": {
     "newMessages": "Novas mensagens"
+  },
+  "composer": {
+    "expand": "Expandir editor",
+    "collapse": "Fechar editor",
+    "undo": "Desfazer",
+    "redo": "Refazer"
   }
 }

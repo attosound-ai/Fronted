@@ -501,6 +501,8 @@ export const ANALYTICS_EVENTS = {
     WALLPAPER_CHANGED: 'messages_wallpaper_changed',
     LIST_SWIPE_ACTION: 'messages_list_swipe_action',
     UNREAD_DIVIDER_SHOWN: 'messages_unread_divider_shown',
+    COMPOSER_EXPANDED: 'messages_composer_expanded',
+    COMPOSER_EXPANDED_CLOSED: 'messages_composer_expanded_closed',
     CONVERSATION_PINNED: 'messages_conversation_pinned',
     CONVERSATION_MUTED: 'messages_conversation_muted',
     CONVERSATION_ARCHIVED: 'messages_conversation_archived',

@@ -32,7 +32,9 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { SendHorizontal } from 'lucide-react-native';
+import { Maximize2, SendHorizontal } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useTranslation } from 'react-i18next';
 
 import { COLORS } from '@/constants/theme';
@@ -83,6 +85,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const { t } = useTranslation('messages');
     const inputRef = useRef<TextInput>(null);
     const [hasText, setHasText] = useState(() => draftRef.current.trim().length > 0);
+    // Two or more lines: Telegram shows an expand button at the top right of
+    // the field that opens the full screen editor.
+    const [tall, setTall] = useState(false);
+    // The editor hands its text back through the store; replacing the field
+    // content deterministically means a remount (see `generation`).
+    const [editorGeneration, setEditorGeneration] = useState(0);
+    const expandResult = useComposerExpandStore((s) => s.result);
+    const consumeExpand = useComposerExpandStore((s) => s.consume);
+    useEffect(() => {
+      if (!expandResult || expandResult.conversationId !== conversationId) return;
+      consumeExpand();
+      if (expandResult.action === 'send') {
+        const content = expandResult.text.trim();
+        draftRef.current = '';
+        setHasText(false);
+        setEditorGeneration((g) => g + 1);
+        if (content) {
+          haptic('light');
+          onSend(content);
+        }
+        return;
+      }
+      draftRef.current = expandResult.text;
+      setHasText(expandResult.text.trim().length > 0);
+      onTextActivity?.(expandResult.text);
+      setEditorGeneration((g) => g + 1);
+    }, [expandResult, conversationId, consumeExpand, draftRef, onSend, onTextActivity]);
+    const openExpanded = useCallback(() => {
+      haptic('selection');
+      useComposerExpandStore.getState().open(conversationId, draftRef.current);
+      router.push('/composer-expanded');
+    }, [conversationId, draftRef]);
 
     // A remount replaces the native field: give the keyboard one frame to
     // attach to the new view before focusing it.
@@ -144,6 +178,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           MAX_FIELD_HEIGHT,
           Math.max(MIN_FIELD_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height))
         );
+        setTall(next >= MIN_FIELD_HEIGHT + 18);
         if (Math.abs(next - fieldHeight.value) < 1) return;
         fieldHeight.value =
           fieldHeight.value === 0
@@ -187,7 +222,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       <View style={styles.row}>
         <Animated.View style={[styles.inputWrapper, fieldStyle]}>
           <TextInput
-            key={generation}
+            key={`${generation}:${editorGeneration}`}
             onContentSizeChange={onContentSizeChange}
             ref={inputRef}
             defaultValue={draftRef.current}
@@ -195,7 +230,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             placeholder={placeholder}
             placeholderTextColor={COLORS.gray[500]}
             multiline
-            style={styles.input}
+            style={[styles.input, tall && styles.inputTall]}
             keyboardAppearance="dark"
             autoCapitalize="sentences"
             maxFontSizeMultiplier={1.0}
@@ -203,6 +238,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             underlineColorAndroid="transparent"
             accessibilityLabel={t('chat.inputAccessibilityLabel')}
           />
+          {tall ? (
+            <Pressable
+              onPress={openExpanded}
+              hitSlop={8}
+              style={styles.expandButton}
+              accessibilityRole="button"
+              accessibilityLabel={t('composer.expand')}
+            >
+              <Maximize2 size={15} color={COLORS.gray[400]} strokeWidth={2.25} />
+            </Pressable>
+          ) : null}
         </Animated.View>
         <Animated.View style={sendStyle}>
           <Pressable
@@ -240,6 +286,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  // Sits at the top right of the field once it has two or more lines.
+  expandButton: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   input: {
     backgroundColor: 'transparent',
     paddingHorizontal: 14,
@@ -253,6 +309,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
+  inputTall: { paddingRight: 34 },
   sendButton: {
     width: 32,
     height: 32,

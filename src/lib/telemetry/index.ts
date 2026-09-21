@@ -31,4 +31,5 @@ export {
   startAmbientTelemetry,
   stopAmbientTelemetry,
   isAmbientTelemetryActive,
+  noteScreen,
 } from './ambientTelemetry';

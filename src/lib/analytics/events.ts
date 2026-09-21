@@ -49,6 +49,23 @@ export const ANALYTICS_EVENTS = {
     // linked to the authenticated user. Should be rare; a spike means the
     // purge anchor is wrong again.
     ACCOUNT_GHOST_PURGED: 'auth_account_ghost_purged',
+    // ── Account switch funnel (Sep 8 2026 "stuck on wrong account" incident) ──
+    // First-class switch telemetry so a blocked/failed switch is answerable
+    // from PostHog, not only inferred from a Sentry unhandled rejection.
+    // ATTEMPTED fires at every entry point (gesture / bottom sheet / auto),
+    // SUCCEEDED after Phase A completes, BLOCKED when a preflight refuses it
+    // (reason: active_call), and STALE_CALL_CLEARED when the active-call guard
+    // found the JS call state was orphaned (no live native call) and cleared it
+    // so the switch could proceed.
+    ACCOUNT_SWITCH_ATTEMPTED: 'auth_account_switch_attempted',
+    ACCOUNT_SWITCH_SUCCEEDED: 'auth_account_switch_succeeded',
+    ACCOUNT_SWITCH_BLOCKED: 'auth_account_switch_blocked',
+    ACCOUNT_SWITCH_STALE_CALL_CLEARED: 'auth_account_switch_stale_call_cleared',
+    // A linked account the backend reports was missing from this device's local
+    // switcher and has now been pulled in (tokens fetched without switching).
+    // Makes a linked creator appear for a representative even when it was
+    // created outside this device's signup (server-side repair, second device).
+    LINKED_ACCOUNT_SYNCED: 'auth_linked_account_synced',
   },
 
   // ── Registration (funnel) ──────────────────────
@@ -62,6 +79,8 @@ export const ANALYTICS_EVENTS = {
     CONSENT_GIVEN: 'registration_consent_given',
     SUBSCRIPTION_SELECTED: 'registration_subscription_selected',
     PAYMENT_COMPLETED: 'registration_payment_completed',
+    BRIDGE_NUMBER_CLAIMED: 'registration_bridge_number_claimed',
+    BRIDGE_NUMBER_CLAIM_FAILED: 'registration_bridge_number_claim_failed',
     COMPLETED: 'registration_completed',
     ABANDONED: 'registration_abandoned',
   },
@@ -102,6 +121,11 @@ export const ANALYTICS_EVENTS = {
 
   // ── Feed ───────────────────────────────────────
   FEED: {
+    AUDIO_PLAY: 'feed_audio_play',
+    AUDIO_PAUSE: 'feed_audio_pause',
+    POST_PUBLISH_NAV: 'feed_post_publish_nav',
+    /** Cover art on an audio post: uploaded, failed, picked or removed. */
+    POST_COVER: 'feed_post_cover',
     VIEWED: 'feed_viewed',
     REFRESHED: 'feed_refreshed',
     POST_LIKED: 'feed_post_liked',
@@ -206,6 +230,16 @@ export const ANALYTICS_EVENTS = {
     INVITE_AUTO_SWITCH_SUCCEEDED: 'call_invite_auto_switch_succeeded',
     INVITE_AUTO_SWITCH_FAILED: 'call_invite_auto_switch_failed',
     INVITE_TARGET_NOT_LINKED: 'call_invite_target_not_linked',
+    // ── Cold-adopt account routing (Sep 8 2026 incident) ──
+    // The live onCallInvite auto-switch cannot run on a cold-launch adopted
+    // call — the invite fired into a dead process. These mirror the INVITE_*
+    // auto-switch funnel for the adoption path in adoptNativeColdCall, so a
+    // call adopted onto the WRONG linked account (rep holding a creator's call)
+    // is visible and, once fixed, routed to the owning account.
+    COLD_ADOPT_AUTO_SWITCH_STARTED: 'call_cold_adopt_auto_switch_started',
+    COLD_ADOPT_AUTO_SWITCH_SUCCEEDED: 'call_cold_adopt_auto_switch_succeeded',
+    COLD_ADOPT_AUTO_SWITCH_FAILED: 'call_cold_adopt_auto_switch_failed',
+    COLD_ADOPT_TARGET_NOT_LINKED: 'call_cold_adopt_target_not_linked',
     OUTGOING_INITIATED: 'call_outgoing_initiated',
     // Telemetry — deep diagnostics for WatchdogTermination repros (REACT-NATIVE-8).
     // TELEMETRY_TICK fires every 10 s while a call is active with a full
@@ -415,10 +449,54 @@ export const ANALYTICS_EVENTS = {
     // transient-null-entitlement bounce (store not yet hydrated → treated as free
     // → sent to feed) that the mother test hit.
     NAV_TO_RECORD: 'call_nav_to_record',
+    // ── Call playback session (Sep 15 2026) ─────────────────────────────
+    // The transport always works and decides what is heard; 📡 only gates
+    // whether the far party hears it. One owner at a time (a feed post, a chat
+    // voice note, the timeline's stems, a reel...). Every row carries the
+    // surface + source kind so "what was the rep doing" is never inferred.
+    // CLAIM: a surface took the session. outcome: ready | superseded |
+    // prepare_failed | prepare_cancelled | engine_error | not_supported |
+    // no_engine_mode, with prepare_ms / download_ms / encode_ms / render_ms /
+    // cache_hit / bytes / stems.
+    PLAYBACK_CLAIM: 'call_playback_claim',
+    // TRANSPORT: play | pause | seek | stop | release | ended | superseded |
+    // device_idle, with from_state, position_ms, transmit and native_ack_ms.
+    PLAYBACK_TRANSPORT: 'call_playback_transport',
+    // The 📡 gate toggled. was_playing tells whether the far party started or
+    // stopped hearing something at that instant; mic_muted flags the case where
+    // Twilio's own mute silences the whole uplink (the button shows "muted").
+    TRANSMIT_TOGGLED: 'call_transmit_toggled',
+    // One stem (lane) rendered offline. cause: initial | structure | overflow.
+    PLAYBACK_STEM_RENDER: 'call_playback_stem_render',
+    // The native session rescheduled itself after an engine rebuild or restart
+    // (route change, format realign, media services reset) or as a self heal.
+    // reason mirrors the native string (engine_rebuild, start_hook_render,
+    // start_hook_capture, tick_self_heal, silent_heal).
+    PLAYBACK_RESCHEDULE: 'call_playback_reschedule',
+    // The JS watchdog saw transmit ON + playing with no far party frames.
+    // class: player_stalled (session position frozen, one self heal issued) |
+    // capture_dead (position advancing but injectFramesToCapture flat).
+    TRANSMIT_SILENT_DETECTED: 'call_transmit_silent_detected',
+    // A muted video following the engine's clock drifted. Telemetry only unless
+    // the drift passed the hard resync threshold (corrected=true).
+    PLAYBACK_VIDEO_DRIFT: 'call_playback_video_drift',
+    // The per call engine mode decision (latched at connect). engine_mode true
+    // means every surface plays through the native session; false means the
+    // legacy expo path. Carries every gate so a "why not" is answerable.
+    PLAYBACK_ENGINE_MODE: 'call_playback_engine_mode',
   },
 
   // ── Messages ───────────────────────────────────
   MESSAGES: {
+    BUBBLE_GESTURE: 'messages_bubble_gesture',
+    TAPBACK_OPENED: 'messages_tapback_opened',
+    TAPBACK_PICKED: 'messages_tapback_picked',
+    TAPBACK_DISMISSED: 'messages_tapback_dismissed',
+    TIMES_REVEALED: 'messages_times_revealed',
+    JUMP_TO_LATEST: 'messages_jump_to_latest',
+    READ_RECEIPT: 'messages_read_receipt',
+    THREAD_RENDERED: 'messages_thread_rendered',
+    HEADER_PROFILE_OPENED: 'messages_header_profile_opened',
     // Conversation lifecycle
     CONVERSATIONS_VIEWED: 'messages_conversations_viewed',
     CONVERSATION_OPENED: 'messages_conversation_opened',
@@ -429,6 +507,9 @@ export const ANALYTICS_EVENTS = {
     MESSAGE_SENT: 'messages_message_sent',
     MESSAGE_SEND_FAILED: 'messages_message_send_failed',
     MESSAGE_SEND_FALLBACK_REST: 'messages_message_send_fallback_rest',
+    // Send tapped while the app saw an empty composer: the signal that the
+    // native field and JS disagree (dictation / autocorrect desync).
+    SEND_PRESSED_EMPTY: 'messages_send_pressed_empty',
     // Reply
     REPLY_SENT: 'messages_reply_sent',
     REPLY_STARTED: 'messages_reply_started',
@@ -485,6 +566,18 @@ export const ANALYTICS_EVENTS = {
     // Non-destructive per-clip effects: apply (render → upload → swap) / remove.
     // action, outcome, phase (on failure), applied[], render_ms, total_ms.
     CLIP_EFFECTS: 'project_clip_effects',
+    /**
+     * One row per PHASE of a range effect, so a failure says exactly where it
+     * died: picked, source_cached, source_downloaded, rendered, uploaded,
+     * patched, skipped, failed. Every row carries op, range, clip and timings.
+     */
+    RANGE_EFFECT: 'project_range_effect',
+    /** Phases of a studio take: armed, started, stopped, placed, discarded, failed. */
+    STUDIO_RECORDING: 'project_studio_recording',
+    /** How the editor was left: save or discard, with the clip count. */
+    EDITOR_CLOSED: 'project_editor_closed',
+    /** A track was created from a source: files, video, music library, text to speech. */
+    TRACK_SOURCE: 'project_track_source',
     AUDIO_TRANSCODE: 'project_audio_transcode',
     CREATED: 'project_created',
     OPENED: 'project_opened',
@@ -500,6 +593,10 @@ export const ANALYTICS_EVENTS = {
     // long enough to be force-killed (REACT-NATIVE-3W) with zero telemetry
     // saying why. Emitted on editor mount and stamped on clip deletion.
     TIMELINE_SCALE: 'project_timeline_scale',
+    /** Master effects committed in the editor (pitch, tempo, reverb, EQ). */
+    MASTER_EFFECTS_SET: 'project_master_effects_set',
+    /** A volume automation envelope was edited on a clip. */
+    AUTOMATION_SET: 'project_automation_set',
     // A clip was deleted in the editor. This action previously emitted NOTHING,
     // which is why the exact moment of the Aug 3 freeze had to be reconstructed
     // from $autocapture element chains instead of read off one row.
@@ -514,6 +611,18 @@ export const ANALYTICS_EVENTS = {
     // The device-side download of the exported WAV (inside onPublish). Isolated
     // from export_ms so we can attribute slowness to the WAV size vs the mix.
     EXPORT_DOWNLOAD: 'project_export_download',
+    // Mixer intent vs what the backend actually rendered. "I lowered the gain
+    // but the posted beat is still loud" (Sep 2026) had ZERO rows: lane gain
+    // lived only in the preview player and the backend export ignored it.
+    // Lane gain committed (slider release): lane_index, gain_db.
+    LANE_GAIN_SET: 'project_lane_gain_set',
+    // Per clip volume set from the clip volume modal: clip_id, volume (0..1).
+    CLIP_VOLUME_SET: 'project_clip_volume_set',
+    // Snapshot of every lane (gain_db, muted, solo, clip_count) plus clip volume
+    // stats, taken right after flushSave and right before the backend export,
+    // so a "sounds different than the preview" report can be diffed against
+    // backend_project_export_mix (same project_id) in one query.
+    EXPORT_MIX_SNAPSHOT: 'project_export_mix_snapshot',
     PLAYBACK_STARTED: 'project_playback_started',
     CLIP_SPLIT: 'project_clip_split',
     CLIP_TRIMMED: 'project_clip_trimmed',
@@ -538,6 +647,7 @@ export const ANALYTICS_EVENTS = {
 
   // ── Payments ───────────────────────────────────
   PAYMENT: {
+    PLAN_PICKED: 'payment_plan_picked',
     CHECKOUT_INITIATED: 'payment_checkout_initiated',
     PAYMENT_COMPLETED: 'payment_completed',
     PAYMENT_FAILED: 'payment_failed',
@@ -552,7 +662,18 @@ export const ANALYTICS_EVENTS = {
   // listener counts. Always-on equivalent of CALL.TELEMETRY_TICK so the next
   // crash anywhere in the app (not just on a call) has runtime context.
   RUNTIME: {
+    UI_STALL: 'runtime_ui_stall',
+    UI_STALL_RECOVERED: 'runtime_ui_stall_recovered',
+    MEMORY_SURGE: 'runtime_memory_surge',
+    // The JS launch splash (painted right after the native one) rendered:
+    // source = cached (admin logo from MMKV) | bundled, build.
+    SPLASH_SHOWN: 'runtime_splash_shown',
     TELEMETRY_TICK: 'runtime_telemetry_tick',
+    // JS thread blocked >= 2 s while in the foreground (taps queue up, the app
+    // looks frozen; Sentry app hang tracking only watches the main thread).
+    // Carries ms_since_<action> for recent blocking actions (audio_play,
+    // call_ended, ...). Sep 14 2026 freeze after a call.
+    JS_STALL: 'runtime_js_stall',
   },
 
   // ── Network ────────────────────────────────────
@@ -590,6 +711,10 @@ export const ANALYTICS_EVENTS = {
     FOLLOW: 'social_follow',
     UNFOLLOW: 'social_unfollow',
     FOLLOW_FAILED: 'social_follow_failed',
+    // One page of the followers / following list loaded: mode, target_id, page,
+    // page_size, received, server_total, total_pages, has_more. "It says 48
+    // followers but I only see 20" (Sep 2026) was the list never paginating.
+    FOLLOW_LIST_PAGE: 'social_follow_list_page',
   },
 
   // ── Data integrity (invariant violations) ─────

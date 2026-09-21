@@ -13,7 +13,19 @@
  * is registered, and stops when the last one releases.
  */
 
+import { AppState } from 'react-native';
+
 const HEARTBEAT_MS = 1000;
+/**
+ * A heartbeat this late means the JS thread was blocked long enough for the
+ * user to see a frozen app (taps queue up and flush later). The main thread is
+ * usually fine in that case, so Sentry's app hang tracking never fires.
+ */
+const STALL_THRESHOLD_MS = 2000;
+
+type StallListener = (stallMs: number) => void;
+const stallListeners = new Set<StallListener>();
+let lastAppStateChangeAt = 0;
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let lastTick = 0;
@@ -38,7 +50,24 @@ function actuallyStart(): void {
     if (drift > peakLagMs) peakLagMs = drift;
     lagSum += drift;
     ticks += 1;
+    // Only a stall if the app stayed in the foreground the whole interval:
+    // a background suspension also delays the heartbeat, but that is iOS
+    // pausing us, not the app freezing.
+    const spannedAppStateChange = lastAppStateChangeAt >= lastTick;
     lastTick = now;
+    if (
+      drift >= STALL_THRESHOLD_MS &&
+      !spannedAppStateChange &&
+      AppState.currentState === 'active'
+    ) {
+      stallListeners.forEach((listener) => {
+        try {
+          listener(drift);
+        } catch {
+          // telemetry must never throw into the heartbeat
+        }
+      });
+    }
   }, HEARTBEAT_MS);
 }
 
@@ -106,4 +135,17 @@ export function consumeJsLagStats(): {
   lagSum = 0;
   ticks = 0;
   return out;
+}
+
+/** Call on every AppState change so suspensions are not reported as stalls. */
+export function noteAppStateChange(): void {
+  lastAppStateChangeAt = Date.now();
+}
+
+/** Subscribe to JS thread stalls (>= 2 s while in the foreground). */
+export function onJsStall(listener: StallListener): () => void {
+  stallListeners.add(listener);
+  return () => {
+    stallListeners.delete(listener);
+  };
 }

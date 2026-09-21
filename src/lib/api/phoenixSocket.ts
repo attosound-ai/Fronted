@@ -5,6 +5,26 @@ import { authStorage } from '@/lib/auth/storage';
 
 type MessageHandler = (payload: Record<string, unknown>) => void;
 
+interface ChatChannelHandlers {
+  onMessage?: MessageHandler;
+  onTyping?: MessageHandler;
+  onMessagesRead?: MessageHandler;
+  onMessageHistory?: MessageHandler;
+  onReactionAdded?: MessageHandler;
+  onReactionRemoved?: MessageHandler;
+  onMessageEdited?: MessageHandler;
+  onMessageDeleted?: MessageHandler;
+}
+
+interface UserChannelHandlers {
+  onConversationUpdated?: MessageHandler;
+  onNewNotification?: MessageHandler;
+}
+
+interface PostChannelHandlers {
+  onInteractionUpdate?: MessageHandler;
+}
+
 /**
  * Decode the `exp` (Unix seconds) claim from an HS256 JWT without verifying
  * the signature — the signature is irrelevant for "is this token close to
@@ -62,15 +82,37 @@ async function ensureFreshToken(): Promise<string | null> {
   return token;
 }
 
+function track(event: string, props: Record<string, unknown>): void {
+  // Lazy import: the analytics module pulls stores that import this file.
+  void import('@/lib/analytics')
+    .then(({ analytics }) => analytics.capture(event, props))
+    .catch(() => {});
+}
+
 /**
  * Singleton manager for the Phoenix WebSocket connection.
  * Handles connect/disconnect, channel join/leave, and auto-reconnect.
+ *
+ * Channel registry: every channel the app asks for (chat, user, post) is
+ * remembered with its handlers, independently of the Socket object that
+ * currently carries it. When the socket is REPLACED (token refresh, auth
+ * error) the old Channel objects die with it; a fresh socket re-creates every
+ * registered channel on open. Before this, an open ChatScreen silently lost
+ * realtime after a token refresh: `pushMessage` kept using a channel bound to
+ * the dead socket (timeouts → REST fallback) and incoming messages never
+ * arrived until the screen remounted (`messages_channel_join_failed`).
  */
 class PhoenixSocketManager {
   private socket: Socket | null = null;
+  private connectPromise: Promise<void> | null = null;
   private readonly channels = new Map<string, Channel>();
+  private readonly chatChannelSpecs = new Map<string, ChatChannelHandlers>();
+  private readonly postChannelSpecs = new Map<string, PostChannelHandlers>();
   private userChannel: Channel | null = null;
+  private userChannelSpec: { userId: string; handlers: UserChannelHandlers } | null =
+    null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasConnectedOnce = false;
   onConnectionChange?: (connected: boolean) => void;
 
   /** Build the WebSocket URL from the REST API base URL. */
@@ -88,29 +130,41 @@ class PhoenixSocketManager {
    *  (A previous version sent the user id as `token`, which chat-service
    *  rejected as `:invalid_token`, killing realtime delivery entirely.)
    */
-  async connect(): Promise<void> {
-    if (this.socket?.isConnected()) return;
+  connect(): Promise<void> {
+    if (this.socket?.isConnected()) return Promise.resolve();
+    if (this.connectPromise) return this.connectPromise;
 
+    this.connectPromise = this.openSocket().finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
+  }
+
+  private async openSocket(): Promise<void> {
     const token = await ensureFreshToken();
     if (!token) return;
 
     return new Promise<void>((resolve) => {
-      this.socket = new Socket(this.getSocketUrl(), {
+      const socket = new Socket(this.getSocketUrl(), {
         params: { token },
         reconnectAfterMs: (tries: number) => Math.min(1000 * 2 ** tries, 30_000),
         heartbeatIntervalMs: 30_000,
       });
+      this.socket = socket;
 
-      this.socket.onOpen(() => {
+      socket.onOpen(() => {
         resolve();
+        const rejoined = this.rejoinRegisteredChannels(socket);
+        track('messages_websocket_connected', {
+          reconnect: this.hasConnectedOnce,
+          channels_rejoined: rejoined,
+        });
+        this.hasConnectedOnce = true;
         this.onConnectionChange?.(true);
-        // Re-join user channel after auto-reconnect
-        if (this.userChannel) {
-          this.userChannel.rejoinUntilConnected();
-        }
       });
 
-      this.socket.onClose(() => {
+      socket.onClose(() => {
+        track('messages_websocket_disconnected', { replaced: this.socket !== socket });
         this.onConnectionChange?.(false);
       });
 
@@ -119,19 +173,59 @@ class PhoenixSocketManager {
       // attempt uses a valid JWT — otherwise phoenix would back-off-retry
       // with the stale token forever. Non-auth socket errors fall through
       // to phoenix's built-in reconnect logic.
-      this.socket.onError((err: unknown) => {
-        const msg = typeof err === 'string' ? err : (err as { message?: string })?.message;
+      socket.onError((err: unknown) => {
+        const msg =
+          typeof err === 'string' ? err : (err as { message?: string })?.message;
         if (msg && /invalid_token|unauthor/i.test(msg)) {
           void this.refreshAndReconnect();
         }
       });
 
-      this.socket.connect();
+      socket.connect();
       this.scheduleProactiveRefresh(token);
 
       // Fallback: resolve after 3s so the app isn't blocked if the server is slow
       setTimeout(resolve, 3_000);
     });
+  }
+
+  /**
+   * Re-create every registered channel on `socket`. Channels that already
+   * live on this very socket are left alone: phoenix rejoins those itself
+   * after its own transport level reconnects.
+   */
+  private rejoinRegisteredChannels(socket: Socket): number {
+    if (this.socket !== socket) return 0;
+    let rejoined = 0;
+
+    this.chatChannelSpecs.forEach((handlers, conversationId) => {
+      const existing = this.channels.get(conversationId);
+      if (existing && existing.socket === socket) return;
+      this.createChatChannel(socket, conversationId, handlers);
+      rejoined += 1;
+    });
+
+    this.postChannelSpecs.forEach((handlers, postId) => {
+      const topic = `post:${postId}`;
+      const existing = this.channels.get(topic);
+      if (existing && existing.socket === socket) return;
+      this.createPostChannel(socket, postId, handlers);
+      rejoined += 1;
+    });
+
+    if (this.userChannelSpec) {
+      const existing = this.userChannel;
+      if (!existing || existing.socket !== socket) {
+        this.createUserChannel(
+          socket,
+          this.userChannelSpec.userId,
+          this.userChannelSpec.handlers
+        );
+        rejoined += 1;
+      }
+    }
+
+    return rejoined;
   }
 
   /**
@@ -154,11 +248,17 @@ class PhoenixSocketManager {
 
   /**
    * Tear down the current socket and reconnect — `connect()` will refresh
-   * the access token first. Channels rejoin automatically via `onOpen`.
+   * the access token first. Registered channels are re-created on the new
+   * socket from `rejoinRegisteredChannels`.
    */
   private async refreshAndReconnect(): Promise<void> {
-    this.socket?.disconnect();
+    if (this.connectPromise) {
+      await this.connectPromise;
+      return;
+    }
+    const old = this.socket;
     this.socket = null;
+    old?.disconnect();
     await this.connect();
   }
 
@@ -171,30 +271,19 @@ class PhoenixSocketManager {
     this.leaveUserChannel();
     this.channels.forEach((ch) => ch.leave());
     this.channels.clear();
-    this.socket?.disconnect();
+    this.chatChannelSpecs.clear();
+    this.postChannelSpecs.clear();
+    const socket = this.socket;
     this.socket = null;
+    socket?.disconnect();
   }
 
-  /** Join a chat channel for a conversation. */
-  joinChannel(
+  private createChatChannel(
+    socket: Socket,
     conversationId: string,
-    handlers: {
-      onMessage?: MessageHandler;
-      onTyping?: MessageHandler;
-      onMessagesRead?: MessageHandler;
-      onMessageHistory?: MessageHandler;
-      onReactionAdded?: MessageHandler;
-      onReactionRemoved?: MessageHandler;
-      onMessageEdited?: MessageHandler;
-      onMessageDeleted?: MessageHandler;
-    } = {}
-  ): Channel | null {
-    if (!this.socket) return null;
-
-    const existing = this.channels.get(conversationId);
-    if (existing?.state === 'joined') return existing;
-
-    const channel = this.socket.channel(`chat:${conversationId}`, {});
+    handlers: ChatChannelHandlers
+  ): Channel {
+    const channel = socket.channel(`chat:${conversationId}`, {});
 
     if (handlers.onMessage) channel.on('new_message', handlers.onMessage);
     if (handlers.onTyping) channel.on('typing', handlers.onTyping);
@@ -221,8 +310,27 @@ class PhoenixSocketManager {
     return channel;
   }
 
-  /** Leave a chat channel. */
+  /**
+   * Join a chat channel for a conversation. The subscription is remembered:
+   * if the socket is not up yet (or gets replaced later) the channel is
+   * created as soon as a socket opens. Returns null while there is no socket.
+   */
+  joinChannel(
+    conversationId: string,
+    handlers: ChatChannelHandlers = {}
+  ): Channel | null {
+    this.chatChannelSpecs.set(conversationId, handlers);
+    if (!this.socket) return null;
+
+    const existing = this.channels.get(conversationId);
+    if (existing?.state === 'joined' && existing.socket === this.socket) return existing;
+
+    return this.createChatChannel(this.socket, conversationId, handlers);
+  }
+
+  /** Leave a chat channel and forget its subscription. */
   leaveChannel(conversationId: string): void {
+    this.chatChannelSpecs.delete(conversationId);
     const channel = this.channels.get(conversationId);
     if (channel) {
       channel.leave();
@@ -239,8 +347,10 @@ class PhoenixSocketManager {
   ): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const channel = this.channels.get(conversationId);
-      if (!channel) {
-        reject(new Error('Channel not joined'));
+      if (!channel || !this.socket?.isConnected()) {
+        // Fail fast so the caller falls back to REST right away instead of
+        // waiting for a push timeout on a dead transport.
+        reject(new Error(channel ? 'Socket not connected' : 'Channel not joined'));
         return;
       }
 
@@ -308,8 +418,8 @@ class PhoenixSocketManager {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const channel = this.channels.get(conversationId);
-      if (!channel) {
-        reject(new Error('Channel not joined'));
+      if (!channel || !this.socket?.isConnected()) {
+        reject(new Error(channel ? 'Socket not connected' : 'Channel not joined'));
         return;
       }
       channel
@@ -336,18 +446,12 @@ class PhoenixSocketManager {
     tryPush(6); // 6 attempts × 500ms = 3s max wait
   }
 
-  /** Join the user-level channel for conversation list updates. */
-  joinUserChannel(
+  private createUserChannel(
+    socket: Socket,
     userId: string,
-    handlers: {
-      onConversationUpdated?: MessageHandler;
-      onNewNotification?: MessageHandler;
-    } = {}
-  ): Channel | null {
-    if (!this.socket) return null;
-    if (this.userChannel?.state === 'joined') return this.userChannel;
-
-    const channel = this.socket.channel(`user:${userId}`, {});
+    handlers: UserChannelHandlers
+  ): Channel {
+    const channel = socket.channel(`user:${userId}`, {});
 
     if (handlers.onConversationUpdated) {
       channel.on('conversation_updated', handlers.onConversationUpdated);
@@ -369,26 +473,32 @@ class PhoenixSocketManager {
     return channel;
   }
 
+  /** Join the user-level channel for conversation list updates. */
+  joinUserChannel(userId: string, handlers: UserChannelHandlers = {}): Channel | null {
+    this.userChannelSpec = { userId, handlers };
+    if (!this.socket) return null;
+    if (this.userChannel?.state === 'joined' && this.userChannel.socket === this.socket) {
+      return this.userChannel;
+    }
+    return this.createUserChannel(this.socket, userId, handlers);
+  }
+
   /** Leave the user-level channel. */
   leaveUserChannel(): void {
+    this.userChannelSpec = null;
     if (this.userChannel) {
       this.userChannel.leave();
       this.userChannel = null;
     }
   }
 
-  /** Join a post channel for real-time interaction updates. */
-  joinPostChannel(
+  private createPostChannel(
+    socket: Socket,
     postId: string,
-    handlers: { onInteractionUpdate?: MessageHandler } = {}
-  ): Channel | null {
-    if (!this.socket) return null;
-
+    handlers: PostChannelHandlers
+  ): Channel {
     const topic = `post:${postId}`;
-    const existing = this.channels.get(topic);
-    if (existing?.state === 'joined') return existing;
-
-    const channel = this.socket.channel(topic, {});
+    const channel = socket.channel(topic, {});
 
     if (handlers.onInteractionUpdate) {
       channel.on('interaction_update', handlers.onInteractionUpdate);
@@ -407,8 +517,21 @@ class PhoenixSocketManager {
     return channel;
   }
 
+  /** Join a post channel for real-time interaction updates. */
+  joinPostChannel(postId: string, handlers: PostChannelHandlers = {}): Channel | null {
+    this.postChannelSpecs.set(postId, handlers);
+    if (!this.socket) return null;
+
+    const topic = `post:${postId}`;
+    const existing = this.channels.get(topic);
+    if (existing?.state === 'joined' && existing.socket === this.socket) return existing;
+
+    return this.createPostChannel(this.socket, postId, handlers);
+  }
+
   /** Leave a post channel. */
   leavePostChannel(postId: string): void {
+    this.postChannelSpecs.delete(postId);
     this.leaveChannel(`post:${postId}`);
   }
 

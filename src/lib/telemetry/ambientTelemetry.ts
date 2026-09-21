@@ -27,14 +27,41 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { isCallTelemetryActive } from './callTelemetry';
 import { getCallAudioState, getDeviceSnapshot } from './deviceSnapshot';
-import { acquireJsLagMonitor, releaseJsLagMonitor } from './jsLag';
+import { recentActionMarks, markAction } from './actionMarks';
+import { memorySurgeMB, resetMemorySurge } from './memorySurge';
+import {
+  noteRenderAppStateChange,
+  onRenderRecovered,
+  onRenderStall,
+  renderFrameCount,
+  startRenderStallMonitor,
+  stopRenderStallMonitor,
+} from './uiStall';
+import {
+  acquireJsLagMonitor,
+  getJsLagStats,
+  noteAppStateChange,
+  onJsStall,
+  releaseJsLagMonitor,
+} from './jsLag';
+import { useCallStore } from '@/stores/callStore';
 
 const TICK_MS = 30_000;
 
 let tickInterval: ReturnType<typeof setInterval> | null = null;
 let appStateSub: { remove(): void } | null = null;
+let stallUnsub: (() => void) | null = null;
+let callStoreUnsub: (() => void) | null = null;
+let renderStallUnsub: (() => void) | null = null;
+let renderRecoverUnsub: (() => void) | null = null;
 let started = false;
 let startedAt = 0;
+
+/** Route the app is on, without importing the router into a telemetry module. */
+let currentScreen: string | null = null;
+export function noteScreen(pathname: string): void {
+  currentScreen = pathname;
+}
 
 async function emitAmbientTick(reason: string): Promise<void> {
   // Don't double-emit while a call is active — callTelemetry covers that window.
@@ -43,9 +70,27 @@ async function emitAmbientTick(reason: string): Promise<void> {
   if (reason === 'tick' && AppState.currentState !== 'active') return;
 
   const snap = await getDeviceSnapshot();
+  // Only steady 30 s ticks are compared. Launch and foreground transitions
+  // grow memory legitimately (bundle, feed, images), so they just reset the
+  // baseline; so does the first minute of a session.
+  const uptimeSec = startedAt ? (Date.now() - startedAt) / 1000 : 0;
+  const steady = reason === 'tick' && uptimeSec >= 60;
+  if (!steady) resetMemorySurge();
+  const surge = steady ? memorySurgeMB((snap as { memUsedMB?: number }).memUsedMB) : null;
+  if (surge !== null) {
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.MEMORY_SURGE, {
+      growth_mb: surge,
+      mem_used_mb: (snap as { memUsedMB?: number }).memUsedMB ?? null,
+      window_sec: TICK_MS / 1000,
+      screen: currentScreen,
+      render_frames: renderFrameCount(),
+      ...recentActionMarks(),
+    });
+  }
   const payload = {
     ...snap,
     reason,
+    renderFrames: renderFrameCount(),
     sessionUptimeSec: startedAt
       ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
       : 0,
@@ -94,8 +139,62 @@ export function startAmbientTelemetry(): void {
     void emitAmbientTick('tick');
   }, TICK_MS);
 
+  startRenderStallMonitor();
+  renderStallUnsub = onRenderStall((stall) => {
+    const call = useCallStore.getState().activeCall;
+    const lag = getJsLagStats();
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.UI_STALL, {
+      gap_ms: stall.gapMs,
+      first_report: stall.first,
+      render_frames: stall.frames,
+      // A render stall with a healthy JS thread points at the UI thread,
+      // mounting, or a native transition that never finished.
+      js_lag_ms: lag.lastLagMs,
+      js_lag_peak_ms: lag.peakLagMs,
+      screen: currentScreen,
+      in_call: call != null,
+      ...recentActionMarks(),
+    });
+    Sentry.captureMessage(
+      `render stalled ${stall.gapMs} ms on ${currentScreen ?? 'unknown'}`,
+      {
+        level: 'warning',
+        tags: { stall_kind: 'render', screen: currentScreen ?? 'unknown' },
+      }
+    );
+  });
+  renderRecoverUnsub = onRenderRecovered((totalMs) => {
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.UI_STALL_RECOVERED, {
+      total_ms: totalMs,
+      screen: currentScreen,
+    });
+  });
+
   appStateSub = AppState.addEventListener('change', (s: AppStateStatus) => {
+    noteAppStateChange();
+    noteRenderAppStateChange();
     void emitAmbientTick(`app_state_${s}`);
+  });
+
+  // Blocked JS thread: report it the moment it recovers, with the recent
+  // actions that are known to do blocking native work.
+  stallUnsub = onJsStall((stallMs) => {
+    const call = useCallStore.getState().activeCall;
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.JS_STALL, {
+      stall_ms: stallMs,
+      in_call: call != null,
+      call_state: call?.state ?? null,
+      ...recentActionMarks(),
+    });
+    Sentry.addBreadcrumb({
+      category: 'runtime.js_stall',
+      level: 'warning',
+      message: `js thread blocked ${stallMs} ms`,
+    });
+  });
+
+  callStoreUnsub = useCallStore.subscribe((state, prev) => {
+    if (prev.activeCall && !state.activeCall) markAction('call_ended');
   });
 }
 
@@ -111,6 +210,15 @@ export function stopAmbientTelemetry(): void {
     appStateSub.remove();
     appStateSub = null;
   }
+  stallUnsub?.();
+  stallUnsub = null;
+  renderStallUnsub?.();
+  renderStallUnsub = null;
+  renderRecoverUnsub?.();
+  renderRecoverUnsub = null;
+  stopRenderStallMonitor();
+  callStoreUnsub?.();
+  callStoreUnsub = null;
   releaseJsLagMonitor();
   startedAt = 0;
 }

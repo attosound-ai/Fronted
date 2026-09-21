@@ -115,6 +115,11 @@ export interface NativeCallAudioState {
   coldEnginePreinstalledAt?: number;
   coldEngineAlreadyInstalledAt?: number;
   coldEnginePreinstallFailedAt?: number;
+  /** Sep 13 2026: an already installed device had its engines torn down at
+   *  push so the call rebuilds them fresh (the fix for silent injection on
+   *  reused engines). Absent when the reset selector was unavailable. */
+  coldEngineResetAt?: number;
+  coldEngineResetUnavailableAt?: number;
   /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.

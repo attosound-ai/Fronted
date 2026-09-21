@@ -68,4 +68,14 @@ export const QUERY_KEYS = {
     CATALOG: ['app-icons', 'catalog'] as const,
     MY: ['app-icons', 'mine'] as const,
   },
+
+  // Main header logo (dynamic, admin-settable from atto-web)
+  APP_LOGO: {
+    CURRENT: ['app-logo', 'current'] as const,
+  },
+
+  // Whether any feature still needs a paid plan (admin dashboard decides)
+  PAYWALL: {
+    CONFIG: ['paywall', 'config'] as const,
+  },
 } as const;

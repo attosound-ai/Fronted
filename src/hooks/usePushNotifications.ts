@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useAccountStore } from '@/stores/accountStore';
 import {
   registerForPushNotifications,
-  sendTokenToBackendForAccount,
+  registerPushForAccount,
   handleNotificationResponse,
 } from '@/lib/pushNotifications';
 
@@ -46,9 +46,11 @@ export function usePushNotifications() {
       // `(user_id, token)` row exists in `push_tokens`. Per-account
       // failures are non-fatal: one revoked access token can't sink the
       // others.
+      const activeId = useAccountStore.getState().activeAccountId;
       for (const account of accounts) {
-        sendTokenToBackendForAccount(expoToken, account.tokens.accessToken).catch((err) =>
-          console.warn(`[push] register failed for user=${account.user.id}:`, err)
+        registerPushForAccount(expoToken, account, account.user.id === activeId).catch(
+          (err) =>
+            console.warn(`[push] register failed for user=${account.user.id}:`, err)
         );
       }
     });

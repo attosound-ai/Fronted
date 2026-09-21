@@ -154,6 +154,13 @@ const PUBLIC_ROUTES = [
   '/auth/reset-password',
   // Signup entrypoints — session ID + OTP code are the credentials, no token yet.
   '/signup/sessions',
+  // Read only lookups the signup wizard makes before any token exists.
+  '/auth/check-email',
+  '/auth/check-username',
+  '/users/inmates/lookup',
+  // Plan catalog and paywall rule are public.
+  '/payments/subscriptions/plans',
+  '/payments/subscriptions/paywall',
 ];
 
 // Signup routes that require the signup_pending scoped token. Everything else

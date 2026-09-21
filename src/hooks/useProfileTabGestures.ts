@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { useAccountStore } from '@/stores/accountStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useAccountSwitchPromptStore } from '@/stores/accountSwitchPromptStore';
 import { haptic } from '@/lib/haptics/hapticService';
 
 /**
@@ -35,14 +36,30 @@ export function useProfileTabGestures(onSingleTap: () => void) {
     // Double-tap: switch to the other account
     if (delta < 400 && accounts.length > 1 && !switchingRef.current) {
       const targetId =
-        previousAccountId ?? accounts.find((a) => a.user.id !== effectiveActiveId)?.user.id;
+        previousAccountId ??
+        accounts.find((a) => a.user.id !== effectiveActiveId)?.user.id;
 
       if (targetId) {
         switchingRef.current = true;
         haptic('light');
-        switchToAccount(targetId).finally(() => {
-          switchingRef.current = false;
-        });
+        switchToAccount(targetId)
+          .catch((err: unknown) => {
+            // NEVER fail silently here. Before, this path only had `.finally()`,
+            // so a switch blocked by an active call did nothing at all — no
+            // feedback, no way out (Sep 8 2026 "stuck on wrong account"). Now a
+            // blocked switch opens the actionable prompt (end call & switch, or
+            // stay). Other errors self-rollback in switchToAccount.
+            if ((err as { code?: string })?.code === 'CANNOT_SWITCH_DURING_ACTIVE_CALL') {
+              const target = accounts.find((a) => Number(a.user.id) === Number(targetId));
+              useAccountSwitchPromptStore.getState().request({
+                targetUserId: targetId,
+                targetUsername: target?.user.username ?? '',
+              });
+            }
+          })
+          .finally(() => {
+            switchingRef.current = false;
+          });
         return;
       }
     }

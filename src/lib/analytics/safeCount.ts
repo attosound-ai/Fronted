@@ -1,4 +1,7 @@
-import { analytics, ANALYTICS_EVENTS } from './index';
+// Import the modules directly, not the barrel: the barrel re exports this file,
+// and going through it was a require cycle warning on every launch.
+import { analytics } from './analyticsService';
+import { ANALYTICS_EVENTS } from './events';
 
 /**
  * Returns the requested next value clamped to >= 0. If the raw value would

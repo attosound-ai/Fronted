@@ -6,11 +6,15 @@
  * (e.g., running in Expo Go without prebuild).
  */
 
-import { MMKV } from 'react-native-mmkv';
+import { createMMKV, type MMKV } from 'react-native-mmkv';
 
+// react-native-mmkv@4 ships a factory (`createMMKV`); the `MMKV` export is a
+// type only alias and calling `new` on it throws. It used to, silently: every
+// value written here lived in the memory map below and was lost on the next
+// cold start, which is how the editor's tips kept coming back (Sep 19 2026).
 let storage: MMKV | null = null;
 try {
-  storage = new MMKV({ id: 'atto-app-storage' });
+  storage = createMMKV({ id: 'atto-app-storage' });
 } catch {
   // Native module not available — fallback below
 }
@@ -85,9 +89,10 @@ export const mmkvStorage = {
     memoryStorage.set(key, json);
   },
 
+  /** v4 renamed the native method to `remove`; the wrapper keeps `delete`. */
   delete(key: string): void {
     if (useNative) {
-      storage!.delete(key);
+      storage!.remove(key);
       return;
     }
     memoryStorage.delete(key);

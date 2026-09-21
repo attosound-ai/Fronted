@@ -25,7 +25,7 @@ export const queryPersister = createSyncStoragePersister({
     ? {
         getItem: (key: string) => mmkvInstance!.getString(key) ?? null,
         setItem: (key: string, value: string) => mmkvInstance!.set(key, value),
-        removeItem: (key: string) => mmkvInstance!.delete(key),
+        removeItem: (key: string) => mmkvInstance!.remove(key),
       }
     : noopStorage,
 });

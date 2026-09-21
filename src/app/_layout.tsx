@@ -38,16 +38,18 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
+import { AppSplash } from '@/components/AppSplash';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
-import { startAmbientTelemetry } from '@/lib/telemetry';
+import { noteScreen, startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { DtmfKeypadHost } from '@/components/call/DtmfKeypadHost';
 import { AudioRoutePickerHost } from '@/components/call/AudioRoutePickerHost';
 import { CallAudioInjectionHost } from '@/components/call/CallAudioInjectionHost';
+import { CallPlaybackHost } from '@/components/call/CallPlaybackHost';
 import { MixerHost } from '@/components/call/MixerHost';
 import { AudioProblemHost } from '@/components/call/AudioProblemHost';
 import {
@@ -56,6 +58,8 @@ import {
   msSinceBackground,
 } from '@/lib/telemetry/resumeProbe';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
+import { AccountSwitchBlockedSheet } from '@/components/ui/AccountSwitchBlockedSheet';
+import { ActiveCallIndicator } from '@/components/call/ActiveCallIndicator';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
 import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
 
@@ -185,6 +189,7 @@ function ScreenTracker() {
     if (pathname === prevPathRef.current) return;
     const from = prevPathRef.current;
     prevPathRef.current = pathname;
+    noteScreen(pathname);
     posthog.screen(pathname, { route: pathname });
     // Navigation breadcrumb so every Sentry event (incl. native crashes) shows
     // exactly where the user navigated / which tabs they hit before it.
@@ -218,6 +223,8 @@ function RootLayout() {
     Archivo_600SemiBold,
     Archivo_700Bold,
   });
+  // JS launch splash (admin logo) shown the moment the native splash hides.
+  const [splashDone, setSplashDone] = useState(false);
   useMountEffect(() => {
     initialize();
   });
@@ -345,12 +352,19 @@ function RootLayout() {
               <KeyboardProvider>
                 <SafeAreaProvider>
                   <StatusBar style="light" />
+                  {/* Mounted in the same commit that hides the native splash
+                      (fontsLoaded), so the wordmark never disappears between
+                      the two. zIndex keeps it above the app tree below. */}
+                  {fontsLoaded && !splashDone ? (
+                    <AppSplash onDone={() => setSplashDone(true)} />
+                  ) : null}
                   {!fontsLoaded ? null : (
                     <UpdateRequiredGate key={deepResumeKey}>
                       <InCallTopBar />
                       <DtmfKeypadHost />
                       <AudioRoutePickerHost />
                       <CallAudioInjectionHost />
+                      <CallPlaybackHost />
                       <MixerHost />
                       <AudioProblemHost />
                       <Stack
@@ -422,6 +436,20 @@ function RootLayout() {
                             presentation: 'fullScreenModal',
                             animation: 'slide_from_bottom',
                             gestureEnabled: false,
+                          }}
+                        />
+                        <Stack.Screen
+                          name="call-keypad"
+                          options={{
+                            // The keypad panel animates itself; the route
+                            // only has to appear instantly and see through.
+                            headerShown: false,
+                            presentation: 'transparentModal',
+                            animation: 'none',
+                            gestureEnabled: false,
+                            // The stack paints every screen black by default;
+                            // this one must show the call screen through.
+                            contentStyle: { backgroundColor: 'transparent' },
                           }}
                         />
                         <Stack.Screen
@@ -526,7 +554,9 @@ function RootLayout() {
                         <Stack.Screen name="+not-found" />
                       </Stack>
                       <CallBanner />
+                      <ActiveCallIndicator />
                       <AccountSwitchOverlay />
+                      <AccountSwitchBlockedSheet />
                     </UpdateRequiredGate>
                   )}
                 </SafeAreaProvider>

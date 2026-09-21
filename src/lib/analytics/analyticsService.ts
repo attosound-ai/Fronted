@@ -74,6 +74,18 @@ class AnalyticsService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   capture(event: string, properties?: Record<string, any>) {
+    // In a dev build every captured event is also printed, so the same
+    // telemetry that lands in PostHog is readable live in the Metro log while
+    // driving the app from a laptop.
+    if (__DEV__) {
+      try {
+        // eslint-disable-next-line no-console
+        console.log(`[tele] ${event}`, JSON.stringify(properties ?? {}));
+      } catch {
+        // eslint-disable-next-line no-console
+        console.log(`[tele] ${event}`);
+      }
+    }
     this.posthog?.capture(event, properties);
   }
 

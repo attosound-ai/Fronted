@@ -92,6 +92,11 @@ export const API_ENDPOINTS = {
     MY: '/users/me/app-icon',
   },
 
+  APP_LOGO: {
+    // Public: the current main header logo, admin-settable from atto-web.
+    CURRENT: '/content/app-logo',
+  },
+
   NOTIFICATIONS: {
     LIST: '/notifications',
     MARK_READ: (id: string) => `/notifications/${id}/read`,
@@ -118,7 +123,10 @@ export const API_ENDPOINTS = {
     CHECKOUT: '/payments/checkout',
     CONFIRM: '/payments/confirm',
     BRIDGE_NUMBER: '/payments/bridge-number',
+    BRIDGE_NUMBER_CLAIM: '/payments/bridge-number/claim',
+    SELECT_PLAN: '/payments/subscriptions/me/select-plan',
     PLANS: '/payments/subscriptions/plans',
+    PAYWALL: '/payments/subscriptions/paywall',
     ENTITLEMENTS: '/payments/subscriptions/me/entitlements',
     UPGRADE: '/payments/subscriptions/me/upgrade',
     CHANGE_PLAN_PREVIEW: '/payments/subscriptions/me/change-plan/preview',
@@ -153,5 +161,6 @@ export const API_ENDPOINTS = {
     EXPORT: (id: string) => `/telephony/projects/${id}/export`,
     WAVEFORM: (segmentId: string) => `/telephony/segments/${segmentId}/waveform`,
     UPLOAD_AUDIO: (id: string) => `/telephony/projects/${id}/upload-audio`,
+    COVER: (id: string) => `/telephony/projects/${id}/cover`,
   },
 } as const;

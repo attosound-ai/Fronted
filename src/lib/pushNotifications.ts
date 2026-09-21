@@ -91,12 +91,69 @@ export async function sendTokenToBackendForAccount(
   expoToken: string,
   accessToken: string
 ): Promise<void> {
+  const res = await postPushToken(expoToken, accessToken);
+  if (!res.ok) {
+    throw new Error(`push token registration failed: HTTP ${res.status}`);
+  }
+}
+
+/**
+ * Register the device for one linked account, refreshing that account's
+ * tokens when they have gone stale.
+ *
+ * The stored access token of a linked account is only rotated when the user
+ * switches to it, so on a cold start it is usually expired and the bare POST
+ * answered 401 on every launch (the "[push] register failed" warning). The
+ * ACTIVE account goes through apiClient, whose interceptor owns that
+ * session's refresh; any other account is refreshed here with its own
+ * refresh token and the new pair is persisted, since nobody else holds it.
+ */
+export async function registerPushForAccount(
+  expoToken: string,
+  account: {
+    user: { id: number };
+    tokens: { accessToken: string; refreshToken: string };
+  },
+  isActive: boolean
+): Promise<void> {
+  const deviceId = Constants.deviceName || 'unknown';
+  const platform = Platform.OS;
+
+  if (isActive) {
+    await apiClient.post(API_ENDPOINTS.USERS.PUSH_TOKEN, {
+      token: expoToken,
+      deviceId,
+      platform,
+    });
+    return;
+  }
+
+  let res = await postPushToken(expoToken, account.tokens.accessToken);
+  if (res.status === 401) {
+    const { authService } = await import('@/lib/api/authService');
+    const { setAccountTokens } = await import('@/lib/auth/storage');
+    const { useAccountStore } = await import('@/stores/accountStore');
+    const fresh = await authService.refreshToken(account.tokens.refreshToken);
+    await setAccountTokens(account.user.id, fresh);
+    useAccountStore.setState((s) => ({
+      accounts: s.accounts.map((a) =>
+        a.user.id === account.user.id ? { ...a, tokens: fresh } : a
+      ),
+    }));
+    res = await postPushToken(expoToken, fresh.accessToken);
+  }
+  if (!res.ok) {
+    throw new Error(`push token registration failed: HTTP ${res.status}`);
+  }
+}
+
+async function postPushToken(expoToken: string, accessToken: string): Promise<Response> {
   const deviceId = Constants.deviceName || 'unknown';
   const platform = Platform.OS;
   const base = API_CONFIG.BASE_URL.replace(/\/$/, '');
   const url = `${base}${API_ENDPOINTS.USERS.PUSH_TOKEN}`;
 
-  const res = await fetch(url, {
+  return fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -105,10 +162,6 @@ export async function sendTokenToBackendForAccount(
     },
     body: JSON.stringify({ token: expoToken, deviceId, platform }),
   });
-
-  if (!res.ok) {
-    throw new Error(`push token registration failed: HTTP ${res.status}`);
-  }
 }
 
 /** Remove the push token for the current user only (not other accounts). */

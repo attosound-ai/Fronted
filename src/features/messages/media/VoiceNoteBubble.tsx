@@ -67,7 +67,10 @@ function VoiceNoteBubbleInner({ url, metadata, onLight }: VoiceNoteBubbleProps) 
   }, [statusError]);
 
   const bars = useMemo(() => {
-    const wave = metadata?.waveform?.length ? metadata.waveform : null;
+    const stored = metadata?.waveform ?? [];
+    // A flat capture (no metering on this device, or silence) would draw a
+    // row of identical dots: fall back to the generated shape instead.
+    const wave = stored.length && Math.max(...stored) > 0.08 ? stored : null;
     if (wave) {
       const out: number[] = [];
       for (let i = 0; i < BARS; i++)
@@ -146,6 +149,7 @@ function VoiceNoteBubbleInner({ url, metadata, onLight }: VoiceNoteBubbleProps) 
 
   const fg = onLight ? COLORS.black : COLORS.white;
   const dim = onLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.35)';
+  const chipBg = onLight ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.16)';
   const shown = isPlaying ? Math.max(0, duration - position) : duration;
 
   if (loadError) {
@@ -204,18 +208,15 @@ function VoiceNoteBubbleInner({ url, metadata, onLight }: VoiceNoteBubbleProps) 
               );
             })}
           </Pressable>
-          {/* WhatsApp only offers the speed once the note has been played. */}
-          {isPlaying || position > 0 ? (
-            <Pressable
-              onPress={cycleRate}
-              hitSlop={8}
-              style={[styles.rate, { borderColor: dim }]}
-              accessibilityRole="button"
-              accessibilityLabel={t('media.speed')}
-            >
-              <Text style={[styles.rateText, { color: fg }]}>{RATES[rateIndex]}x</Text>
-            </Pressable>
-          ) : null}
+          <Pressable
+            onPress={cycleRate}
+            hitSlop={8}
+            style={[styles.rate, { backgroundColor: chipBg }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('media.speed')}
+          >
+            <Text style={[styles.rateText, { color: fg }]}>{RATES[rateIndex]}x</Text>
+          </Pressable>
         </View>
         <Text style={[styles.time, { color: dim }]}>{formatTime(shown)}</Text>
       </View>
@@ -260,6 +261,14 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     marginTop: 1,
   },
-  rate: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 0 },
-  rateText: { fontSize: 10, fontFamily: 'Archivo_600SemiBold' },
+  // WhatsApp's speed pill: a filled rounded rect, not a thin outline.
+  rate: {
+    minWidth: 34,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rateText: { fontSize: 12, fontFamily: 'Archivo_700Bold' },
 });

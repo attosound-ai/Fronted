@@ -17,11 +17,15 @@ const MIN_DURATION_MS = 800;
  * Telegram record them. Meters the input while recording so the bubble can
  * draw a real waveform.
  */
+/**
+ * Full options, reused for both the hook and prepareToRecordAsync: passing a
+ * partial to prepare reset the format to the platform default, which on iOS
+ * is Core Audio (.caf) and Cloudinary rejects it ("Unsupported file type caf").
+ */
+const VOICE_OPTIONS = { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true };
+
 export function useVoiceNote(conversationId: string) {
-  const recorder = useAudioRecorder({
-    ...RecordingPresets.HIGH_QUALITY,
-    isMeteringEnabled: true,
-  });
+  const recorder = useAudioRecorder(VOICE_OPTIONS);
   const state = useAudioRecorderState(recorder, 100);
   const samples = useRef<number[]>([]);
   const startedAt = useRef(0);
@@ -43,7 +47,7 @@ export function useVoiceNote(conversationId: string) {
     });
     if (!granted) return false;
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync({ isMeteringEnabled: true });
+    await recorder.prepareToRecordAsync(VOICE_OPTIONS);
     samples.current = [];
     startedAt.current = Date.now();
     recorder.record();
@@ -71,11 +75,13 @@ export function useVoiceNote(conversationId: string) {
         });
         return null;
       }
+      // Name the upload after the real extension, never a guess.
+      const ext = (recorder.uri.split('.').pop() ?? 'm4a').split('?')[0].toLowerCase();
       return {
         kind: 'audio',
         uri: recorder.uri,
-        mime: 'audio/m4a',
-        fileName: `voice-${Date.now()}.m4a`,
+        mime: ext === 'caf' ? 'audio/x-caf' : `audio/${ext}`,
+        fileName: `voice-${Date.now()}.${ext}`,
         durationMs,
         waveform: waveformFromSamples(samples.current, 40),
       };

@@ -113,6 +113,8 @@ export async function uploadChatMedia(
       kind: media.kind,
       elapsed_ms: Date.now() - started,
       error: error instanceof Error ? error.message : String(error),
+      detail:
+        (error as { cloudinaryBody?: string }).cloudinaryBody?.slice(0, 300) ?? null,
     });
     throw error;
   }

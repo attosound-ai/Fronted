@@ -497,6 +497,10 @@ export const ANALYTICS_EVENTS = {
     READ_RECEIPT: 'messages_read_receipt',
     THREAD_RENDERED: 'messages_thread_rendered',
     HEADER_PROFILE_OPENED: 'messages_header_profile_opened',
+    HEADER_MENU_ACTION: 'messages_header_menu_action',
+    WALLPAPER_CHANGED: 'messages_wallpaper_changed',
+    WALLPAPER_PICKER_OPENED: 'messages_wallpaper_picker_opened',
+    WALLPAPER_RENDERED: 'messages_wallpaper_rendered',
     // Conversation lifecycle
     CONVERSATIONS_VIEWED: 'messages_conversations_viewed',
     CONVERSATION_OPENED: 'messages_conversation_opened',

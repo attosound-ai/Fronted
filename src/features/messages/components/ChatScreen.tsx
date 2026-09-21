@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Alert, ImageBackground, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Alert, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -43,8 +43,11 @@ import { ReactionPicker } from './ReactionPicker';
 import { useChatWallpapers } from '../hooks/useChatWallpapers';
 import {
   CHAT_WALLPAPER_NONE_ID,
+  resolveWallpaperChoice,
   useChatWallpaperStore,
 } from '@/stores/chatWallpaperStore';
+import { ChatWallpaperLayer } from './ChatWallpaperLayer';
+import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import * as Clipboard from 'expo-clipboard';
 import { AudioMessagePlayer } from './AudioMessagePlayer';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
@@ -129,7 +132,20 @@ export function ChatScreen({
   // the first active wallpaper from the backend catalogue as global default.
   // `CHAT_WALLPAPER_NONE_ID` means user explicitly chose black/no wallpaper.
   const { data: wallpapersCatalogue = [] } = useChatWallpapers();
-  const selectedWallpaperId = useChatWallpaperStore((s) => s.selectedWallpaperId);
+  const globalWallpaperId = useChatWallpaperStore((s) => s.selectedWallpaperId);
+  const perConversationWallpaper = useChatWallpaperStore((s) => s.perConversation);
+  const selectedWallpaperId = useMemo(
+    () =>
+      resolveWallpaperChoice(
+        {
+          selectedWallpaperId: globalWallpaperId,
+          perConversation: perConversationWallpaper,
+        },
+        conversationId
+      ) ?? null,
+    [globalWallpaperId, perConversationWallpaper, conversationId]
+  );
+  const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
   const activeWallpaper = useMemo(() => {
     if (selectedWallpaperId === CHAT_WALLPAPER_NONE_ID) {
       return null;
@@ -626,39 +642,23 @@ export function ChatScreen({
 
   if (!user) return null;
 
-  // Render the wallpaper (if any) as an absolutely-positioned layer behind
-  // GiftedChat, with a dark overlay on top so the bubbles remain legible.
-  // The overlay colour + opacity come from the wallpaper document so admins
-  // can tune contrast remotely without a rebuild.
-  const wallpaperLayer = activeWallpaper ? (
-    <View style={styles.wallpaperLayer} pointerEvents="none">
-      <ImageBackground
-        source={{ uri: activeWallpaper.imageUrl }}
-        style={StyleSheet.absoluteFillObject}
-        imageStyle={{
-          backgroundColor: activeWallpaper.tintColor ?? '#000',
-        }}
-        resizeMode="repeat"
-      >
-        <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            {
-              // The catalogue value is a ceiling, not a floor: at 0.7 the pattern
-              // was barely there. Cap the veil so the wallpaper always reads.
-              backgroundColor: `rgba(0,0,0,${Math.min(activeWallpaper.overlayOpacity ?? 0.35, 0.45)})`,
-            },
-          ]}
-        />
-      </ImageBackground>
-    </View>
-  ) : null;
+  // The wallpaper sits behind the thread; the layer handles image, gradient
+  // and pattern kinds and turns the gradient on each sent message.
+  const wallpaperLayer = (
+    <ChatWallpaperLayer wallpaper={activeWallpaper} sendPulse={justSentId} />
+  );
 
   return (
     <View style={styles.container}>
       {wallpaperLayer}
 
+      <WallpaperPickerSheet
+        visible={wallpaperPickerVisible}
+        onClose={() => setWallpaperPickerVisible(false)}
+        conversationId={conversationId}
+      />
       <ChatHeader
+        onOpenWallpaper={() => setWallpaperPickerVisible(true)}
         participantName={participantName}
         participantId={participantId || ''}
         onBack={handleBack}

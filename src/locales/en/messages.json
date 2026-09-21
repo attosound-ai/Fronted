@@ -34,7 +34,9 @@
   "chatHeader": {
     "backAccessibilityLabel": "Go back",
     "voiceCallAccessibilityLabel": "Voice call",
-    "openProfileAccessibilityLabel": "Open {{name}} profile"
+    "openProfileAccessibilityLabel": "Open {{name}} profile",
+    "menuViewProfile": "View profile",
+    "menuWallpaper": "Chat wallpaper"
   },
   "typing": {
     "suffix": " is typing",
@@ -58,7 +60,11 @@
     "subtitle": "Choose a background. The change applies to all your chats.",
     "noneLabel": "None",
     "loading": "Loading wallpapers...",
-    "error": "Could not load wallpapers. Please try again later."
+    "error": "Could not load wallpapers. Please try again later.",
+    "scopeThisChat": "This chat",
+    "scopeAllChats": "All chats",
+    "subtitleThisChat": "Choose a background for this chat only.",
+    "followGlobalLabel": "Same as all"
   },
   "splitView": {
     "emptyTitle": "Your Messages",

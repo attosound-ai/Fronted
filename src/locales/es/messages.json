@@ -34,7 +34,9 @@
   "chatHeader": {
     "backAccessibilityLabel": "Volver",
     "voiceCallAccessibilityLabel": "Llamada de voz",
-    "openProfileAccessibilityLabel": "Abrir el perfil de {{name}}"
+    "openProfileAccessibilityLabel": "Abrir el perfil de {{name}}",
+    "menuViewProfile": "Ver perfil",
+    "menuWallpaper": "Fondo del chat"
   },
   "typing": {
     "suffix": " está escribiendo",
@@ -58,7 +60,11 @@
     "subtitle": "Elige un fondo. El cambio se aplica a todos tus chats.",
     "noneLabel": "Ninguno",
     "loading": "Cargando fondos...",
-    "error": "No se pudieron cargar los fondos. Intenta de nuevo más tarde."
+    "error": "No se pudieron cargar los fondos. Intenta de nuevo más tarde.",
+    "scopeThisChat": "Este chat",
+    "scopeAllChats": "Todos los chats",
+    "subtitleThisChat": "Elige un fondo solo para este chat.",
+    "followGlobalLabel": "Igual que todos"
   },
   "splitView": {
     "emptyTitle": "Tus mensajes",

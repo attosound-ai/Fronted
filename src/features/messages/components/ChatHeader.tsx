@@ -1,4 +1,5 @@
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import type React from 'react';
+import { Platform, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ChevronLeft, Phone } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
@@ -11,13 +12,27 @@ import { useCallStore } from '@/stores/callStore';
 import { useScreenTopInset } from '@/hooks/useInCallChrome';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { router } from 'expo-router';
+
+// Native iOS context menu, loaded the same guarded way as the thread rows so
+// the header still renders when the module is absent (tests, other platforms).
+const ContextMenuView =
+  Platform.OS === 'ios'
+    ? (require('react-native-ios-context-menu').ContextMenuView as React.ComponentType<
+        Record<string, unknown>
+      >)
+    : null;
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const MenuHost: React.ComponentType<any> = ContextMenuView ?? View;
 
 interface ChatHeaderProps {
   participantName: string;
   participantId: string;
   onBack: () => void;
   hideBack?: boolean;
+  /** Opens the wallpaper picker for this chat (long press menu on the name). */
+  onOpenWallpaper?: () => void;
 }
 
 export function ChatHeader({
@@ -25,6 +40,7 @@ export function ChatHeader({
   participantId,
   onBack,
   hideBack,
+  onOpenWallpaper,
 }: ChatHeaderProps) {
   const { t } = useTranslation('messages');
   // Reserves room below the green call-bar overlay when a call is up. The header
@@ -33,6 +49,15 @@ export function ChatHeader({
   const { avatarUri, username, role } = useParticipantProfile(participantId);
   const name = username || participantName || t('conversation.fallbackUserName');
   const isInCall = useCallStore((s) => s.activeCall !== null);
+  const openProfile = () => {
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_PROFILE_OPENED, {
+      participant_id: participantId,
+    });
+    router.push({
+      pathname: '/user/[id]',
+      params: { id: participantId, username: name, avatar: avatarUri ?? '' },
+    });
+  };
 
   return (
     <View style={[styles.container, { paddingTop: topInset + SPACING.xs }]}>
@@ -50,40 +75,65 @@ export function ChatHeader({
       )}
 
       <GlassSurface radius={20} style={styles.namePill}>
-        <TouchableOpacity
+        <MenuHost
           style={styles.nameRow}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel={t('chatHeader.openProfileAccessibilityLabel', { name })}
-          onPress={() => {
-            analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_PROFILE_OPENED, {
+          menuConfig={{
+            menuTitle: '',
+            menuItems: [
+              {
+                actionKey: 'profile',
+                actionTitle: t('chatHeader.menuViewProfile'),
+                icon: {
+                  type: 'IMAGE_SYSTEM',
+                  imageValue: { systemName: 'person.crop.circle' },
+                },
+              },
+              {
+                actionKey: 'wallpaper',
+                actionTitle: t('chatHeader.menuWallpaper'),
+                icon: {
+                  type: 'IMAGE_SYSTEM',
+                  imageValue: { systemName: 'photo.on.rectangle' },
+                },
+              },
+            ],
+          }}
+          onPressMenuItem={({ nativeEvent }: { nativeEvent: { actionKey: string } }) => {
+            analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_MENU_ACTION, {
+              action: nativeEvent.actionKey,
               participant_id: participantId,
             });
-            router.push({
-              pathname: '/user/[id]',
-              params: { id: participantId, username: name, avatar: avatarUri ?? '' },
-            });
+            if (nativeEvent.actionKey === 'wallpaper') onOpenWallpaper?.();
+            if (nativeEvent.actionKey === 'profile') openProfile();
           }}
         >
-          <Avatar
-            uri={avatarUri}
-            size="sm"
-            fallbackText={name}
-            creatorRing={role === 'creator'}
-            style={styles.pillAvatar}
-          />
-          <Text
-            variant="h3"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-            maxFontSizeMultiplier={1.15}
-            style={styles.name}
+          <TouchableOpacity
+            style={styles.nameRow}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={t('chatHeader.openProfileAccessibilityLabel', { name })}
+            onPress={openProfile}
           >
-            {name}
-          </Text>
-          {role === 'creator' && <CreatorBadge size="sm" />}
-        </TouchableOpacity>
+            <Avatar
+              uri={avatarUri}
+              size="sm"
+              fallbackText={name}
+              creatorRing={role === 'creator'}
+              style={styles.pillAvatar}
+            />
+            <Text
+              variant="h3"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              maxFontSizeMultiplier={1.15}
+              style={styles.name}
+            >
+              {name}
+            </Text>
+            {role === 'creator' && <CreatorBadge size="sm" />}
+          </TouchableOpacity>
+        </MenuHost>
       </GlassSurface>
 
       <View style={styles.rightContainer}>

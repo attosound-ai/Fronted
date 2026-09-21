@@ -111,13 +111,19 @@ export interface ChatMessagesPage {
 
 // Chat wallpapers (remote-managed via content-service)
 
+export type ChatWallpaperKind = 'image' | 'gradient' | 'pattern';
+
 export interface BackendChatWallpaper {
   id: string;
   name: string;
-  imageUrl: string;
+  imageUrl?: string | null;
   thumbnailUrl?: string | null;
   tintColor?: string | null;
   overlayOpacity?: number | null;
+  kind?: ChatWallpaperKind | null;
+  gradientColors?: string[] | null;
+  patternUrl?: string | null;
+  patternOpacity?: number | null;
   sortOrder?: number;
   createdAt?: string | null;
 }
@@ -125,10 +131,17 @@ export interface BackendChatWallpaper {
 export interface ChatWallpaper {
   id: string;
   name: string;
+  /** Tile for `image` wallpapers; empty for the other kinds. */
   imageUrl: string;
   thumbnailUrl: string | null;
   tintColor: string | null;
   overlayOpacity: number | null;
+  kind: ChatWallpaperKind;
+  /** Two to four HEX colours, top left to bottom right. */
+  gradientColors: string[];
+  /** Tileable line art drawn over the gradient for `pattern` wallpapers. */
+  patternUrl: string | null;
+  patternOpacity: number | null;
   sortOrder: number;
   createdAt: string | null;
 }

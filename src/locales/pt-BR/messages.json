@@ -60,7 +60,9 @@
   "chatHeader": {
     "backAccessibilityLabel": "Voltar",
     "voiceCallAccessibilityLabel": "Chamada de voz",
-    "openProfileAccessibilityLabel": "Abrir o perfil de {{name}}"
+    "openProfileAccessibilityLabel": "Abrir o perfil de {{name}}",
+    "menuViewProfile": "Ver perfil",
+    "menuWallpaper": "Fundo da conversa"
   },
   "typing": {
     "suffix": " está digitando",
@@ -75,6 +77,10 @@
     "subtitle": "Escolha um plano de fundo. A alteração se aplica a todos os seus chats.",
     "noneLabel": "Nenhum",
     "loading": "Carregando planos de fundo...",
-    "error": "Não foi possível carregar os planos de fundo. Tente novamente mais tarde."
+    "error": "Não foi possível carregar os planos de fundo. Tente novamente mais tarde.",
+    "scopeThisChat": "Esta conversa",
+    "scopeAllChats": "Todas as conversas",
+    "subtitleThisChat": "Escolha um fundo só para esta conversa.",
+    "followGlobalLabel": "Igual às demais"
   }
 }

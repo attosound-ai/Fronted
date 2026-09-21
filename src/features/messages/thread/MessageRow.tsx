@@ -68,7 +68,13 @@ export interface MessageRowProps {
   /** The author is a creator: the bubble wears the creator gold, whichever side it is on. */
   senderIsCreator: boolean;
   menuItems: MenuItem[];
-  labels: { you: string; deleted: string; edited: string };
+  labels: {
+    you: string;
+    deleted: string;
+    edited: string;
+    /** "3 replies", for the thread footer. */
+    replies: (count: number) => string;
+  };
   onMenuAction: (actionKey: string, message: AttoMessage) => void;
   onReply: (message: AttoMessage) => void;
   /** Double tap or the React menu item: the bubble's window rect comes along for the Tapback pill. */

@@ -202,6 +202,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         you: t('chat.you', { defaultValue: 'You' }),
         deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
+        replies: (count: number) => t('thread.replies', { count }),
       }),
       [t]
     );

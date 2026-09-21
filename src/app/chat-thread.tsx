@@ -73,6 +73,7 @@ export default function ChatThreadScreen() {
       you: t('chat.you', { defaultValue: 'You' }),
       deleted: t('actions.deleted', { defaultValue: 'Message deleted' }),
       edited: t('actions.edited', { defaultValue: 'edited' }),
+      replies: (count: number) => t('thread.replies', { count }),
     }),
     [t]
   );

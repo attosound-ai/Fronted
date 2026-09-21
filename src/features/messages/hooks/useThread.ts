@@ -44,8 +44,15 @@ export function useThread(conversationId: string, threadId: string) {
 
   // Replies that landed in the conversation cache (channel or optimistic):
   // observed reactively, without fetching, so a reply shows up here at once.
+  const conversationKey = QUERY_KEYS.MESSAGES.CHAT(conversationId);
   const { data: conversationPages } = useQuery<{ pages: ChatMessagesPage[] }>({
-    queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
+    queryKey: conversationKey,
+    // Never fetches from here: the chat screen owns that query. The queryFn
+    // only satisfies React Query and hands back whatever is cached.
+    queryFn: () =>
+      queryClient.getQueryData<{ pages: ChatMessagesPage[] }>(conversationKey) ?? {
+        pages: [],
+      },
     enabled: false,
   });
   const cachedReplies = useMemo(

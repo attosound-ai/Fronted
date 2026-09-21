@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import {
   AtSign,
   Bold,
@@ -45,6 +46,13 @@ export default function ComposerExpandedScreen() {
   const conversationId = useComposerExpandStore((s) => s.conversationId);
   const finish = useComposerExpandStore((s) => s.finish);
   const { openAttach } = useAttachSheet(conversationId ?? '');
+  // The route is a modal: the keyboard controller's avoiding view measured
+  // against the wrong window there, so the body follows the keyboard height
+  // directly (a negative value while it is up).
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const bodyStyle = useAnimatedStyle(() => ({
+    paddingBottom: -keyboardHeight.value,
+  }));
   const [emojiOpen, setEmojiOpen] = useState(false);
 
   const textRef = useRef(initial);
@@ -240,7 +248,7 @@ export default function ComposerExpandedScreen() {
         </GlassSurface>
       </View>
 
-      <KeyboardAvoidingView behavior="padding" style={styles.body}>
+      <Animated.View style={[styles.body, bodyStyle]}>
         <TextInput
           key={generation}
           ref={inputRef}
@@ -366,7 +374,7 @@ export default function ComposerExpandedScreen() {
             />
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </View>
   );
 }

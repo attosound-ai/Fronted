@@ -31,7 +31,6 @@ import Animated, {
   LinearTransition,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { Maximize2, Mic, Plus, SendHorizontal, Smile } from 'lucide-react-native';
@@ -191,30 +190,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       opacity: 1 - sendIn.value,
     }));
 
-    // The field grows one line at a time with a spring, never in a jump.
-    const fieldHeight = useSharedValue(0);
-    const fieldStyle = useAnimatedStyle(() =>
-      fieldHeight.value > 0 ? { height: fieldHeight.value } : {}
-    );
-    const onContentSizeChange = useCallback(
-      (e: { nativeEvent: { contentSize: { height: number } } }) => {
-        const next = Math.min(
-          MAX_FIELD_HEIGHT,
-          Math.max(MIN_FIELD_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height))
-        );
-        setTall(next >= MIN_FIELD_HEIGHT + 18);
-        if (Math.abs(next - fieldHeight.value) < 1) return;
-        fieldHeight.value =
-          fieldHeight.value === 0
-            ? next
-            : withSpring(next, {
-                damping: 24,
-                stiffness: 400,
-                mass: 0.5,
-                overshootClamping: true,
-              });
+    // On the New Architecture `onContentSizeChange` never fires for this
+    // multiline field, so the native view sizes itself (auto grow between
+    // MIN and MAX) and the capsule animates the layout change. `onLayout`
+    // does fire: it drives the expand button once the field has two lines.
+    const onFieldLayout = useCallback(
+      (e: { nativeEvent: { layout: { height: number } } }) => {
+        setTall(e.nativeEvent.layout.height >= MIN_FIELD_HEIGHT + 18);
       },
-      [fieldHeight]
+      []
     );
 
     const handleChangeText = useCallback(
@@ -306,10 +290,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
           <GlassSurface radius={24} style={styles.capsule}>
             {preview}
             <View style={styles.fieldRow}>
-              <Animated.View style={[styles.inputWrapper, fieldStyle]}>
+              <Animated.View
+                style={styles.inputWrapper}
+                layout={LinearTransition.duration(160)}
+              >
                 <TextInput
                   key={`${generation}:${localGeneration}`}
-                  onContentSizeChange={onContentSizeChange}
+                  onLayout={onFieldLayout}
                   ref={inputRef}
                   defaultValue={draftRef.current}
                   onChangeText={handleChangeText}
@@ -437,6 +424,8 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: 'transparent',
+    minHeight: MIN_FIELD_HEIGHT,
+    maxHeight: MAX_FIELD_HEIGHT,
     paddingHorizontal: 12,
     // iOS multiline fields sit their text at the top of the box; with the
     // box exactly one line tall plus symmetric padding, the placeholder and

@@ -59,7 +59,10 @@
     "sendFailed": "No se pudo enviar. Toca para reintentar.",
     "recordingHint": "Desliza para cancelar",
     "recordingCancel": "Cancelar",
-    "slideToCancel": "‹ Desliza para cancelar"
+    "slideToCancel": "‹ Desliza para cancelar",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "speed": "Velocidad"
   },
   "newMessage": {
     "headerTitle": "Nuevo mensaje",
@@ -143,7 +146,7 @@
     "voice": "Nota de voz",
     "file": "Archivo",
     "contact": "Contacto",
-    "projectAudio": "Audio de un proyecto ATTO",
+    "projectAudio": "Audio de proyecto",
     "location": "Ubicación",
     "soon": "Pronto",
     "close": "Cerrar menú"

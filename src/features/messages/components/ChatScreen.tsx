@@ -619,6 +619,22 @@ export function ChatScreen({
           metadata,
         });
         sentMessageIds.add(sent.messageId);
+        // The channel echo may have landed first with the real id: keep one row.
+        queryClient.setQueryData(
+          chatKey,
+          (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                messages: page.messages.filter(
+                  (m) => !(m.messageId === sent.messageId && m.messageId !== tempId)
+                ),
+              })),
+            };
+          }
+        );
         patchTemp({ messageId: sent.messageId, content, metadata, status: 'sent' });
         setJustSentId((cur) => (cur === tempId ? sent.messageId : cur));
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_SENT, {

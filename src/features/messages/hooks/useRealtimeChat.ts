@@ -52,13 +52,7 @@ export function useRealtimeChat(conversationId: string) {
           const firstPage = old.pages[0];
           // Deduplicate: skip if messageId already exists OR if there's a
           // temp optimistic message with the same content (own message echo)
-          if (
-            firstPage.messages.some(
-              (m) =>
-                m.messageId === msg.messageId ||
-                (m.messageId.startsWith('temp-') && m.content === msg.content)
-            )
-          ) {
+          if (firstPage.messages.some((m) => isEchoOf(m, msg))) {
             // Replace the temp message with the real server message
             return {
               ...old,
@@ -66,7 +60,7 @@ export function useRealtimeChat(conversationId: string) {
                 {
                   ...firstPage,
                   messages: firstPage.messages.map((m) =>
-                    m.messageId.startsWith('temp-') && m.content === msg.content
+                    m.messageId.startsWith('temp-') && isEchoOf(m, msg)
                       ? {
                           ...msg,
                           clientKey: m.clientKey ?? m.messageId,
@@ -285,4 +279,32 @@ export function useRealtimeChat(conversationId: string) {
   );
 
   return { sendViaSocket, markRead, sendTyping };
+}
+
+/**
+ * Is the cached row the optimistic copy (or the same row) of a message that
+ * just arrived on the channel? Text echoes match by content; a media echo
+ * cannot (the optimistic row holds the local file, the server the hosted
+ * url), so a pending media row of the same kind from the same sender is it.
+ */
+function isEchoOf(
+  cached: {
+    messageId: string;
+    content: string;
+    contentType?: string;
+    senderId: string;
+    status?: string;
+  },
+  incoming: { messageId: string; content: string; contentType?: string; senderId: string }
+): boolean {
+  if (cached.messageId === incoming.messageId) return true;
+  if (!cached.messageId.startsWith('temp-')) return false;
+  if (cached.content === incoming.content) return true;
+  const kind = cached.contentType ?? 'text';
+  return (
+    kind !== 'text' &&
+    kind === (incoming.contentType ?? 'text') &&
+    cached.senderId === incoming.senderId &&
+    cached.status === 'sending'
+  );
 }

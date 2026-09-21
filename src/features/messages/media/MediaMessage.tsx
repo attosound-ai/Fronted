@@ -4,7 +4,7 @@ import { FileText, Phone, UserRound, Volume2, VolumeX } from 'lucide-react-nativ
 import { useTranslation } from 'react-i18next';
 import { COLORS } from '@/constants/theme';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
-import { AudioMessagePlayer } from '../components/AudioMessagePlayer';
+import { VoiceNoteBubble } from './VoiceNoteBubble';
 import { VideoMessagePlayer } from '../components/VideoMessagePlayer';
 import type { AttoMessage } from '../utils/messageAdapter';
 
@@ -60,7 +60,7 @@ function MediaMessageInner({ message, isOwn }: MediaMessageProps) {
     case 'audio':
       return (
         <View style={styles.audio}>
-          <AudioMessagePlayer audioUrl={url} />
+          <VoiceNoteBubble url={url} metadata={message.metadata} onLight={isOwn} />
         </View>
       );
     case 'file':

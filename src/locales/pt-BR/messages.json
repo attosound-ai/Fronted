@@ -85,7 +85,10 @@
     "sendFailed": "Não foi possível enviar. Toque para tentar de novo.",
     "recordingHint": "Deslize para cancelar",
     "recordingCancel": "Cancelar",
-    "slideToCancel": "‹ Deslize para cancelar"
+    "slideToCancel": "‹ Deslize para cancelar",
+    "play": "Reproduzir",
+    "pause": "Pausar",
+    "speed": "Velocidade"
   },
   "wallpaperPicker": {
     "title": "Plano de fundo do chat",
@@ -143,7 +146,7 @@
     "voice": "Mensagem de voz",
     "file": "Arquivo",
     "contact": "Contato",
-    "projectAudio": "Áudio de um projeto ATTO",
+    "projectAudio": "Áudio de projeto",
     "location": "Localização",
     "soon": "Em breve",
     "close": "Fechar menu"

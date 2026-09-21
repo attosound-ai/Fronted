@@ -59,7 +59,10 @@
     "sendFailed": "Could not send. Tap to retry.",
     "recordingHint": "Slide to cancel",
     "recordingCancel": "Cancel",
-    "slideToCancel": "‹ Slide to cancel"
+    "slideToCancel": "‹ Slide to cancel",
+    "play": "Play",
+    "pause": "Pause",
+    "speed": "Playback speed"
   },
   "newMessage": {
     "headerTitle": "New Message",
@@ -143,7 +146,7 @@
     "voice": "Voice note",
     "file": "File",
     "contact": "Contact",
-    "projectAudio": "ATTO project audio",
+    "projectAudio": "Project audio",
     "location": "Location",
     "soon": "Soon",
     "close": "Close menu"

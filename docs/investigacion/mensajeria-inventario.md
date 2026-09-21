@@ -349,3 +349,24 @@ Pendiente de construir: composer multilínea de Telegram (cápsula vertical de b
 | Colita | cuelga 8 pt bajo la base, punta 9 pt hacia dentro | 10 pt de alto, sale 4,7 pt del borde, punta sobre la base | igual que iMessage |
 
 Conclusión: la burbuja de ATTO es más alta que las dos porque pone la hora en una segunda fila; WhatsApp y Telegram la meten en la misma línea del texto cuando cabe (la hora flota a la derecha del último renglón). Es la siguiente mejora de densidad: hora en línea con el texto cuando el último renglón deja sitio.
+
+### 9.7 Composer de Telegram: de vacío a primer carácter (medido a 13 fps, 21 sep 02:24)
+- Vacío: cápsula de vidrio con el campo y un icono de temporizador a la derecha; fuera de la cápsula, un botón circular de vidrio con el micrófono; a la izquierda, clip de vidrio.
+- Primer carácter (unos 220 ms, ease out): el botón azul de enviar nace como un punto dentro del extremo derecho de la cápsula y escala hasta 1 (0,9 a los 190 ms); la cápsula se estira hacia la derecha para envolverlo; el micrófono se desliza a la derecha y se desvanece a la vez; el temporizador se funde con el icono de emoji.
+- Último carácter borrado: lo inverso en unos 175 ms.
+- ATTO (`ChatComposer.tsx`): mismos tiempos, misma disposición (más de vidrio, cápsula de vidrio con emoji y enviar dentro, micrófono de vidrio fuera), barra y cabecera sin fondo propio para que el fondo de pantalla sea continuo.
+- Deslizar para responder ahora con las constantes de Telegram (`ChatSwipeToReplyRecognizer.swift`, aportadas por la sesión futem-app-71): umbral 45 pt ajeno y 60 pt propio, goma `umbral + (1 − 1/(exceso·0,4/100 + 1))·100`, háptico heavy una sola vez, decisión al soltar.
+
+### 9.8 Botones del composer por app (lo que ATTO ya muestra)
+| Botón | WhatsApp | Telegram | iMessage | Slack | ATTO |
+|---|---|---|---|---|---|
+| Adjuntar (+ o clip) | ✅ | ✅ | ✅ (+) | ✅ | ✅ hoja nativa con foto, cámara, archivo, ubicación, contacto, audio de proyecto (en desarrollo, con telemetría) |
+| Cámara directa | ✅ | ❌ | ✅ dentro de + | ❌ | dentro de + |
+| Emoji o stickers | ✅ | ✅ | ✅ | ✅ | ✅ tira rápida de 12 emojis |
+| Nota de voz | ✅ | ✅ | ✅ | ✅ | ✅ botón de vidrio (en desarrollo) |
+| Enviar | ✅ | ✅ | ✅ | ✅ | ✅ nace dentro de la cápsula |
+| Expandir editor | ❌ | ✅ | ❌ | ❌ | ✅ |
+| Deshacer y rehacer | ❌ | ✅ (editor) | ❌ | ❌ | ✅ (editor) |
+| Mención @ | ❌ | ✅ tecleando @ | ❌ | ✅ | ✅ (editor) |
+| Lista | ❌ | ❌ | ❌ | ✅ | ✅ (editor) |
+| Formato (negrita, cursiva, código) | ✅ tecleando | ✅ menú | ❌ | ✅ barra | pendiente |

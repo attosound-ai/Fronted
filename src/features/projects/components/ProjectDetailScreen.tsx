@@ -127,13 +127,18 @@ export function ProjectDetailScreen({
     const TimelineEditor =
       require('@/features/timeline/components/TimelineEditor').TimelineEditor;
 
-    const handlePublish = async (result: ExportResult, durationMs: number) => {
+    const handlePublish = async (
+      result: ExportResult,
+      durationMs: number,
+      coverUri?: string
+    ) => {
       const localUri = `${FileSystem.cacheDirectory}export_${projectId}_${Date.now()}.wav`;
       await FileSystem.downloadAsync(result.downloadUrl, localUri);
       setPendingAudio({
         uri: localUri,
         fileName: `${project.name}.wav`,
         durationMs,
+        coverUri,
       });
       if (publishMode) {
         router.back();
@@ -166,6 +171,7 @@ export function ProjectDetailScreen({
         clips={clips}
         segments={segments}
         lanes={project.lanes}
+        settings={project.settings}
         onClose={async () => {
           // Refetch BEFORE unmounting so detail view has fresh data
           await queryClient.refetchQueries({ queryKey: ['project', projectId] });
@@ -175,6 +181,28 @@ export function ProjectDetailScreen({
       />
     );
   }
+
+  // One row per lane the project has: its name, its color and how many clips
+  // sit on it. Lanes with no metadata still show, named like the editor names
+  // them, so a recorded take is visible here right away.
+  const trackRows = (() => {
+    const lanes = project.lanes ?? {};
+    const laneIndexes = new Set<number>();
+    for (const key of Object.keys(lanes)) laneIndexes.add(Number(key));
+    for (const clip of clips) laneIndexes.add(clip.laneIndex ?? 0);
+    return Array.from(laneIndexes)
+      .filter((i) => Number.isFinite(i))
+      .sort((a, b) => a - b)
+      .map((index) => {
+        const meta = lanes[String(index)];
+        return {
+          index,
+          name: meta?.name || t('detail.trackDefaultName', { n: index + 1 }),
+          color: meta?.color || '#3B82F6',
+          clipCount: clips.filter((c) => (c.laneIndex ?? 0) === index).length,
+        };
+      });
+  })();
 
   return (
     <View style={styles.container}>
@@ -207,6 +235,31 @@ export function ProjectDetailScreen({
           </Text>
         </View>
       </View>
+
+      {/* The tracks, with the names and colors given in the editor, so the
+          project reads the same here as it does inside it. */}
+      {trackRows.length > 0 && (
+        <View style={styles.tracksBlock}>
+          <View style={styles.sectionHeader}>
+            <Text variant="body" style={styles.sectionTitle}>
+              {t('detail.sectionTracks')}
+            </Text>
+          </View>
+          <View style={styles.trackRows}>
+            {trackRows.map((track) => (
+              <View key={track.index} style={styles.trackRow}>
+                <View style={[styles.trackDot, { backgroundColor: track.color }]} />
+                <Text variant="body" numberOfLines={1} style={styles.trackName}>
+                  {track.name}
+                </Text>
+                <Text variant="caption" style={styles.trackMeta}>
+                  {t('detail.trackClips', { count: track.clipCount })}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       <View style={styles.sectionHeader}>
         <Text variant="body" style={styles.sectionTitle}>
@@ -325,6 +378,34 @@ const styles = StyleSheet.create({
   },
   stat: {
     gap: 2,
+  },
+  tracksBlock: {
+    marginBottom: 4,
+  },
+  trackRows: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#111111',
+  },
+  trackDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  trackName: {
+    flex: 1,
+    color: '#FFFFFF',
+  },
+  trackMeta: {
+    color: '#888888',
   },
   statLabel: {
     color: '#666',

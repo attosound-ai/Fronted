@@ -3,6 +3,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { apiClient } from './client';
 import { API_ENDPOINTS } from './endpoints';
 import type {
+  ProjectSettings,
+  ExportOptions,
   Project,
   ProjectDetail,
   LaneMetadata,
@@ -47,6 +49,7 @@ export const projectService = {
       description?: string;
       status?: string;
       lanes?: Record<string, LaneMetadata>;
+      settings?: ProjectSettings;
     }
   ): Promise<Project> {
     const { data } = await apiClient.patch<ApiResponse<Project>>(
@@ -110,9 +113,35 @@ export const projectService = {
     return data.data;
   },
 
-  async exportProject(projectId: string): Promise<ExportResult> {
+  /**
+   * Mix the project down. Without options the backend uses the project's
+   * stored exporter preferences (WAV by default, the feed path); with them
+   * it encodes to that format and remembers the picks for next time.
+   */
+  async exportProject(projectId: string, options?: ExportOptions): Promise<ExportResult> {
     const { data } = await apiClient.post<ApiResponse<ExportResult>>(
-      API_ENDPOINTS.PROJECTS.EXPORT(projectId)
+      API_ENDPOINTS.PROJECTS.EXPORT(projectId),
+      options ?? {}
+    );
+    return data.data;
+  },
+
+  /** Cover art for the exporter. Returns the key to pass back as coverKey. */
+  async uploadCover(
+    projectId: string,
+    fileUri: string,
+    mimeType: 'image/jpeg' | 'image/png'
+  ): Promise<{ coverKey: string }> {
+    const form = new FormData();
+    form.append('file', {
+      uri: fileUri,
+      name: mimeType === 'image/png' ? 'cover.png' : 'cover.jpg',
+      type: mimeType,
+    } as unknown as Blob);
+    const { data } = await apiClient.post<ApiResponse<{ coverKey: string }>>(
+      API_ENDPOINTS.PROJECTS.COVER(projectId),
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
     );
     return data.data;
   },

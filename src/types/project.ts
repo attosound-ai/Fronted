@@ -14,6 +14,39 @@ export interface LaneMetadata {
   pan?: number;
 }
 
+/** Mix bus effects; the export applies the same values the editor previews. */
+export interface MasterEffects {
+  /** Semitone shift of the whole mix, minus 12 to 12. */
+  pitchSemitones?: number;
+  /** Playback rate of the whole mix, 0.5 to 2. */
+  tempoRate?: number;
+  reverb?: { preset?: string; wetDryMix?: number };
+  /** Ten gains in dB at 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 Hz. */
+  eqGainsDb?: number[];
+}
+
+export type ExportFormat = 'wav' | 'mp3' | 'aac' | 'alac' | 'flac';
+export type ExportQuality = 'low' | 'medium' | 'high';
+
+export interface ExportOptions {
+  format?: ExportFormat;
+  quality?: ExportQuality;
+  sampleRate?: 8000 | 22050 | 44100 | 48000;
+  channels?: 1 | 2;
+  title?: string;
+  author?: string;
+  isrc?: string;
+  fileName?: string;
+  /** Storage key returned by the cover upload. */
+  coverKey?: string;
+}
+
+export interface ProjectSettings {
+  master?: MasterEffects;
+  exportPrefs?: ExportOptions;
+  automation?: Record<string, Array<[number, number]>>;
+}
+
 export interface Project {
   id: string;
   userId: string;
@@ -23,6 +56,8 @@ export interface Project {
   segmentCount?: number;
   totalDurationMs?: number;
   lanes: Record<string, LaneMetadata>;
+  /** Editor settings: master effects, exporter preferences, automation. */
+  settings?: ProjectSettings;
   createdAt: string;
   updatedAt: string;
 }

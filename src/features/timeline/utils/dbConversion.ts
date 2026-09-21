@@ -36,3 +36,27 @@ export function formatDb(db: number): string {
   const sign = db > 0 ? '+' : '';
   return `${sign}${db.toFixed(1)} dB`;
 }
+
+// ── Gain slider mapping ──────────────────────────────────────────────────
+// The range is lopsided (60 dB of cut, 12 dB of boost), so a linear slider
+// parks 0 dB at 83 percent of its travel. Mixers put unity in the middle:
+// the left half of the travel covers DB_MIN..0 and the right half 0..DB_MAX.
+
+/** Half width of the zone around the middle that snaps to exactly 0 dB. */
+export const GAIN_CENTER_SNAP = 0.02;
+
+/** Slider position (0..1) for a gain in dB, with 0 dB at 0.5. */
+export function gainDbToSlider(db: number): number {
+  const d = clampDb(db);
+  if (d <= 0) return 0.5 * (1 - d / DB_MIN);
+  return 0.5 + 0.5 * (d / DB_MAX);
+}
+
+/** Gain in dB for a slider position (0..1). The middle snaps to unity. */
+export function sliderToGainDb(position: number): number {
+  const p = Math.max(0, Math.min(1, Number.isFinite(position) ? position : 0.5));
+  // The epsilon keeps the edge of the zone inside it despite float rounding.
+  if (Math.abs(p - 0.5) <= GAIN_CENTER_SNAP + 1e-9) return 0;
+  if (p < 0.5) return clampDb(DB_MIN * (1 - p / 0.5));
+  return clampDb(DB_MAX * ((p - 0.5) / 0.5));
+}

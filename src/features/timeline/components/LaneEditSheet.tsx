@@ -7,7 +7,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Check, Trash2 } from 'lucide-react-native';
+import { Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -34,6 +34,10 @@ interface LaneEditSheetProps {
    *  playing under the sheet, so it lands in the timeline as you drag. */
   /** `commit` = true for gesture begin / tap / reset, false for drag frames. */
   onPanChange?: (pan: number, commit: boolean) => void;
+  /** Reorder the track. Absent when the editor does not support it. */
+  onMove?: (direction: -1 | 1) => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 const SWATCHES = [
@@ -67,10 +71,14 @@ export function LaneEditSheet({
   onSave,
   onDelete,
   onPanChange,
+  onMove,
+  canMoveUp = false,
+  canMoveDown = false,
 }: LaneEditSheetProps) {
   const { t } = useTranslation('projects');
   const [name, setName] = useState(currentMeta?.name ?? '');
   const [color, setColor] = useState(currentMeta?.color ?? SWATCHES[0]);
+  const nameInputRef = useRef<TextInput>(null);
 
   // Re-sync local state when the sheet opens (or is re-targeted to another
   // lane). NOT on every currentMeta change: pan applies live, so currentMeta
@@ -167,7 +175,13 @@ export function LaneEditSheet({
   const panThumbX = ((Math.max(-1, Math.min(1, pan)) + 1) / 2) * panTrackWidth;
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={t('timeline.laneEditTitle')}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={t('timeline.laneEditTitle')}
+      // Native sheet: focus once it is on screen (autoFocus fires too early).
+      onPresented={() => nameInputRef.current?.focus()}
+    >
       <View style={styles.content}>
         {/* Name input */}
         <View style={styles.field}>
@@ -175,12 +189,12 @@ export function LaneEditSheet({
             {t('timeline.laneEditNameLabel')}
           </Text>
           <TextInput
+            ref={nameInputRef}
             value={name}
             onChangeText={setName}
             placeholder={placeholder}
             placeholderTextColor="#555"
             style={styles.input}
-            autoFocus
             autoCapitalize="words"
             autoCorrect={false}
             returnKeyType="done"
@@ -259,6 +273,50 @@ export function LaneEditSheet({
           </TouchableOpacity>
         </View>
 
+        {/* Move the track up or down, the way SoundLab's track menu does. */}
+        {onMove && (
+          <View style={styles.moveRow}>
+            <TouchableOpacity
+              onPress={() => onMove(-1)}
+              disabled={!canMoveUp}
+              activeOpacity={0.7}
+              style={[styles.moveButton, !canMoveUp && styles.moveButtonDisabled]}
+              accessibilityRole="button"
+            >
+              <ChevronUp
+                size={16}
+                color={canMoveUp ? '#FFF' : '#555'}
+                strokeWidth={2.25}
+              />
+              <Text
+                variant="caption"
+                style={[styles.moveLabel, !canMoveUp && styles.moveLabelDisabled]}
+              >
+                {t('timeline.laneMoveUp')}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => onMove(1)}
+              disabled={!canMoveDown}
+              activeOpacity={0.7}
+              style={[styles.moveButton, !canMoveDown && styles.moveButtonDisabled]}
+              accessibilityRole="button"
+            >
+              <ChevronDown
+                size={16}
+                color={canMoveDown ? '#FFF' : '#555'}
+                strokeWidth={2.25}
+              />
+              <Text
+                variant="caption"
+                style={[styles.moveLabel, !canMoveDown && styles.moveLabelDisabled]}
+              >
+                {t('timeline.laneMoveDown')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Delete row — secondary destructive action */}
         {canDelete && (
           <TouchableOpacity
@@ -313,8 +371,32 @@ function formatPan(pan: number, centerLabel: string): string {
 }
 
 const styles = StyleSheet.create({
+  moveRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  moveButton: {
+    flex: 1,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  moveButtonDisabled: {
+    opacity: 0.5,
+  },
+  moveLabel: {
+    color: '#FFFFFF',
+  },
+  moveLabelDisabled: {
+    color: '#555',
+  },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 24,
     gap: 16,

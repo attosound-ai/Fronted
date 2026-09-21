@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { View, StyleSheet, type TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Input } from '@/components/ui/Input';
@@ -22,6 +22,9 @@ export function CreateProjectSheet({
   const { t } = useTranslation('projects');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const nameRef = useRef<TextInput>(null);
+  // Native sheet: focus once it is on screen (autoFocus fires too early).
+  const focusName = useCallback(() => nameRef.current?.focus(), []);
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -37,17 +40,17 @@ export function CreateProjectSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={handleClose}>
+    <BottomSheet visible={visible} onClose={handleClose} onPresented={focusName}>
       <View style={styles.container}>
         <Text variant="h3" style={styles.title}>
           {t('create.sheetTitle')}
         </Text>
         <Input
+          ref={nameRef}
           placeholder={t('create.namePlaceholder')}
           value={name}
           onChangeText={setName}
           maxLength={200}
-          autoFocus
         />
         <Input
           placeholder={t('create.descriptionPlaceholder')}

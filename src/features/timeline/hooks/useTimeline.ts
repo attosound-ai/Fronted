@@ -6,6 +6,7 @@ import type {
   TimelineAction,
   TimeRange,
   ClipEffectsPatch,
+  ClipPlacement,
 } from '../types';
 import {
   splitClipAtPosition,
@@ -43,7 +44,9 @@ export const initialTimelineState: TimelineState = {
   selectedClipId: null,
   playbackPositionMs: 0,
   isPlaying: false,
-  zoomLevel: 1,
+  // 25 px per second, the span SoundLab opens at (about 17 seconds across
+  // the lane area on an iPhone). 1 would be 100 px per second, far too close.
+  zoomLevel: 0.25,
   isDirty: false,
   activeLaneIndex: 0,
   laneCount: 1,
@@ -99,15 +102,35 @@ export function timelineReducer(
       // Place the new clip at the rightmost edge of its lane so it
       // doesn't overlap with existing clips. The user can then drag it
       // to a different position via the long-press drag gesture.
-      const laneIndex = action.clip.laneIndex ?? state.activeLaneIndex;
-      const lanePosition = endOfLaneMs(state.clips, laneIndex);
+      // With a placement the clip lands at the selection line instead:
+      // `insert` pushes the lane's later material right, `overwrite`
+      // punches the window out first (the wall invariant either way).
+      const placement = action.placement;
+      const laneIndex =
+        placement?.laneIndex ?? action.clip.laneIndex ?? state.activeLaneIndex;
+      const clipLength = action.clip.endInSegment - action.clip.startInSegment;
+      let base = state.clips;
+      let position = endOfLaneMs(state.clips, laneIndex);
+      if (placement) {
+        position = Math.max(0, placement.atMs);
+        base =
+          placement.mode === 'insert'
+            ? insertTimeOp(state.clips, position, clipLength, laneIndex)
+            : punchOutRange(state.clips, laneIndex, position, position + clipLength);
+      }
       const clipWithLane = {
         ...action.clip,
         laneIndex,
-        positionInTimeline: lanePosition,
+        positionInTimeline: position,
       };
-      const next = normalizeOrders([...state.clips, clipWithLane]);
-      return { ...state, clips: next, selection: null, isDirty: true };
+      const next = normalizeOrders([...base, clipWithLane]);
+      return {
+        ...state,
+        clips: next,
+        selection: null,
+        activeLaneIndex: placement ? laneIndex : state.activeLaneIndex,
+        isDirty: true,
+      };
     }
 
     case 'SELECT_CLIP': {
@@ -551,6 +574,192 @@ export function timelineReducer(
       return { ...state, clips, selection: null, isDirty: true };
     }
 
+    case 'DELETE_REGION': {
+      // Remove, in SoundLab's words: punch the window out and keep the
+      // clipboard as it was. `ripple` closes the gap on that lane.
+      const range = state.selection;
+      if (!range || range.endMs <= range.startMs) return state;
+      const { laneIndex, startMs, endMs } = range;
+      let clips = punchOutRange(state.clips, laneIndex, startMs, endMs);
+      if (action.ripple) {
+        const width = endMs - startMs;
+        clips = normalizeOrders(
+          clips.map((c) =>
+            c.laneIndex === laneIndex && c.positionInTimeline >= endMs
+              ? { ...c, positionInTimeline: c.positionInTimeline - width }
+              : c
+          )
+        );
+      }
+      return {
+        ...state,
+        clips,
+        selection: null,
+        selectedClipId: keepSelectedIfPresent(state.selectedClipId, clips),
+        isDirty: true,
+      };
+    }
+
+    case 'TRIM_TO_REGION': {
+      // Keep the window, drop the rest of the lane, and slide the kept
+      // material to where the window started so nothing dangles.
+      const range = state.selection;
+      if (!range || range.endMs <= range.startMs) return state;
+      const { laneIndex, startMs, endMs } = range;
+      const laneEnd = endOfLaneMs(state.clips, laneIndex);
+      let clips = punchOutRange(state.clips, laneIndex, 0, startMs);
+      clips = punchOutRange(clips, laneIndex, endMs, Math.max(endMs, laneEnd) + 1);
+      clips = normalizeOrders(
+        clips.map((c) =>
+          c.laneIndex === laneIndex
+            ? { ...c, positionInTimeline: c.positionInTimeline - startMs }
+            : c
+        )
+      );
+      return {
+        ...state,
+        clips,
+        selection: null,
+        selectedClipId: keepSelectedIfPresent(state.selectedClipId, clips),
+        isDirty: true,
+      };
+    }
+
+    case 'SPLIT_REGION_TO_NEW_LANE': {
+      // Split New: the window leaves its lane (gap stays) and lands on a
+      // brand new lane at the same time, so it stays in sync.
+      const range = state.selection;
+      if (!range || range.endMs <= range.startMs) return state;
+      const { laneIndex, startMs, endMs } = range;
+      const slice = sliceRange(state.clips, range);
+      if (slice.fragments.length === 0) return state;
+      const newLane = state.laneCount;
+      const cleared = punchOutRange(state.clips, laneIndex, startMs, endMs);
+      const moved: LocalClip[] = slice.fragments.map((f) => ({
+        id: generateId(),
+        segmentId: f.segmentId,
+        sourceSegmentId: f.sourceSegmentId,
+        effects: f.effects,
+        startInSegment: f.startInSegment,
+        endInSegment: f.endInSegment,
+        positionInTimeline: startMs + f.offsetMs,
+        order: 0,
+        volume: f.volume,
+        laneIndex: newLane,
+      }));
+      const clips = normalizeOrders([...cleared, ...moved]);
+      const source = state.laneMeta[laneIndex];
+      return {
+        ...state,
+        clips,
+        laneCount: state.laneCount + 1,
+        laneMeta: {
+          ...state.laneMeta,
+          [newLane]: {
+            name: '',
+            color: LANE_COLORS[newLane % LANE_COLORS.length],
+            gainDb: source?.gainDb ?? 0,
+            pan: source?.pan ?? 0,
+          },
+        },
+        activeLaneIndex: newLane,
+        selection: { laneIndex: newLane, startMs, endMs },
+        selectedClipId: keepSelectedIfPresent(state.selectedClipId, clips),
+        isDirty: true,
+      };
+    }
+
+    case 'SHIFT_LANE': {
+      // Dragging empty lane space slides the whole lane. Clamp so the
+      // first clip never goes below zero.
+      const laneClips = state.clips.filter((c) => c.laneIndex === action.laneIndex);
+      if (laneClips.length === 0 || action.deltaMs === 0) return state;
+      const first = Math.min(...laneClips.map((c) => c.positionInTimeline));
+      const delta = Math.max(-first, action.deltaMs);
+      if (delta === 0) return state;
+      const clips = state.clips.map((c) =>
+        c.laneIndex === action.laneIndex
+          ? { ...c, positionInTimeline: c.positionInTimeline + delta }
+          : c
+      );
+      return { ...state, clips, selection: null, isDirty: true };
+    }
+
+    case 'MOVE_LANE': {
+      const from = action.laneIndex;
+      const to = from + action.direction;
+      if (to < 0 || to >= state.laneCount) return state;
+      const clips = state.clips.map((c) =>
+        c.laneIndex === from
+          ? { ...c, laneIndex: to }
+          : c.laneIndex === to
+            ? { ...c, laneIndex: from }
+            : c
+      );
+      const laneMeta = { ...state.laneMeta };
+      const a = laneMeta[from];
+      const b = laneMeta[to];
+      if (b) laneMeta[from] = b;
+      else delete laneMeta[from];
+      if (a) laneMeta[to] = a;
+      else delete laneMeta[to];
+      const selection =
+        state.selection && state.selection.laneIndex === from
+          ? { ...state.selection, laneIndex: to }
+          : state.selection;
+      return {
+        ...state,
+        clips: normalizeOrders(clips),
+        laneMeta,
+        activeLaneIndex: state.activeLaneIndex === from ? to : state.activeLaneIndex,
+        selection,
+        isDirty: true,
+      };
+    }
+
+    case 'SPLIT_LANE_AT_POSITION': {
+      // The clip actions bar's Split: only the lane the line sits on.
+      const target = findClipAtPositionOnLane(
+        state.clips,
+        action.positionMs,
+        action.laneIndex
+      );
+      if (!target) return state;
+      const clips = splitClipAtPosition(state.clips, target.id, action.positionMs);
+      if (clips === state.clips) return state;
+      return { ...state, clips: normalizeOrders(clips), selection: null, isDirty: true };
+    }
+
+    case 'REPLACE_CLIP_SOURCE': {
+      const target = state.clips.find((c) => c.id === action.clipId);
+      if (!target) return state;
+      const oldLength = target.endInSegment - target.startInSegment;
+      const newLength = action.endInSegment - action.startInSegment;
+      const delta = newLength - oldLength;
+      const oldEnd = target.positionInTimeline + oldLength;
+      const clips = state.clips.map((c) => {
+        if (c.id === action.clipId) {
+          return {
+            ...c,
+            segmentId: action.segmentId,
+            sourceSegmentId: action.sourceSegmentId,
+            startInSegment: action.startInSegment,
+            endInSegment: action.endInSegment,
+          };
+        }
+        if (
+          action.ripple !== false &&
+          delta !== 0 &&
+          c.laneIndex === target.laneIndex &&
+          c.positionInTimeline >= oldEnd - 1
+        ) {
+          return { ...c, positionInTimeline: Math.max(0, c.positionInTimeline + delta) };
+        }
+        return c;
+      });
+      return { ...state, clips: normalizeOrders(clips), selection: null, isDirty: true };
+    }
+
     case 'RESTORE_SNAPSHOT': {
       // Restores clips + laneMeta only. `selection` and `clipboard` are
       // deliberately left alone — they are not part of the snapshot. The clip
@@ -650,9 +859,9 @@ export function useTimeline(
   }, []);
 
   const addClip = useCallback(
-    (clip: LocalClip) => {
+    (clip: LocalClip, placement?: ClipPlacement) => {
       pushUndo();
-      dispatch({ type: 'ADD_CLIP', clip });
+      dispatch({ type: 'ADD_CLIP', clip, placement });
     },
     [pushUndo]
   );
@@ -911,6 +1120,59 @@ export function useTimeline(
    * Insert `durationMs` of empty time at `atMs`. All lanes by default;
    * `{ allLanes: false }` limits it to `laneIndex` (default: active lane).
    */
+  const deleteRegion = useCallback(
+    (ripple = false) => {
+      if (!hasEditableRegion) return;
+      pushUndo();
+      dispatch({ type: 'DELETE_REGION', ripple });
+    },
+    [hasEditableRegion, pushUndo]
+  );
+
+  const trimToRegion = useCallback(() => {
+    if (!hasEditableRegion) return;
+    pushUndo();
+    dispatch({ type: 'TRIM_TO_REGION' });
+  }, [hasEditableRegion, pushUndo]);
+
+  const splitRegionToNewLane = useCallback(() => {
+    if (!hasEditableRegion) return;
+    pushUndo();
+    dispatch({ type: 'SPLIT_REGION_TO_NEW_LANE' });
+  }, [hasEditableRegion, pushUndo]);
+
+  const shiftLane = useCallback(
+    (laneIndex: number, deltaMs: number) => {
+      pushUndo();
+      dispatch({ type: 'SHIFT_LANE', laneIndex, deltaMs });
+    },
+    [pushUndo]
+  );
+
+  const moveLane = useCallback(
+    (laneIndex: number, direction: -1 | 1) => {
+      pushUndo();
+      dispatch({ type: 'MOVE_LANE', laneIndex, direction });
+    },
+    [pushUndo]
+  );
+
+  const splitLaneAt = useCallback(
+    (laneIndex: number, positionMs: number) => {
+      pushUndo();
+      dispatch({ type: 'SPLIT_LANE_AT_POSITION', laneIndex, positionMs });
+    },
+    [pushUndo]
+  );
+
+  const replaceClipSource = useCallback(
+    (args: Omit<Extract<TimelineAction, { type: 'REPLACE_CLIP_SOURCE' }>, 'type'>) => {
+      pushUndo();
+      dispatch({ type: 'REPLACE_CLIP_SOURCE', ...args });
+    },
+    [pushUndo]
+  );
+
   const insertTime = useCallback(
     (
       atMs: number,
@@ -963,6 +1225,13 @@ export function useTimeline(
     canJoinClips,
     joinClips,
     insertTime,
+    deleteRegion,
+    trimToRegion,
+    splitRegionToNewLane,
+    shiftLane,
+    moveLane,
+    splitLaneAt,
+    replaceClipSource,
     undo,
     redo,
     canUndo: undoStack.current.length > 0,

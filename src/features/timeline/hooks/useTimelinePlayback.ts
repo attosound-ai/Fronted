@@ -8,6 +8,7 @@ import type { LocalClip, LaneMeta } from '../types';
 import type { AudioSegment } from '@/types/call';
 import { getTimelineDuration } from '../utils/clipOperations';
 import { computeLaneEffectiveVolume, hasAnySoloedLane } from '../utils/laneMixer';
+import { useTimelineEnginePlayback } from './useTimelineEnginePlayback';
 
 interface UseTimelinePlaybackProps {
   clips: LocalClip[];
@@ -118,6 +119,23 @@ export function useTimelinePlayback({
       shouldRouteThroughEarpiece: false,
     });
   }, [hasActiveCall]);
+
+  // ATTO (Sep 15 2026): in an engine call the stems play through the native
+  // call session and this hook creates NO expo players (their speaker copy would
+  // sit outside the call's echo canceller). `engineActive` gates every expo path
+  // below; the engine branch owns the playhead and the transport.
+  const { active: engineActive } = useTimelineEnginePlayback({
+    clips,
+    segments,
+    playbackPositionMs,
+    isPlaying,
+    laneMeta,
+    onPositionChange,
+    onPlayingChange,
+    positionSv,
+  });
+  const engineActiveRef = useRef(engineActive);
+  engineActiveRef.current = engineActive;
 
   const animFrameRef = useRef<number | null>(null);
   const playStartRef = useRef<number>(0);
@@ -230,6 +248,7 @@ export function useTimelinePlayback({
   // Apply mixer changes (mute/solo/gain) immediately without waiting
   // for the next animation frame or user interaction.
   useEffect(() => {
+    if (engineActiveRef.current) return;
     const anySoloed = hasAnySoloedLane(laneMeta);
     for (const lane of laneIndices.current) {
       const player = playersRef.current.get(lane);
@@ -305,6 +324,7 @@ export function useTimelinePlayback({
   // changes OUTSIDE the play loop (seek, skip-to-start/end, pause, undo), so the
   // playhead never shows a stale spot.
   useEffect(() => {
+    if (engineActiveRef.current) return;
     if (positionSv && !isPlaying) positionSv.value = playbackPositionMs;
   }, [positionSv, playbackPositionMs, isPlaying]);
 
@@ -317,6 +337,7 @@ export function useTimelinePlayback({
 
   // Start/stop playback across all lanes
   useEffect(() => {
+    if (engineActive) return undefined;
     if (isPlaying) {
       let cancelled = false;
       const lanes = [...laneIndices.current];
@@ -376,7 +397,7 @@ export function useTimelinePlayback({
       return undefined;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying]);
+  }, [isPlaying, engineActive]);
 
   // Cleanup players on unmount. MUST call remove() (frees the native
   // AVAudioPlayer), NOT just pause() — pause + clearing the JS Map dropped the JS

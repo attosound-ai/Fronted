@@ -103,9 +103,21 @@ export interface TimelineState {
   clipboard: Clipboard | null;
 }
 
+/**
+ * Where a freshly imported or recorded clip lands. Without a placement it
+ * goes after the last clip of its lane. `insert` opens time at `atMs` on
+ * that lane (SoundLab's Insert), `overwrite` clears the window first
+ * (Replace and recording at the line).
+ */
+export interface ClipPlacement {
+  atMs: number;
+  mode: 'insert' | 'overwrite';
+  laneIndex?: number;
+}
+
 export type TimelineAction =
   | { type: 'SET_CLIPS'; clips: LocalClip[] }
-  | { type: 'ADD_CLIP'; clip: LocalClip }
+  | { type: 'ADD_CLIP'; clip: LocalClip; placement?: ClipPlacement }
   | { type: 'SELECT_CLIP'; clipId: string | null }
   | { type: 'SPLIT_AT_POSITION'; positionMs: number }
   | { type: 'DELETE_CLIP'; clipId: string }
@@ -141,6 +153,32 @@ export type TimelineAction =
       /** Default true. When false only `laneIndex` (or the active lane) opens up. */
       allLanes?: boolean;
       laneIndex?: number;
+    }
+  /** Remove the selected window without touching the clipboard. */
+  | { type: 'DELETE_REGION'; ripple?: boolean }
+  /** Keep only the selected window on its lane; everything else on the lane goes. */
+  | { type: 'TRIM_TO_REGION' }
+  /** Cut the selected window out of its lane and drop it on a new lane at the same time. */
+  | { type: 'SPLIT_REGION_TO_NEW_LANE' }
+  /** Slide every clip of a lane by `deltaMs` (the drag on empty lane space). */
+  | { type: 'SHIFT_LANE'; laneIndex: number; deltaMs: number }
+  /** Swap a lane with its neighbor (the track menu's move up and down). */
+  | { type: 'MOVE_LANE'; laneIndex: number; direction: -1 | 1 }
+  /** Split every clip crossing `positionMs` on `laneIndex` only. */
+  | { type: 'SPLIT_LANE_AT_POSITION'; laneIndex: number; positionMs: number }
+  /**
+   * A range effect rendered the clip's source into a new segment. The clip
+   * points at the render, remembers the dry original, and takes the new
+   * window; when the render changed length, later clips on the lane slide.
+   */
+  | {
+      type: 'REPLACE_CLIP_SOURCE';
+      clipId: string;
+      segmentId: string;
+      sourceSegmentId: string;
+      startInSegment: number;
+      endInSegment: number;
+      ripple?: boolean;
     };
 
 export function clipToInput(clip: LocalClip): TimelineClipInput {

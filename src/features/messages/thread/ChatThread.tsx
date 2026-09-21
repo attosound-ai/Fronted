@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeInDown,
   FadeOut,
@@ -43,6 +44,10 @@ import {
   shouldShowJumpPill,
   type ThreadItem,
 } from './threadModel';
+
+// Older rows slide up smoothly when a new bubble is inserted (Telegram),
+// instead of jumping the height of the new row in one frame.
+const rowLayout = LinearTransition.duration(220).easing(Easing.out(Easing.cubic));
 
 export interface ChatThreadHandle {
   scrollToBottom: (animated?: boolean) => void;
@@ -302,7 +307,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             row
           );
         return (
-          <View>
+          <Animated.View layout={rowLayout}>
             {pill ? (
               <View style={styles.dayRow}>
                 <View style={styles.dayPill}>
@@ -322,7 +327,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
               </View>
             ) : null}
             {body}
-          </View>
+          </Animated.View>
         );
       },
       [

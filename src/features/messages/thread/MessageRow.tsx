@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
   type LayoutChangeEvent,
   Platform,
+  Pressable,
   StyleSheet,
   Text as RNText,
   View,
@@ -20,7 +21,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { ArrowUpLeft, Clock, AlertCircle } from 'lucide-react-native';
+import { ArrowUpLeft, Clock, AlertCircle, MessageSquare } from 'lucide-react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { GOLD } from '@/constants/gold';
 
@@ -83,6 +84,9 @@ export interface MessageRowProps {
   onTimesRevealed?: () => void;
   /** "Read 12:17 AM" under this bubble (only the newest own message the other side read). */
   readLabel: string | null;
+  /** Slack style thread footer under the bubble. */
+  threadReplies?: number;
+  onOpenThread?: (messageId: string) => void;
   onToggleReaction: (message: AttoMessage, emoji: string) => void;
   onPressQuote?: (replyToId: string) => void;
   renderMedia?: (message: AttoMessage) => React.ReactNode;
@@ -144,6 +148,8 @@ function MessageRowInner({
   timesReveal,
   onTimesRevealed,
   readLabel,
+  threadReplies = 0,
+  onOpenThread,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
   // Bubble size, only tracked for creator bubbles: the tail continues the
@@ -437,6 +443,19 @@ function MessageRowInner({
         ) : null}
       </View>
       {hasReactions ? <View style={styles.reactionsSpace} /> : null}
+      {threadReplies > 0 ? (
+        <Pressable
+          onPress={() => onOpenThread?.(String(message._id))}
+          style={styles.threadFooter}
+          accessibilityRole="button"
+          accessibilityLabel={labels.replies(threadReplies)}
+        >
+          <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
+          <RNText style={styles.threadFooterText} maxFontSizeMultiplier={1.1}>
+            {labels.replies(threadReplies)}
+          </RNText>
+        </Pressable>
+      ) : null}
       {readLabel ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
@@ -821,6 +840,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     marginTop: TAIL_DROP + 2,
     marginRight: 4,
+  },
+  threadFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: TAIL_DROP + 2,
+    paddingHorizontal: 6,
+  },
+  threadFooterText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontFamily: 'Archivo_600SemiBold',
   },
   // The reaction spacer already clears the tail.
   readLabelAfterReactions: { marginTop: 2 },

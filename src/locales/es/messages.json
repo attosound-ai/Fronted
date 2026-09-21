@@ -113,7 +113,14 @@
     "unarchive": "Restaurar"
   },
   "thread": {
-    "newMessages": "Mensajes nuevos"
+    "newMessages": "Mensajes nuevos",
+    "title": "Hilo",
+    "replies_one": "{{count}} respuesta",
+    "replies_other": "{{count}} respuestas",
+    "replyPlaceholder": "Responder en el hilo...",
+    "menu": "Responder en hilo",
+    "empty": "Todavía no hay respuestas. Empieza el hilo.",
+    "rootMissing": "El mensaje ya no está disponible."
   },
   "composer": {
     "expand": "Ampliar editor",

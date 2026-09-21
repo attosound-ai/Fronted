@@ -113,7 +113,14 @@
     "unarchive": "Restaurar"
   },
   "thread": {
-    "newMessages": "Novas mensagens"
+    "newMessages": "Novas mensagens",
+    "title": "Tópico",
+    "replies_one": "{{count}} resposta",
+    "replies_other": "{{count}} respostas",
+    "replyPlaceholder": "Responder no tópico...",
+    "menu": "Responder no tópico",
+    "empty": "Ainda não há respostas. Comece o tópico.",
+    "rootMissing": "A mensagem não está mais disponível."
   },
   "composer": {
     "expand": "Expandir editor",

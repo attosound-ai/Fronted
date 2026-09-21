@@ -113,7 +113,14 @@
     "unarchive": "Restore"
   },
   "thread": {
-    "newMessages": "New messages"
+    "newMessages": "New messages",
+    "title": "Thread",
+    "replies_one": "{{count}} reply",
+    "replies_other": "{{count}} replies",
+    "replyPlaceholder": "Reply in thread...",
+    "menu": "Reply in thread",
+    "empty": "No replies yet. Start the thread.",
+    "rootMissing": "The message is no longer available."
   },
   "composer": {
     "expand": "Expand editor",

@@ -55,6 +55,9 @@ export interface ChatThreadHandle {
 }
 
 export interface ChatThreadProps {
+  /** Replies per thread root, for the footer under a bubble. */
+  threadCounts?: Map<string, number>;
+  onOpenThread?: (messageId: string) => void;
   /**
    * Unread count when the chat was opened: draws the "new messages" line
    * above the oldest unread message (WhatsApp, Telegram). Fixed for the
@@ -107,6 +110,8 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       messages,
       currentUserId,
       initialUnreadCount = 0,
+      threadCounts,
+      onOpenThread,
       justSentId,
       creatorIds,
       isParticipantTyping,
@@ -298,6 +303,8 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             timesReveal={timesReveal}
             onTimesRevealed={reportTimesRevealed}
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
+            threadReplies={threadCounts?.get(String(item._id)) ?? 0}
+            onOpenThread={onOpenThread}
           />
         );
         const body =
@@ -351,6 +358,8 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         timesReveal,
         reportTimesRevealed,
         readLabelId,
+        threadCounts,
+        onOpenThread,
         readLabelText,
       ]
     );

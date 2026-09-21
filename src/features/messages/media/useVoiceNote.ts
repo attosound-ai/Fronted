@@ -43,7 +43,7 @@ export function useVoiceNote(conversationId: string) {
     });
     if (!granted) return false;
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
+    await recorder.prepareToRecordAsync({ isMeteringEnabled: true });
     samples.current = [];
     startedAt.current = Date.now();
     recorder.record();

@@ -195,9 +195,13 @@ export function waveformFromSamples(samples: number[], bars = 40): number[] {
     let peak = 0;
     for (let j = start; j < end && j < samples.length; j++)
       peak = Math.max(peak, samples[j]);
-    out.push(Math.round(Math.min(1, peak) * 100) / 100);
+    out.push(Math.min(1, peak));
   }
-  return out;
+  // Quiet notes still get a readable wave: scale so the loudest bar is full,
+  // the way WhatsApp draws them (skip near silence, which stays flat).
+  const max = Math.max(...out);
+  const scaled = max > 0.05 ? out.map((v) => v / max) : out;
+  return scaled.map((v) => Math.round(v * 100) / 100);
 }
 
 /** Recorder metering comes in dBFS (about -160 to 0): map to 0 to 1. */

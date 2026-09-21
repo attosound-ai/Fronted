@@ -147,7 +147,7 @@ export function AttachMenu({ visible, bottom, onClose, onPick }: AttachMenuProps
 }
 
 const styles = StyleSheet.create({
-  panelWrap: { position: 'absolute', left: 10, width: 232 },
+  panelWrap: { position: 'absolute', left: 10, width: 252 },
   panel: { borderRadius: 24, overflow: 'hidden' },
   list: { paddingVertical: 6 },
   row: {

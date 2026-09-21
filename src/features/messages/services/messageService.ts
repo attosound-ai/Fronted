@@ -59,6 +59,8 @@ function mapMessage(m: BackendMessage): ChatMessage {
 // --- Service ---
 
 export const messageService = {
+  /** Backend row to app message, for callers that fetch their own lists. */
+  mapBackendMessage: mapMessage,
   async getConversations(): Promise<ChatConversation[]> {
     const response = await apiClient.get<ApiSuccessResponse<BackendConversation[]>>(
       API_ENDPOINTS.MESSAGES.CONVERSATIONS

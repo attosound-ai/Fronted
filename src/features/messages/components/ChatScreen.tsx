@@ -54,6 +54,7 @@ import { ChatWallpaperLayer } from './ChatWallpaperLayer';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import { AttachMenu, type AttachAction } from './AttachMenu';
+import { countThreadReplies } from '../hooks/useThread';
 import { MediaMessage } from '../media/MediaMessage';
 import { uploadChatMedia, type OutgoingMedia } from '../media/chatMedia';
 import * as ImagePicker from 'expo-image-picker';
@@ -268,11 +269,29 @@ export function ChatScreen({
   }, [messages.length, conversationId, participantId, markRead, queryClient]);
 
   // Convert messages to gifted-chat format
+  // Slack style threads: replies live in their own screen, the main list
+  // only shows the root with a "N replies" footer.
+  const threadCounts = useMemo(() => countThreadReplies(messages), [messages]);
+  const mainMessages = useMemo(() => messages.filter((m) => !m.threadId), [messages]);
   const giftedMessages = toGiftedMessages(
-    messages,
+    mainMessages,
     userId,
     participantName,
     participantAvatar
+  );
+  const openThread = useCallback(
+    (threadId: string) => {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_STARTED, {
+        conversation_id: conversationId,
+        thread_id: threadId,
+        existing_replies: threadCounts.get(threadId) ?? 0,
+      });
+      router.push({
+        pathname: '/chat-thread',
+        params: { conversationId, threadId, participantId, participantName },
+      });
+    },
+    [conversationId, participantId, participantName, threadCounts]
   );
 
   // ── Handlers ──
@@ -461,6 +480,9 @@ export function ChatScreen({
         case 'reply':
           setReplyMessage(msg);
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.REPLY_STARTED, eventProps);
+          break;
+        case 'thread':
+          openThread(String(msg._id));
           break;
         case 'copy':
           Clipboard.setStringAsync(msg.text);
@@ -878,6 +900,11 @@ export function ChatScreen({
           actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
           icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
         },
+        {
+          actionKey: 'thread',
+          actionTitle: t('thread.menu'),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'text.bubble' } },
+        },
       ];
       if (isOwn) {
         items.push({
@@ -981,6 +1008,8 @@ export function ChatScreen({
           messages={giftedMessages}
           currentUserId={userId}
           initialUnreadCount={initialUnreadRef.current ?? 0}
+          threadCounts={threadCounts}
+          onOpenThread={openThread}
           justSentId={justSentId}
           creatorIds={creatorIds}
           isParticipantTyping={isParticipantTyping}

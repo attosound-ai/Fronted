@@ -36,6 +36,8 @@ function mapMessage(m: BackendMessage): ChatMessage {
     senderId: m.sender_id,
     content: m.content,
     contentType: m.content_type,
+    metadata: (m.metadata as ChatMessage['metadata']) ?? null,
+    threadId: m.thread_id || null,
     isRead: m.is_read,
     isEdited: m.is_edited || false,
     editedAt: m.edited_at || null,
@@ -96,6 +98,11 @@ export const messageService = {
         conversationId: dto.conversationId,
         content: dto.content,
         contentType: dto.contentType || 'text',
+        metadata: dto.metadata,
+        threadId: dto.threadId,
+        replyToId: dto.replyToId,
+        replyToContent: dto.replyToContent,
+        replyToSender: dto.replyToSender,
       }
     );
     return mapMessage(response.data.data);

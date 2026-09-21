@@ -22,7 +22,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ArrowUpLeft, Clock, AlertCircle } from 'lucide-react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
 import { GOLD } from '@/constants/gold';
 
 import { haptic } from '@/lib/haptics/hapticService';
@@ -34,7 +33,6 @@ import {
   bubbleCorners,
   emojiOnlyCount,
   emojiOnlySize,
-  RADIUS_OUTER,
   replySwipeTranslation,
   replySwipeTrigger,
   type GroupPosition,
@@ -94,17 +92,9 @@ export interface MessageRowProps {
 /** Rubber banded translation while swiping to reply. Same rule as threadModel, on the UI thread. */
 
 /** Tail geometry: 24 pt of the width sit under the bubble, 8 pt curl past its edge. */
-// iMessage geometry, measured on a real sent bubble at 3x: the bubble keeps
-// its full corner radius and the tail hangs BELOW that corner. It drops 8 pt
-// under the bubble's bottom, its point sits 9 pt inside the bubble's edge, the
-// outer side runs almost straight down from the corner arc and the inner side
-// sweeps back up to the bottom edge 21 pt in from the corner. The svg overlaps
-// the bubble by TAIL_W so it can start on the corner arc; only the part below
-// the bottom edge is visible.
-const TAIL_W = 24;
+// iMessage geometry, measured on a real sent bubble at 3x: the tail hangs
+// this far below the bubble's bottom edge (see BubbleShape).
 const TAIL_DROP = 8;
-const TAIL_ABOVE = 22;
-const TAIL_H = TAIL_ABOVE + TAIL_DROP;
 // The reaction pill hangs from the bottom edge on the inner side (the tail
 // owns the outer corner), overlapping the bubble by a few points so it never
 // covers the time or the ticks.
@@ -160,7 +150,6 @@ function MessageRowInner({
   const [bubbleSize, setBubbleSize] = useState<{ w: number; h: number } | null>(null);
   const onBubbleLayout = useCallback(
     (e: LayoutChangeEvent) => {
-      if (!senderIsCreator) return;
       const { width, height } = e.nativeEvent.layout;
       setBubbleSize((prev) =>
         prev && prev.w === width && prev.h === height ? prev : { w: width, h: height }
@@ -314,27 +303,16 @@ function MessageRowInner({
       </RNText>
     </View>
   ) : (
-    <View
-      style={[
-        styles.bubble,
-        senderIsCreator
-          ? styles.bubbleCreator
-          : isOwn
-            ? styles.bubbleOwn
-            : styles.bubbleOther,
-        cornerStyle,
-      ]}
-    >
-      {senderIsCreator ? (
-        <LinearGradient
-          colors={GOLD_STOPS}
-          locations={GOLD_LOCATIONS}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-      ) : null}
+    <View style={styles.bubble}>
+      {/* Bubble and tail are ONE vector shape with one fill, so no seam can
+          appear where the tail meets the corner (a separate tail svg left a
+          visible line on the phone). */}
+      <BubbleShape
+        size={bubbleSize}
+        corners={corners}
+        tail={tailed ? (isOwn ? 'right' : 'left') : null}
+        fill={senderIsCreator ? 'gold' : isOwn ? COLORS.white : '#262626'}
+      />
       {message.replyToId && message.replyToContent ? (
         <View
           style={[
@@ -424,7 +402,6 @@ function MessageRowInner({
     </View>
   );
 
-  const showTail = tailed;
   const content = (
     <View style={[styles.stack, isOwn ? styles.stackOwn : styles.stackOther]}>
       <View
@@ -434,13 +411,6 @@ function MessageRowInner({
         onLayout={onBubbleLayout}
       >
         {bubble}
-        {showTail ? (
-          <Tail
-            own={isOwn}
-            color={senderIsCreator ? GOLD.rich : isOwn ? COLORS.white : '#262626'}
-            gradientBubble={senderIsCreator ? bubbleSize : null}
-          />
-        ) : null}
         {hasReactions ? (
           <View
             style={[
@@ -529,68 +499,78 @@ function MessageRowInner({
 }
 
 /**
- * The little tail at the bottom corner of the last bubble in a run, drawn the
- * way iMessage draws it: the bubble's edge flares out into a hook whose point
- * sits on the baseline. Own bubbles get it on the right, the other side's on
- * the left (mirrored). The svg overlaps the bubble so both read as one shape;
- * creator bubbles pass their size so the tail continues the same gradient.
+ * The bubble background: a rounded rectangle with the run's corner radii and,
+ * on the last bubble of a run, iMessage's tail hanging under the outer bottom
+ * corner (measured on a real sent bubble at 3x: 8 pt drop, point 9 pt inside
+ * the edge, inner side sweeping back to the bottom 21 pt in). One path, one
+ * fill (solid or the creator gradient), so bubble and tail are one surface.
  */
-function Tail({
-  own,
-  color,
-  gradientBubble,
+function BubbleShape({
+  size,
+  corners,
+  tail,
+  fill,
 }: {
-  own: boolean;
-  color: string;
-  gradientBubble: { w: number; h: number } | null;
+  size: { w: number; h: number } | null;
+  corners: { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
+  tail: 'left' | 'right' | null;
+  fill: 'gold' | string;
 }) {
-  const E = TAIL_W; // bubble edge inside the svg
-  const B = TAIL_ABOVE; // bubble bottom inside the svg
-  const R = RADIUS_OUTER;
-  // Own tails hang on the right; the other side's are the same shape mirrored.
-  const X = (x: number) => (own ? x : TAIL_W - x);
-  const sweep = (f: 0 | 1) => (own ? f : 1 - f);
-  const path = [
-    `M${X(E - 19)} ${B - 0.5}`,
-    `L${X(E - R)} ${B}`,
-    // Up the corner arc to where the tail departs from it.
-    `A${R} ${R} 0 0 ${sweep(0)} ${X(E - 11.3)} ${B - 1.3}`,
-    // Outer side: almost straight down to the point, bowing out a touch.
-    `Q${X(E - 9.5)} ${B + 4} ${X(E - 9)} ${B + TAIL_DROP - 0.5}`,
-    // Inner side: sweep back up to the bottom edge.
-    `Q${X(E - 19)} ${B + 3.25} ${X(E - 21)} ${B}`,
-    `L${X(E - 21)} ${B - 0.5} Z`,
-  ].join(' ');
-  // The bubble gradient runs from its top left to its bottom right corner.
-  // In svg user space the bubble's origin sits up and to the side of the
-  // tail, so the same line, expressed here, gives the same colour at every
-  // point the tail covers.
-  let gradient: { x1: number; y1: number; x2: number; y2: number } | null = null;
-  if (gradientBubble) {
-    const { w, h } = gradientBubble;
-    // The bubble's edge sits at svg x = E (own) or 0 (other) and its bottom
-    // at svg y = B, so its origin is one bubble size up and across from there.
-    const originX = own ? E - w : 0;
-    const originY = B - h;
-    gradient = { x1: originX, y1: originY, x2: originX + w, y2: originY + h };
+  if (!size) return null;
+  const { w, h } = size;
+  const tl = Math.min(corners.topLeft, w / 2, h / 2);
+  const tr = Math.min(corners.topRight, w / 2, h / 2);
+  const br = Math.min(corners.bottomRight, w / 2, h / 2);
+  const bl = Math.min(corners.bottomLeft, w / 2, h / 2);
+  const d = [
+    `M${tl} 0`,
+    `H${w - tr}`,
+    `A${tr} ${tr} 0 0 1 ${w} ${tr}`,
+    `V${h - br}`,
+    `A${br} ${br} 0 0 1 ${w - br} ${h}`,
+    `H${bl}`,
+    `A${bl} ${bl} 0 0 1 0 ${h - bl}`,
+    `V${tl}`,
+    `A${tl} ${tl} 0 0 1 ${tl} 0`,
+    'Z',
+  ];
+  if (tail === 'right') {
+    // Starts on the corner arc and returns along the bottom edge.
+    d.push(
+      `M${w - 19} ${h - 0.5}`,
+      `L${w - br} ${h}`,
+      `A${br} ${br} 0 0 0 ${w - 11.3} ${h - 1.3}`,
+      `Q${w - 9.5} ${h + 4} ${w - 9} ${h + TAIL_DROP - 0.5}`,
+      `Q${w - 19} ${h + 3.25} ${w - 21} ${h}`,
+      'Z'
+    );
+  } else if (tail === 'left') {
+    d.push(
+      `M19 ${h - 0.5}`,
+      `L${bl} ${h}`,
+      `A${bl} ${bl} 0 0 1 11.3 ${h - 1.3}`,
+      `Q9.5 ${h + 4} 9 ${h + TAIL_DROP - 0.5}`,
+      `Q19 ${h + 3.25} 21 ${h}`,
+      'Z'
+    );
   }
   return (
     <Svg
-      width={TAIL_W}
-      height={TAIL_H}
-      viewBox={`0 0 ${TAIL_W} ${TAIL_H}`}
-      style={[styles.tail, own ? styles.tailOwn : styles.tailOther]}
+      width={w}
+      height={h + TAIL_DROP}
+      viewBox={`0 0 ${w} ${h + TAIL_DROP}`}
+      style={styles.shape}
       pointerEvents="none"
     >
-      {gradient ? (
+      {fill === 'gold' ? (
         <Defs>
           <SvgGradient
-            id="tailGold"
+            id="bubbleGold"
             gradientUnits="userSpaceOnUse"
-            x1={gradient.x1}
-            y1={gradient.y1}
-            x2={gradient.x2}
-            y2={gradient.y2}
+            x1={0}
+            y1={0}
+            x2={w}
+            y2={h}
           >
             {GOLD_STOPS.map((c, i) => (
               <Stop key={c} offset={GOLD_LOCATIONS[i]} stopColor={c} />
@@ -598,7 +578,11 @@ function Tail({
           </SvgGradient>
         </Defs>
       ) : null}
-      <Path d={path} fill={gradient ? 'url(#tailGold)' : color} />
+      <Path
+        d={d.join(' ')}
+        fill={fill === 'gold' ? 'url(#bubbleGold)' : fill}
+        fillRule="nonzero"
+      />
     </Svg>
   );
 }
@@ -712,9 +696,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
     textAlign: 'left',
   },
-  tail: { position: 'absolute', bottom: -TAIL_DROP },
-  tailOwn: { right: 0 },
-  tailOther: { left: 0 },
   stackOwn: { alignItems: 'flex-end' },
   stackOther: { alignItems: 'flex-start' },
   bubble: {
@@ -722,10 +703,9 @@ const styles = StyleSheet.create({
     paddingTop: 7,
     paddingBottom: 5,
     minWidth: 60,
+    backgroundColor: 'transparent',
   },
-  bubbleOwn: { backgroundColor: COLORS.white },
-  bubbleCreator: { backgroundColor: GOLD.base, overflow: 'hidden' },
-  bubbleOther: { backgroundColor: '#262626' },
+  shape: { position: 'absolute', left: 0, top: 0 },
   bubbleDeleted: { backgroundColor: 'rgba(255,255,255,0.08)' },
   deletedText: {
     color: 'rgba(255,255,255,0.5)',

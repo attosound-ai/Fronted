@@ -33,6 +33,9 @@ export interface BackendMessage {
   reply_to_sender: string | null;
   created_at: string | null;
   reactions?: BackendReaction[];
+  /** JSON metadata: media url, duration, waveform, iMessage style effect. */
+  metadata?: Record<string, unknown> | null;
+  thread_id?: string | null;
 }
 
 export interface BackendReaction {
@@ -83,6 +86,8 @@ export interface ChatMessage {
   createdAt: string | null;
   status?: MessageStatus;
   reactions?: Reaction[];
+  metadata?: MessageMetadata | null;
+  threadId?: string | null;
 }
 
 export interface Reaction {
@@ -93,10 +98,44 @@ export interface Reaction {
 
 // DTOs
 
+/**
+ * Media and effect details that ride along a message. `content` keeps the
+ * media url (or the text) so older clients still show something.
+ */
+export interface MessageMetadata {
+  durationMs?: number;
+  /** 0 to 1 bars for voice notes. */
+  waveform?: number[];
+  mime?: string;
+  width?: number;
+  height?: number;
+  thumbnailUrl?: string;
+  fileName?: string;
+  bytes?: number;
+  /** iMessage style effect played once on arrival. */
+  effect?: { kind: 'bubble' | 'screen'; name: string };
+  [key: string]: unknown;
+}
+
+export type MessageContentType =
+  | 'text'
+  | 'audio'
+  | 'video_note'
+  | 'image'
+  | 'video'
+  | 'file'
+  | 'location'
+  | 'contact';
+
 export interface SendMessageDTO {
   conversationId: string;
   content: string;
   contentType?: string;
+  metadata?: MessageMetadata;
+  threadId?: string;
+  replyToId?: string;
+  replyToContent?: string;
+  replyToSender?: string;
 }
 
 export interface CreateConversationDTO {

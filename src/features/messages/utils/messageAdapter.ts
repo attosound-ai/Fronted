@@ -6,7 +6,7 @@
 
 import type { IMessage, User as GiftedUser } from 'react-native-gifted-chat';
 import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
-import type { ChatMessage, Reaction } from '../types';
+import type { ChatMessage, Reaction, MessageMetadata } from '../types';
 
 export interface AttoMessage extends IMessage {
   conversationId: string;
@@ -21,6 +21,8 @@ export interface AttoMessage extends IMessage {
   reactions: Reaction[];
   status?: 'sending' | 'sent' | 'failed';
   clientKey?: string;
+  metadata?: MessageMetadata | null;
+  threadId?: string | null;
 }
 
 /**
@@ -43,6 +45,8 @@ export function toGiftedMessage(
   return {
     _id: msg.messageId,
     clientKey: msg.clientKey,
+    metadata: msg.metadata ?? null,
+    threadId: msg.threadId ?? null,
     text: msg.isDeleted ? '' : msg.content,
     createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
     user,

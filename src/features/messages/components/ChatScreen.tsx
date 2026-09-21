@@ -12,7 +12,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import type { IMessage } from 'react-native-gifted-chat';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import {
+  KeyboardAvoidingView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
 import type { MenuItem } from '../thread/MessageRow';
 import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
@@ -581,10 +585,16 @@ export function ChatScreen({
 
   // The toolbar has no background of its own: the wallpaper runs under it
   // and the composer's glass floats on top (iOS 26 Messages, Telegram).
+  // Telegram and iMessage sit the composer right on the keyboard: the home
+  // indicator inset only applies while the keyboard is down.
+  const { progress: keyboardProgress } = useReanimatedKeyboardAnimation();
+  const toolbarInset = useAnimatedStyle(() => ({
+    paddingBottom:
+      Math.max(insets.bottom, 12) * (1 - keyboardProgress.value) +
+      8 * keyboardProgress.value,
+  }));
   const inputToolbar = (
-    <View
-      style={[styles.inputToolbarOuter, { paddingBottom: Math.max(insets.bottom, 12) }]}
-    >
+    <Animated.View style={[styles.inputToolbarOuter, toolbarInset]}>
       <ChatComposer
         ref={composerRef}
         conversationId={conversationId}
@@ -608,7 +618,7 @@ export function ChatScreen({
         onTextActivity={handleTypingActivity}
         preview={composerPreview}
       />
-    </View>
+    </Animated.View>
   );
 
   const menuItemsFor = useCallback(

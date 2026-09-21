@@ -45,14 +45,19 @@ export function useRealtimeChat(conversationId: string) {
 
   const prependMessage = useCallback(
     (msg: ChatMessage) => {
+      let outcome: 'no_cache' | 'replaced_temp' | 'prepended' = 'prepended';
       queryClient.setQueryData(
         QUERY_KEYS.MESSAGES.CHAT(conversationId),
         (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
-          if (!old) return old;
+          if (!old) {
+            outcome = 'no_cache';
+            return old;
+          }
           const firstPage = old.pages[0];
           // Deduplicate: skip if messageId already exists OR if there's a
           // temp optimistic message with the same content (own message echo)
           if (firstPage.messages.some((m) => isEchoOf(m, msg))) {
+            outcome = 'replaced_temp';
             // Replace the temp message with the real server message
             return {
               ...old,
@@ -82,6 +87,12 @@ export function useRealtimeChat(conversationId: string) {
           };
         }
       );
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CACHE_PREPEND, {
+        conversation_id: conversationId,
+        message_id: msg.messageId,
+        content_type: msg.contentType ?? 'text',
+        outcome,
+      });
       // Refresh conversation list sidebar
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
     },

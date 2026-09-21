@@ -748,6 +748,20 @@ export function ChatScreen({
           };
         }
       );
+      // Granular by design: when a media row does not show up, this says
+      // whether it ever entered the cache and how many rows the first page
+      // had afterwards.
+      {
+        const after = queryClient.getQueryData<{ pages: ChatMessagesPage[] }>(chatKey);
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.OPTIMISTIC_ROW_ADDED, {
+          conversation_id: conversationId,
+          kind: media.kind,
+          temp_id: tempId,
+          pages: after?.pages?.length ?? 0,
+          first_page_rows: after?.pages?.[0]?.messages?.length ?? 0,
+          has_temp: !!after?.pages?.[0]?.messages?.some((m) => m.messageId === tempId),
+        });
+      }
       const patchTemp = (patch: Record<string, unknown>) =>
         queryClient.setQueryData(
           chatKey,

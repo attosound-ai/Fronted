@@ -524,6 +524,8 @@ export const ANALYTICS_EVENTS = {
     INVISIBLE_INK_REVEALED: 'messages_invisible_ink_revealed',
     ATTACH_MENU_OPENED: 'messages_attach_menu_opened',
     CAMERA_OPENED: 'messages_camera_opened',
+    OPTIMISTIC_ROW_ADDED: 'messages_optimistic_row_added',
+    CACHE_PREPEND: 'messages_cache_prepend',
     MEDIA_COMPRESSED: 'messages_media_compressed',
     MEDIA_COMPRESS_FAILED: 'messages_media_compress_failed',
     MEDIA_REJECTED: 'messages_media_rejected',

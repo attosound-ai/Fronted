@@ -647,12 +647,14 @@ function TickMarks({ double, color }: { double: boolean; color: string }) {
   );
 }
 
-/** Slide the freshly sent bubble in from the composer: iMessage's send. */
-export const sentFromComposer = FadeInDown.springify()
-  .damping(16)
-  .stiffness(200)
+/**
+ * Slide the freshly sent bubble in from the composer: a short ease out with
+ * no spring. A bouncy version was rejected on the phone as slow and ugly.
+ */
+export const sentFromComposer = FadeInDown.duration(220)
+  .easing(EASE_OUT)
   .withInitialValues({
-    transform: [{ translateY: 56 }, { scale: 0.92 }],
+    transform: [{ translateY: 44 }, { scale: 0.96 }],
     opacity: 0,
   });
 

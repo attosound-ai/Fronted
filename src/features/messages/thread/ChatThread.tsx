@@ -387,7 +387,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           ListHeaderComponent={
             isParticipantTyping ? (
               <Animated.View
-                entering={ZoomIn.springify().damping(16)}
+                entering={ZoomIn.duration(180)}
                 exiting={ZoomOut.duration(160)}
                 style={styles.typingRow}
               >
@@ -429,7 +429,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
 
         {farFromBottom ? (
           <Animated.View
-            entering={ZoomIn.springify().damping(15)}
+            entering={ZoomIn.duration(180)}
             exiting={ZoomOut.duration(140)}
             layout={LinearTransition}
             style={[styles.jumpWrap, { bottom: bottomInset + 12 }]}

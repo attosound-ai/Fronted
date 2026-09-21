@@ -20,7 +20,9 @@ export const GROUP_GAP_MS = 5 * 60_000;
 /** Corner radius of a bubble edge that faces the outside of its group. */
 export const RADIUS_OUTER = 18;
 /** Corner radius of an edge that touches a neighbour in the group. */
-export const RADIUS_INNER = 5;
+// 5 pt (iMessage) read as a flattened edge on the phone; 12 keeps the run
+// readable without the squashed look.
+export const RADIUS_INNER = 12;
 /** A solo emoji message shows this many characters at most, drawn large. */
 export const EMOJI_ONLY_MAX = 3;
 

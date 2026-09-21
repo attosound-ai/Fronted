@@ -355,7 +355,11 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       ]
     );
 
-    const keyExtractor = useCallback((m: AttoMessage) => String(m._id), []);
+    // The optimistic temp row and its server copy share one key.
+    const keyExtractor = useCallback(
+      (m: AttoMessage) => m.clientKey ?? String(m._id),
+      []
+    );
     const reportedRef = useRef(false);
     useEffect(() => {
       if (reportedRef.current || messages.length === 0) return;

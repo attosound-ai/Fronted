@@ -67,7 +67,11 @@ export function useRealtimeChat(conversationId: string) {
                   ...firstPage,
                   messages: firstPage.messages.map((m) =>
                     m.messageId.startsWith('temp-') && m.content === msg.content
-                      ? { ...msg, status: 'sent' as const }
+                      ? {
+                          ...msg,
+                          clientKey: m.clientKey ?? m.messageId,
+                          status: 'sent' as const,
+                        }
                       : m
                   ),
                 },

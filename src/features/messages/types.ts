@@ -65,6 +65,9 @@ export type MessageStatus = 'sending' | 'sent' | 'failed';
 export interface ChatMessage {
   conversationId: string;
   messageId: string;
+  /** Stable list key across the optimistic temp id and the server id, so
+   * the row never remounts (a remount showed a ghost copy for one frame). */
+  clientKey?: string;
   senderId: string;
   content: string;
   contentType: string;

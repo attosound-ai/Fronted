@@ -20,6 +20,7 @@ export interface AttoMessage extends IMessage {
   replyToSender?: string | null;
   reactions: Reaction[];
   status?: 'sending' | 'sent' | 'failed';
+  clientKey?: string;
 }
 
 /**
@@ -41,6 +42,7 @@ export function toGiftedMessage(
 
   return {
     _id: msg.messageId,
+    clientKey: msg.clientKey,
     text: msg.isDeleted ? '' : msg.content,
     createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
     user,

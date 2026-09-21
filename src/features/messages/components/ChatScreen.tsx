@@ -345,6 +345,7 @@ export function ChatScreen({
                   {
                     conversationId,
                     messageId: tempId,
+                    clientKey: tempId,
                     senderId: userId,
                     content,
                     replyToId: currentReply?._id as string | undefined,

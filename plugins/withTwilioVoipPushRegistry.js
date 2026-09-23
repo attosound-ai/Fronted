@@ -953,7 +953,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         if pct >= 3 { tops.append((t.name, pct)) }
       }
       tops.sort { $0.1 > $1.1 }
-      let top = tops.prefix(4).map { "\($0.0):\($0.1)" }.joined(separator: ",")
+      let top = tops.prefix(4).map { "\\($0.0):\\($0.1)" }.joined(separator: ",")
       UserDefaults.standard.set(top, forKey: "atto_native_cpu_top")
     }
     var next: [UInt64: Double] = [:]

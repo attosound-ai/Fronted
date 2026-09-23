@@ -130,6 +130,9 @@ export interface NativeCallAudioState {
   nativeAudioOutput?: string;
   nativeAudioInput?: string;
   nativeThermal?: number;
+  nativeCpuPct?: number;
+  nativeAvailMB?: number;
+  nativeSysFreeMB?: number;
   nativeLowPower?: boolean;
   nativeBgAt?: number;
   nativeFgAt?: number;
@@ -154,6 +157,9 @@ export interface NativeCallAudioState {
   prevNativeAudioOutput?: string;
   prevNativeAudioInput?: string;
   prevNativeThermal?: number;
+  prevNativeCpuPct?: number;
+  prevNativeAvailMB?: number;
+  prevNativeSysFreeMB?: number;
   prevNativeLowPower?: boolean;
   prevNativeBgAt?: number;
   prevNativeFgAt?: number;
@@ -503,6 +509,8 @@ export interface DeviceSnapshot {
   nativeAudioEnabled: boolean | null;
   nativeMemMB: number | null;
   nativeAudioInput: string | null;
+  nativeCpuPct: number | null;
+  nativeSysFreeMB: number | null;
   audioInterruptionCount: number | null;
   audioInterruptionBeganAt: number | null;
   mediaServicesResetAt: number | null;
@@ -692,6 +700,8 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     nativeAudioEnabled: a?.nativeAudioEnabled ?? null,
     nativeMemMB: a?.nativeMemMB ?? null,
     nativeAudioInput: a?.nativeAudioInput || null,
+    nativeCpuPct: a?.nativeCpuPct ?? null,
+    nativeSysFreeMB: a?.nativeSysFreeMB ?? null,
     audioInterruptionCount: a?.interruptionCount ?? null,
     audioInterruptionBeganAt: aTs(a?.interruptionBeganAt),
     mediaServicesResetAt: aTs(a?.mediaServicesResetAt),

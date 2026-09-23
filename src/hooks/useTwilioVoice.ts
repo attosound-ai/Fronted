@@ -68,6 +68,7 @@ function reportInterruptedCallIfAny(): void {
 }
 import {
   startCallTelemetry,
+  registerCallCadenceListener,
   endCallTelemetry,
   telemetryCounters,
   captureCallAudioSnapshot,
@@ -559,6 +560,24 @@ function startCallStatsCapture() {
     clearInterval(callStatsInterval);
     callStatsInterval = setInterval(() => void captureCallStats('tick'), STATS_SLOW_MS);
   }, STATS_FAST_WINDOW_MS);
+}
+
+/** Background (Sep 23 2026): one stats sample a minute, see callTelemetry. */
+const STATS_BG_MS = 60_000;
+let statsCadenceBg = false;
+registerCallCadenceListener((bg: boolean) => setCallStatsBackground(bg));
+export function setCallStatsBackground(bg: boolean): void {
+  if (bg === statsCadenceBg || !callStatsInterval) return;
+  statsCadenceBg = bg;
+  if (callStatsCadenceTimer) {
+    clearTimeout(callStatsCadenceTimer);
+    callStatsCadenceTimer = null;
+  }
+  clearInterval(callStatsInterval);
+  callStatsInterval = setInterval(
+    () => void captureCallStats('tick'),
+    bg ? STATS_BG_MS : STATS_SLOW_MS
+  );
 }
 
 function stopCallStatsCapture() {

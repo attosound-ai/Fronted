@@ -26,6 +26,7 @@ export {
   reportAudioProblem,
   registerCallStatsSampler,
   type AudioProblemSymptom,
+  registerCallCadenceListener,
 } from './callTelemetry';
 export {
   startAmbientTelemetry,

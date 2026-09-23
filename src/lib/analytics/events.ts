@@ -225,6 +225,8 @@ export const ANALYTICS_EVENTS = {
     // calls had a disconnect reason and every silent death had to be INFERRED from
     // missing events. Carries how long the call had run and its last known state.
     DIED_UNREPORTED: 'call_died_unreported',
+    // The call telemetry slowed down (background) or sped up (foreground).
+    CADENCE_CHANGED: 'call_telemetry_cadence',
     TWILIO_UNREGISTERED: 'call_twilio_unregistered',
     INVITE_AUTO_SWITCH_STARTED: 'call_invite_auto_switch_started',
     INVITE_AUTO_SWITCH_SUCCEEDED: 'call_invite_auto_switch_succeeded',

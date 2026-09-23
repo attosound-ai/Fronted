@@ -842,6 +842,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   private static let pulseKeys = [
     "alive_at", "app_state", "callkit_calls", "audio_enabled", "mem_mb", "audio_category",
+    "cpu_pct", "avail_mb", "sys_free_mb",
     "audio_output", "audio_input", "thermal", "low_power", "bg_at", "fg_at", "will_terminate_at",
     "interruption_began_at", "interruption_ended_at", "interruption_reason", "interruption_count",
     "media_reset_at",
@@ -888,6 +889,60 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
            forKey: "atto_native_audio_input")
     ud.set(ProcessInfo.processInfo.thermalState.rawValue, forKey: "atto_native_thermal")
     ud.set(ProcessInfo.processInfo.isLowPowerModeEnabled, forKey: "atto_native_low_power")
+    // CPU of THIS process since the last tick, as a percentage of one core, and
+    // the memory picture: what this process may still take before its limit
+    // and how much the whole device has free. MetricKit (Sep 23 2026) blamed
+    // background exits on CPU limit and memory pressure; these say which.
+    ud.set(AttoVoipBootstrap.cpuPercentSinceLastPulse(), forKey: "atto_native_cpu_pct")
+    ud.set(Int(os_proc_available_memory() / (1024 * 1024)), forKey: "atto_native_avail_mb")
+    ud.set(AttoVoipBootstrap.systemFreeMB(), forKey: "atto_native_sys_free_mb")
+  }
+
+  private static var lastCpuSeconds: Double = -1
+  private static var lastCpuAt: Double = 0
+
+  /// User plus system CPU time of every thread in the process, delta over the
+  /// pulse interval, as percent of one core (100 = one core busy).
+  private static func cpuPercentSinceLastPulse() -> Int {
+    var threads: thread_act_array_t?
+    var count = mach_msg_type_number_t(0)
+    guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS, let list = threads else { return -1 }
+    var total: Double = 0
+    for i in 0..<Int(count) {
+      var info = thread_basic_info()
+      var infoCount = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size / MemoryLayout<natural_t>.size)
+      let kr = withUnsafeMutablePointer(to: &info) { ptr -> kern_return_t in
+        ptr.withMemoryRebound(to: integer_t.self, capacity: Int(infoCount)) { raw in
+          thread_info(list[i], thread_flavor_t(THREAD_BASIC_INFO), raw, &infoCount)
+        }
+      }
+      if kr == KERN_SUCCESS && (info.flags & TH_FLAGS_IDLE) == 0 {
+        total += Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1_000_000
+        total += Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1_000_000
+      }
+    }
+    let size = vm_size_t(UInt(count) * UInt(MemoryLayout<thread_t>.size))
+    vm_deallocate(mach_task_self_, vm_address_t(bitPattern: list), size)
+    let now = Date().timeIntervalSince1970
+    defer { lastCpuSeconds = total; lastCpuAt = now }
+    if lastCpuSeconds < 0 || now <= lastCpuAt { return -1 }
+    return Int(((total - lastCpuSeconds) / (now - lastCpuAt)) * 100)
+  }
+
+  /// Free plus inactive pages on the device, in MB (what iOS can hand out
+  /// before it starts evicting background apps).
+  private static func systemFreeMB() -> Int {
+    var stats = vm_statistics64()
+    var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+    let kr = withUnsafeMutablePointer(to: &stats) { ptr -> kern_return_t in
+      ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { raw in
+        host_statistics64(mach_host_self(), HOST_VM_INFO64, raw, &count)
+      }
+    }
+    if kr != KERN_SUCCESS { return -1 }
+    let page = UInt64(vm_kernel_page_size)
+    let free = (UInt64(stats.free_count) + UInt64(stats.inactive_count)) * page
+    return Int(free / (1024 * 1024))
   }
 
   private static func audioDeviceEnabled() -> Bool {

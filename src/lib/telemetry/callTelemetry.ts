@@ -217,6 +217,7 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
   // Mark "call in flight" so a silent process death is detectable next launch.
   writeInFlightMarker();
 
+  cadence = 'foreground';
   lastSessionKey = null;
   lastRouteChangeCount = null;
   routeHistory = [];
@@ -228,7 +229,51 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
 
   appStateSub = AppState.addEventListener('change', (s: AppStateStatus) => {
     void snapshotAndEmit(`app_state_${s}`);
+    applyCallCadence(s);
   });
+}
+
+/**
+ * Background call mode (Sep 23 2026). MetricKit on the client's phone counted
+ * background exits for CPU limit and memory pressure during calls, and on
+ * David's phone memory pressure, one per locked call. In background the only
+ * work that matters is the audio; the 750 ms audio session watch, the 2 s
+ * memory heartbeat and the 10 s snapshot each wake JS, cross the bridge and
+ * queue an event, for nothing anyone reads while the screen is off. So they
+ * slow to 30 s, 30 s and 60 s the moment the app leaves the foreground and
+ * come back when it returns. The native 5 s pulse keeps the death report.
+ */
+const BG_TICK_MS = 60_000;
+const BG_MEM_HEARTBEAT_MS = 30_000;
+const BG_SESSION_WATCH_MS = 30_000;
+let cadence: 'foreground' | 'background' = 'foreground';
+
+function applyCallCadence(state: AppStateStatus): void {
+  if (!isActive) return;
+  const next = state === 'active' ? 'foreground' : 'background';
+  if (next === cadence) return;
+  cadence = next;
+  const bg = next === 'background';
+  if (tickInterval) clearInterval(tickInterval);
+  tickInterval = setInterval(() => {
+    void snapshotAndEmit('tick');
+  }, bg ? BG_TICK_MS : TICK_MS);
+  if (memHeartbeatInterval) clearInterval(memHeartbeatInterval);
+  memHeartbeatInterval = setInterval(() => {
+    void emitMemHeartbeat();
+  }, bg ? BG_MEM_HEARTBEAT_MS : MEM_HEARTBEAT_MS);
+  if (sessionWatchInterval) clearInterval(sessionWatchInterval);
+  sessionWatchInterval = setInterval(() => {
+    void watchAudioSession();
+  }, bg ? BG_SESSION_WATCH_MS : SESSION_WATCH_MS);
+  cadenceListener?.(bg);
+  analytics.capture(ANALYTICS_EVENTS.CALL.CADENCE_CHANGED, { cadence: next });
+}
+
+let cadenceListener: ((background: boolean) => void) | null = null;
+/** useTwilioVoice registers its stats sampler cadence here. */
+export function registerCallCadenceListener(l: ((background: boolean) => void) | null): void {
+  cadenceListener = l;
 }
 
 /**
@@ -353,6 +398,9 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
       native_audio_output: native?.prevNativeAudioOutput || null,
       native_audio_input: native?.prevNativeAudioInput || null,
       native_thermal: native?.prevNativeThermal ?? null,
+      native_cpu_pct: native?.prevNativeCpuPct ?? null,
+      native_avail_mb: native?.prevNativeAvailMB ?? null,
+      native_sys_free_mb: native?.prevNativeSysFreeMB ?? null,
       native_low_power: native?.prevNativeLowPower ?? null,
       native_bg_gap_sec: gap(native?.prevNativeBgAt),
       native_fg_gap_sec: gap(native?.prevNativeFgAt),

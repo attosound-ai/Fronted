@@ -853,10 +853,10 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   private func snapshotPreviousPulse() {
     let ud = UserDefaults.standard
     for k in AttoVoipBootstrap.pulseKeys {
-      if let v = ud.object(forKey: "atto_native_\(k)") {
-        ud.set(v, forKey: "atto_native_prev_\(k)")
+      if let v = ud.object(forKey: "atto_native_\\(k)") {
+        ud.set(v, forKey: "atto_native_prev_\\(k)")
       } else {
-        ud.removeObject(forKey: "atto_native_prev_\(k)")
+        ud.removeObject(forKey: "atto_native_prev_\\(k)")
       }
     }
     ud.set(Date().timeIntervalSince1970, forKey: "atto_native_prev_snapshot_at")

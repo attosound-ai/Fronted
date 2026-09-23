@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561..0a9d016 100644
+index 948c561..7cd8b92 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,10 @@
@@ -33,7 +33,7 @@ index 948c561..0a9d016 100644
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,355 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,375 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -311,6 +311,26 @@ index 948c561..0a9d016 100644
 +        @"metricKitReceivedAt": @([ud doubleForKey:@"atto_metrickit_received_at"]),
 +        @"metricKitDiagJson": ([ud stringForKey:@"atto_metrickit_diag_json"] ?: @""),
 +        @"metricKitDiagReceivedAt": @([ud doubleForKey:@"atto_metrickit_diag_received_at"]),
++        // the previous process's last pulse, snapshotted at this launch
++        @"prevNativeAliveAt": @([ud doubleForKey:@"atto_native_prev_alive_at"]),
++        @"prevNativeAppState": @([ud integerForKey:@"atto_native_prev_app_state"]),
++        @"prevNativeCallKitCalls": @([ud integerForKey:@"atto_native_prev_callkit_calls"]),
++        @"prevNativeAudioEnabled": @([ud boolForKey:@"atto_native_prev_audio_enabled"]),
++        @"prevNativeMemMB": @([ud integerForKey:@"atto_native_prev_mem_mb"]),
++        @"prevNativeAudioCategory": ([ud stringForKey:@"atto_native_prev_audio_category"] ?: @""),
++        @"prevNativeAudioOutput": ([ud stringForKey:@"atto_native_prev_audio_output"] ?: @""),
++        @"prevNativeAudioInput": ([ud stringForKey:@"atto_native_prev_audio_input"] ?: @""),
++        @"prevNativeThermal": @([ud integerForKey:@"atto_native_prev_thermal"]),
++        @"prevNativeLowPower": @([ud boolForKey:@"atto_native_prev_low_power"]),
++        @"prevNativeBgAt": @([ud doubleForKey:@"atto_native_prev_bg_at"]),
++        @"prevNativeFgAt": @([ud doubleForKey:@"atto_native_prev_fg_at"]),
++        @"prevNativeWillTerminateAt": @([ud doubleForKey:@"atto_native_prev_will_terminate_at"]),
++        @"prevInterruptionBeganAt": @([ud doubleForKey:@"atto_native_prev_interruption_began_at"]),
++        @"prevInterruptionEndedAt": @([ud doubleForKey:@"atto_native_prev_interruption_ended_at"]),
++        @"prevInterruptionReason": @([ud integerForKey:@"atto_native_prev_interruption_reason"]),
++        @"prevInterruptionCount": @([ud integerForKey:@"atto_native_prev_interruption_count"]),
++        @"prevMediaServicesResetAt": @([ud doubleForKey:@"atto_native_prev_media_reset_at"]),
++        @"prevSnapshotAt": @([ud doubleForKey:@"atto_native_prev_snapshot_at"]),
 +    });
 +}
 +

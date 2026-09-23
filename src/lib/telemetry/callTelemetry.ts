@@ -323,8 +323,13 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
     // the app in background and a live CallKit call means iOS suspended or
     // killed a process that was still on a call.
     const ts = (v: number | undefined) => (v && v > 0 ? v : null);
-    const aliveAt = ts(native?.nativeAliveAt);
-    const bgAt = ts(native?.nativeBgAt);
+    // prev* = the pulse of the process that died, snapshotted by the bootstrap
+    // at this launch BEFORE its first tick (the plain fields already describe
+    // this new process and said nothing about the death, Sep 23 2026).
+    const aliveAt = ts(native?.prevNativeAliveAt);
+    const bgAt = ts(native?.prevNativeBgAt);
+    const now = Date.now() / 1000;
+    const gap = (v: number | undefined) => (ts(v) ? Math.round(now - (v as number)) : null);
     analytics.capture(ANALYTICS_EVENTS.CALL.DIED_UNREPORTED, {
       call_sid: m.callSid ?? null,
       // How far the call got before the process died.
@@ -335,29 +340,29 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
       // What the app was doing when it died (editor mount, capture, etc.).
       last_marker: m.lastMarker ?? null,
       last_mem_mb: m.lastMemMb ?? null,
-      native_alive_gap_sec: aliveAt ? Math.round(Date.now() / 1000 - aliveAt) : null,
+      // Seconds between the dead process's last native tick and this launch.
+      native_alive_gap_sec: aliveAt ? Math.round(now - aliveAt) : null,
+      // How long the dead process kept ticking after it went to background.
       native_bg_to_last_alive_sec:
         aliveAt && bgAt && aliveAt >= bgAt ? Math.round(aliveAt - bgAt) : null,
-      native_app_state: native?.nativeAppState ?? null,
-      native_callkit_calls: native?.nativeCallKitCalls ?? null,
-      native_audio_enabled: native?.nativeAudioEnabled ?? null,
-      native_mem_mb: native?.nativeMemMB ?? null,
-      native_audio_category: native?.nativeAudioCategory || null,
-      native_audio_output: native?.nativeAudioOutput || null,
-      native_audio_input: native?.nativeAudioInput || null,
-      native_thermal: native?.nativeThermal ?? null,
-      native_low_power: native?.nativeLowPower ?? null,
-      native_will_terminate_gap_sec: ts(native?.nativeWillTerminateAt)
-        ? Math.round(Date.now() / 1000 - (native?.nativeWillTerminateAt as number))
-        : null,
-      interruption_began_gap_sec: ts(native?.interruptionBeganAt)
-        ? Math.round(Date.now() / 1000 - (native?.interruptionBeganAt as number))
-        : null,
-      interruption_reason: native?.interruptionReason ?? null,
-      interruption_count: native?.interruptionCount ?? null,
-      media_services_reset_gap_sec: ts(native?.mediaServicesResetAt)
-        ? Math.round(Date.now() / 1000 - (native?.mediaServicesResetAt as number))
-        : null,
+      native_app_state: native?.prevNativeAppState ?? null,
+      native_callkit_calls: native?.prevNativeCallKitCalls ?? null,
+      native_audio_enabled: native?.prevNativeAudioEnabled ?? null,
+      native_mem_mb: native?.prevNativeMemMB ?? null,
+      native_audio_category: native?.prevNativeAudioCategory || null,
+      native_audio_output: native?.prevNativeAudioOutput || null,
+      native_audio_input: native?.prevNativeAudioInput || null,
+      native_thermal: native?.prevNativeThermal ?? null,
+      native_low_power: native?.prevNativeLowPower ?? null,
+      native_bg_gap_sec: gap(native?.prevNativeBgAt),
+      native_fg_gap_sec: gap(native?.prevNativeFgAt),
+      native_will_terminate_gap_sec: gap(native?.prevNativeWillTerminateAt),
+      interruption_began_gap_sec: gap(native?.prevInterruptionBeganAt),
+      interruption_ended_gap_sec: gap(native?.prevInterruptionEndedAt),
+      interruption_reason: native?.prevInterruptionReason ?? null,
+      interruption_count: native?.prevInterruptionCount ?? null,
+      media_services_reset_gap_sec: gap(native?.prevMediaServicesResetAt),
+      prev_snapshot_gap_sec: gap(native?.prevSnapshotAt),
     });
   } catch {
     // Corrupt marker — drop it so it can't loop.

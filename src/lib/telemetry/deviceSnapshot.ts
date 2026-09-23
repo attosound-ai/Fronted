@@ -143,6 +143,27 @@ export interface NativeCallAudioState {
   metricKitReceivedAt?: number;
   metricKitDiagJson?: string;
   metricKitDiagReceivedAt?: number;
+  // The previous process's last pulse, snapshotted at this launch before the
+  // first new tick (what the app looked like when it died).
+  prevNativeAliveAt?: number;
+  prevNativeAppState?: number;
+  prevNativeCallKitCalls?: number;
+  prevNativeAudioEnabled?: boolean;
+  prevNativeMemMB?: number;
+  prevNativeAudioCategory?: string;
+  prevNativeAudioOutput?: string;
+  prevNativeAudioInput?: string;
+  prevNativeThermal?: number;
+  prevNativeLowPower?: boolean;
+  prevNativeBgAt?: number;
+  prevNativeFgAt?: number;
+  prevNativeWillTerminateAt?: number;
+  prevInterruptionBeganAt?: number;
+  prevInterruptionEndedAt?: number;
+  prevInterruptionReason?: number;
+  prevInterruptionCount?: number;
+  prevMediaServicesResetAt?: number;
+  prevSnapshotAt?: number;
   /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.

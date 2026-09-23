@@ -840,7 +840,30 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   private var pulseTimer: Timer?
 
+  private static let pulseKeys = [
+    "alive_at", "app_state", "callkit_calls", "audio_enabled", "mem_mb", "audio_category",
+    "audio_output", "audio_input", "thermal", "low_power", "bg_at", "fg_at", "will_terminate_at",
+    "interruption_began_at", "interruption_ended_at", "interruption_reason", "interruption_count",
+    "media_reset_at",
+  ]
+
+  /// The pulse of the PREVIOUS process, copied before this process writes its
+  /// first tick. Without this the launch overwrote the very values that say
+  /// what the app looked like when it died (Sep 23 2026, first field run).
+  private func snapshotPreviousPulse() {
+    let ud = UserDefaults.standard
+    for k in AttoVoipBootstrap.pulseKeys {
+      if let v = ud.object(forKey: "atto_native_\(k)") {
+        ud.set(v, forKey: "atto_native_prev_\(k)")
+      } else {
+        ud.removeObject(forKey: "atto_native_prev_\(k)")
+      }
+    }
+    ud.set(Date().timeIntervalSince1970, forKey: "atto_native_prev_snapshot_at")
+  }
+
   private func startNativePulse() {
+    snapshotPreviousPulse()
     pulseTimer?.invalidate()
     let t = Timer(timeInterval: 5.0, target: self, selector: #selector(nativePulse),
                   userInfo: nil, repeats: true)

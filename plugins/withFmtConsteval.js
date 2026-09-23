@@ -18,10 +18,15 @@ const path = require('path');
  */
 const MARKER = '# withFmtConsteval';
 const INJECT = `
-    ${MARKER}: Xcode 26 rejects fmt 11's consteval strings, see plugins/withFmtConsteval.js
+    ${MARKER}: Xcode 26 rejects fmt 11's consteval strings, see plugins/withFmtConsteval.js.
+    # Runs AFTER react_native_post_install so nothing rewrites these settings,
+    # and on EVERY pod target: fmt's headers are included by folly and React
+    # core too, and a preprocessor definition is what the compiler honours.
     installer.pods_project.targets.each do |target|
-      next unless target.name == 'fmt'
       target.build_configurations.each do |config|
+        defs = Array(config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)'])
+        defs << 'FMT_CONSTEVAL=' unless defs.include?('FMT_CONSTEVAL=')
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
         flags = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'] || ['$(inherited)'])
         flags << '-DFMT_CONSTEVAL=' unless flags.include?('-DFMT_CONSTEVAL=')
         config.build_settings['OTHER_CPLUSPLUSFLAGS'] = flags
@@ -36,11 +41,13 @@ module.exports = function withFmtConsteval(config) {
       const podfile = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
       let src = fs.readFileSync(podfile, 'utf8');
       if (src.includes(MARKER)) return cfg;
-      const anchor = 'post_install do |installer|\n';
-      if (!src.includes(anchor)) {
-        throw new Error('[withFmtConsteval] post_install block not found in the Podfile');
+      // Inject at the END of the post_install block: after the closing paren
+      // of react_native_post_install(...) and before the block's `end`.
+      const re = /(post_install do \|installer\|\n[\s\S]*?react_native_post_install\([\s\S]*?\n\s*\)\n)/;
+      if (!re.test(src)) {
+        throw new Error('[withFmtConsteval] react_native_post_install call not found in the Podfile');
       }
-      src = src.replace(anchor, anchor + INJECT);
+      src = src.replace(re, `$1${INJECT}`);
       fs.writeFileSync(podfile, src);
       return cfg;
     },

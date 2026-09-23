@@ -13,6 +13,7 @@ import {
   refreshAppLogoCaches,
 } from '@/features/feed/hooks/useAppLogo';
 import { splashBox } from '@/features/feed/utils/splashLogo';
+import { getCachedSplashScale } from '@/features/feed/utils/appSettings';
 import { useCallStore } from '@/stores/callStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
@@ -106,7 +107,8 @@ export function AppSplash({ onDone }: { onDone: () => void }) {
   // width, a round or square mark gets a compact box, so neither ends up tiny
   // or oversized. The bundled fallback is the round mark from the website.
   const aspect = showRemote ? (cachedLogo?.aspect ?? BUNDLED_ASPECT) : BUNDLED_ASPECT;
-  const size = splashBox(aspect, width);
+  // The admin sets the mark's share of the width; cached with the logo.
+  const size = splashBox(aspect, width, getCachedSplashScale());
   return (
     <Animated.View
       pointerEvents="none"

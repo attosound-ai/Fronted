@@ -7,6 +7,30 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { parseSplashCache, type SplashLogo } from '../utils/splashLogo';
+import {
+  parseFeedMenu,
+  parseSplashScale,
+  readCachedAppSettings,
+  writeCachedAppSettings,
+  type AppSettings,
+} from '../utils/appSettings';
+import { create } from 'zustand';
+
+/**
+ * Live copy of the admin settings for screens (the feed header menu). Seeded
+ * from the MMKV cache so the first frame already has the last known menu,
+ * then replaced by every app-logo response.
+ */
+export const useAppSettingsStore = create<AppSettings>(() => readCachedAppSettings());
+
+function keepAppSettings(payload: AppLogoPayload | null | undefined): void {
+  const next: AppSettings = {
+    feedMenu: parseFeedMenu(payload?.feedMenu),
+    splashScale: parseSplashScale(payload?.splashScale),
+  };
+  writeCachedAppSettings(next);
+  useAppSettingsStore.setState(next);
+}
 
 /**
  * This build's number. Sent to the backend so it can target logos by version.
@@ -59,6 +83,10 @@ interface AppLogoPayload {
   imageUrl: string;
   /** Launch splash image set in the admin; absent means follow `imageUrl`. */
   splashImageUrl?: string | null;
+  /** Admin feed menu, order and names; absent means the app's default. */
+  feedMenu?: unknown;
+  /** Splash mark width as a fraction of the screen; absent means 0.3. */
+  splashScale?: unknown;
   updatedAt: string;
 }
 
@@ -159,6 +187,7 @@ export async function refreshAppLogoCaches(): Promise<'updated' | 'failed'> {
       { timeout: 8000, ...(APP_BUILD ? { params: { appBuild: APP_BUILD } } : {}) }
     );
     writeCachedLogo(res.data.data?.imageUrl ?? null);
+    keepAppSettings(res.data.data);
     await syncSplashLogo(res.data.data?.splashImageUrl ?? null);
     return 'updated';
   } catch {
@@ -190,6 +219,7 @@ export function useAppLogo(): string | null {
         );
         const url = res.data.data?.imageUrl ?? null;
         writeCachedLogo(url);
+        keepAppSettings(res.data.data);
         void syncSplashLogo(res.data.data?.splashImageUrl ?? null);
         return url;
       } catch {

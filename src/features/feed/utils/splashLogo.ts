@@ -44,12 +44,15 @@ export function parseSplashCache(raw: string | null | undefined): SplashLogo | n
  */
 export function splashBox(
   aspect: number,
-  windowWidth: number
+  windowWidth: number,
+  /** Mark width as a fraction of the window; the admin sets it, 0.3 by default. */
+  scale: number = 0.3
 ): { width: number; height: number } {
   const safe = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const wide = safe >= WIDE_ASPECT;
+  const markScale = Number.isFinite(scale) && scale > 0 ? scale : 0.3;
   const width = Math.round(
-    wide ? Math.min(windowWidth * 0.78, 520) : Math.min(windowWidth * 0.3, 180)
+    wide ? Math.min(windowWidth * 0.78, 520) : Math.min(windowWidth * markScale, 600 * markScale)
   );
   return { width, height: Math.round(width / safe) };
 }

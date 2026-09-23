@@ -36,7 +36,48 @@ import {
   X,
   SlidersHorizontal,
   Palette,
+  Star,
+  Music,
+  Mic,
+  Store,
+  Gift,
+  Sparkles,
+  Globe,
+  Calendar,
+  Camera,
+  Film,
+  Headphones,
+  MessageCircle,
+  Shirt,
+  Ticket,
+  Trophy,
+  Zap,
+  Radio,
+  BookOpen,
+  Compass,
+  Flame,
+  Handshake,
+  Newspaper,
+  Video,
+  Megaphone,
+  type LucideIcon,
 } from 'lucide-react-native';
+import { useAppSettingsStore } from '@/features/feed/hooks/useAppLogo';
+import {
+  DEFAULT_FEED_MENU_ICON,
+  resolveFeedMenu,
+  type FeedMenuKey,
+} from '@/features/feed/utils/appSettings';
+
+/**
+ * Icons the admin can pick for a menu entry (Sep 23 2026). A name outside
+ * this map falls back to the entry's default, so a typo never blanks a row.
+ */
+const MENU_ICONS: Record<string, LucideIcon> = {
+  Users, Bell, ShoppingBag, Info, Heart, Palette, Star, Music, Mic, Store, Gift, Sparkles,
+  Globe, Calendar, Camera, Film, Headphones, MessageCircle, Shirt, Ticket, Trophy, Zap, Radio,
+  BookOpen, Compass, Flame, Handshake, Newspaper, Video, Megaphone,
+};
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { CreatorBadge } from '@/components/ui/CreatorBadge';
@@ -144,6 +185,45 @@ export function FeedHeader() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [logoFullscreen, setLogoFullscreen] = useState(false);
   const [artGalleryOpen, setArtGalleryOpen] = useState(false);
+  // The menu the admin arranged (order, names, icons, hidden), or the built in
+
+  // one when nothing is set. Labels the admin left empty keep the translation.
+
+  const feedMenu = useAppSettingsStore((s) => s.feedMenu);
+
+  const menuItems = resolveFeedMenu(feedMenu);
+
+  const menuDefaultLabels: Record<FeedMenuKey, string> = {
+
+    following: t('header.menuFollowing'),
+
+    notifications: t('header.menuNotifications'),
+
+    store: t('header.menuStore'),
+
+    about: t('header.menuAbout'),
+
+    dating: t('header.menuDating'),
+
+    art: 'ATTO ART',
+
+  };
+
+  const menuActions: Record<FeedMenuKey, () => void> = {
+
+    following: () => router.navigate('/following'),
+
+    notifications: () => router.navigate('/notifications'),
+
+    store: () => setComingSoonFeature('store'),
+
+    about: () => setComingSoonFeature('info'),
+
+    dating: () => setComingSoonFeature('dating'),
+
+    art: () => setArtGalleryOpen(true),
+
+  };
   const [artFullscreen, setArtFullscreen] = useState<string | null>(null);
 
   // Hidden: behind the header (top: 0 = tucked behind header bar).
@@ -291,62 +371,25 @@ export function FeedHeader() {
                 </TouchableOpacity>
               </View>
               <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => router.navigate('/following'))}
-              >
-                <Users size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuFollowing')}</Text>
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => router.navigate('/notifications'))}
-              >
-                <Bell size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuNotifications')}</Text>
-                {notifUnread > 0 && (
-                  <CounterBadge count={notifUnread} style={styles.bellBadge} />
-                )}
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => setComingSoonFeature('store'))}
-              >
-                <ShoppingBag size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuStore')}</Text>
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => setComingSoonFeature('info'))}
-              >
-                <Info size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuAbout')}</Text>
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => setComingSoonFeature('dating'))}
-              >
-                <Heart size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>{t('header.menuDating')}</Text>
-              </TouchableOpacity>
-              <View style={styles.sheetSeparator} />
-              <TouchableOpacity
-                style={styles.sheetItem}
-                activeOpacity={0.7}
-                onPress={() => handleAction(() => setArtGalleryOpen(true))}
-              >
-                <Palette size={22} color="#FFF" strokeWidth={2.25} />
-                <Text style={styles.sheetText}>ATTO ART</Text>
-              </TouchableOpacity>
+              {menuItems.map((item) => {
+                const Icon = MENU_ICONS[item.icon ?? ''] ?? MENU_ICONS[DEFAULT_FEED_MENU_ICON[item.key]];
+                return (
+                  <View key={item.key}>
+                    <TouchableOpacity
+                      style={styles.sheetItem}
+                      activeOpacity={0.7}
+                      onPress={() => handleAction(menuActions[item.key])}
+                    >
+                      <Icon size={22} color="#FFF" strokeWidth={2.25} />
+                      <Text style={styles.sheetText}>{item.label || menuDefaultLabels[item.key]}</Text>
+                      {item.key === 'notifications' && notifUnread > 0 && (
+                        <CounterBadge count={notifUnread} style={styles.bellBadge} />
+                      )}
+                    </TouchableOpacity>
+                    <View style={styles.sheetSeparator} />
+                  </View>
+                );
+              })}
               <View style={styles.sheetHandle} />
             </ReAnimated.View>
           </GestureDetector>
@@ -460,10 +503,10 @@ export function FeedHeader() {
         }
         title={
           comingSoonFeature === 'store'
-            ? t('header.menuStore')
+            ? (feedMenu?.find((i) => i.key === 'store')?.label || t('header.menuStore'))
             : comingSoonFeature === 'dating'
-              ? t('header.menuDating')
-              : t('header.menuAbout')
+              ? (feedMenu?.find((i) => i.key === 'dating')?.label || t('header.menuDating'))
+              : (feedMenu?.find((i) => i.key === 'about')?.label || t('header.menuAbout'))
         }
         description={
           comingSoonFeature === 'store'

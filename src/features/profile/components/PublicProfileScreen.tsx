@@ -785,10 +785,12 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12,
   },
-  // Both buttons share a fixed height and centre their content; the label
-  // keeps a line box close to the font's own (Archivo 14 pt is 15.2 pt tall)
-  // so the caps sit on the button's centre line. With the default 20 pt line
-  // box iOS put the extra space under the baseline and "Follow" rode 2 pt high.
+  // Both buttons share a fixed height and centre their content. Archivo
+  // carries more empty space above its caps (ascent 878) than below the
+  // baseline (descent 210), so a centred line box still draws the letters
+  // about 2.5 pt high, which the client saw on the white Follow button
+  // (measured on the client's capture and again on build 15). The labels get
+  // an optical nudge instead of the box; the icon next to Message stays put.
   chatButton: {
     flex: 1,
     flexDirection: 'row',
@@ -805,6 +807,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     lineHeight: 16,
+    transform: [{ translateY: 2.5 }],
   },
   followButton: {
     flex: 1,
@@ -824,6 +827,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
     lineHeight: 16,
+    transform: [{ translateY: 2.5 }],
   },
   followingButtonText: {
     color: '#FFF',

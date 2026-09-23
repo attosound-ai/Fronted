@@ -7,6 +7,7 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { isOnCallScreen, isCallConnected } from '@/hooks/useInCallChrome';
+import { useCallKeypadRouteMounted } from '@/lib/callKeypadRoute';
 
 /**
  * Gates auto-opening the Record Pro editor on a connected call. DEFAULT OFF
@@ -63,6 +64,11 @@ export function useConnectedCallLanding(): void {
   const lastFetchFailed = useSubscriptionStore((s) => s.lastFetchFailed);
   const pathname = usePathname();
   const navReady = useRootNavigationState()?.key != null;
+  // The keypad is a modal ROUTE on top of everything. router.replace() tears it
+  // down, and the route hides the keypad in its own cleanup, so the pad never
+  // comes back for the rest of the call.
+  const keypadRouteMounted = useCallKeypadRouteMounted();
+  const keypadVisible = useCallStore((s) => s.keypadVisible);
 
   // Reactive flag read, PLUS an imperative read inside the evaluator below: on a
   // background cold launch the reactive hook can be stale/unloaded at mount and
@@ -144,6 +150,16 @@ export function useConnectedCallLanding(): void {
       blockedBy('nav_not_ready');
       return;
     }
+    // The keypad is up: WAIT. Almost every inbound call here is a Securus call
+    // that only connects once the creator presses 1, and this navigation used to
+    // replace the keypad route about a second after it auto opened (Sep 22 2026:
+    // keypad at 02:02:04.107, this landing at 02:02:05.961, call dead at 64 s
+    // with no digit ever sent). The ticker re-evaluates every 1.5 s, so the
+    // recorder still opens the moment the creator puts the pad away.
+    if (keypadRouteMounted || keypadVisible) {
+      blockedBy('keypad_open', { keypad_route_mounted: keypadRouteMounted });
+      return;
+    }
     // /call owns its own hand-off; the recorder means we already landed.
     if (isOnCallScreen(pathname) || pathname.includes('/recording')) {
       landedForSid.current = callSid;
@@ -197,6 +213,8 @@ export function useConnectedCallLanding(): void {
     navReady,
     pathname,
     autoLandFlagReactive,
+    keypadRouteMounted,
+    keypadVisible,
     tick,
   ]);
 }

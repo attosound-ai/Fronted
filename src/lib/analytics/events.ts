@@ -311,6 +311,12 @@ export const ANALYTICS_EVENTS = {
     DTMF_KEYPRESS: 'call_dtmf_keypress',
     DTMF_ATTEMPT: 'call_dtmf_attempt',
     KEYPAD_AUTO_OPENED: 'call_keypad_auto_opened',
+    // The keypad route was torn down by something other than the user (a
+    // navigation underneath it). Sep 22 2026: the recorder landing replaced it
+    // seconds after it auto opened and the pad never came back, so the Securus
+    // "press 1" was never sent and the call died at 64 s. The route now keeps
+    // the store true so the host re-presents it, and reports it here.
+    KEYPAD_ROUTE_LOST: 'call_keypad_route_lost',
     // Auto-sent "press 1" that completes the Securus accept on inbound carrier
     // calls (build-98 telemetry proved: no "1" → Securus drops at ~60s; "1" →
     // call connects). Each scheduled attempt reports {attempt, delay_ms, sent}.

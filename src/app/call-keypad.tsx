@@ -92,9 +92,21 @@ export default function CallKeypadScreen() {
     backdrop.value = withTiming(1, { duration: 220 });
     return () => {
       setCallKeypadRouteMounted(false);
-      // Popped by something other than `close` (the call modal going away
-      // underneath, a navigation reset): keep the store honest.
-      useCallStore.getState().hideKeypad();
+      const cs = useCallStore.getState();
+      // Popped by something other than `close` (a navigation underneath us)
+      // while the call is still up: do NOT hide the keypad. The creator never
+      // put it away, and on a Securus call the pad IS the call: without it the
+      // "press 1" never goes out and the line drops at about a minute. Leave
+      // the store true and DtmfKeypadHost presents the route again.
+      if (!closingRef.current && cs.keypadVisible && cs.activeCall?.state === 'connected') {
+        analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_ROUTE_LOST, {
+          call_sid: cs.activeCall?.callSid ?? null,
+          direction: cs.activeCall?.direction ?? null,
+        });
+        return;
+      }
+      // Everything else (call ended, deliberate close): keep the store honest.
+      cs.hideKeypad();
     };
   }, [translateY, backdrop]);
 

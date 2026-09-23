@@ -38,6 +38,8 @@ export const PLAYBACK_EVENTS = {
   STEM_RENDER: 'call_playback_stem_render',
   RESCHEDULE: 'call_playback_reschedule',
   ENGINE_MODE: 'call_playback_engine_mode',
+  /** Every native session event that carries a reason or changes the state. */
+  NATIVE_EVENT: 'call_playback_native_event',
 } as const;
 
 /** Native event reasons that mean "the engine rescheduled itself". */
@@ -552,6 +554,20 @@ export class CallPlaybackController {
     if (this.snapshot.status === 'preparing') return;
     if (this.snapshot.status === 'idle' && event.state === 'idle') return;
     const reason = event.reason ?? null;
+    if (reason || event.state !== this.snapshot.status) {
+      this.deps.telemetry.capture(PLAYBACK_EVENTS.NATIVE_EVENT, {
+        ...this.baseProps(),
+        native_state: event.state,
+        native_reason: reason,
+        from_status: this.snapshot.status,
+        native_position_ms: Math.round(event.positionMs),
+        native_duration_ms: Math.round(event.durationMs ?? 0),
+        loop_count: event.loopCount ?? null,
+        level_rms: event.levelRms ?? null,
+        build_seq: event.buildSeq ?? null,
+        generation: event.generation ?? null,
+      });
+    }
     if (reason && RESCHEDULE_REASONS.has(reason)) {
       this.deps.telemetry.capture(PLAYBACK_EVENTS.RESCHEDULE, {
         ...this.baseProps(),

@@ -16,6 +16,7 @@ struct AttoTimelineClipRecord: Record {
   @Field var peaks: [Double] = []
   @Field var selected: Bool? = nil
   @Field var muted: Bool? = nil
+  @Field var color: String? = nil
 }
 
 struct AttoTimelineSelectionRecord: Record {
@@ -57,6 +58,8 @@ struct AttoTimelineClip {
   let peaks: [Float]
   let selected: Bool
   let muted: Bool
+  /// The lane's colour, when the editor sends one (track colour picker).
+  let color: UIColor?
   /// Cheap fingerprint of the peaks array so the downsample cache can tell a
   /// reload apart from an unchanged array without hashing 4000 values.
   let peaksSignature: Int
@@ -71,6 +74,7 @@ struct AttoTimelineClip {
     peaks = record.peaks.map { Float(min(1, max(0, $0))) }
     selected = record.selected ?? false
     muted = record.muted ?? false
+    color = record.color.flatMap { UIColor(hex: $0) }
     var hasher = Hasher()
     hasher.combine(peaks.count)
     if !peaks.isEmpty {

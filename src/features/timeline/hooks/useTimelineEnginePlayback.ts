@@ -19,6 +19,7 @@
  * its expo path byte for byte.
  */
 
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { SharedValue } from 'react-native-reanimated';
 import { useCallStore } from '@/stores/callStore';
@@ -243,6 +244,13 @@ export function useTimelineEnginePlayback(props: UseTimelineEnginePlaybackProps)
     if (!active || !isOwner || status !== 'ended') return;
     const p = propsRef.current;
     const total = getTimelineDuration(p.clips);
+    analytics.capture(ANALYTICS_EVENTS.CALL.PLAYBACK_TIMELINE_ENDED, {
+      owner_id: ownerId,
+      total_ms: Math.round(total),
+      last_position_ms: Math.round(p.playbackPositionMs),
+      clip_count: p.clips.length,
+      lane_count: built.stemLanes.length,
+    });
     if (p.positionSv) p.positionSv.value = total;
     lastCommittedRef.current = total;
     p.onPositionChange(total);

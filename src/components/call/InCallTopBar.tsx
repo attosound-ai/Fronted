@@ -396,6 +396,28 @@ export function InCallTopBar() {
         const d = await mixerService.getMixDiagnostics();
         if (!d) return;
         const pb = useCallStore.getState().playback;
+        // PLAYBACK PROGRESS (Sep 23 2026, David: all the telemetry possible).
+        // Every sample while the session plays, gate open or not, so a "kept
+        // sounding after the clip ended" report is answered from the stems.
+        if (pb.engineMode && pb.status === 'playing') {
+          analytics.capture(ANALYTICS_EVENTS.CALL.PLAYBACK_PROGRESS, {
+            call_sid: sid,
+            owner_surface: pb.surface,
+            transmit: pb.transmit,
+            js_position_ms: Math.round(pb.positionMs),
+            session_position_ms: d.sessionPositionMs ?? null,
+            session_state: d.sessionState ?? null,
+            transmit_gate: d.transmitGate ?? null,
+            stem_record_playing: d.stemRecordPlaying ?? null,
+            stem_record_volume: d.stemRecordVolume ?? null,
+            inject_frames_to_capture: d.injectFramesToCapture ?? null,
+            mic_frames: d.micFrames ?? null,
+            remote_frames: d.remoteFrames ?? null,
+            app_frames: d.appFrames ?? null,
+            session_reschedule_count: d.sessionRescheduleCount ?? null,
+            spurious_completion_ignored_count: d.spuriousCompletionIgnoredCount ?? null,
+          });
+        }
         if (pb.engineMode && pb.transmit && pb.status === 'playing') {
           const pos = Number(d.sessionPositionMs ?? -1);
           const frames = Number(d.injectFramesToCapture ?? -1);

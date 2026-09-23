@@ -411,6 +411,10 @@ export const ANALYTICS_EVENTS = {
     // so we can see exactly what the rep mixed. The native record path is the
     // blind spot, so capturing its RESULT here is the only JS-visible signal.
     AUDIO_MIX_RECORD: 'call_audio_mix_record',
+    /** Every 5 s while the engine session plays: position, stems, gate, frames. */
+    PLAYBACK_PROGRESS: 'call_playback_progress',
+    /** The timeline's stems reached their end (position vs the timeline total). */
+    PLAYBACK_TIMELINE_ENDED: 'call_playback_timeline_ended',
     /** The record sheet used inside a call: open, start, stop, listen, discard, place. */
     TAKE_SHEET: 'call_take_sheet',
     AUDIO_MIX_METRONOME: 'call_audio_mix_metronome',
@@ -626,6 +630,8 @@ export const ANALYTICS_EVENTS = {
     // succeeded | failed | cancelled | aborted_or_timeout | picker_cancelled |
     // no_file, with size_bytes / duration_ms / error / timed_out.
     AUDIO_IMPORT: 'project_audio_import',
+    /** A track colour saved from the lane sheet: hex and whether a swatch or the wheel. */
+    LANE_COLOR: 'timeline_lane_color',
     // Decile-sampled byte progress during an import upload (~10 per import, not
     // hundreds). Gives the throughput CURVE, which is what separates "the user's
     // uplink is slow" from "it stalled halfway" — the single number we had before

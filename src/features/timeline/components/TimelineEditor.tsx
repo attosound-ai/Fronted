@@ -1839,6 +1839,7 @@ export function TimelineEditor({
       peaks: clipPeaks.get(c.id) ?? [],
       selected: c.id === state.selectedClipId,
       muted: state.laneMeta[c.laneIndex]?.muted === true,
+      color: state.laneMeta[c.laneIndex]?.color || undefined,
     }));
     // The take being recorded grows in place until its clip lands.
     if (isRecording || isUploadingRecording) {
@@ -1850,6 +1851,7 @@ export function TimelineEditor({
         peaks: [],
         selected: true,
         muted: false,
+        color: state.laneMeta[recordingLaneRef.current]?.color || undefined,
       });
     }
     return list;

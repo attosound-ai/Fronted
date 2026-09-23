@@ -71,6 +71,7 @@
     "laneEditNameLabel": "Nome",
     "laneEditNamePlaceholder": "Faixa {{index}}",
     "laneEditColorLabel": "Cor",
+    "laneEditMoreColors": "Mais cores",
     "laneEditDelete": "Excluir faixa",
     "laneEditDeleteBlocked": "Remova os clipes desta faixa primeiro",
     "laneEditCancel": "Cancelar",

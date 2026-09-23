@@ -70,6 +70,9 @@ export const TrackPanel = memo(function TrackPanel({
   const pan = Math.max(-1, Math.min(1, meta?.pan ?? 0));
   const muted = meta?.muted ?? false;
   const solo = meta?.solo ?? false;
+  // The lane colour from the track sheet: a dot by the name and the fader's
+  // filled side, so the panel and its clips read as one track.
+  const laneColor = meta?.color || null;
 
   // The slider travels 0..1 with 0 dB in the middle; the track keeps dB.
   const handleGain = useCallback(
@@ -96,6 +99,9 @@ export const TrackPanel = memo(function TrackPanel({
           accessibilityLabel={name}
           style={({ pressed }) => [styles.nameButton, pressed && styles.pressed]}
         >
+          {laneColor && (
+            <View style={[styles.colorDot, { backgroundColor: laneColor }]} />
+          )}
           <Text
             variant="small"
             numberOfLines={1}
@@ -130,7 +136,7 @@ export const TrackPanel = memo(function TrackPanel({
             step={0}
             onValueChange={handleGain}
             onSlidingComplete={handleGainEnd}
-            minimumTrackTintColor={STUDIO_COLORS.text}
+            minimumTrackTintColor={laneColor ?? STUDIO_COLORS.text}
             maximumTrackTintColor={STUDIO_COLORS.borderStrong}
             thumbTintColor={STUDIO_COLORS.text}
             accessibilityLabel={t('studio.gain')}
@@ -232,7 +238,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 26,
     borderRadius: 6,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  colorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   wrench: {
     width: 24,

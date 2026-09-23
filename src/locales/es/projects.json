@@ -71,6 +71,7 @@
     "laneEditNameLabel": "Nombre",
     "laneEditNamePlaceholder": "Pista {{index}}",
     "laneEditColorLabel": "Color",
+    "laneEditMoreColors": "Más colores",
     "laneEditDelete": "Eliminar pista",
     "laneEditDeleteBlocked": "Primero elimina los clips de esta pista",
     "laneEditCancel": "Cancelar",

@@ -232,7 +232,10 @@ final class AttoTimelineRenderer {
     ctx.fillPath()
 
     // Waveform: a filled polygon mirrored around the lane centre.
-    let waveColor = clip.selected ? colors.waveformSelected : colors.waveform
+    // The lane colour paints the clip (Sep 23 2026, David: the track colour
+    // has to show like before); the selection stays white so it reads on any hue.
+    let laneColor = clip.color ?? colors.waveform
+    let waveColor = clip.selected ? colors.waveformSelected : laneColor
     ctx.saveGState()
     ctx.addPath(boxPath)
     ctx.clip()
@@ -244,7 +247,7 @@ final class AttoTimelineRenderer {
       ctx.setStrokeColor(colors.waveformSelected.cgColor)
       ctx.setLineWidth(1.5)
     } else {
-      ctx.setStrokeColor(colors.clipBorder.cgColor)
+      ctx.setStrokeColor((clip.color?.withAlphaComponent(0.7) ?? colors.clipBorder).cgColor)
       ctx.setLineWidth(1)
     }
     ctx.strokePath()

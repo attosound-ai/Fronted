@@ -36,6 +36,8 @@ export interface TimelineClip {
   peaks: number[];
   selected?: boolean;
   muted?: boolean;
+  /** The lane's colour (hex); the waveform and border take it. Absent = palette waveform. */
+  color?: string;
 }
 
 export interface TimelineSelection {

@@ -7,11 +7,13 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Check, ChevronDown, ChevronUp, Trash2 } from 'lucide-react-native';
+import { Check, ChevronDown, ChevronUp, Palette, Trash2 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import ColorPicker, { HueSlider, Panel1, Preview } from 'reanimated-color-picker';
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 import type { LaneMeta } from '../types';
 
@@ -78,6 +80,9 @@ export function LaneEditSheet({
   const { t } = useTranslation('projects');
   const [name, setName] = useState(currentMeta?.name ?? '');
   const [color, setColor] = useState(currentMeta?.color ?? SWATCHES[0]);
+  // The full spectrum wheel folds under the swatches (David, Sep 23 2026).
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const colorSourceRef = useRef<'swatch' | 'wheel' | 'unchanged'>('unchanged');
   const nameInputRef = useRef<TextInput>(null);
 
   // Re-sync local state when the sheet opens (or is re-targeted to another
@@ -88,6 +93,8 @@ export function LaneEditSheet({
     if (!visible) return;
     setName(currentMeta?.name ?? '');
     setColor(currentMeta?.color ?? SWATCHES[0]);
+    setWheelOpen(false);
+    colorSourceRef.current = 'unchanged';
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, laneIndex]);
 
@@ -152,6 +159,15 @@ export function LaneEditSheet({
   };
 
   const handleSave = () => {
+    if (color !== (currentMeta?.color ?? '')) {
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.LANE_COLOR, {
+        lane_index: laneIndex,
+        color,
+        previous: currentMeta?.color ?? null,
+        source: colorSourceRef.current,
+        in_swatches: SWATCHES.includes(color.toUpperCase()),
+      });
+    }
     onSave({
       ...currentMeta,
       name: name.trim(),
@@ -215,7 +231,10 @@ export function LaneEditSheet({
               return (
                 <TouchableOpacity
                   key={swatch}
-                  onPress={() => setColor(swatch)}
+                  onPress={() => {
+                    colorSourceRef.current = 'swatch';
+                    setColor(swatch);
+                  }}
                   activeOpacity={0.7}
                   style={[
                     styles.swatch,
@@ -231,7 +250,39 @@ export function LaneEditSheet({
                 </TouchableOpacity>
               );
             })}
+            <TouchableOpacity
+              onPress={() => {
+                void haptic('selection');
+                setWheelOpen((v) => !v);
+              }}
+              activeOpacity={0.7}
+              style={[
+                styles.swatch,
+                styles.wheelToggle,
+                !SWATCHES.includes(color.toUpperCase()) && { backgroundColor: color },
+                wheelOpen && styles.swatchSelected,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('timeline.laneEditMoreColors')}
+              accessibilityState={{ expanded: wheelOpen }}
+            >
+              <Palette size={16} color="#FFF" strokeWidth={2.25} />
+            </TouchableOpacity>
           </View>
+          {wheelOpen && (
+            <ColorPicker
+              value={color}
+              style={styles.wheel}
+              onChangeJS={(c) => {
+                colorSourceRef.current = 'wheel';
+                setColor(c.hex.slice(0, 7).toUpperCase());
+              }}
+            >
+              <Panel1 style={styles.wheelPanel} />
+              <HueSlider style={styles.wheelHue} />
+              <Preview style={styles.wheelPreview} hideInitialColor />
+            </ColorPicker>
+          )}
         </View>
 
         {/* Pan — one row: label, slider with a center mark, tappable
@@ -438,6 +489,26 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderColor: '#FFF',
+  },
+  wheelToggle: {
+    backgroundColor: '#1A1A1A',
+    borderColor: '#333',
+  },
+  wheel: {
+    marginTop: 12,
+    gap: 12,
+  },
+  wheelPanel: {
+    height: 160,
+    borderRadius: 12,
+  },
+  wheelHue: {
+    height: 24,
+    borderRadius: 12,
+  },
+  wheelPreview: {
+    height: 28,
+    borderRadius: 8,
   },
   panRow: {
     flexDirection: 'row',

@@ -29,7 +29,7 @@ patchedDependencies:
     hash: af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e
     path: patches/react-native-compressor.patch
   react-native-device-info@15.0.2:
-    hash: ec02c85fc9d92c834bc725f3ae9e5c88b54ed3c5c35380c7faf9ba67a1adc969
+    hash: 7ca72edb5603691e8c858f80b475011d564dea7299c0caa9c8ec173ba359ddee
     path: patches/react-native-device-info@15.0.2.patch
   react-native@0.83.4:
     hash: b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af
@@ -206,7 +206,7 @@ importers:
         version: 1.8.5
       posthog-react-native:
         specifier: ^4.41.2
-        version: 4.43.9(5b2a1758d2a6b134e3941e16d27b36ab)
+        version: 4.43.9(1ff3a8c5ce69f875e45cf3ff986dbea1)
       posthog-react-native-session-replay:
         specifier: ^1.5.6
         version: 1.5.6(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -233,7 +233,7 @@ importers:
         version: 1.10.3(patch_hash=af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^15.0.2
-        version: 15.0.2(patch_hash=ec02c85fc9d92c834bc725f3ae9e5c88b54ed3c5c35380c7faf9ba67a1adc969)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
+        version: 15.0.2(patch_hash=7ca72edb5603691e8c858f80b475011d564dea7299c0caa9c8ec173ba359ddee)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       react-native-gesture-handler:
         specifier: ~2.30.0
         version: 2.30.1(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -9618,7 +9618,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 
-  posthog-react-native@4.43.9(5b2a1758d2a6b134e3941e16d27b36ab):
+  posthog-react-native@4.43.9(1ff3a8c5ce69f875e45cf3ff986dbea1):
     dependencies:
       '@posthog/core': 1.27.7
       '@posthog/types': 1.372.3
@@ -9629,7 +9629,7 @@ snapshots:
       expo-file-system: 55.0.14(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       expo-localization: 55.0.11(expo@55.0.11)(react@19.2.0)
       posthog-react-native-session-replay: 1.5.6(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
-      react-native-device-info: 15.0.2(patch_hash=ec02c85fc9d92c834bc725f3ae9e5c88b54ed3c5c35380c7faf9ba67a1adc969)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
+      react-native-device-info: 15.0.2(patch_hash=7ca72edb5603691e8c858f80b475011d564dea7299c0caa9c8ec173ba359ddee)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       react-native-safe-area-context: 5.7.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-svg: 15.15.3(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
 
@@ -9743,7 +9743,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 
-  react-native-device-info@15.0.2(patch_hash=ec02c85fc9d92c834bc725f3ae9e5c88b54ed3c5c35380c7faf9ba67a1adc969)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
+  react-native-device-info@15.0.2(patch_hash=7ca72edb5603691e8c858f80b475011d564dea7299c0caa9c8ec173ba359ddee)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
     dependencies:
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 

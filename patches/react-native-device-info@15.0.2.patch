@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561..2f0cda7 100644
+index 948c561..8a20633 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,10 @@
@@ -33,7 +33,7 @@ index 948c561..2f0cda7 100644
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,381 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,383 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -301,6 +301,7 @@ index 948c561..2f0cda7 100644
 +        @"nativeCpuPct": @([ud integerForKey:@"atto_native_cpu_pct"]),
 +        @"nativeAvailMB": @([ud integerForKey:@"atto_native_avail_mb"]),
 +        @"nativeSysFreeMB": @([ud integerForKey:@"atto_native_sys_free_mb"]),
++        @"nativeCpuTop": ([ud stringForKey:@"atto_native_cpu_top"] ?: @""),
 +        @"nativeLowPower": @([ud boolForKey:@"atto_native_low_power"]),
 +        @"nativeBgAt": @([ud doubleForKey:@"atto_native_bg_at"]),
 +        @"nativeFgAt": @([ud doubleForKey:@"atto_native_fg_at"]),
@@ -327,6 +328,7 @@ index 948c561..2f0cda7 100644
 +        @"prevNativeCpuPct": @([ud integerForKey:@"atto_native_prev_cpu_pct"]),
 +        @"prevNativeAvailMB": @([ud integerForKey:@"atto_native_prev_avail_mb"]),
 +        @"prevNativeSysFreeMB": @([ud integerForKey:@"atto_native_prev_sys_free_mb"]),
++        @"prevNativeCpuTop": ([ud stringForKey:@"atto_native_prev_cpu_top"] ?: @""),
 +        @"prevNativeLowPower": @([ud boolForKey:@"atto_native_prev_low_power"]),
 +        @"prevNativeBgAt": @([ud doubleForKey:@"atto_native_prev_bg_at"]),
 +        @"prevNativeFgAt": @([ud doubleForKey:@"atto_native_prev_fg_at"]),

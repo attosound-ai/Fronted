@@ -401,6 +401,7 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
       native_cpu_pct: native?.prevNativeCpuPct ?? null,
       native_avail_mb: native?.prevNativeAvailMB ?? null,
       native_sys_free_mb: native?.prevNativeSysFreeMB ?? null,
+      native_cpu_top: native?.prevNativeCpuTop || null,
       native_low_power: native?.prevNativeLowPower ?? null,
       native_bg_gap_sec: gap(native?.prevNativeBgAt),
       native_fg_gap_sec: gap(native?.prevNativeFgAt),

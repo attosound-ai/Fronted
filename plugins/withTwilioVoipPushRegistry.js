@@ -842,7 +842,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   private static let pulseKeys = [
     "alive_at", "app_state", "callkit_calls", "audio_enabled", "mem_mb", "audio_category",
-    "cpu_pct", "avail_mb", "sys_free_mb",
+    "cpu_pct", "avail_mb", "sys_free_mb", "cpu_top",
     "audio_output", "audio_input", "thermal", "low_power", "bg_at", "fg_at", "will_terminate_at",
     "interruption_began_at", "interruption_ended_at", "interruption_reason", "interruption_count",
     "media_reset_at",
@@ -900,6 +900,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   private static var lastCpuSeconds: Double = -1
   private static var lastCpuAt: Double = 0
+  private static var lastThreadSeconds: [UInt64: Double] = [:]
 
   /// User plus system CPU time of every thread in the process, delta over the
   /// pulse interval, as percent of one core (100 = one core busy).
@@ -908,6 +909,10 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     var count = mach_msg_type_number_t(0)
     guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS, let list = threads else { return -1 }
     var total: Double = 0
+    // Per thread too: the death report names the hog (Sep 23 2026, build 11:
+    // 92 percent of a core in background, 54 s after the lock, and nothing
+    // said which thread).
+    var perThread: [(id: UInt64, name: String, seconds: Double)] = []
     for i in 0..<Int(count) {
       var info = thread_basic_info()
       var infoCount = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size / MemoryLayout<natural_t>.size)
@@ -917,16 +922,46 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         }
       }
       if kr == KERN_SUCCESS && (info.flags & TH_FLAGS_IDLE) == 0 {
-        total += Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1_000_000
-        total += Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1_000_000
+        let secs = Double(info.user_time.seconds) + Double(info.user_time.microseconds) / 1_000_000
+          + Double(info.system_time.seconds) + Double(info.system_time.microseconds) / 1_000_000
+        total += secs
+        var ident = thread_identifier_info()
+        var identCount = mach_msg_type_number_t(MemoryLayout<thread_identifier_info>.size / MemoryLayout<natural_t>.size)
+        let kr2 = withUnsafeMutablePointer(to: &ident) { ptr -> kern_return_t in
+          ptr.withMemoryRebound(to: integer_t.self, capacity: Int(identCount)) { raw in
+            thread_info(list[i], thread_flavor_t(THREAD_IDENTIFIER_INFO), raw, &identCount)
+          }
+        }
+        var name = "?"
+        if let p = pthread_from_mach_thread_np(list[i]) {
+          var buf = [CChar](repeating: 0, count: 64)
+          if pthread_getname_np(p, &buf, buf.count) == 0 { name = String(cString: buf) }
+        }
+        if name.isEmpty { name = "thread" }
+        perThread.append((id: kr2 == KERN_SUCCESS ? ident.thread_id : UInt64(i), name: name, seconds: secs))
       }
     }
     let size = vm_size_t(UInt(count) * UInt(MemoryLayout<thread_t>.size))
     vm_deallocate(mach_task_self_, vm_address_t(bitPattern: list), size)
     let now = Date().timeIntervalSince1970
+    let elapsed = now - lastCpuAt
+    if lastCpuSeconds >= 0 && elapsed > 0 {
+      var tops: [(String, Int)] = []
+      for t in perThread {
+        let prev = lastThreadSeconds[t.id] ?? t.seconds
+        let pct = Int(((t.seconds - prev) / elapsed) * 100)
+        if pct >= 3 { tops.append((t.name, pct)) }
+      }
+      tops.sort { $0.1 > $1.1 }
+      let top = tops.prefix(4).map { "\($0.0):\($0.1)" }.joined(separator: ",")
+      UserDefaults.standard.set(top, forKey: "atto_native_cpu_top")
+    }
+    var next: [UInt64: Double] = [:]
+    for t in perThread { next[t.id] = t.seconds }
+    lastThreadSeconds = next
     defer { lastCpuSeconds = total; lastCpuAt = now }
-    if lastCpuSeconds < 0 || now <= lastCpuAt { return -1 }
-    return Int(((total - lastCpuSeconds) / (now - lastCpuAt)) * 100)
+    if lastCpuSeconds < 0 || elapsed <= 0 { return -1 }
+    return Int(((total - lastCpuSeconds) / elapsed) * 100)
   }
 
   /// Free plus inactive pages on the device, in MB (what iOS can hand out

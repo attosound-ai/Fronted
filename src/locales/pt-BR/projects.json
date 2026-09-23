@@ -229,6 +229,7 @@
       "headphonesHint": "Use fones ao tocar outras faixas, ou o alto falante vaza no take.",
       "noPermission": "É preciso acesso ao microfone para gravar",
       "blockedInCall": "A chamada está com o microfone. Use o botão de gravar a chamada.",
+      "callMix": "Gravando seu microfone e a chamada. Ouça, fique com ele ou grave de novo antes de cair na faixa.",
       "unavailable": "O gravador não está nesta versão",
       "reverbPresets": {
         "smallRoom": "Sala pequena",

@@ -30,7 +30,7 @@ import { useEngineMixRecording } from '../hooks/useEngineMixRecording';
 import { useRangeEffects } from '../hooks/useRangeEffects';
 import { RangeEffectsSheet } from '../studio/RangeEffectsSheet';
 import { EffectDialog } from '../studio/EffectDialog';
-import { RecordSheet } from '../studio/RecordSheet';
+import { RecordSheet, type CallTakeRecorder } from '../studio/RecordSheet';
 import type { EffectDef, EffectValues } from '../studio/effectsCatalog';
 import type { RangeOp } from '../../../../modules/atto-audio-transcode';
 import type { StopResult } from '../../../../modules/atto-recorder';
@@ -512,6 +512,10 @@ export function TimelineEditor({
       ? engineMixRecording
       : twilioRecording
     : micRecording;
+  // The record sheet works inside a call when the engine mixer is the
+  // recorder (David, Sep 23 2026: listen, keep or record again there too).
+  // The Twilio fork records on the server, so it keeps the inline button.
+  const sheetInCall = recordingMode === 'twilioCall' && useEngineMix;
 
   const startRecording = useCallback(async () => {
     // Record AT THE PLAYHEAD — the position the user is listening at — not
@@ -590,6 +594,23 @@ export function TimelineEditor({
       // best-effort
     }
   }, [rawStopRecording, projectId]);
+
+  // The sheet's recorder in a call: start keeps the playhead placement, the
+  // free lane pick and the telemetry of the inline path; stop hands the raw
+  // take back so the sheet reviews it, and Place runs placeTake at that
+  // position like any other take.
+  const callTakeRecorder = useMemo<CallTakeRecorder>(
+    () => ({
+      start: startRecording,
+      stop: () => engineMixRecording.stopRecordingToTake(recordingStartMsRef.current),
+      discard: engineMixRecording.discardTake,
+    }),
+    [
+      startRecording,
+      engineMixRecording.stopRecordingToTake,
+      engineMixRecording.discardTake,
+    ]
+  );
 
   // UI-thread playhead position. The play loop writes it every frame; the
   // playhead + time readout animate off it with no React re-render. Reducer
@@ -1852,10 +1873,10 @@ export function TimelineEditor({
   const selectionStartMs = hasRange && region ? region.startMs : null;
   const selectionEndMs = hasRange && region ? region.endMs : null;
 
-  // Record slot: during a call the existing record the call button stays,
-  // with its elapsed counter; in a project the mic button opens the take.
+  // Record slot: a server recorded call keeps the record the call button with
+  // its elapsed counter; otherwise the mic button opens the take sheet.
   const recordSlot =
-    recordingMode === 'twilioCall' ? (
+    recordingMode === 'twilioCall' && !sheetInCall ? (
       <CallRecordButton
         isRecording={isRecording}
         elapsed={formatElapsedSeconds(recordingElapsed)}
@@ -2107,11 +2128,12 @@ export function TimelineEditor({
       <RecordSheet
         visible={recordSheetVisible}
         onClose={() => setRecordSheetVisible(false)}
-        fromMs={lineMs}
+        fromMs={sheetInCall ? state.playbackPositionMs : lineMs}
         onPlace={placeTake}
         prepareStems={prepareStems}
         laneIndex={state.activeLaneIndex}
-        blocked={recordingMode === 'twilioCall'}
+        blocked={recordingMode === 'twilioCall' && !sheetInCall}
+        callRecorder={sheetInCall ? callTakeRecorder : undefined}
         trackName={laneName(state.activeLaneIndex)}
       />
 

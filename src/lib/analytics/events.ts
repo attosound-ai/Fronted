@@ -411,6 +411,8 @@ export const ANALYTICS_EVENTS = {
     // so we can see exactly what the rep mixed. The native record path is the
     // blind spot, so capturing its RESULT here is the only JS-visible signal.
     AUDIO_MIX_RECORD: 'call_audio_mix_record',
+    /** The record sheet used inside a call: open, start, stop, listen, discard, place. */
+    TAKE_SHEET: 'call_take_sheet',
     AUDIO_MIX_METRONOME: 'call_audio_mix_metronome',
     AUDIO_MIX_PLAYBACK: 'call_audio_mix_playback',
     // THE diagnostic for the "answered from background → dead audio both ways +

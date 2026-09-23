@@ -20,6 +20,7 @@ import Animated, {
 
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 import {
   addMetersListener,
@@ -48,6 +49,18 @@ import {
 } from '../../../../modules/atto-recorder';
 import { STUDIO_COLORS } from './studioTheme';
 
+/**
+ * The take source inside a call. The call owns the microphone, so the native
+ * recorder cannot arm; the engine mixer records mic plus the far side instead
+ * and hands the file back here, so the user still listens, keeps or records
+ * again before anything lands on the track (David, Sep 23 2026).
+ */
+export interface CallTakeRecorder {
+  start: () => Promise<void>;
+  stop: () => Promise<StopResult | null>;
+  discard: (path: string) => Promise<void>;
+}
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -66,6 +79,8 @@ interface Props {
   laneIndex: number;
   /** During a call the recorder must not take the session; the sheet says so. */
   blocked?: boolean;
+  /** Set during a call with the engine mixer: the sheet records through it. */
+  callRecorder?: CallTakeRecorder;
   trackName: string;
 }
 
@@ -142,6 +157,7 @@ export function RecordSheet({
   prepareStems,
   laneIndex,
   blocked = false,
+  callRecorder,
   trackName,
 }: Props) {
   const { t } = useTranslation('projects');
@@ -164,6 +180,24 @@ export function RecordSheet({
   const outputLevel = useSharedValue(0);
   const phaseRef = useRef<Phase>('arming');
   phaseRef.current = phase;
+  const callRecorderRef = useRef(callRecorder);
+  callRecorderRef.current = callRecorder;
+  const takeRef = useRef<StopResult | null>(null);
+  takeRef.current = take;
+  const inCall = !!callRecorder;
+
+  const track = useCallback(
+    (action: string, extra: Record<string, unknown> = {}) => {
+      analytics.capture(ANALYTICS_EVENTS.CALL.TAKE_SHEET, {
+        action,
+        source: inCall ? 'engine_mix' : 'mic',
+        lane_index: laneIndex,
+        from_ms: Math.round(fromMs),
+        ...extra,
+      });
+    },
+    [inCall, laneIndex, fromMs]
+  );
 
   const refreshPorts = useCallback(async () => {
     try {
@@ -183,6 +217,25 @@ export function RecordSheet({
     setElapsedMs(0);
     setError(null);
     setPreviewing(false);
+    track('open');
+    if (callRecorder) {
+      // The engine mixer is armed by the call itself; nothing to prepare.
+      setPhase('ready');
+      return () => {
+        // Closing mid take: stop the mixer and drop the file, like the
+        // native path discards an unfinished take.
+        const p = phaseRef.current;
+        void previewStop().catch(() => {});
+        if (p === 'recording') {
+          void callRecorderRef.current
+            ?.stop()
+            .then((r) => (r ? callRecorderRef.current?.discard(r.path) : undefined))
+            .catch(() => {});
+        } else if (p === 'review' && takeRef.current) {
+          void callRecorderRef.current?.discard(takeRef.current.path).catch(() => {});
+        }
+      };
+    }
     if (blocked || !isRecorderAvailable()) {
       setPhase('blocked');
       return;
@@ -246,11 +299,19 @@ export function RecordSheet({
     };
     // Settings changes are pushed by the effect below, not by re arming.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, blocked, retryToken, overdub]);
+  }, [visible, blocked, retryToken, overdub, !!callRecorder]);
+
+  // The engine mixer sends no meters; the clock ticks on its own in a call.
+  useEffect(() => {
+    if (!inCall || phase !== 'recording') return;
+    const startedAt = Date.now();
+    const id = setInterval(() => setElapsedMs(Date.now() - startedAt), 100);
+    return () => clearInterval(id);
+  }, [inCall, phase]);
 
   // Live parameters apply immediately, even mid take.
   useEffect(() => {
-    if (!visible || phase === 'blocked' || phase === 'arming') return;
+    if (!visible || inCall || phase === 'blocked' || phase === 'arming') return;
     void configureRecorder({
       monitoring,
       inputGainDb,
@@ -258,31 +319,52 @@ export function RecordSheet({
       monitorReverb: reverb,
       monitorReverbPreset: reverbPreset,
     }).catch(() => {});
-  }, [visible, phase, monitoring, inputGainDb, limiter, reverb, reverbPreset]);
+  }, [visible, inCall, phase, monitoring, inputGainDb, limiter, reverb, reverbPreset]);
 
   const handleRecord = useCallback(async () => {
     void haptic('heavy');
     try {
       setError(null);
-      await startRecording({ fromMs });
+      if (callRecorder) {
+        setElapsedMs(0);
+        await callRecorder.start();
+      } else {
+        await startRecording({ fromMs });
+      }
+      track('start');
       setPhase('recording');
     } catch (e: unknown) {
+      track('start', {
+        outcome: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      });
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [fromMs]);
+  }, [fromMs, callRecorder, track]);
 
   const handleStop = useCallback(async () => {
     void haptic('medium');
     try {
-      const result = await stopRecording();
+      const result = callRecorder ? await callRecorder.stop() : await stopRecording();
+      if (!result) {
+        // The mixer had nothing to hand back; it already said so in a toast.
+        track('stop', { outcome: 'no_take' });
+        setPhase('ready');
+        return;
+      }
       setTake(result);
       setElapsedMs(result.durationMs);
       setPhase('review');
+      track('stop', { outcome: 'ok', duration_ms: Math.round(result.durationMs) });
     } catch (e: unknown) {
+      track('stop', {
+        outcome: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      });
       setError(e instanceof Error ? e.message : String(e));
       setPhase('ready');
     }
-  }, []);
+  }, [callRecorder, track]);
 
   const handlePause = useCallback(async () => {
     void haptic('light');
@@ -310,21 +392,37 @@ export function RecordSheet({
     if (previewing) {
       await previewStop().catch(() => {});
       setPreviewing(false);
+      track('listen_stop');
       return;
     }
     try {
       setPreviewing(true);
+      // In a call the session mode is voiceChat, so the native preview leaves
+      // the session alone and the player joins the call's output route.
       await previewPlay(take.path);
+      track('listen', { outcome: 'ok' });
     } catch (e: unknown) {
       setPreviewing(false);
+      track('listen', {
+        outcome: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      });
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [take, previewing]);
+  }, [take, previewing, track]);
 
   const handleDiscard = useCallback(async () => {
     void haptic('medium');
     await previewStop().catch(() => {});
     setPreviewing(false);
+    track('discard', { duration_ms: take ? Math.round(take.durationMs) : null });
+    if (callRecorder) {
+      if (take) await callRecorder.discard(take.path).catch(() => {});
+      setTake(null);
+      setElapsedMs(0);
+      setPhase('ready');
+      return;
+    }
     await discardRecording().catch(() => {});
     setTake(null);
     setElapsedMs(0);
@@ -335,7 +433,7 @@ export function RecordSheet({
       setError(e instanceof Error ? e.message : String(e));
       setPhase('blocked');
     }
-  }, []);
+  }, [callRecorder, take, track]);
 
   const handlePlace = useCallback(async () => {
     if (!take) return;
@@ -345,12 +443,20 @@ export function RecordSheet({
     setPhase('placing');
     try {
       await onPlace(take);
+      track('place', { outcome: 'ok', duration_ms: Math.round(take.durationMs) });
+      // Placed takes are uploaded copies; the raw engine file can go.
+      if (callRecorder) void callRecorder.discard(take.path).catch(() => {});
+      setTake(null);
       onClose();
     } catch (e: unknown) {
+      track('place', {
+        outcome: 'failed',
+        error: e instanceof Error ? e.message : String(e),
+      });
       setError(e instanceof Error ? e.message : String(e));
       setPhase('review');
     }
-  }, [take, onPlace, onClose]);
+  }, [take, onPlace, onClose, callRecorder, track]);
 
   const selectedInput = inputs.find((i) => i.selected) ?? inputs[0];
   const busy = phase === 'recording' || phase === 'paused' || phase === 'placing';
@@ -370,8 +476,16 @@ export function RecordSheet({
           {formatClock(elapsedMs)}
         </Text>
 
-        <Meter label={t('studio.record.input')} level={inputLevel} />
-        <Meter label={t('studio.record.output')} level={outputLevel} />
+        {inCall ? (
+          <Text variant="caption" style={styles.hint}>
+            {t('studio.record.callMix')}
+          </Text>
+        ) : (
+          <>
+            <Meter label={t('studio.record.input')} level={inputLevel} />
+            <Meter label={t('studio.record.output')} level={outputLevel} />
+          </>
+        )}
 
         {error && (
           <Text variant="caption" style={styles.error}>
@@ -424,17 +538,28 @@ export function RecordSheet({
           )}
           {(phase === 'recording' || phase === 'paused') && (
             <View style={styles.row}>
-              <Pressable
-                onPress={phase === 'recording' ? handlePause : handleResume}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
-              >
-                {phase === 'recording' ? (
-                  <Pause size={20} color={STUDIO_COLORS.text} fill={STUDIO_COLORS.text} />
-                ) : (
-                  <Play size={20} color={STUDIO_COLORS.text} fill={STUDIO_COLORS.text} />
-                )}
-              </Pressable>
+              {/* The engine mixer records straight through; no pause in a call. */}
+              {!inCall && (
+                <Pressable
+                  onPress={phase === 'recording' ? handlePause : handleResume}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
+                >
+                  {phase === 'recording' ? (
+                    <Pause
+                      size={20}
+                      color={STUDIO_COLORS.text}
+                      fill={STUDIO_COLORS.text}
+                    />
+                  ) : (
+                    <Play
+                      size={20}
+                      color={STUDIO_COLORS.text}
+                      fill={STUDIO_COLORS.text}
+                    />
+                  )}
+                </Pressable>
+              )}
               <Pressable
                 onPress={handleStop}
                 accessibilityRole="button"
@@ -508,168 +633,177 @@ export function RecordSheet({
               </View>
               {take && (
                 <Text variant="caption" style={styles.takeInfo}>
-                  {t('studio.record.takeInfo', {
-                    duration: formatClock(take.durationMs),
-                    peak: Math.round(take.peakDb),
-                  })}
+                  {Number.isFinite(take.peakDb)
+                    ? t('studio.record.takeInfo', {
+                        duration: formatClock(take.durationMs),
+                        peak: Math.round(take.peakDb),
+                      })
+                    : formatClock(take.durationMs)}
                 </Text>
               )}
             </View>
           )}
         </View>
 
-        {/* Settings fold */}
-        <Pressable
-          onPress={() => setShowSettings((v) => !v)}
-          accessibilityRole="button"
-          style={styles.foldHeader}
-        >
-          <Text variant="small" style={styles.foldTitle}>
-            {t('studio.record.settings')}
-          </Text>
-          {showSettings ? (
-            <ChevronUp size={16} color={STUDIO_COLORS.textMuted} />
-          ) : (
-            <ChevronDown size={16} color={STUDIO_COLORS.textMuted} />
-          )}
-        </Pressable>
-        {showSettings && (
-          <View style={styles.settings}>
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.inputDevice')}
-              </Text>
-              <View style={styles.chips}>
-                {inputs.map((port) => {
-                  const active = port.id === selectedInput?.id;
-                  return (
-                    <Pressable
-                      key={port.id}
-                      onPress={() => {
-                        void haptic('selection');
-                        void setInput(port.id).then(refreshPorts);
-                      }}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      style={[styles.chip, active && styles.chipActive]}
-                    >
-                      <Text
-                        variant="caption"
-                        numberOfLines={1}
-                        style={[styles.chipText, active && styles.chipTextActive]}
-                      >
-                        {port.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.outputDevice')}
-              </Text>
-              <Text variant="caption" style={styles.settingValue}>
-                {outputs.map((o) => o.name).join(', ') || '…'}
-              </Text>
-            </View>
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.monitoring')}
-              </Text>
-              <Switch
-                value={monitoring}
-                onValueChange={setMonitoring}
-                trackColor={{ true: STUDIO_COLORS.primary }}
-                thumbColor={monitoring ? STUDIO_COLORS.onPrimary : undefined}
-              />
-            </View>
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.inputGain', { value: Math.round(inputGainDb) })}
-              </Text>
-              <NativeSlider
-                style={styles.settingSlider}
-                minimumValue={-24}
-                maximumValue={24}
-                step={1}
-                value={inputGainDb}
-                onValueChange={setInputGainDb}
-                minimumTrackTintColor={STUDIO_COLORS.text}
-                maximumTrackTintColor={STUDIO_COLORS.borderStrong}
-                thumbTintColor={STUDIO_COLORS.text}
-              />
-            </View>
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.limiter')}
-              </Text>
-              <Switch
-                value={limiter}
-                onValueChange={setLimiter}
-                trackColor={{ true: STUDIO_COLORS.primary }}
-                thumbColor={limiter ? STUDIO_COLORS.onPrimary : undefined}
-              />
-            </View>
-            {/* Locked while effects are being built: visible, off and inert. */}
-            <View
-              style={[styles.settingRow, MONITOR_REVERB_LOCKED && styles.settingLocked]}
+        {/* Settings fold: the native recorder's, nothing to set in a call */}
+        {!inCall && (
+          <>
+            <Pressable
+              onPress={() => setShowSettings((v) => !v)}
+              accessibilityRole="button"
+              style={styles.foldHeader}
             >
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.reverb')}
-                {MONITOR_REVERB_LOCKED ? `  ${t('studio.record.reverbSoon')}` : ''}
+              <Text variant="small" style={styles.foldTitle}>
+                {t('studio.record.settings')}
               </Text>
-              <Switch
-                value={reverb}
-                onValueChange={setReverb}
-                disabled={MONITOR_REVERB_LOCKED}
-                trackColor={{ true: STUDIO_COLORS.primary }}
-                thumbColor={reverb ? STUDIO_COLORS.onPrimary : undefined}
-              />
-            </View>
-            {reverb && (
-              <View style={styles.chips}>
-                {REVERB_PRESETS.map((p) => (
-                  <Pressable
-                    key={p}
-                    onPress={() => {
-                      void haptic('selection');
-                      setReverbPreset(p);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: reverbPreset === p }}
-                    style={[styles.chip, reverbPreset === p && styles.chipActive]}
-                  >
-                    <Text
-                      variant="caption"
-                      style={[
-                        styles.chipText,
-                        reverbPreset === p && styles.chipTextActive,
-                      ]}
-                    >
-                      {t(
-                        `studio.record.reverbPresets.${p}` as 'studio.record.reverbPresets.plate'
-                      )}
-                    </Text>
-                  </Pressable>
-                ))}
+              {showSettings ? (
+                <ChevronUp size={16} color={STUDIO_COLORS.textMuted} />
+              ) : (
+                <ChevronDown size={16} color={STUDIO_COLORS.textMuted} />
+              )}
+            </Pressable>
+            {showSettings && (
+              <View style={styles.settings}>
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.inputDevice')}
+                  </Text>
+                  <View style={styles.chips}>
+                    {inputs.map((port) => {
+                      const active = port.id === selectedInput?.id;
+                      return (
+                        <Pressable
+                          key={port.id}
+                          onPress={() => {
+                            void haptic('selection');
+                            void setInput(port.id).then(refreshPorts);
+                          }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          style={[styles.chip, active && styles.chipActive]}
+                        >
+                          <Text
+                            variant="caption"
+                            numberOfLines={1}
+                            style={[styles.chipText, active && styles.chipTextActive]}
+                          >
+                            {port.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.outputDevice')}
+                  </Text>
+                  <Text variant="caption" style={styles.settingValue}>
+                    {outputs.map((o) => o.name).join(', ') || '…'}
+                  </Text>
+                </View>
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.monitoring')}
+                  </Text>
+                  <Switch
+                    value={monitoring}
+                    onValueChange={setMonitoring}
+                    trackColor={{ true: STUDIO_COLORS.primary }}
+                    thumbColor={monitoring ? STUDIO_COLORS.onPrimary : undefined}
+                  />
+                </View>
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.inputGain', { value: Math.round(inputGainDb) })}
+                  </Text>
+                  <NativeSlider
+                    style={styles.settingSlider}
+                    minimumValue={-24}
+                    maximumValue={24}
+                    step={1}
+                    value={inputGainDb}
+                    onValueChange={setInputGainDb}
+                    minimumTrackTintColor={STUDIO_COLORS.text}
+                    maximumTrackTintColor={STUDIO_COLORS.borderStrong}
+                    thumbTintColor={STUDIO_COLORS.text}
+                  />
+                </View>
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.limiter')}
+                  </Text>
+                  <Switch
+                    value={limiter}
+                    onValueChange={setLimiter}
+                    trackColor={{ true: STUDIO_COLORS.primary }}
+                    thumbColor={limiter ? STUDIO_COLORS.onPrimary : undefined}
+                  />
+                </View>
+                {/* Locked while effects are being built: visible, off and inert. */}
+                <View
+                  style={[
+                    styles.settingRow,
+                    MONITOR_REVERB_LOCKED && styles.settingLocked,
+                  ]}
+                >
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.reverb')}
+                    {MONITOR_REVERB_LOCKED ? `  ${t('studio.record.reverbSoon')}` : ''}
+                  </Text>
+                  <Switch
+                    value={reverb}
+                    onValueChange={setReverb}
+                    disabled={MONITOR_REVERB_LOCKED}
+                    trackColor={{ true: STUDIO_COLORS.primary }}
+                    thumbColor={reverb ? STUDIO_COLORS.onPrimary : undefined}
+                  />
+                </View>
+                {reverb && (
+                  <View style={styles.chips}>
+                    {REVERB_PRESETS.map((p) => (
+                      <Pressable
+                        key={p}
+                        onPress={() => {
+                          void haptic('selection');
+                          setReverbPreset(p);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: reverbPreset === p }}
+                        style={[styles.chip, reverbPreset === p && styles.chipActive]}
+                      >
+                        <Text
+                          variant="caption"
+                          style={[
+                            styles.chipText,
+                            reverbPreset === p && styles.chipTextActive,
+                          ]}
+                        >
+                          {t(
+                            `studio.record.reverbPresets.${p}` as 'studio.record.reverbPresets.plate'
+                          )}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                <View style={styles.settingRow}>
+                  <Text variant="small" style={styles.settingLabel}>
+                    {t('studio.record.overdub')}
+                  </Text>
+                  <Switch
+                    value={overdub}
+                    onValueChange={setOverdub}
+                    trackColor={{ true: STUDIO_COLORS.primary }}
+                    thumbColor={overdub ? STUDIO_COLORS.onPrimary : undefined}
+                  />
+                </View>
+                <Text variant="caption" style={styles.hint}>
+                  {t('studio.record.headphonesHint')}
+                </Text>
               </View>
             )}
-            <View style={styles.settingRow}>
-              <Text variant="small" style={styles.settingLabel}>
-                {t('studio.record.overdub')}
-              </Text>
-              <Switch
-                value={overdub}
-                onValueChange={setOverdub}
-                trackColor={{ true: STUDIO_COLORS.primary }}
-                thumbColor={overdub ? STUDIO_COLORS.onPrimary : undefined}
-              />
-            </View>
-            <Text variant="caption" style={styles.hint}>
-              {t('studio.record.headphonesHint')}
-            </Text>
-          </View>
+          </>
         )}
       </View>
     </BottomSheet>

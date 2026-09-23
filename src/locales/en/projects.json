@@ -229,6 +229,7 @@
       "headphonesHint": "Use headphones when playing other tracks, or the speaker bleeds into the take.",
       "noPermission": "Microphone access is needed to record",
       "blockedInCall": "The call owns the microphone. Use the record the call button instead.",
+      "callMix": "Recording your mic and the call. Listen, keep it or record again before it lands on the track.",
       "unavailable": "The recorder is not in this build",
       "reverbPresets": {
         "smallRoom": "Small room",

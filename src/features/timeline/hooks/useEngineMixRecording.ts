@@ -17,6 +17,7 @@ import {
 } from '../../../../modules/atto-audio-transcode';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { LocalClip } from '../types';
+import type { StopResult } from '../../../../modules/atto-recorder';
 
 interface UseEngineMixRecordingOptions {
   projectId: string;
@@ -266,9 +267,90 @@ export function useEngineMixRecording({
     }
   }, [isRecording, elapsedMs, activeCall, setMixRecording, queryClient, t]);
 
+  /**
+   * Stop and hand the raw take back instead of uploading it, for the record
+   * sheet inside a call (David, Sep 23 2026: the sheet is the better UX in a
+   * call too, listen, keep or record again before anything lands on the
+   * track). The sheet's Place goes through the editor's placeTake, which
+   * transcodes, uploads and adds the clip exactly like an out of call take.
+   */
+  const stopRecordingToTake = useCallback(
+    async (fromMs: number): Promise<StopResult | null> => {
+      if (!isRecording) return null;
+      setIsRecording(false);
+      setMixRecording(false);
+      const takeMs = elapsedMs;
+      let outcome = 'ok';
+      try {
+        const rawPath = await mixerService.stopMixRecording();
+        const diag = await mixerService.getMixDiagnostics();
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+          action: 'stop',
+          engine: 'engine_mix',
+          sink: 'sheet',
+          outcome: rawPath ? 'ok' : 'no_path',
+          call_sid: activeCall?.callSid ?? null,
+          duration_ms: takeMs,
+          mic_frames: diag?.micFrames ?? null,
+          remote_frames: diag?.remoteFrames ?? null,
+          app_frames: diag?.appFrames ?? null,
+          total_frames: diag?.totalFrames ?? null,
+          engine_duration_sec: diag?.durationSec ?? null,
+          record_cb_count: diag?.recordCbCount ?? null,
+          playout_cb_count: diag?.playoutCbCount ?? null,
+          render_fail_count: diag?.renderFailCount ?? null,
+        });
+        if (!rawPath) {
+          outcome = 'no_path';
+          showToast(t('toasts.recordingFailed', 'Recording failed'));
+          return null;
+        }
+        return {
+          path: rawPath,
+          durationMs: takeMs,
+          // The engine keeps no peak; the sheet hides the figure when it is not finite.
+          peakDb: Number.NaN,
+          sampleRate: 0,
+          fromMs,
+          frames: Array.isArray(diag?.totalFrames)
+            ? diag.totalFrames.reduce((a, b) => a + b, 0)
+            : (diag?.totalFrames ?? 0),
+        };
+      } catch (error: unknown) {
+        outcome = 'failed';
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+          action: 'stop',
+          engine: 'engine_mix',
+          sink: 'sheet',
+          outcome: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+          duration_ms: takeMs,
+        });
+        showToast(t('toasts.recordingFailed', 'Recording failed'));
+        return null;
+      } finally {
+        armingRef.current = false;
+        void emitTelemetryMarker('engine_mix_record_ended', { outcome, sink: 'sheet' });
+      }
+    },
+    [isRecording, elapsedMs, activeCall, setMixRecording, t]
+  );
+
+  /** Drops a take the sheet did not keep. Best effort, the cache sweeps anyway. */
+  const discardTake = useCallback(async (path: string) => {
+    const uri = path.startsWith('file://') ? path : `file://${path}`;
+    try {
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+    } catch {
+      // cache file, nothing depends on it
+    }
+  }, []);
+
   return {
     startRecording,
     stopRecording,
+    stopRecordingToTake,
+    discardTake,
     isRecording,
     isUploading,
     elapsed,

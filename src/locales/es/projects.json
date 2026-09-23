@@ -229,6 +229,7 @@
       "headphonesHint": "Usa audífonos al reproducir otras pistas, o el parlante se cuela en la toma.",
       "noPermission": "Se necesita acceso al micrófono para grabar",
       "blockedInCall": "La llamada tiene el micrófono. Usa el botón de grabar la llamada.",
+      "callMix": "Grabando tu micrófono y la llamada. Escucha, quédatela o vuelve a grabar antes de que caiga en la pista.",
       "unavailable": "La grabadora no está en esta versión",
       "reverbPresets": {
         "smallRoom": "Sala pequeña",

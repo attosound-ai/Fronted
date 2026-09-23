@@ -44,7 +44,7 @@ export function ProfileSettingsSection() {
 
   return (
     <ProfileSection title={t('settings.sectionTitle')}>
-      <EmbeddedSettingsForm>
+      <EmbeddedSettingsForm rows={4}>
         <Section>
           <NavRow
             title={t('settings.recorderLabel')}

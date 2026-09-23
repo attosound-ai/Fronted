@@ -12,6 +12,7 @@ import {
   Host,
   Image,
   LabeledContent,
+  List,
   Picker,
   Section,
   Spacer,
@@ -21,6 +22,7 @@ import {
 import {
   buttonStyle,
   foregroundStyle,
+  listStyle,
   pickerStyle,
   scrollContentBackground,
   scrollDisabled,
@@ -40,16 +42,37 @@ export function SettingsForm({ children }: { children: ReactNode }) {
   );
 }
 
+/** One inset grouped row is 44 pt; the group adds its own top and bottom air. */
+const ROW_HEIGHT = 44;
+const GROUP_INSET = 36;
+
 /**
- * A form embedded in another scroll view (the profile): sized to its content
- * and with its own scrolling off, so the outer list keeps the gesture.
+ * A list embedded in another scroll view (the profile). A SwiftUI list has no
+ * intrinsic height (measured on build 20 it collapsed to a 34 pt bar), so the
+ * host gets an explicit height from the row count and its own scrolling is
+ * off, leaving the gesture to the outer list.
  */
-export function EmbeddedSettingsForm({ children }: { children: ReactNode }) {
+export function EmbeddedSettingsForm({
+  children,
+  rows,
+}: {
+  children: ReactNode;
+  rows: number;
+}) {
   return (
-    <Host matchContents style={{ width: '100%' }} colorScheme="dark">
-      <Form modifiers={[scrollDisabled(true), scrollContentBackground('hidden')]}>
+    <Host
+      style={{ width: '100%', height: rows * ROW_HEIGHT + GROUP_INSET }}
+      colorScheme="dark"
+    >
+      <List
+        modifiers={[
+          listStyle('insetGrouped'),
+          scrollDisabled(true),
+          scrollContentBackground('hidden'),
+        ]}
+      >
         {children}
-      </Form>
+      </List>
     </Host>
   );
 }

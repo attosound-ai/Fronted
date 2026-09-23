@@ -36,7 +36,9 @@ interface HistorySnapshot {
   laneMeta: Record<number, LaneMeta>;
 }
 
-const LANE_COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
+// New tracks carry no colour (white waveform, no dot) until the user picks
+// one in the track sheet (David, Sep 23 2026: black and white by default).
+const NO_LANE_COLOR = '';
 
 /** Exported (with `timelineReducer`) for pure-logic tests. */
 export const initialTimelineState: TimelineState = {
@@ -216,7 +218,7 @@ export function timelineReducer(
 
     case 'ADD_LANE': {
       const newIndex = state.laneCount;
-      const color = LANE_COLORS[newIndex % LANE_COLORS.length];
+      const color = NO_LANE_COLOR;
       return {
         ...state,
         laneCount: state.laneCount + 1,
@@ -657,7 +659,7 @@ export function timelineReducer(
           ...state.laneMeta,
           [newLane]: {
             name: '',
-            color: LANE_COLORS[newLane % LANE_COLORS.length],
+            color: NO_LANE_COLOR,
             gainDb: source?.gainDb ?? 0,
             pan: source?.pan ?? 0,
           },
@@ -793,7 +795,7 @@ export function useTimeline(
   for (let i = 0; i < laneCount; i++) {
     defaultMeta[i] = initialLaneMeta?.[i] ?? {
       name: '',
-      color: LANE_COLORS[i % LANE_COLORS.length],
+      color: NO_LANE_COLOR,
     };
   }
 

@@ -79,7 +79,7 @@ export function LaneEditSheet({
 }: LaneEditSheetProps) {
   const { t } = useTranslation('projects');
   const [name, setName] = useState(currentMeta?.name ?? '');
-  const [color, setColor] = useState(currentMeta?.color ?? SWATCHES[0]);
+  const [color, setColor] = useState(currentMeta?.color ?? '');
   // The full spectrum wheel folds under the swatches (David, Sep 23 2026).
   const [wheelOpen, setWheelOpen] = useState(false);
   const colorSourceRef = useRef<'swatch' | 'wheel' | 'unchanged'>('unchanged');
@@ -92,7 +92,7 @@ export function LaneEditSheet({
   useEffect(() => {
     if (!visible) return;
     setName(currentMeta?.name ?? '');
-    setColor(currentMeta?.color ?? SWATCHES[0]);
+    setColor(currentMeta?.color ?? '');
     setWheelOpen(false);
     colorSourceRef.current = 'unchanged';
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,7 +259,8 @@ export function LaneEditSheet({
               style={[
                 styles.swatch,
                 styles.wheelToggle,
-                !SWATCHES.includes(color.toUpperCase()) && { backgroundColor: color },
+                !!color &&
+                  !SWATCHES.includes(color.toUpperCase()) && { backgroundColor: color },
                 wheelOpen && styles.swatchSelected,
               ]}
               accessibilityRole="button"
@@ -300,7 +301,7 @@ export function LaneEditSheet({
                     {
                       left: Math.min(panCenterX, panThumbX),
                       width: Math.abs(panThumbX - panCenterX),
-                      backgroundColor: color,
+                      backgroundColor: color || '#FFFFFF',
                     },
                   ]}
                 />

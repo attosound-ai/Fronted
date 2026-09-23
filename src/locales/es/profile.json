@@ -105,7 +105,16 @@
     "sectionTitle": "Ajustes",
     "languageLabel": "Idioma",
     "appIconLabel": "Icono del app",
-    "analyticsLabel": "Analíticas"
+    "analyticsLabel": "Analíticas",
+    "title": "Ajustes",
+    "recorderSection": "Grabación",
+    "generalSection": "General",
+    "recorderLabel": "Grabador",
+    "recorderPro": "Pro",
+    "recorderSimple": "Sencillo",
+    "recorderFooter": "La pantalla en la que cae una llamada después de pulsar 1.",
+    "recorderProDetail": "El estudio completo: pistas, tomas que escuchas antes de colocar, efectos, mezcla y exportación.",
+    "recorderSimpleDetail": "Grabar y publicar, nada más en pantalla."
   },
   "support": {
     "sectionTitle": "Soporte",

@@ -710,6 +710,10 @@ export const ANALYTICS_EVENTS = {
 
   // ── Profile ────────────────────────────────────
   PROFILE: {
+    /** A native settings screen opened (settings, recorder, language) and from where. */
+    SETTINGS_SCREEN_OPENED: 'settings_screen_opened',
+    /** Profile > Settings > Recorder: pro or simple, from the effective mode before. */
+    RECORDER_MODE_CHANGED: 'settings_recorder_mode_changed',
     VIEWED: 'profile_viewed',
     EDIT_OPENED: 'profile_edit_opened',
     UPDATED: 'profile_updated',

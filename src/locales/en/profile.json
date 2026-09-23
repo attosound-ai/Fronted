@@ -105,7 +105,16 @@
     "sectionTitle": "Settings",
     "languageLabel": "Language",
     "appIconLabel": "App icon",
-    "analyticsLabel": "Analytics"
+    "analyticsLabel": "Analytics",
+    "title": "Settings",
+    "recorderSection": "Recording",
+    "generalSection": "General",
+    "recorderLabel": "Recorder",
+    "recorderPro": "Pro",
+    "recorderSimple": "Simple",
+    "recorderFooter": "Which screen a call lands on after you press 1.",
+    "recorderProDetail": "The full studio: tracks, takes you can listen to before placing, effects, mixing and export.",
+    "recorderSimpleDetail": "Record and publish, nothing else on screen."
   },
   "support": {
     "sectionTitle": "Support",

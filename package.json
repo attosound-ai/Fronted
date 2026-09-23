@@ -17,6 +17,7 @@
   "dependencies": {
     "@expo-google-fonts/archivo": "^0.4.2",
     "@expo/metro-runtime": "~55.0.7",
+    "@expo/ui": "55.0.17",
     "@expo/vector-icons": "^15.0.3",
     "@howincodes/expo-dynamic-app-icon": "^3.0.2",
     "@lodev09/react-native-true-sheet": "3.11.13",

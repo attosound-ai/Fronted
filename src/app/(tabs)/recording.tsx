@@ -7,6 +7,7 @@ import { useFeatureFlag } from '@/lib/analytics';
 import { INCALL_EDITOR_AUTOLOAD_FLAG } from '@/hooks/useConnectedCallLanding';
 import { ActiveCallScreen } from '@/components/call/ActiveCallScreen';
 import { SimpleRecordingScreen } from '@/components/call/SimpleRecordingScreen';
+import { useRecorderModeStore } from '@/stores/recorderModeStore';
 
 export default function RecordingScreen() {
   const recordState = useSubscriptionStore((s) => s.entitlementState('record_upload'));
@@ -14,6 +15,7 @@ export default function RecordingScreen() {
     s.hasEntitlement('advanced_production')
   );
   const editorFlagOn = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
+  const recorderMode = useRecorderModeStore((s) => s.mode);
   // Set by the project picker: the user chose a project on purpose, so the
   // editor opens with it instead of the plain recorder.
   const { editor } = useLocalSearchParams<{ editor?: string }>();
@@ -54,7 +56,15 @@ export default function RecordingScreen() {
   // for the cohort that has its flag on. Without the flag ActiveCallScreen
   // showed a bare "On call" placeholder, and once the free plan was granted
   // advanced_production every new creator landed on it (Sep 20 2026).
-  if (hasAdvancedProduction && (editorFlagOn || editorRequested)) {
+  // Profile > Settings > Recorder (David, Sep 23 2026) overrides the rule:
+  // 'simple' always lands on the plain recorder, 'pro' always on the editor.
+  if (recorderMode === 'simple' && !editorRequested) {
+    return <SimpleRecordingScreen onBack={handleBack} />;
+  }
+  if (
+    recorderMode === 'pro' ||
+    (hasAdvancedProduction && (editorFlagOn || editorRequested))
+  ) {
     return <ActiveCallScreen onBack={handleBack} openEditor={editorRequested} />;
   }
 

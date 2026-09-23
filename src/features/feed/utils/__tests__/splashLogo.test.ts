@@ -32,7 +32,7 @@ test('malformed cache entries read as nothing', () => {
 });
 
 test('the round web mark gets a compact square box on a phone', () => {
-  assert.deepEqual(splashBox(1, 430), { width: 215, height: 215 });
+  assert.deepEqual(splashBox(1, 430), { width: 129, height: 129 });
 });
 
 test('the wide wordmark spans most of the window', () => {
@@ -42,14 +42,14 @@ test('the wide wordmark spans most of the window', () => {
 });
 
 test('boxes are capped on tablets', () => {
-  assert.equal(splashBox(1, 1200).width, 300);
+  assert.equal(splashBox(1, 1200).width, 180);
   assert.equal(splashBox(3, 1200).width, 520);
 });
 
 test('a tall image keeps its ratio inside the compact box', () => {
   const box = splashBox(0.5, 430);
-  assert.equal(box.width, 215);
-  assert.equal(box.height, 430);
+  assert.equal(box.width, 129);
+  assert.equal(box.height, 258);
 });
 
 test('a nonsense ratio falls back to a square', () => {

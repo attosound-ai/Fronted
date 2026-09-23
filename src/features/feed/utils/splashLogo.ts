@@ -39,6 +39,8 @@ export function parseSplashCache(raw: string | null | undefined): SplashLogo | n
 /**
  * The box the logo is drawn in. A wide wordmark spans most of the window, a
  * round or square mark gets a compact box, so neither ends up tiny or huge.
+ * The mark's size follows Spotify's launch screen (the client, Sep 23 2026:
+ * "can we get our logo this size"): about three tenths of the width, not half.
  */
 export function splashBox(
   aspect: number,
@@ -47,7 +49,7 @@ export function splashBox(
   const safe = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
   const wide = safe >= WIDE_ASPECT;
   const width = Math.round(
-    wide ? Math.min(windowWidth * 0.78, 520) : Math.min(windowWidth * 0.5, 300)
+    wide ? Math.min(windowWidth * 0.78, 520) : Math.min(windowWidth * 0.3, 180)
   );
   return { width, height: Math.round(width / safe) };
 }

@@ -49,7 +49,7 @@ const CORNER_RADIUS = 38;
  *  is the point of the glass (the client, Sep 22 2026: "we can actually enjoy
  *  the liquid glass display"; David, Sep 23: even more translucent). The tint
  *  stays ultra thin so the feed's colour comes through. */
-const BLUR_INTENSITY = 62;
+const BLUR_INTENSITY = 38;
 /** After the last digit on an inbound call, how long the pad waits for another
  *  digit before it slides away and the editor opens. */
 const ACCEPT_HANDOFF_MS = 1500;
@@ -248,8 +248,8 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     // Barely there: the feed behind the pad is the point of the glass
-    // (David, Sep 23 2026: "aun mas translucido").
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    // (David, Sep 23 2026, twice: "aun mas translucido").
+    backgroundColor: 'rgba(0,0,0,0.02)',
   },
   panel: {
     borderTopLeftRadius: CORNER_RADIUS,

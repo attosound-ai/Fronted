@@ -25,6 +25,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useCallStore } from '@/stores/callStore';
 
 import type { NativeCallAudioState } from '@/lib/telemetry/deviceSnapshot';
+import { jsCensusSnapshot, startJsCensus, stopJsCensus } from './jsCensus';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 
 import { telemetryCounters } from './counters';
@@ -199,6 +200,9 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
     }
   }, 0);
 
+  // JS thread census for the life of the call (see jsCensus.ts).
+  startJsCensus();
+
   await snapshotAndEmit(reason);
 
   if (tickInterval) clearInterval(tickInterval);
@@ -288,6 +292,17 @@ async function emitMemHeartbeat(): Promise<void> {
     const used = await DeviceInfo.getUsedMemory();
     const lag = getJsLagStats();
     analytics.capture(ANALYTICS_EVENTS.CALL.MEM_HEARTBEAT, {
+      // What the JS thread was asked to do since the last heartbeat.
+      ...(() => {
+        const c = jsCensusSnapshot();
+        return {
+          js_timer_callbacks: c.timerCallbacks,
+          js_native_events: c.nativeEvents,
+          js_promise_thens: c.promiseThens,
+          js_top_timers: c.timers,
+          js_top_events: c.events,
+        };
+      })(),
       mem_used_mb: Number.isFinite(used) ? Math.round(used / MB) : null,
       js_lag_last_ms: lag.lastLagMs,
       js_lag_peak_ms: lag.peakLagMs,
@@ -649,6 +664,7 @@ export async function emitTelemetryMarker(
  * always have a baseline at the moment the call was torn down.
  */
 export async function endCallTelemetry(reason: string = 'call_ended'): Promise<void> {
+  stopJsCensus();
   if (!isActive) return;
   await snapshotAndEmit(reason);
 

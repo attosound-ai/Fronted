@@ -45,8 +45,14 @@ const DISMISS_DISTANCE = 110;
 const DISMISS_VELOCITY = 900;
 /** iOS 26 sheets round their top at about this radius on a modern iPhone. */
 const CORNER_RADIUS = 38;
-/** Material strength: lower shows more of the call screen through the panel. */
-const BLUR_INTENSITY = 55;
+/** Material strength. Higher blurs the feed behind the panel harder, which is
+ *  how the glass reads as glass (the client, Sep 22 2026: "we can actually
+ *  enjoy the liquid glass display"). The tint stays ultra thin so the feed's
+ *  colour still comes through. */
+const BLUR_INTENSITY = 88;
+/** After the last digit on an inbound call, how long the pad waits for another
+ *  digit before it slides away and the editor opens. */
+const ACCEPT_HANDOFF_MS = 1500;
 const OPEN_SPRING = { damping: 26, stiffness: 260, mass: 1 };
 
 export default function CallKeypadScreen() {
@@ -55,6 +61,7 @@ export default function CallKeypadScreen() {
 
   const keypadVisible = useCallStore((s) => s.keypadVisible);
   const hideKeypad = useCallStore((s) => s.hideKeypad);
+  const markDtmfSent = useCallStore((s) => s.markDtmfSent);
   const callSid = useCallStore((s) => s.activeCall?.callSid);
   const state = useCallStore((s) => s.activeCall?.state);
   const direction = useCallStore((s) => s.activeCall?.direction);
@@ -62,6 +69,12 @@ export default function CallKeypadScreen() {
 
   // Digits typed during this visit, echoed above the grid like Apple does.
   const [entered, setEntered] = useState('');
+  // "Press 1 and the editor opens": on an inbound call the first digit marks
+  // the call accepted, and once the creator stops typing for a beat the pad
+  // slides away so useConnectedCallLanding can land on the recorder. A second
+  // digit inside the window (Securus sometimes asks for more) resets it.
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (handoffTimer.current) clearTimeout(handoffTimer.current); }, []);
 
   const translateY = useSharedValue(OFFSCREEN);
   const backdrop = useSharedValue(0);
@@ -177,7 +190,19 @@ export default function CallKeypadScreen() {
             <DtmfKeypad
               onPressDigit={(d) => {
                 setEntered((prev) => prev + d);
-                void sendCallDigit(d);
+                void sendCallDigit(d).then((sent) => {
+                  if (!sent || !callSid || direction !== 'inbound') return;
+                  markDtmfSent(callSid);
+                  if (handoffTimer.current) clearTimeout(handoffTimer.current);
+                  handoffTimer.current = setTimeout(() => {
+                    handoffTimer.current = null;
+                    analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_ACCEPT_HANDOFF, {
+                      call_sid: callSid,
+                      digits: entered.length + 1,
+                    });
+                    close();
+                  }, ACCEPT_HANDOFF_MS);
+                });
               }}
               onKeyTap={(digit, meta) =>
                 analytics.capture(ANALYTICS_EVENTS.CALL.DTMF_KEYPRESS, {
@@ -222,7 +247,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    // Light: the feed behind the pad is the point of the glass.
+    backgroundColor: 'rgba(0,0,0,0.14)',
   },
   panel: {
     borderTopLeftRadius: CORNER_RADIUS,

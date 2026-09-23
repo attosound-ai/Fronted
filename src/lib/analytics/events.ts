@@ -317,6 +317,12 @@ export const ANALYTICS_EVENTS = {
     // "press 1" was never sent and the call died at 64 s. The route now keeps
     // the store true so the host re-presents it, and reports it here.
     KEYPAD_ROUTE_LOST: 'call_keypad_route_lost',
+    // The pad slid away on its own after the creator's digit(s) on an inbound
+    // call, handing the screen to the recorder landing. {call_sid, digits}
+    KEYPAD_ACCEPT_HANDOFF: 'call_keypad_accept_handoff',
+    // An inbound call connected while the app sat on some other screen and the
+    // landing brought it to the feed so the glass keypad has the feed behind it.
+    NAV_TO_HOME: 'call_nav_to_home',
     // Auto-sent "press 1" that completes the Securus accept on inbound carrier
     // calls (build-98 telemetry proved: no "1" → Securus drops at ~60s; "1" →
     // call connects). Each scheduled attempt reports {attempt, delay_ms, sent}.

@@ -11,6 +11,10 @@ interface CallStoreState {
   // DTMF keypad overlay visibility. Lives at store level (not on ActiveCall)
   // so a single global host can render the sheet for every call surface.
   keypadVisible: boolean;
+  // The call the creator has sent a DTMF digit on (Sep 23 2026, the client's
+  // flow: the call lands on the feed with the glass keypad over it, and only
+  // "press 1" opens the editor). useConnectedCallLanding waits for this.
+  dtmfSentSid: string | null;
   routePickerVisible: boolean;
   // Live audio-injection snapshot (a phone-side track played INTO the call).
   // Store-level for the same reason as keypadVisible — a single global host
@@ -57,6 +61,7 @@ interface CallStoreActions {
   setActiveProjectId: (id: string | null) => void;
   showKeypad: () => void;
   hideKeypad: () => void;
+  markDtmfSent: (callSid: string) => void;
   /**
    * Audio route picker sheet (b155). Our OWN 3-option sheet (Bluetooth / oído /
    * altavoz): the system AVRoutePickerView lists DEVICES, not ports, so with a
@@ -77,6 +82,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   isRegistered: false,
   registrationError: null,
   keypadVisible: false,
+  dtmfSentSid: null,
   routePickerVisible: false,
   injection: null,
   playback: IDLE_PLAYBACK,
@@ -202,6 +208,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
 
   showKeypad: () => set({ keypadVisible: true }),
   hideKeypad: () => set({ keypadVisible: false }),
+  markDtmfSent: (callSid) => set({ dtmfSentSid: callSid }),
 
   showRoutePicker: () => set({ routePickerVisible: true }),
   hideRoutePicker: () => set({ routePickerVisible: false }),
@@ -219,6 +226,7 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
       activeCall: null,
       activeProjectId: null,
       keypadVisible: false,
+      dtmfSentSid: null,
       routePickerVisible: false,
       injection: null,
       networkWeak: false,

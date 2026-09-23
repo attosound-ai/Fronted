@@ -51,10 +51,18 @@ const MAX_TICKS = 40;
  * Navigates at most once per callSid; skips when already on /call (it runs its
  * own hand-off) or already on the recorder; gated on the root navigator being
  * ready so a cold-launch foreground doesn't fire into an unmounted router.
+ *
+ * INBOUND ORDER (Sep 23 2026, the client's ask): feed first, keypad over it,
+ * and the recorder only after the creator's digit. The keypad route marks the
+ * call accepted (callStore.dtmfSentSid) and slides itself away; this hook then
+ * lands on the recorder on its next tick. Nothing navigates while the pad is up.
  */
 export function useConnectedCallLanding(): void {
   const callState = useCallStore((s) => s.activeCall?.state);
   const callSid = useCallStore((s) => s.activeCall?.callSid);
+  const direction = useCallStore((s) => s.activeCall?.direction);
+  // The call the creator accepted with a digit (the keypad marks it).
+  const dtmfSentSid = useCallStore((s) => s.dtmfSentSid);
   const role = useAuthStore((s) => s.user?.role);
   // Reactive: re-runs when the subscription resolves (cold-launch null → true).
   const recordUpload = useSubscriptionStore((s) => s.entitlementState('record_upload'));
@@ -76,6 +84,7 @@ export function useConnectedCallLanding(): void {
   const autoLandFlagReactive = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
 
   const landedForSid = useRef<string | null>(null);
+  const homedForSid = useRef<string | null>(null);
   const fetchedForSid = useRef<string | null>(null);
   // One landing-skip row per (call, reason) — a Set, not a last-wins slot, so two
   // alternating reasons can't re-emit each other forever.
@@ -160,6 +169,25 @@ export function useConnectedCallLanding(): void {
       blockedBy('keypad_open', { keypad_route_mounted: keypadRouteMounted });
       return;
     }
+    // Inbound (Sep 23 2026, the client's flow): the call lands on the FEED
+    // with the glass keypad over it, and only the creator's digit opens the
+    // editor. Until that digit, bring a stray screen home once and wait.
+    if (direction === 'inbound' && dtmfSentSid !== callSid) {
+      if (
+        homedForSid.current !== callSid &&
+        !isOnCallScreen(pathname) &&
+        pathname !== '/'
+      ) {
+        homedForSid.current = callSid;
+        analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_HOME, {
+          call_sid: callSid,
+          from_pathname: pathname,
+        });
+        router.replace('/(tabs)');
+      }
+      blockedBy('awaiting_digit', { pathname });
+      return;
+    }
     // /call owns its own hand-off; the recorder means we already landed.
     if (isOnCallScreen(pathname) || pathname.includes('/recording')) {
       landedForSid.current = callSid;
@@ -206,6 +234,8 @@ export function useConnectedCallLanding(): void {
   }, [
     callState,
     callSid,
+    direction,
+    dtmfSentSid,
     role,
     recordUpload,
     lastFetchFailed,

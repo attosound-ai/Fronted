@@ -45,11 +45,11 @@ const DISMISS_DISTANCE = 110;
 const DISMISS_VELOCITY = 900;
 /** iOS 26 sheets round their top at about this radius on a modern iPhone. */
 const CORNER_RADIUS = 38;
-/** Material strength. Higher blurs the feed behind the panel harder, which is
- *  how the glass reads as glass (the client, Sep 22 2026: "we can actually
- *  enjoy the liquid glass display"). The tint stays ultra thin so the feed's
- *  colour still comes through. */
-const BLUR_INTENSITY = 88;
+/** Material strength. Lower lets more of the feed through the panel, which
+ *  is the point of the glass (the client, Sep 22 2026: "we can actually enjoy
+ *  the liquid glass display"; David, Sep 23: even more translucent). The tint
+ *  stays ultra thin so the feed's colour comes through. */
+const BLUR_INTENSITY = 62;
 /** After the last digit on an inbound call, how long the pad waits for another
  *  digit before it slides away and the editor opens. */
 const ACCEPT_HANDOFF_MS = 1500;
@@ -247,8 +247,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   backdrop: {
-    // Light: the feed behind the pad is the point of the glass.
-    backgroundColor: 'rgba(0,0,0,0.14)',
+    // Barely there: the feed behind the pad is the point of the glass
+    // (David, Sep 23 2026: "aun mas translucido").
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   panel: {
     borderTopLeftRadius: CORNER_RADIUS,

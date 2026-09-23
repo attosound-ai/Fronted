@@ -33,6 +33,7 @@ import { AppSplash } from '@/components/AppSplash';
 import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
+import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
 import { noteScreen, startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
@@ -63,6 +64,9 @@ import { COLORS } from '@/constants/theme';
 // clip descenders (y, g, p, j). The original @expo-google-fonts/archivo
 // build has hhea.descender=-210 while glyphs extend to -410, causing
 // clipping in TextInputs and tight layouts. See assets/fonts/README.
+// Before anything schedules a frame: rAF loops must never spin off screen.
+installBackgroundFramePacing();
+
 const Archivo_400Regular = require('../../assets/fonts/Archivo_400Regular.ttf');
 const Archivo_500Medium = require('../../assets/fonts/Archivo_500Medium.ttf');
 const Archivo_600SemiBold = require('../../assets/fonts/Archivo_600SemiBold.ttf');

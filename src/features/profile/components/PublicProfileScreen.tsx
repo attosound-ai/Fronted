@@ -785,6 +785,10 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12,
   },
+  // Both buttons share a fixed height and centre their content; the label
+  // keeps a line box close to the font's own (Archivo 14 pt is 15.2 pt tall)
+  // so the caps sit on the button's centre line. With the default 20 pt line
+  // box iOS put the extra space under the baseline and "Follow" rode 2 pt high.
   chatButton: {
     flex: 1,
     flexDirection: 'row',
@@ -792,7 +796,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#333',
     borderRadius: 8,
-    paddingVertical: 10,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -800,13 +804,15 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
+    lineHeight: 16,
   },
   followButton: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
-    paddingVertical: 10,
+    height: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   followingButton: {
     backgroundColor: 'transparent',
@@ -817,6 +823,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
+    lineHeight: 16,
   },
   followingButtonText: {
     color: '#FFF',

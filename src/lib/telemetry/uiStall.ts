@@ -63,6 +63,12 @@ function onFrame(): void {
   }
   lastFrameAt = now;
   frames += 1;
+  // No frames to watch off screen, and a rAF loop in the background spins
+  // (see src/lib/backgroundFrames.ts); check() restarts it on return.
+  if (AppState.currentState !== 'active') {
+    rafId = null;
+    return;
+  }
   rafId = requestAnimationFrame(onFrame);
 }
 
@@ -73,6 +79,11 @@ function check(): void {
     return;
   }
   const now = Date.now();
+  if (rafId === null && checkId !== null) {
+    lastFrameAt = now;
+    rafId = requestAnimationFrame(onFrame);
+    return;
+  }
   // Give the display link a moment after coming back to the foreground.
   if (now - lastAppStateChangeAt < RENDER_STALL_MS) return;
   const gap = now - lastFrameAt;

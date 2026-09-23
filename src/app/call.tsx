@@ -52,6 +52,25 @@ function handOff(trigger: string = 'effect') {
   //   false → definitely free → feed.
   const store = useSubscriptionStore.getState();
   const ent = store.entitlementState('record_upload');
+  // INBOUND (Sep 23 2026, the client's flow): the call lands on the FEED with
+  // the glass keypad over it, and the creator's digit is what opens the editor
+  // (useConnectedCallLanding waits for callStore.dtmfSentSid). Going straight
+  // to the recorder from here would skip the keypad and race it, which is
+  // exactly the Sep 22 wipe. Outbound calls keep landing on the recorder.
+  const direction = useCallStore.getState().activeCall?.direction;
+  if (direction === 'inbound') {
+    analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_HOME, {
+      trigger,
+      from_pathname: '/call',
+      can_dismiss: router.canDismiss(),
+    });
+    if (router.canDismiss()) {
+      router.dismissTo('/(tabs)');
+    } else {
+      router.replace('/(tabs)');
+    }
+    return;
+  }
   const goRecord = ent === true || ent === null;
 
   analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_RECORD, {

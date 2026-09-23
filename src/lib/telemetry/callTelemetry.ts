@@ -24,6 +24,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 import { useCallStore } from '@/stores/callStore';
 
+import type { NativeCallAudioState } from '@/lib/telemetry/deviceSnapshot';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 
 import { telemetryCounters } from './counters';
@@ -309,12 +310,21 @@ function clearInFlightMarker(): void {
  * This is what turns a silent kill into a first-class, queryable event instead of an
  * absence we have to reason about.
  */
-export function reportUnreportedCallDeath(): void {
+export function reportUnreportedCallDeath(native?: NativeCallAudioState | null): void {
   try {
     const raw = mmkvStorage.getString(IN_FLIGHT_CALL_KEY);
     if (!raw) return;
     clearInFlightMarker();
     const m = JSON.parse(raw) as InFlightCall;
+    // The native pulse (Sep 23 2026): the last 5 s tick the process managed
+    // before it went away. `native_alive_gap_sec` is the time between that tick
+    // and this launch; `native_bg_to_last_alive_sec` says how long the process
+    // kept running after it went to background. A gap of a minute or more with
+    // the app in background and a live CallKit call means iOS suspended or
+    // killed a process that was still on a call.
+    const ts = (v: number | undefined) => (v && v > 0 ? v : null);
+    const aliveAt = ts(native?.nativeAliveAt);
+    const bgAt = ts(native?.nativeBgAt);
     analytics.capture(ANALYTICS_EVENTS.CALL.DIED_UNREPORTED, {
       call_sid: m.callSid ?? null,
       // How far the call got before the process died.
@@ -325,6 +335,29 @@ export function reportUnreportedCallDeath(): void {
       // What the app was doing when it died (editor mount, capture, etc.).
       last_marker: m.lastMarker ?? null,
       last_mem_mb: m.lastMemMb ?? null,
+      native_alive_gap_sec: aliveAt ? Math.round(Date.now() / 1000 - aliveAt) : null,
+      native_bg_to_last_alive_sec:
+        aliveAt && bgAt && aliveAt >= bgAt ? Math.round(aliveAt - bgAt) : null,
+      native_app_state: native?.nativeAppState ?? null,
+      native_callkit_calls: native?.nativeCallKitCalls ?? null,
+      native_audio_enabled: native?.nativeAudioEnabled ?? null,
+      native_mem_mb: native?.nativeMemMB ?? null,
+      native_audio_category: native?.nativeAudioCategory || null,
+      native_audio_output: native?.nativeAudioOutput || null,
+      native_audio_input: native?.nativeAudioInput || null,
+      native_thermal: native?.nativeThermal ?? null,
+      native_low_power: native?.nativeLowPower ?? null,
+      native_will_terminate_gap_sec: ts(native?.nativeWillTerminateAt)
+        ? Math.round(Date.now() / 1000 - (native?.nativeWillTerminateAt as number))
+        : null,
+      interruption_began_gap_sec: ts(native?.interruptionBeganAt)
+        ? Math.round(Date.now() / 1000 - (native?.interruptionBeganAt as number))
+        : null,
+      interruption_reason: native?.interruptionReason ?? null,
+      interruption_count: native?.interruptionCount ?? null,
+      media_services_reset_gap_sec: ts(native?.mediaServicesResetAt)
+        ? Math.round(Date.now() / 1000 - (native?.mediaServicesResetAt as number))
+        : null,
     });
   } catch {
     // Corrupt marker — drop it so it can't loop.

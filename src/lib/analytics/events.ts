@@ -731,6 +731,11 @@ export const ANALYTICS_EVENTS = {
   // listener counts. Always-on equivalent of CALL.TELEMETRY_TICK so the next
   // crash anywhere in the app (not just on a call) has runtime context.
   RUNTIME: {
+    // iOS's own account of why the app exited (MetricKit application exit
+    // metrics, at most once a day) plus crash and hang diagnostics. Emitted on
+    // launch when a new payload arrived. Sep 23 2026: calls were dying with no
+    // crash in Sentry and no way to tell a kill from a suspension.
+    EXIT_REASONS: 'runtime_exit_reasons',
     UI_STALL: 'runtime_ui_stall',
     UI_STALL_RECOVERED: 'runtime_ui_stall_recovered',
     MEMORY_SURGE: 'runtime_memory_surge',

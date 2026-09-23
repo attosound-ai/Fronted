@@ -120,6 +120,29 @@ export interface NativeCallAudioState {
    *  reused engines). Absent when the reset selector was unavailable. */
   coldEngineResetAt?: number;
   coldEngineResetUnavailableAt?: number;
+  // Exit-reason telemetry (Sep 23 2026), see withTwilioVoipPushRegistry.
+  nativeAliveAt?: number;
+  nativeAppState?: number;
+  nativeCallKitCalls?: number;
+  nativeAudioEnabled?: boolean;
+  nativeMemMB?: number;
+  nativeAudioCategory?: string;
+  nativeAudioOutput?: string;
+  nativeAudioInput?: string;
+  nativeThermal?: number;
+  nativeLowPower?: boolean;
+  nativeBgAt?: number;
+  nativeFgAt?: number;
+  nativeWillTerminateAt?: number;
+  interruptionBeganAt?: number;
+  interruptionEndedAt?: number;
+  interruptionReason?: number;
+  interruptionCount?: number;
+  mediaServicesResetAt?: number;
+  metricKitExitsJson?: string;
+  metricKitReceivedAt?: number;
+  metricKitDiagJson?: string;
+  metricKitDiagReceivedAt?: number;
   /**
    * Route-change attribution, written by the native
    * AVAudioSessionRouteChangeNotification observer added in the same patch.
@@ -453,6 +476,15 @@ export interface DeviceSnapshot {
   audioLiveInputLatency: number | null;
   audioLiveOutputChannels: number | null;
   audioLiveInputChannels: number | null;
+  // Native pulse (survives a dead JS thread): what CallKit and the audio
+  // device looked like at the last 5 s native tick.
+  nativeCallKitCalls: number | null;
+  nativeAudioEnabled: boolean | null;
+  nativeMemMB: number | null;
+  nativeAudioInput: string | null;
+  audioInterruptionCount: number | null;
+  audioInterruptionBeganAt: number | null;
+  mediaServicesResetAt: number | null;
 
   // ── Static identity (cached after first call) ─
   deviceModel: string | null;
@@ -635,6 +667,13 @@ export async function getDeviceSnapshot(): Promise<DeviceSnapshot> {
     audioLiveInputLatency: a?.liveInputLatency ?? null,
     audioLiveOutputChannels: a?.liveOutputChannels ?? null,
     audioLiveInputChannels: a?.liveInputChannels ?? null,
+    nativeCallKitCalls: a?.nativeCallKitCalls ?? null,
+    nativeAudioEnabled: a?.nativeAudioEnabled ?? null,
+    nativeMemMB: a?.nativeMemMB ?? null,
+    nativeAudioInput: a?.nativeAudioInput || null,
+    audioInterruptionCount: a?.interruptionCount ?? null,
+    audioInterruptionBeganAt: aTs(a?.interruptionBeganAt),
+    mediaServicesResetAt: aTs(a?.mediaServicesResetAt),
     ...staticInfo,
   };
 }

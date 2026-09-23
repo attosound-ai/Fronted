@@ -84,6 +84,7 @@
       ],
       "./plugins/withSentryNativeInit",
       "./plugins/withTwilioVoipPushRegistry",
+      "./plugins/withFmtConsteval",
       "expo-router",
       "expo-secure-store",
       "expo-font",

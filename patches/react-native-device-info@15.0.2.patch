@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..516f162e0b58c934f4ac20108aec7c38ee019098 100644
+index 948c561..0a9d016 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,10 @@
@@ -33,7 +33,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..516f162e0b58c934f4ac20108aec7c38
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,331 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,355 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -287,6 +287,30 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..516f162e0b58c934f4ac20108aec7c38
 +        @"coldEnginePreinstallFailedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_preinstall_failed_at"]),
 +        @"coldEngineResetAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_reset_at"]),
 +        @"coldEngineResetUnavailableAt": @([ud doubleForKey:@"atto_coldcallkit_cold_engine_reset_unavailable_at"]),
++        // ── exit-reason telemetry (Sep 23 2026): native 5 s pulse, lifecycle
++        // edges and MetricKit, written by AttoVoipBootstrap, read on next launch.
++        @"nativeAliveAt": @([ud doubleForKey:@"atto_native_alive_at"]),
++        @"nativeAppState": @([ud integerForKey:@"atto_native_app_state"]),
++        @"nativeCallKitCalls": @([ud integerForKey:@"atto_native_callkit_calls"]),
++        @"nativeAudioEnabled": @([ud boolForKey:@"atto_native_audio_enabled"]),
++        @"nativeMemMB": @([ud integerForKey:@"atto_native_mem_mb"]),
++        @"nativeAudioCategory": ([ud stringForKey:@"atto_native_audio_category"] ?: @""),
++        @"nativeAudioOutput": ([ud stringForKey:@"atto_native_audio_output"] ?: @""),
++        @"nativeAudioInput": ([ud stringForKey:@"atto_native_audio_input"] ?: @""),
++        @"nativeThermal": @([ud integerForKey:@"atto_native_thermal"]),
++        @"nativeLowPower": @([ud boolForKey:@"atto_native_low_power"]),
++        @"nativeBgAt": @([ud doubleForKey:@"atto_native_bg_at"]),
++        @"nativeFgAt": @([ud doubleForKey:@"atto_native_fg_at"]),
++        @"nativeWillTerminateAt": @([ud doubleForKey:@"atto_native_will_terminate_at"]),
++        @"interruptionBeganAt": @([ud doubleForKey:@"atto_native_interruption_began_at"]),
++        @"interruptionEndedAt": @([ud doubleForKey:@"atto_native_interruption_ended_at"]),
++        @"interruptionReason": @([ud integerForKey:@"atto_native_interruption_reason"]),
++        @"interruptionCount": @([ud integerForKey:@"atto_native_interruption_count"]),
++        @"mediaServicesResetAt": @([ud doubleForKey:@"atto_native_media_reset_at"]),
++        @"metricKitExitsJson": ([ud stringForKey:@"atto_metrickit_exits_json"] ?: @""),
++        @"metricKitReceivedAt": @([ud doubleForKey:@"atto_metrickit_received_at"]),
++        @"metricKitDiagJson": ([ud stringForKey:@"atto_metrickit_diag_json"] ?: @""),
++        @"metricKitDiagReceivedAt": @([ud doubleForKey:@"atto_metrickit_diag_received_at"]),
 +    });
 +}
 +

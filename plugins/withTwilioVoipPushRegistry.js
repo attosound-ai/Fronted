@@ -58,7 +58,7 @@ const { withAppDelegate } = require('@expo/config-plugins');
 
 const IMPORT_ANCHOR = 'import ReactAppDependencyProvider\n';
 const IMPORT_INJECT =
-  'import ReactAppDependencyProvider\nimport PushKit\nimport UIKit\nimport CallKit\nimport AVFoundation\nimport TwilioVoice\n#if canImport(Sentry)\nimport Sentry\n#endif\n';
+  'import ReactAppDependencyProvider\nimport PushKit\nimport UIKit\nimport CallKit\nimport AVFoundation\nimport MetricKit\nimport TwilioVoice\n#if canImport(Sentry)\nimport Sentry\n#endif\n';
 
 const PROPERTY_ANCHOR = 'var reactNativeFactory: RCTReactNativeFactory?\n';
 const PROPERTY_INJECT =
@@ -194,6 +194,31 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     let provider = CXProvider(configuration: config)
     provider.setDelegate(self, queue: nil)
     coldProvider = provider
+
+    // ── Exit-reason telemetry (Sep 23 2026) ─────────────────────────────
+    // Three calls died mid call on Sep 22 with JS heartbeats stopping about
+    // 50 s after the app went to background and no crash in Sentry. JS cannot
+    // report its own death, so the NATIVE side keeps a 5 s pulse in
+    // UserDefaults (alive_at, app state, live CallKit calls, audio device
+    // enabled, footprint, session category and route), stamps every lifecycle
+    // edge (background, foreground, willTerminate, audio interruption, media
+    // services reset), and subscribes to MetricKit so iOS itself tells us the
+    // exit reasons (memory limit, watchdog, background task timeout, ...).
+    // JS reads all of it through RNDeviceInfo.getCallAudioState on the next
+    // launch and ships it on call_died_unreported and runtime_exit_reasons.
+    startNativePulse()
+    if #available(iOS 13.0, *) { MXMetricManager.shared.add(self) }
+    let nc = NotificationCenter.default
+    nc.addObserver(self, selector: #selector(onEnterBackground),
+                   name: UIApplication.didEnterBackgroundNotification, object: nil)
+    nc.addObserver(self, selector: #selector(onEnterForeground),
+                   name: UIApplication.willEnterForegroundNotification, object: nil)
+    nc.addObserver(self, selector: #selector(onWillTerminate),
+                   name: UIApplication.willTerminateNotification, object: nil)
+    nc.addObserver(self, selector: #selector(onAudioInterruption(_:)),
+                   name: AVAudioSession.interruptionNotification, object: nil)
+    nc.addObserver(self, selector: #selector(onMediaServicesReset),
+                   name: AVAudioSession.mediaServicesWereResetNotification, object: nil)
 
     // The module subscribes lazily (~3s after first JS use) and iOS never replays
     // the early device-token notification — so re-emit the cached token on
@@ -809,6 +834,163 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
     if type == .voIP { cachedToken = nil }
+  }
+
+  // MARK: - Exit-reason telemetry (native pulse + lifecycle edges)
+
+  private var pulseTimer: Timer?
+
+  private func startNativePulse() {
+    pulseTimer?.invalidate()
+    let t = Timer(timeInterval: 5.0, target: self, selector: #selector(nativePulse),
+                  userInfo: nil, repeats: true)
+    t.tolerance = 1.0
+    RunLoop.main.add(t, forMode: .common)
+    pulseTimer = t
+    nativePulse()
+  }
+
+  @objc private func nativePulse() {
+    let ud = UserDefaults.standard
+    ud.set(Date().timeIntervalSince1970, forKey: "atto_native_alive_at")
+    ud.set(UIApplication.shared.applicationState.rawValue, forKey: "atto_native_app_state")
+    ud.set(callObserver.calls.filter { !$0.hasEnded }.count, forKey: "atto_native_callkit_calls")
+    ud.set(AttoVoipBootstrap.audioDeviceEnabled(), forKey: "atto_native_audio_enabled")
+    ud.set(AttoVoipBootstrap.footprintMB(), forKey: "atto_native_mem_mb")
+    let session = AVAudioSession.sharedInstance()
+    ud.set(session.category.rawValue, forKey: "atto_native_audio_category")
+    ud.set(session.currentRoute.outputs.first?.portType.rawValue ?? "none",
+           forKey: "atto_native_audio_output")
+    ud.set(session.currentRoute.inputs.first?.portType.rawValue ?? "none",
+           forKey: "atto_native_audio_input")
+    ud.set(ProcessInfo.processInfo.thermalState.rawValue, forKey: "atto_native_thermal")
+    ud.set(ProcessInfo.processInfo.isLowPowerModeEnabled, forKey: "atto_native_low_power")
+  }
+
+  private static func audioDeviceEnabled() -> Bool {
+    let device = TwilioVoiceSDK.audioDevice
+    if let d = device as? TwilioVoice.DefaultAudioDevice { return d.isEnabled }
+    // Injection's custom device: read its ObjC enabled flag through KVC, guarded.
+    if let obj = device as? NSObject, obj.responds(to: NSSelectorFromString("isEnabled")) {
+      return (obj.value(forKey: "enabled") as? Bool) ?? false
+    }
+    return false
+  }
+
+  private static func footprintMB() -> Int {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size) / 4
+    let kr = withUnsafeMutablePointer(to: &info) { ptr -> kern_return_t in
+      ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { raw in
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), raw, &count)
+      }
+    }
+    if kr != KERN_SUCCESS { return -1 }
+    return Int(info.phys_footprint / (1024 * 1024))
+  }
+
+  @objc private func onEnterBackground() {
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_native_bg_at")
+    nativePulse()
+  }
+
+  @objc private func onEnterForeground() {
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_native_fg_at")
+    nativePulse()
+  }
+
+  @objc private func onWillTerminate() {
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_native_will_terminate_at")
+    nativePulse()
+  }
+
+  @objc private func onAudioInterruption(_ n: Notification) {
+    let ud = UserDefaults.standard
+    let typeRaw = (n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt) ?? 99
+    if typeRaw == AVAudioSession.InterruptionType.began.rawValue {
+      ud.set(Date().timeIntervalSince1970, forKey: "atto_native_interruption_began_at")
+      let reason = (n.userInfo?[AVAudioSessionInterruptionReasonKey] as? UInt) ?? 99
+      ud.set(Int(reason), forKey: "atto_native_interruption_reason")
+    } else {
+      ud.set(Date().timeIntervalSince1970, forKey: "atto_native_interruption_ended_at")
+    }
+    ud.set(ud.integer(forKey: "atto_native_interruption_count") + 1,
+           forKey: "atto_native_interruption_count")
+    NSLog("[AttoExit] audio interruption type=%lu", typeRaw)
+  }
+
+  @objc private func onMediaServicesReset() {
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_native_media_reset_at")
+    NSLog("[AttoExit] media services were reset")
+  }
+}
+
+// MetricKit: the operating system's own account of why the app exited. Metric
+// payloads arrive at most once a day, diagnostics on the next launch after a
+// crash or hang. Both are stored as JSON for JS to ship.
+@available(iOS 13.0, *)
+extension AttoVoipBootstrap: MXMetricManagerSubscriber {
+  func didReceive(_ payloads: [MXMetricPayload]) {
+    guard let p = payloads.last else { return }
+    var d: [String: Any] = [:]
+    d["begin"] = p.timeStampBegin.timeIntervalSince1970
+    d["end"] = p.timeStampEnd.timeIntervalSince1970
+    d["payloads"] = payloads.count
+    if #available(iOS 14.0, *), let ex = p.applicationExitMetrics {
+      let f = ex.foregroundExitData
+      let b = ex.backgroundExitData
+      d["fg_normal"] = f.cumulativeNormalAppExitCount
+      d["fg_memory_limit"] = f.cumulativeMemoryResourceLimitExitCount
+      d["fg_watchdog"] = f.cumulativeAppWatchdogExitCount
+      d["fg_bad_access"] = f.cumulativeBadAccessExitCount
+      d["fg_abnormal"] = f.cumulativeAbnormalExitCount
+      d["fg_illegal_instruction"] = f.cumulativeIllegalInstructionExitCount
+      d["bg_normal"] = b.cumulativeNormalAppExitCount
+      d["bg_memory_limit"] = b.cumulativeMemoryResourceLimitExitCount
+      d["bg_memory_pressure"] = b.cumulativeMemoryPressureExitCount
+      d["bg_watchdog"] = b.cumulativeAppWatchdogExitCount
+      d["bg_task_assertion_timeout"] = b.cumulativeBackgroundTaskAssertionTimeoutExitCount
+      d["bg_cpu_limit"] = b.cumulativeCPUResourceLimitExitCount
+      d["bg_locked_file"] = b.cumulativeSuspendedWithLockedFileExitCount
+      d["bg_bad_access"] = b.cumulativeBadAccessExitCount
+      d["bg_abnormal"] = b.cumulativeAbnormalExitCount
+      d["bg_illegal_instruction"] = b.cumulativeIllegalInstructionExitCount
+    }
+    if let m = p.memoryMetrics {
+      d["peak_mem_mb"] = Int(m.peakMemoryUsage.converted(to: .megabytes).value)
+    }
+    if let json = try? JSONSerialization.data(withJSONObject: d),
+       let str = String(data: json, encoding: .utf8) {
+      UserDefaults.standard.set(str, forKey: "atto_metrickit_exits_json")
+      UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_metrickit_received_at")
+      NSLog("[AttoExit] MetricKit exits: %@", str)
+    }
+  }
+
+  @available(iOS 14.0, *)
+  func didReceive(_ payloads: [MXDiagnosticPayload]) {
+    var crashes: [[String: Any]] = []
+    var hangs = 0
+    for p in payloads {
+      for c in p.crashDiagnostics ?? [] {
+        var e: [String: Any] = [:]
+        e["signal"] = c.signal?.intValue ?? -1
+        e["exception_type"] = c.exceptionType?.intValue ?? -1
+        e["exception_code"] = c.exceptionCode?.intValue ?? -1
+        e["termination_reason"] = c.terminationReason ?? ""
+        e["vm_region"] = c.virtualMemoryRegionInfo ?? ""
+        e["end"] = p.timeStampEnd.timeIntervalSince1970
+        crashes.append(e)
+      }
+      hangs += p.hangDiagnostics?.count ?? 0
+    }
+    let d: [String: Any] = ["crashes": crashes, "hangs": hangs, "payloads": payloads.count]
+    if let json = try? JSONSerialization.data(withJSONObject: d),
+       let str = String(data: json, encoding: .utf8) {
+      UserDefaults.standard.set(str, forKey: "atto_metrickit_diag_json")
+      UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "atto_metrickit_diag_received_at")
+      NSLog("[AttoExit] MetricKit diagnostics: %@", str)
+    }
   }
 }
 `;

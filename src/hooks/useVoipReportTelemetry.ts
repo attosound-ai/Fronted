@@ -17,6 +17,44 @@ import { mmkvStorage } from '@/lib/storage/mmkv';
  * that hadn't happened yet and the dedup swallowed the corrected values forever.
  */
 const LAST_REPORTED_PUSH_KEY = 'atto_last_reported_voip_push_at';
+const LAST_REPORTED_EXITS_KEY = 'atto_last_reported_metrickit_at';
+const LAST_REPORTED_DIAG_KEY = 'atto_last_reported_metrickit_diag_at';
+
+/**
+ * iOS's own account of why this app exited, from MetricKit (Sep 23 2026).
+ * Exit metrics arrive at most once a day as cumulative counts per reason, so
+ * a row here is "since the last payload, iOS killed us N times for memory,
+ * M times for a background task that overran, ...". Diagnostics (crashes,
+ * hangs) arrive on the launch after the event. One row per new payload.
+ */
+function emitExitReasonsIfNew(
+  s: Awaited<ReturnType<typeof getCallAudioState>>
+): void {
+  if (!s) return;
+  try {
+    const receivedAt = s.metricKitReceivedAt ?? 0;
+    const diagAt = s.metricKitDiagReceivedAt ?? 0;
+    const newExits =
+      receivedAt > 0 && mmkvStorage.getString(LAST_REPORTED_EXITS_KEY) !== String(receivedAt);
+    const newDiag =
+      diagAt > 0 && mmkvStorage.getString(LAST_REPORTED_DIAG_KEY) !== String(diagAt);
+    if (!newExits && !newDiag) return;
+    const exits = newExits && s.metricKitExitsJson ? JSON.parse(s.metricKitExitsJson) : null;
+    const diag = newDiag && s.metricKitDiagJson ? JSON.parse(s.metricKitDiagJson) : null;
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.EXIT_REASONS, {
+      exits_received_at: receivedAt > 0 ? receivedAt : null,
+      diag_received_at: diagAt > 0 ? diagAt : null,
+      ...(exits ? Object.fromEntries(Object.entries(exits).map(([k, v]) => [`exit_${k}`, v])) : {}),
+      diag_crashes: diag?.crashes?.length ?? null,
+      diag_hangs: diag?.hangs ?? null,
+      diag_crash_list: diag?.crashes ? JSON.stringify(diag.crashes).slice(0, 4000) : null,
+    });
+    if (newExits) mmkvStorage.setString(LAST_REPORTED_EXITS_KEY, String(receivedAt));
+    if (newDiag) mmkvStorage.setString(LAST_REPORTED_DIAG_KEY, String(diagAt));
+  } catch {
+    // Best effort: a malformed payload must never break launch.
+  }
+}
 const SETTLED_DELAY_MS = 12_000;
 
 /**
@@ -44,10 +82,23 @@ const SETTLED_DELAY_MS = 12_000;
 export function useVoipReportTelemetry(): void {
   useEffect(() => {
     // Runs on every platform: if a call was in flight when the process died, this
-    // is where that silent death finally gets reported.
-    reportUnreportedCallDeath();
-
-    if (Platform.OS !== 'ios') return;
+    // is where that silent death finally gets reported. On iOS the report waits
+    // for the native pulse so it can say what CallKit, the audio device and the
+    // app state looked like at the process's last 5 s tick.
+    if (Platform.OS !== 'ios') {
+      reportUnreportedCallDeath();
+      return;
+    }
+    void (async () => {
+      let native: Awaited<ReturnType<typeof getCallAudioState>> = null;
+      try {
+        native = await getCallAudioState();
+      } catch {
+        native = null;
+      }
+      reportUnreportedCallDeath(native);
+      emitExitReasonsIfNew(native);
+    })();
 
     const emitPushFunnelIfNew = async (phase: 'immediate' | 'settled') => {
       try {

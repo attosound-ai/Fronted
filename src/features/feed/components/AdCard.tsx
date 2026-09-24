@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Avatar } from '@/components/ui/Avatar';
@@ -172,12 +173,15 @@ export function AdCard({ post, isVisible = false, onComment, onShare }: AdCardPr
               fallbackText={post.author.displayName}
             />
             <Text style={styles.authorName}>{post.author.displayName}</Text>
-            <View style={styles.sponsoredBadge}>
-              <Ionicons name="megaphone-outline" size={11} color="#CCC" />
-              <Text style={styles.sponsoredText} allowFontScaling={false}>
-                {t('ad.sponsored')}
-              </Text>
-            </View>
+            {/* Liquid Glass chip (David, Sep 23 2026), same surface as the call bar buttons. */}
+            <GlassSurface radius={14} style={styles.sponsoredGlass}>
+              <View style={styles.sponsoredBadge}>
+                <Ionicons name="megaphone-outline" size={11} color="#FFF" />
+                <Text style={styles.sponsoredText} allowFontScaling={false}>
+                  {t('ad.sponsored')}
+                </Text>
+              </View>
+            </GlassSurface>
           </View>
         </LinearGradient>
 
@@ -322,18 +326,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  sponsoredGlass: {
+    marginLeft: 2,
+  },
   sponsoredBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginLeft: 2,
+    paddingVertical: 5,
   },
   sponsoredText: {
-    color: '#CCC',
+    color: '#FFF',
     fontSize: 11,
     fontFamily: 'Archivo_500Medium',
     letterSpacing: 0.3,

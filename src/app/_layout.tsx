@@ -429,23 +429,18 @@ function RootLayout() {
                             animation: 'slide_from_bottom',
                           }}
                         />
-                        {/* Settings: Apple's large title that collapses on scroll. Set here,
-                            statically, so the navigation item is configured before the screen
-                            mounts; the screen only supplies its title. */}
+                        {/* Settings: the native bar is transparent and carries only the back
+                            chevron and the bottom search; the screen draws its own large title,
+                            the small one and the home's dissolving blur (a native large title
+                            never rendered over a transparent bar on iOS 26, measured live). */}
                         <Stack.Screen
                           name="settings/index"
                           options={{
-                            headerLargeTitle: true,
-                            headerLargeTitleEnabled: true,
-                            headerLargeTitleShadowVisible: false,
+                            title: '',
+                            headerTransparent: true,
                             headerShadowVisible: false,
-                            headerLargeStyle: {
-                              backgroundColor: COLORS.background.primary,
-                            },
-                            headerLargeTitleStyle: {
-                              color: '#FFFFFF',
-                              fontFamily: 'Archivo_700Bold',
-                            },
+                            // The root header style paints black even on a transparent bar.
+                            headerStyle: { backgroundColor: 'transparent' },
                           }}
                         />
                         <Stack.Screen

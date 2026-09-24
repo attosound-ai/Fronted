@@ -570,12 +570,14 @@ function AdReelItem({ post, isActive }: AdReelItemProps) {
       />
 
       {/* Sponsored badge — top-right */}
-      <View style={styles.adSponsoredBadge}>
-        <Megaphone size={12} color="#CCC" strokeWidth={2.25} />
-        <Text style={styles.adSponsoredText} maxFontSizeMultiplier={1.0}>
-          {t('reels.sponsored')}
-        </Text>
-      </View>
+      <GlassSurface radius={16} style={styles.adSponsoredGlass}>
+        <View style={styles.adSponsoredBadge}>
+          <Megaphone size={12} color="#FFF" strokeWidth={2.25} />
+          <Text style={styles.adSponsoredText} maxFontSizeMultiplier={1.0}>
+            {t('reels.sponsored')}
+          </Text>
+        </View>
+      </GlassSurface>
 
       {/* Mute toggle */}
       <TouchableOpacity style={styles.muteButton} onPress={toggleMuted} hitSlop={12}>
@@ -1021,20 +1023,20 @@ const styles = StyleSheet.create({
   },
 
   // ── Ad reel badge ──
-  adSponsoredBadge: {
+  adSponsoredGlass: {
     position: 'absolute',
     top: 56,
     left: 16,
+  },
+  adSponsoredBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
   },
   adSponsoredText: {
-    color: '#CCC',
+    color: '#FFF',
     fontSize: 12,
     fontFamily: 'Archivo_500Medium',
     letterSpacing: 0.3,

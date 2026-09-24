@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
-import { useHeaderHeight } from '@react-navigation/elements';
+import { Share, StyleSheet } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
+import { Text } from '@/components/ui/Text';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -36,6 +43,8 @@ const DISPLAY_CODE: Record<string, string> = {
   'pt-BR': 'Português',
 };
 
+/** The large title block: Apple's 34 pt title with its air, measured on the Settings app. */
+const LARGE_TITLE_HEIGHT = 52;
 const GREEN = '#30D158';
 const AMBER = '#FF9F0A';
 const RED = '#FF453A';
@@ -79,7 +88,38 @@ export default function SettingsScreen() {
     });
   }, [storedMode, effectiveMode]);
 
-  const headerHeight = useHeaderHeight();
+  // The transparent bar reports no height of its own; Apple's standard bar is
+  // 44 pt under the status bar, which is what the chevron and the search use.
+  const insets = useSafeAreaInsets();
+  const headerHeight = insets.top + 44;
+  // Apple's large title, drawn by the screen: it scrolls away with the content
+  // and the small centred title fades in over the blur once it has passed
+  // under the bar (the offset starts at minus the bar height because the scroll
+  // view insets itself under the transparent bar).
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y + headerHeight;
+  });
+  const smallTitleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [LARGE_TITLE_HEIGHT - 26, LARGE_TITLE_HEIGHT + 4],
+      [0, 1],
+      'clamp'
+    ),
+  }));
+  // The bar's blur only appears once content moves under it, like Apple's.
+  const barStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, LARGE_TITLE_HEIGHT], [0, 1], 'clamp'),
+  }));
+  const largeTitleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [LARGE_TITLE_HEIGHT - 30, LARGE_TITLE_HEIGHT],
+      [1, 0],
+      'clamp'
+    ),
+  }));
   const q = query.trim().toLowerCase();
   const show = (...titles: string[]) =>
     !q || titles.some((x) => x.toLowerCase().includes(q));
@@ -153,14 +193,27 @@ export default function SettingsScreen() {
   // care where they mount).
   return (
     <>
-      <ScrollView
+      <Animated.ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
       >
+        <Animated.View style={[styles.largeTitleBox, largeTitleStyle]}>
+          <Text style={styles.largeTitle} maxFontSizeMultiplier={1.2}>
+            {t('settings.title')}
+          </Text>
+        </Animated.View>
         <Stack.Screen
           options={{
-            title: t('settings.title'),
+            // The small title is the bar's own title slot, faded in as the large one
+            // scrolls under it, so it sits exactly where Apple's does.
+            headerTitle: () => (
+              <Animated.Text style={[styles.smallTitle, smallTitleStyle]}>
+                {t('settings.title')}
+              </Animated.Text>
+            ),
             // iOS 26 puts the search in the bottom bar, like Apple's Settings; it filters the rows.
             headerSearchBarOptions: {
               placeholder: t('settings.search'),
@@ -523,13 +576,17 @@ export default function SettingsScreen() {
           onClose={() => setDeleteVisible(false)}
           user={user}
         />
-      </ScrollView>
+      </Animated.ScrollView>
       {/* The home header's frosted blur that dissolves downward, under the
-          transparent native bar (David, Sep 23 2026). It sits after the scroll
-          view so the scroll view stays the screen's first child. */}
-      <View pointerEvents="none" style={[styles.blur, { height: headerHeight }]}>
+          transparent native bar (David, Sep 23 2026), with the small title
+          that fades in. It sits after the scroll view so the scroll view stays
+          the screen's first child. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.blur, { height: headerHeight }, barStyle]}
+      >
         <HeaderBlur />
-      </View>
+      </Animated.View>
     </>
   );
 }
@@ -538,4 +595,17 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.background.primary },
   content: { paddingBottom: 40 },
   blur: { position: 'absolute', top: 0, left: 0, right: 0 },
+  largeTitleBox: {
+    height: LARGE_TITLE_HEIGHT,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingBottom: 6,
+  },
+  largeTitle: {
+    color: '#FFFFFF',
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 34,
+    lineHeight: 40,
+  },
+  smallTitle: { color: '#FFFFFF', fontFamily: 'Archivo_600SemiBold', fontSize: 17 },
 });

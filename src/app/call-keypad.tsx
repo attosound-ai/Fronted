@@ -74,7 +74,12 @@ export default function CallKeypadScreen() {
   // slides away so useConnectedCallLanding can land on the recorder. A second
   // digit inside the window (Securus sometimes asks for more) resets it.
   const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (handoffTimer.current) clearTimeout(handoffTimer.current); }, []);
+  useEffect(
+    () => () => {
+      if (handoffTimer.current) clearTimeout(handoffTimer.current);
+    },
+    []
+  );
 
   const translateY = useSharedValue(OFFSCREEN);
   const backdrop = useSharedValue(0);
@@ -111,7 +116,11 @@ export default function CallKeypadScreen() {
       // put it away, and on a Securus call the pad IS the call: without it the
       // "press 1" never goes out and the line drops at about a minute. Leave
       // the store true and DtmfKeypadHost presents the route again.
-      if (!closingRef.current && cs.keypadVisible && cs.activeCall?.state === 'connected') {
+      if (
+        !closingRef.current &&
+        cs.keypadVisible &&
+        cs.activeCall?.state === 'connected'
+      ) {
         analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_ROUTE_LOST, {
           call_sid: cs.activeCall?.callSid ?? null,
           direction: cs.activeCall?.direction ?? null,
@@ -149,7 +158,23 @@ export default function CallKeypadScreen() {
 
   return (
     <View style={styles.root}>
+      {/* One sheet of glass over the whole screen (David, Sep 23 2026): the
+          pad's blur joins the call bar's blur at the top instead of stopping
+          at the panel's edge, so the feed reads through a single frost. */}
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={BLUR_INTENSITY}
+            tint="systemUltraThinMaterialDark"
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+          />
+        ) : (
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, styles.androidFill]}
+          />
+        )}
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={close}
@@ -160,20 +185,6 @@ export default function CallKeypadScreen() {
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.panel, panelStyle]}>
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={BLUR_INTENSITY}
-              tint="systemUltraThinMaterialDark"
-              pointerEvents="none"
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View
-              pointerEvents="none"
-              style={[StyleSheet.absoluteFill, styles.androidFill]}
-            />
-          )}
-
           <View style={[styles.body, { paddingBottom: insets.bottom + 8 }]}>
             <View style={styles.readout}>
               <RNText

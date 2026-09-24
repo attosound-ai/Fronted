@@ -143,26 +143,25 @@ export default function SettingsScreen() {
     router.replace('/(auth)/login');
   };
 
+  // The scroll view is the screen's only child: react-native-screens finds the
+  // scroll view for the collapsing large title by walking the first subview at
+  // every level, so nothing may sit beside it. The screen configurator and the
+  // native sheets render inside its content (sheets are modal, they do not
+  // care where they mount).
   return (
-    <>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="automatic"
+    >
       <Stack.Screen
         options={{
           title: t('settings.title'),
-          headerLargeTitle: true,
-          headerLargeTitleShadowVisible: false,
-          headerShadowVisible: false,
-          headerTransparent: true,
-          headerBlurEffect: 'systemChromeMaterialDark',
-          headerLargeStyle: { backgroundColor: COLORS.background.primary },
-          // Build 24 drew the large title in the default label colour, black on
-          // black; the collapsed title takes the root header style already.
-          headerLargeTitleStyle: { color: '#FFFFFF', fontFamily: 'Archivo_700Bold' },
+          // iOS 26 puts the search in the bottom bar, like Apple's Settings; it filters the rows.
           headerSearchBarOptions: {
             placeholder: t('settings.search'),
             placement: 'integratedCentered',
             hideWhenScrolling: false,
-            // Build 24 opened with the search focused and the navigation bar
-            // hidden behind it; the bar stays, the field waits for a tap.
             autoFocus: false,
             hideNavigationBar: false,
             onChangeText: (e) => setQuery(e.nativeEvent.text),
@@ -170,11 +169,7 @@ export default function SettingsScreen() {
           },
         }}
       />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        contentInsetAdjustmentBehavior="automatic"
-      >
+      {
         <EmbeddedSettings>
           {show(user.displayName || user.username, user.username) && (
             <InsetGroup>
@@ -514,8 +509,7 @@ export default function SettingsScreen() {
             </InsetGroup>
           )}
         </EmbeddedSettings>
-      </ScrollView>
-
+      }
       <AppIconPickerSheet
         visible={iconSheetVisible}
         onClose={() => setIconSheetVisible(false)}
@@ -525,7 +519,7 @@ export default function SettingsScreen() {
         onClose={() => setDeleteVisible(false)}
         user={user}
       />
-    </>
+    </ScrollView>
   );
 }
 

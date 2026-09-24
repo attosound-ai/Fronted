@@ -53,6 +53,11 @@ const RADIUS = 22;
 const rowFrame = () => [
   padding({ horizontal: 16, vertical: 11 }),
   frame({ minHeight: 44, maxWidth: 10000 }),
+];
+/** On a Button the fill has to sit on the button, or the plain style shrinks to its label. */
+const buttonRow = () => [
+  buttonStyle('plain'),
+  frame({ maxWidth: 10000 }),
   background(ROW_BG),
 ];
 
@@ -167,9 +172,12 @@ export function NavRow({
   return (
     <Button
       onPress={onPress}
-      modifiers={[accessibilityLabel(value ? `${title}, ${value}` : title)]}
+      modifiers={[
+        ...buttonRow(),
+        accessibilityLabel(value ? `${title}, ${value}` : title),
+      ]}
     >
-      <HStack spacing={12}>
+      <HStack spacing={12} modifiers={rowFrame()}>
         {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
         <Text modifiers={[foregroundStyle(INK)]}>{title}</Text>
         <Spacer />
@@ -218,10 +226,7 @@ export function ActionRow({
 }) {
   const tint = destructive ? DESTRUCTIVE : ACCENT;
   return (
-    <Button
-      onPress={onPress}
-      modifiers={[buttonStyle('plain'), accessibilityLabel(title)]}
-    >
+    <Button onPress={onPress} modifiers={[...buttonRow(), accessibilityLabel(title)]}>
       <HStack spacing={12} modifiers={rowFrame()}>
         {symbol ? <Image systemName={symbol as never} size={18} color={tint} /> : null}
         <Text modifiers={[foregroundStyle(tint)]}>{title}</Text>
@@ -242,10 +247,7 @@ export function ProfileCardRow({
   onPress: () => void;
 }) {
   return (
-    <Button
-      onPress={onPress}
-      modifiers={[buttonStyle('plain'), accessibilityLabel(name)]}
-    >
+    <Button onPress={onPress} modifiers={[...buttonRow(), accessibilityLabel(name)]}>
       <HStack
         spacing={14}
         modifiers={[
@@ -355,10 +357,14 @@ export function ConfirmRow({
     >
       <ConfirmationDialog.Trigger>
         <Button
-          role="destructive"
-          label={title}
           onPress={() => onPresentedChange(true)}
-        />
+          modifiers={[...buttonRow(), accessibilityLabel(title)]}
+        >
+          <HStack spacing={12} modifiers={rowFrame()}>
+            <Text modifiers={[foregroundStyle(DESTRUCTIVE)]}>{title}</Text>
+            <Spacer />
+          </HStack>
+        </Button>
       </ConfirmationDialog.Trigger>
       <ConfirmationDialog.Actions>
         <Button role="destructive" label={confirmLabel} onPress={onConfirm} />

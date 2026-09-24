@@ -429,8 +429,6 @@ function RootLayout() {
                             animation: 'slide_from_bottom',
                           }}
                         />
-                        {/* Settings brings its own native stack (large titles); the root header would double it. */}
-                        <Stack.Screen name="settings" options={{ headerShown: false }} />
                         <Stack.Screen
                           name="edit-profile"
                           options={{

@@ -117,7 +117,8 @@
     "recorderSimpleDetail": "Record and publish, nothing else on screen.",
     "on": "On",
     "off": "Off",
-    "signOutQuestion": "Sign out of ATTO on this iPhone?"
+    "signOutQuestion": "Sign out of ATTO on this iPhone?",
+    "search": "Search"
   },
   "support": {
     "sectionTitle": "Support",

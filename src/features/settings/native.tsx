@@ -25,7 +25,6 @@ import {
 import {
   accessibilityLabel,
   background,
-  buttonStyle,
   defaultScrollAnchor,
   cornerRadius,
   font,
@@ -42,6 +41,7 @@ export { Section };
 
 const SECONDARY = '#8E8E93';
 const CHEVRON = '#5C5C61';
+const INK = '#FFFFFF';
 
 /** A full screen settings form, scrolling on its own. */
 export function SettingsForm({ children }: { children: ReactNode }) {
@@ -53,28 +53,47 @@ export function SettingsForm({ children }: { children: ReactNode }) {
   );
 }
 
-/** One inset grouped row is 44 pt; the group adds its own top and bottom air. */
+/** Inset grouped metrics, measured on David's phone: a row is 44 pt, a titled section adds its header. */
 const ROW_HEIGHT = 44;
-const GROUP_INSET = 36;
+const SECTION_WITH_TITLE = 46;
+const SECTION_PLAIN = 22;
+const FOOTER_LINE = 20;
+const CARD_EXTRA = 32;
+const SLACK = 80;
+
+/** The height a list needs when it cannot scroll on its own. */
+export function embeddedHeight(
+  sections: { rows: number; title?: boolean; footerLines?: number; card?: boolean }[]
+) {
+  return (
+    sections.reduce(
+      (h, s) =>
+        h +
+        s.rows * ROW_HEIGHT +
+        (s.title ? SECTION_WITH_TITLE : SECTION_PLAIN) +
+        (s.footerLines ?? 0) * FOOTER_LINE +
+        (s.card ? CARD_EXTRA : 0),
+      0
+    ) + SLACK
+  );
+}
 
 /**
- * A list embedded in another scroll view (the profile). A SwiftUI list has no
- * intrinsic height (measured on build 20 it collapsed to a 34 pt bar), so the
- * host gets an explicit height from the row count and its own scrolling is
- * off, leaving the gesture to the outer list.
+ * A list embedded in a React Native scroll view: the outer scroll view is what
+ * the navigation bar watches, so the large title collapses into the small
+ * translucent one exactly like Apple's Settings (David, Sep 23 2026). A SwiftUI
+ * list has no intrinsic height (build 20 collapsed it to a 34 pt bar), so the
+ * host takes an explicit height and the list's own scrolling is off.
  */
 export function EmbeddedSettingsForm({
   children,
-  rows,
+  height,
 }: {
   children: ReactNode;
-  rows: number;
+  height: number;
 }) {
   return (
-    <Host
-      style={{ width: '100%', height: rows * ROW_HEIGHT + GROUP_INSET }}
-      colorScheme="dark"
-    >
+    <Host style={{ width: '100%', height }} colorScheme="dark">
       <List
         modifiers={[
           listStyle('insetGrouped'),
@@ -123,14 +142,11 @@ export function NavRow({
   return (
     <Button
       onPress={onPress}
-      modifiers={[
-        buttonStyle('plain'),
-        accessibilityLabel(value ? `${title}, ${value}` : title),
-      ]}
+      modifiers={[accessibilityLabel(value ? `${title}, ${value}` : title)]}
     >
       <HStack spacing={12}>
         {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
-        <Text>{title}</Text>
+        <Text modifiers={[foregroundStyle(INK)]}>{title}</Text>
         <Spacer />
         {value ? <Text modifiers={[foregroundStyle(SECONDARY)]}>{value}</Text> : null}
         <Chevron />
@@ -196,10 +212,7 @@ export function ProfileCardRow({
   onPress: () => void;
 }) {
   return (
-    <Button
-      onPress={onPress}
-      modifiers={[buttonStyle('plain'), accessibilityLabel(name)]}
-    >
+    <Button onPress={onPress} modifiers={[accessibilityLabel(name)]}>
       <HStack spacing={14}>
         <Image
           systemName={'person.crop.circle.fill' as never}
@@ -207,7 +220,11 @@ export function ProfileCardRow({
           color={SECONDARY}
         />
         <VStack alignment="leading" spacing={2}>
-          <Text modifiers={[font({ size: 20, weight: 'semibold' })]}>{name}</Text>
+          <Text
+            modifiers={[font({ size: 20, weight: 'semibold' }), foregroundStyle(INK)]}
+          >
+            {name}
+          </Text>
           <Text modifiers={[foregroundStyle(SECONDARY), font({ size: 14 })]}>
             {subtitle}
           </Text>

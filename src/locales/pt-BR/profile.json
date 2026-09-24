@@ -117,7 +117,8 @@
     "recorderSimpleDetail": "Gravar e publicar, nada mais na tela.",
     "on": "Ativada",
     "off": "Desativada",
-    "signOutQuestion": "Sair do ATTO neste iPhone?"
+    "signOutQuestion": "Sair do ATTO neste iPhone?",
+    "search": "Buscar"
   },
   "support": {
     "sectionTitle": "Suporte",

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -66,17 +67,20 @@ export default function PlanSettingsScreen() {
   };
 
   return (
-    <SettingsForm>
-      <Section
-        title={t('subscription.pickerTitle')}
-        footer={<FooterText>{t('subscription.pickerNote')}</FooterText>}
-      >
-        <ChoiceList
-          selection={currentPlan ?? ''}
-          options={(plans ?? []).map((p) => ({ value: p.id, label: p.name }))}
-          onChange={(id) => void pick(id)}
-        />
-      </Section>
-    </SettingsForm>
+    <>
+      <Stack.Screen options={{ title: t('subscription.pickerTitle') }} />
+      <SettingsForm>
+        <Section
+          title={t('subscription.pickerTitle')}
+          footer={<FooterText>{t('subscription.pickerNote')}</FooterText>}
+        >
+          <ChoiceList
+            selection={currentPlan ?? ''}
+            options={(plans ?? []).map((p) => ({ value: p.id, label: p.name }))}
+            onChange={(id) => void pick(id)}
+          />
+        </Section>
+      </SettingsForm>
+    </>
   );
 }

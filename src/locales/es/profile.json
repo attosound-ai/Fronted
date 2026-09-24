@@ -117,7 +117,8 @@
     "recorderSimpleDetail": "Grabar y publicar, nada más en pantalla.",
     "on": "Activada",
     "off": "Desactivada",
-    "signOutQuestion": "¿Cerrar sesión de ATTO en este iPhone?"
+    "signOutQuestion": "¿Cerrar sesión de ATTO en este iPhone?",
+    "search": "Buscar"
   },
   "support": {
     "sectionTitle": "Soporte",

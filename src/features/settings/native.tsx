@@ -5,10 +5,11 @@
  * toggles, inline pickers with a checkmark, red destructive rows and a
  * native confirmation sheet. Everything here renders inside a Host.
  */
-import type { ReactNode } from 'react';
+import { Children, Fragment, type ReactNode } from 'react';
 import {
   Button,
   ConfirmationDialog,
+  Divider,
   Form,
   HStack,
   Host,
@@ -25,12 +26,14 @@ import {
 import {
   accessibilityLabel,
   background,
+  buttonStyle,
   defaultScrollAnchor,
   cornerRadius,
   font,
   foregroundStyle,
   frame,
   listStyle,
+  padding,
   pickerStyle,
   scrollContentBackground,
   scrollDisabled,
@@ -42,6 +45,16 @@ export { Section };
 const SECONDARY = '#8E8E93';
 const CHEVRON = '#5C5C61';
 const INK = '#FFFFFF';
+const ACCENT = '#0A84FF';
+const DESTRUCTIVE = '#FF453A';
+const ROW_BG = '#1C1C1E';
+const RADIUS = 22;
+/** Every row: 44 pt minimum, full width, an opaque fill so the whole row takes the tap. */
+const rowFrame = () => [
+  padding({ horizontal: 16, vertical: 11 }),
+  frame({ minHeight: 44, maxWidth: 10000 }),
+  background(ROW_BG),
+];
 
 /** A full screen settings form, scrolling on its own. */
 export function SettingsForm({ children }: { children: ReactNode }) {
@@ -53,57 +66,69 @@ export function SettingsForm({ children }: { children: ReactNode }) {
   );
 }
 
-/** Inset grouped metrics, measured on David's phone: a row is 44 pt, a titled section adds its header. */
-const ROW_HEIGHT = 44;
-const SECTION_WITH_TITLE = 46;
-const SECTION_PLAIN = 22;
-const FOOTER_LINE = 20;
-const CARD_EXTRA = 32;
-const SLACK = 80;
-
-/** The height a list needs when it cannot scroll on its own. */
-export function embeddedHeight(
-  sections: { rows: number; title?: boolean; footerLines?: number; card?: boolean }[]
-) {
+/**
+ * The settings content embedded in a React Native scroll view. No SwiftUI
+ * List here on purpose (David, Sep 23 2026): a List is a UIScrollView of its
+ * own and the navigation bar tracked it instead of the outer scroll view, so
+ * the large title never collapsed. Groups are drawn by hand in the inset
+ * grouped style, the host sizes to its content, and the React Native scroll
+ * view is the only scroll view, which is what makes "Settings" shrink into
+ * the small translucent title like Apple's.
+ */
+export function EmbeddedSettings({ children }: { children: ReactNode }) {
   return (
-    sections.reduce(
-      (h, s) =>
-        h +
-        s.rows * ROW_HEIGHT +
-        (s.title ? SECTION_WITH_TITLE : SECTION_PLAIN) +
-        (s.footerLines ?? 0) * FOOTER_LINE +
-        (s.card ? CARD_EXTRA : 0),
-      0
-    ) + SLACK
+    <Host matchContents style={{ width: '100%' }} colorScheme="dark">
+      <VStack spacing={26} modifiers={[padding({ horizontal: 16, top: 6, bottom: 28 })]}>
+        {children}
+      </VStack>
+    </Host>
   );
 }
 
-/**
- * A list embedded in a React Native scroll view: the outer scroll view is what
- * the navigation bar watches, so the large title collapses into the small
- * translucent one exactly like Apple's Settings (David, Sep 23 2026). A SwiftUI
- * list has no intrinsic height (build 20 collapsed it to a 34 pt bar), so the
- * host takes an explicit height and the list's own scrolling is off.
- */
-export function EmbeddedSettingsForm({
+/** An inset grouped block: grey title above, rounded fill, hairlines between rows, footer below. */
+export function InsetGroup({
+  title,
+  footer,
   children,
-  height,
 }: {
+  title?: string;
+  footer?: string;
   children: ReactNode;
-  height: number;
 }) {
+  const rows = Children.toArray(children).filter(Boolean);
   return (
-    <Host style={{ width: '100%', height }} colorScheme="dark">
-      <List
-        modifiers={[
-          listStyle('insetGrouped'),
-          scrollDisabled(true),
-          scrollContentBackground('hidden'),
-        ]}
-      >
-        {children}
-      </List>
-    </Host>
+    <VStack alignment="leading" spacing={8}>
+      {title ? (
+        <Text
+          modifiers={[
+            font({ size: 15, weight: 'semibold' }),
+            foregroundStyle(SECONDARY),
+            padding({ leading: 20 }),
+          ]}
+        >
+          {title}
+        </Text>
+      ) : null}
+      <VStack spacing={0} modifiers={[background(ROW_BG), cornerRadius(RADIUS)]}>
+        {rows.map((row, i) => (
+          <Fragment key={i}>
+            {i > 0 ? <Divider modifiers={[padding({ leading: 60 })]} /> : null}
+            {row}
+          </Fragment>
+        ))}
+      </VStack>
+      {footer ? (
+        <Text
+          modifiers={[
+            font({ size: 13 }),
+            foregroundStyle(SECONDARY),
+            padding({ horizontal: 20 }),
+          ]}
+        >
+          {footer}
+        </Text>
+      ) : null}
+    </VStack>
   );
 }
 
@@ -170,9 +195,9 @@ export function ValueRow({
   valueColor?: string;
 }) {
   return (
-    <HStack spacing={12}>
+    <HStack spacing={12} modifiers={rowFrame()}>
       {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
-      <Text>{title}</Text>
+      <Text modifiers={[foregroundStyle(INK)]}>{title}</Text>
       <Spacer />
       <Text modifiers={[foregroundStyle(valueColor ?? SECONDARY)]}>{value}</Text>
     </HStack>
@@ -191,13 +216,18 @@ export function ActionRow({
   onPress: () => void;
   destructive?: boolean;
 }) {
+  const tint = destructive ? DESTRUCTIVE : ACCENT;
   return (
     <Button
       onPress={onPress}
-      role={destructive ? 'destructive' : 'default'}
-      systemImage={symbol as never}
-      label={title}
-    />
+      modifiers={[buttonStyle('plain'), accessibilityLabel(title)]}
+    >
+      <HStack spacing={12} modifiers={rowFrame()}>
+        {symbol ? <Image systemName={symbol as never} size={18} color={tint} /> : null}
+        <Text modifiers={[foregroundStyle(tint)]}>{title}</Text>
+        <Spacer />
+      </HStack>
+    </Button>
   );
 }
 
@@ -212,8 +242,18 @@ export function ProfileCardRow({
   onPress: () => void;
 }) {
   return (
-    <Button onPress={onPress} modifiers={[accessibilityLabel(name)]}>
-      <HStack spacing={14}>
+    <Button
+      onPress={onPress}
+      modifiers={[buttonStyle('plain'), accessibilityLabel(name)]}
+    >
+      <HStack
+        spacing={14}
+        modifiers={[
+          padding({ horizontal: 16, vertical: 14 }),
+          frame({ maxWidth: 10000 }),
+          background(ROW_BG),
+        ]}
+      >
         <Image
           systemName={'person.crop.circle.fill' as never}
           size={54}
@@ -250,10 +290,10 @@ export function ToggleRow({
   color?: string;
 }) {
   return (
-    <Toggle isOn={isOn} onIsOnChange={onChange}>
+    <Toggle isOn={isOn} onIsOnChange={onChange} modifiers={rowFrame()}>
       <HStack spacing={12}>
         {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
-        <Text>{title}</Text>
+        <Text modifiers={[foregroundStyle(INK)]}>{title}</Text>
       </HStack>
     </Toggle>
   );

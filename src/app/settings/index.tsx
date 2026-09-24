@@ -19,14 +19,12 @@ import { useEffectiveRecorderMode } from '@/features/settings/useEffectiveRecord
 import {
   ActionRow,
   ConfirmRow,
-  FooterText,
   NavRow,
-  EmbeddedSettingsForm,
+  EmbeddedSettings,
+  InsetGroup,
   ProfileCardRow,
-  Section,
   ToggleRow,
   ValueRow,
-  embeddedHeight,
 } from '@/features/settings/native';
 import { COLORS } from '@/constants/theme';
 
@@ -145,28 +143,6 @@ export default function SettingsScreen() {
     router.replace('/(auth)/login');
   };
 
-  const sectionsForHeight = [
-    { rows: 1, card: true },
-    { rows: 4 + (user.role === 'listener' ? 1 : 0), title: true },
-    ...(user.role === 'creator' ? [{ rows: 3, title: true }] : []),
-    ...(user.role === 'representative' ? [{ rows: 8, title: true }] : []),
-    ...(bridgeVisible ? [{ rows: 2 + (bridgeNumber ? 2 : 0), title: true }] : []),
-    ...(freeSwitching || showSubscription
-      ? [
-          {
-            rows: 1 + (showSubscription ? 2 : 0),
-            title: true,
-            footerLines: freeSwitching ? 2 : 0,
-          },
-        ]
-      : []),
-    { rows: 1, title: true },
-    { rows: 4, title: true },
-    { rows: 1, title: true },
-    { rows: 2 },
-  ];
-  const height = embeddedHeight(sectionsForHeight);
-
   return (
     <>
       <Stack.Screen
@@ -199,15 +175,15 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
       >
-        <EmbeddedSettingsForm height={height}>
+        <EmbeddedSettings>
           {show(user.displayName || user.username, user.username) && (
-            <Section>
+            <InsetGroup>
               <ProfileCardRow
                 name={user.displayName || user.username}
                 subtitle={`@${user.username} · ${roleLabel}`}
                 onPress={() => router.push('/edit-profile')}
               />
-            </Section>
+            </InsetGroup>
           )}
 
           {show(
@@ -216,7 +192,7 @@ export default function SettingsScreen() {
             t('account.phoneLabel'),
             t('account.statusLabel')
           ) && (
-            <Section title={t('account.sectionTitle')}>
+            <InsetGroup title={t('account.sectionTitle')}>
               <ValueRow
                 title={t('account.emailLabel')}
                 value={user.email}
@@ -253,7 +229,7 @@ export default function SettingsScreen() {
                   onPress={() => router.push('/(auth)/register?mode=creator')}
                 />
               )}
-            </Section>
+            </InsetGroup>
           )}
 
           {user.role === 'creator' &&
@@ -262,7 +238,7 @@ export default function SettingsScreen() {
               t('creator.creatorNameLabel'),
               t('creator.inmateNumberLabel')
             ) && (
-              <Section title={t('creator.sectionTitle')}>
+              <InsetGroup title={t('creator.sectionTitle')}>
                 <ValueRow
                   title={t('creator.creatorNameLabel')}
                   value={user.creatorName ?? t('creator.creatorNameNotSet')}
@@ -286,11 +262,11 @@ export default function SettingsScreen() {
                   symbol="checkmark.seal.fill"
                   color="#0A84FF"
                 />
-              </Section>
+              </InsetGroup>
             )}
 
           {user.role === 'representative' && show(t('representative.sectionTitle')) && (
-            <Section title={t('representative.sectionTitle')}>
+            <InsetGroup title={t('representative.sectionTitle')}>
               <ValueRow
                 title={t('representative.creatorNameLabel')}
                 value={user.creatorName ?? t('representative.creatorNameNotSet')}
@@ -349,12 +325,12 @@ export default function SettingsScreen() {
                 symbol="checkmark.seal.fill"
                 color="#0A84FF"
               />
-            </Section>
+            </InsetGroup>
           )}
 
           {bridgeVisible &&
             show(t('bridgeNumber.sectionTitle'), t('bridgeNumber.numberLabel')) && (
-              <Section title={t('bridgeNumber.sectionTitle')}>
+              <InsetGroup title={t('bridgeNumber.sectionTitle')}>
                 <ValueRow
                   title={t('bridgeNumber.numberLabel')}
                   value={
@@ -386,18 +362,14 @@ export default function SettingsScreen() {
                     onPress={shareBridge}
                   />
                 )}
-              </Section>
+              </InsetGroup>
             )}
 
           {(freeSwitching || showSubscription) &&
             show(t('subscription.pickerTitle'), t('subscription.sectionTitle')) && (
-              <Section
+              <InsetGroup
                 title={t('subscription.pickerTitle')}
-                footer={
-                  freeSwitching ? (
-                    <FooterText>{t('subscription.pickerNote')}</FooterText>
-                  ) : undefined
-                }
+                footer={freeSwitching ? t('subscription.pickerNote') : undefined}
               >
                 {freeSwitching ? (
                   <NavRow
@@ -439,11 +411,11 @@ export default function SettingsScreen() {
                     onPress={() => router.push('/subscription')}
                   />
                 )}
-              </Section>
+              </InsetGroup>
             )}
 
           {show(t('security.sectionTitle'), t('security.twoFactorLabel')) && (
-            <Section title={t('security.sectionTitle')}>
+            <InsetGroup title={t('security.sectionTitle')}>
               <NavRow
                 title={t('security.twoFactorLabel')}
                 value={user.twoFactorEnabled ? t('settings.on') : t('settings.off')}
@@ -451,7 +423,7 @@ export default function SettingsScreen() {
                 color="#FF453A"
                 onPress={() => router.push('/settings/security')}
               />
-            </Section>
+            </InsetGroup>
           )}
 
           {show(
@@ -461,7 +433,7 @@ export default function SettingsScreen() {
             t('settings.appIconLabel', { defaultValue: 'App icon' }),
             t('settings.analyticsLabel', { defaultValue: 'Analytics' })
           ) && (
-            <Section title={t('settings.sectionTitle')}>
+            <InsetGroup title={t('settings.sectionTitle')}>
               <NavRow
                 title={t('settings.recorderLabel')}
                 value={
@@ -504,22 +476,22 @@ export default function SettingsScreen() {
                   else analytics.optOut();
                 }}
               />
-            </Section>
+            </InsetGroup>
           )}
 
           {show(t('support.sectionTitle'), t('support.contactButton')) && (
-            <Section title={t('support.sectionTitle')}>
+            <InsetGroup title={t('support.sectionTitle')}>
               <NavRow
                 title={t('support.contactButton')}
                 symbol="questionmark.circle.fill"
                 color="#0A84FF"
                 onPress={() => router.push('/settings/support')}
               />
-            </Section>
+            </InsetGroup>
           )}
 
           {show(t('actions.logout'), t('actions.deleteAccount')) && (
-            <Section>
+            <InsetGroup>
               <ConfirmRow
                 title={t('actions.logout')}
                 question={t('settings.signOutQuestion')}
@@ -539,9 +511,9 @@ export default function SettingsScreen() {
                   setDeleteVisible(true);
                 }}
               />
-            </Section>
+            </InsetGroup>
           )}
-        </EmbeddedSettingsForm>
+        </EmbeddedSettings>
       </ScrollView>
 
       <AppIconPickerSheet

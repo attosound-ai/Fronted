@@ -8,9 +8,9 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { AppIconPickerSheet, useAppIconStore } from '@/features/appIcon';
 import { useEffectiveRecorderMode } from '@/features/settings/useEffectiveRecorderMode';
 import {
-  EmbeddedSettingsForm,
+  EmbeddedSettings,
+  InsetGroup,
   NavRow,
-  Section,
   ToggleRow,
 } from '@/features/settings/native';
 
@@ -44,8 +44,8 @@ export function ProfileSettingsSection() {
 
   return (
     <ProfileSection title={t('settings.sectionTitle')}>
-      <EmbeddedSettingsForm rows={4}>
-        <Section>
+      <EmbeddedSettings>
+        <InsetGroup>
           <NavRow
             title={t('settings.recorderLabel')}
             value={
@@ -81,8 +81,8 @@ export function ProfileSettingsSection() {
             isOn={analyticsEnabled}
             onChange={handleAnalyticsToggle}
           />
-        </Section>
-      </EmbeddedSettingsForm>
+        </InsetGroup>
+      </EmbeddedSettings>
 
       <AppIconPickerSheet
         visible={iconSheetVisible}

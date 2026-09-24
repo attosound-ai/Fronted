@@ -13,8 +13,8 @@ import { useAuthStore } from '@/stores/authStore';
  */
 export default function SecuritySettingsScreen() {
   const user = useAuthStore((s) => s.user);
-  if (!user) return null;
   const { t } = useTranslation('profile');
+  if (!user) return null;
   return (
     <>
       <Stack.Screen options={{ title: t('security.sectionTitle') }} />

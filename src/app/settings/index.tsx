@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -165,9 +165,7 @@ export default function SettingsScreen() {
     { rows: 1, title: true },
     { rows: 2 },
   ];
-  const heightKey = JSON.stringify(sectionsForHeight);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const height = useMemo(() => embeddedHeight(sectionsForHeight), [heightKey]);
+  const height = embeddedHeight(sectionsForHeight);
 
   return (
     <>

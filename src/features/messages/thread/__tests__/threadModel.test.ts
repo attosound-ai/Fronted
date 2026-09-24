@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  summarizeThreads,
   bubbleCorners,
   dayLabel,
   emojiOnlyCount,
@@ -181,4 +182,30 @@ test('a round video note never joins a run', () => {
     { first: true, last: true },
     { first: true, last: true },
   ]);
+});
+
+test('summarizeThreads counts replies, keeps the newest replier first', () => {
+  const summaries = summarizeThreads([
+    { threadId: 'root', senderId: '1', createdAt: '2026-09-24T10:00:00.000Z' },
+    { threadId: 'root', senderId: '2', createdAt: '2026-09-24T10:05:00.000Z' },
+    { threadId: 'root', senderId: '1', createdAt: '2026-09-24T10:09:00.000Z' },
+    { threadId: null, senderId: '2', createdAt: '2026-09-24T10:10:00.000Z' },
+    { threadId: 'other', senderId: '2', createdAt: '2026-09-24T09:00:00.000Z' },
+  ]);
+  const root = summaries.get('root');
+  assert.equal(root?.count, 3);
+  assert.deepEqual(root?.senderIds, ['1', '2']);
+  assert.equal(root?.lastReplyAt, Date.parse('2026-09-24T10:09:00.000Z'));
+  assert.equal(summaries.get('other')?.count, 1);
+  assert.equal(summaries.has('none'), false);
+});
+
+test('summarizeThreads survives missing senders and dates', () => {
+  const summaries = summarizeThreads([
+    { threadId: 'root', senderId: null, createdAt: null },
+    { threadId: 'root', senderId: 7, createdAt: 1_700_000_000_000 },
+  ]);
+  assert.equal(summaries.get('root')?.count, 2);
+  assert.equal(summaries.get('root')?.senderIds[0], '7');
+  assert.equal(summaries.get('root')?.lastReplyAt, 1_700_000_000_000);
 });

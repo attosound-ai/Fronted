@@ -136,7 +136,12 @@
     "draftPrefix": "Rascunho:",
     "pinnedSection": "Fixadas",
     "archivedCount": "{{count}} arquivadas",
-    "unarchive": "Restaurar"
+    "unarchive": "Restaurar",
+    "delete": "Excluir",
+    "deleteConfirmTitle": "Excluir esta conversa?",
+    "deleteConfirmBody": "Ela sai da sua lista com as mensagens que tem. {{name}} mantém a cópia dele, e uma mensagem nova traz a conversa de volta.",
+    "deleteFailed": "Não foi possível excluir a conversa",
+    "deleted": "Conversa excluída"
   },
   "thread": {
     "newMessages": "Novas mensagens",

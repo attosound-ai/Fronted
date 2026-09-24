@@ -136,7 +136,12 @@
     "draftPrefix": "Borrador:",
     "pinnedSection": "Fijados",
     "archivedCount": "{{count}} archivados",
-    "unarchive": "Restaurar"
+    "unarchive": "Restaurar",
+    "delete": "Eliminar",
+    "deleteConfirmTitle": "¿Eliminar este chat?",
+    "deleteConfirmBody": "Se va de tu lista junto con los mensajes que tiene. {{name}} conserva su copia, y un mensaje nuevo lo trae de vuelta.",
+    "deleteFailed": "No se pudo eliminar el chat",
+    "deleted": "Chat eliminado"
   },
   "thread": {
     "newMessages": "Mensajes nuevos",

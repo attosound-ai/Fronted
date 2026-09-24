@@ -61,6 +61,15 @@ function mapMessage(m: BackendMessage): ChatMessage {
 export const messageService = {
   /** Backend row to app message, for callers that fetch their own lists. */
   mapBackendMessage: mapMessage,
+  /**
+   * Delete a chat, for this user only. The server keeps the row so the other
+   * side can still write, hides it from the list and stamps the moment, so
+   * what was there does not come back with the next message.
+   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.MESSAGES.DELETE_CONVERSATION(conversationId));
+  },
+
   async getConversations(): Promise<ChatConversation[]> {
     const response = await apiClient.get<ApiSuccessResponse<BackendConversation[]>>(
       API_ENDPOINTS.MESSAGES.CONVERSATIONS

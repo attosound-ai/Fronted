@@ -81,6 +81,10 @@ export const API_ENDPOINTS = {
   MESSAGES: {
     CONVERSATIONS: '/messages/conversations',
     CREATE_CONVERSATION: '/messages/conversations',
+    // Deletes the chat for the signed in user only, the way WhatsApp and
+    // Telegram delete one. The other side keeps theirs.
+    DELETE_CONVERSATION: (conversationId: string) =>
+      `/messages/conversations/${conversationId}`,
     CHAT: (chatId: string) => `/messages/${chatId}`,
     MARK_READ: (chatId: string) => `/messages/${chatId}/read`,
     SEND: '/messages',

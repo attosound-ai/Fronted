@@ -136,7 +136,12 @@
     "draftPrefix": "Draft:",
     "pinnedSection": "Pinned",
     "archivedCount": "{{count}} archived",
-    "unarchive": "Restore"
+    "unarchive": "Restore",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete this chat?",
+    "deleteConfirmBody": "It goes from your list along with the messages in it. {{name}} keeps their copy, and a new message brings the chat back.",
+    "deleteFailed": "The chat could not be deleted",
+    "deleted": "Chat deleted"
   },
   "thread": {
     "newMessages": "New messages",

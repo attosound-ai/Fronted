@@ -78,7 +78,7 @@ export function ConversationsHeader({ containerStyle }: ConversationsHeaderProps
         {
           key: 'unread' as ViewKey,
           label: t('header.viewUnread'),
-          symbol: 'circle.badge.fill',
+          symbol: 'circlebadge.fill',
         },
         {
           key: 'threads' as ViewKey,

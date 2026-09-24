@@ -124,9 +124,9 @@ export function DtmfKeypad({
   );
 }
 
-const KEY_SIZE = 75;
-const COLUMN_GAP = 28;
-const ROW_GAP = 14;
+const KEY_SIZE = 86;
+const COLUMN_GAP = 26;
+const ROW_GAP = 16;
 /** Apple's keys read as a light fill over whatever sits behind the sheet. */
 const KEY_TINT = 'rgba(255,255,255,0.14)';
 const KEY_TINT_PRESSED = 'rgba(255,255,255,0.42)';
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   digit: {
     color: '#FFFFFF',
     fontFamily: SYSTEM_FONT,
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '400',
     lineHeight: 42,
     includeFontPadding: false,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     // The asterisk glyph hangs high in SF Pro, so Apple nudges it down to sit
     // on the same optical center as the digits.
     lineHeight: 52,
-    fontSize: 38,
+    fontSize: 42,
   },
   letters: {
     color: '#FFFFFF',

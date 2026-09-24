@@ -196,7 +196,7 @@ export default function CallKeypadScreen() {
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.panel, panelStyle]}>
-          <View style={[styles.body, { paddingBottom: insets.bottom + 44 }]}>
+          <View style={[styles.body, { paddingBottom: insets.bottom + 120 }]}>
             <View style={styles.readout}>
               <RNText
                 style={styles.readoutText}

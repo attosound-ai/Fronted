@@ -64,6 +64,7 @@ import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { summarizeThreads } from '../thread/threadModel';
 import { useThreadSeenStore } from '../stores/threadSeenStore';
+import { useThreadFollowStore } from '../stores/threadFollowStore';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
 import { effectFromMetadata, type MessageEffect } from '../effects/effectCatalog';
@@ -327,6 +328,8 @@ export function ChatScreen({
   const threadCounts = useMemo(() => countThreadReplies(messages), [messages]);
   // Slack's footer also needs the faces and the time of the last reply.
   const threadSeen = useThreadSeenStore((s) => s.seenAt);
+  const threadFollowed = useThreadFollowStore((s) => s.isFollowing);
+  const setThreadFollowing = useThreadFollowStore((s) => s.setFollowing);
   const threadSummaries = useMemo(
     () => summarizeThreads(messages, threadSeen, userId),
     [messages, threadSeen, userId]
@@ -576,6 +579,18 @@ export function ChatScreen({
         case 'thread':
           openThread(String(msg._id));
           break;
+        case 'followThread': {
+          const now = !threadFollowed(String(msg._id));
+          setThreadFollowing(String(msg._id), now);
+          showToast(now ? t('thread.following') : t('thread.unfollowed'));
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_FOLLOW_TOGGLED, {
+            conversation_id: conversationId,
+            thread_id: msg._id,
+            following: now,
+            surface: 'chat',
+          });
+          break;
+        }
         case 'pin':
           pin(String(msg._id));
           showToast(t('pinned.pinned'));
@@ -1119,6 +1134,23 @@ export function ChatScreen({
           actionTitle: t('thread.menu'),
           icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'text.bubble' } },
         },
+        // Slack offers the thread's notifications from the message itself.
+        ...((threadCounts.get(String(_msg._id)) ?? 0) > 0
+          ? [
+              {
+                actionKey: 'followThread',
+                actionTitle: threadFollowed(String(_msg._id))
+                  ? t('thread.unfollowThread')
+                  : t('thread.followThread'),
+                icon: {
+                  type: 'IMAGE_SYSTEM' as const,
+                  imageValue: {
+                    systemName: threadFollowed(String(_msg._id)) ? 'bell.slash' : 'bell',
+                  },
+                },
+              },
+            ]
+          : []),
         {
           actionKey: pinnedIds.has(String(_msg._id)) ? 'unpin' : 'pin',
           actionTitle: pinnedIds.has(String(_msg._id))
@@ -1147,7 +1179,7 @@ export function ChatScreen({
       }
       return items;
     },
-    [pinnedIds, t]
+    [pinnedIds, t, threadCounts, threadFollowed]
   );
 
   const handleSwipeReply = useCallback(

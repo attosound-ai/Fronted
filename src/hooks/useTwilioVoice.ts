@@ -1502,14 +1502,25 @@ export function persistAudioInjectionFlag(source: string = 'unknown') {
     // flag widening can never install the custom audio device for a non-creator's
     // calls (role is available early from persisted auth; subscription is checked
     // separately at the inject ACTION in useCallAudioInjection).
-    const flagOn = analytics.isFeatureEnabled('audio_injection_enabled') === true;
+    const flagRaw = analytics.isFeatureEnabled('audio_injection_enabled');
+    const flagOn = flagRaw === true;
     const isCreator = useAuthStore.getState().user?.role === 'creator';
-    Settings.set({ atto_audio_injection_enabled: flagOn && isCreator });
-    // Every write is recorded: the cold path reads this key blind, so a false
-    // written while flags were still loading is the whole story of a silent call.
+    // The gate is PER PHONE, read blind by the cold path for whichever
+    // account the push wakes. Anthony's phone holds a creator (153) and a
+    // representative (152): opening the app as 152 wrote false, and the next
+    // cold call as 153 (Sep 24 2026, "Larry can't hear the playback") ran on
+    // the stock device. So only a creator session decides the value, and only
+    // once the flag is actually known (undefined = flags not loaded yet).
+    let value: boolean | null = null;
+    if (isCreator && flagRaw !== undefined) value = flagOn;
+    if (value !== null) Settings.set({ atto_audio_injection_enabled: value });
+    // Every write (and every skip) is recorded: the cold path reads this key
+    // blind, so a stale false is the whole story of a silent call.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECTION_FLAG_PERSISTED, {
-      value: flagOn && isCreator,
+      value,
+      written: value !== null,
       flag_on: flagOn,
+      flag_known: flagRaw !== undefined,
       is_creator: isCreator,
       source,
     });

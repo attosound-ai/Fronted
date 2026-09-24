@@ -1494,7 +1494,7 @@ export function persistColdLaunchCallKitFlag() {
  * the JS re-install). Written at app launch AND on (re)registration so it's on
  * disk before -init; iOS-only no-op elsewhere. See project_injection_device_not_pumped.
  */
-export function persistAudioInjectionFlag() {
+export function persistAudioInjectionFlag(source: string = 'unknown') {
   if (!IS_IOS) return;
   try {
     // The custom injection engine is a CREATOR feature. The PostHog flag is now
@@ -1505,6 +1505,14 @@ export function persistAudioInjectionFlag() {
     const flagOn = analytics.isFeatureEnabled('audio_injection_enabled') === true;
     const isCreator = useAuthStore.getState().user?.role === 'creator';
     Settings.set({ atto_audio_injection_enabled: flagOn && isCreator });
+    // Every write is recorded: the cold path reads this key blind, so a false
+    // written while flags were still loading is the whole story of a silent call.
+    analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECTION_FLAG_PERSISTED, {
+      value: flagOn && isCreator,
+      flag_on: flagOn,
+      is_creator: isCreator,
+      source,
+    });
   } catch {
     // Settings is iOS-only / native module may be unavailable; ignore.
   }
@@ -1945,9 +1953,26 @@ let injectionDeviceUserId: string | number | null = null;
  * not exist and every surface must keep its expo player instead.
  */
 export function isInjectionDeviceInstalled(): boolean {
-  if (!IS_IOS || !injectionDeviceInstalled) return false;
+  if (!IS_IOS) return false;
+  // The native side installs the engine itself on cold VoIP launches and in
+  // the CallKit accept handler (UserDefaults gate); JS never sees those
+  // installs, so ask the SDK which device is live before trusting our own
+  // bookkeeping (Sep 24 2026, Anthony's calls answered from the lock screen
+  // ran legacy playback and Larry heard nothing).
+  if (nativeInjectionDeviceInstalled()) return true;
+  if (!injectionDeviceInstalled) return false;
   const currentUserId = useAuthStore.getState().user?.id ?? null;
   return injectionDeviceUserId === currentUserId;
+}
+
+/** Whether Twilio's current audio device is the custom engine, per the native module. */
+export function nativeInjectionDeviceInstalled(): boolean {
+  if (!IS_IOS) return false;
+  try {
+    return NativeModules.AttoAudioInjection?.isInjectionDeviceInstalled?.() === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function installInjectionDeviceIfEnabled(
@@ -1990,6 +2015,9 @@ export async function installInjectionDeviceIfEnabled(
     const ok = await NativeModules.AttoAudioInjection?.installInjectionDevice?.();
     injectionDeviceInstalled = ok === true;
     injectionDeviceUserId = ok === true ? currentUserId : null;
+    // A successful install means the flag is readable and true: write it to
+    // disk now so the next cold launch installs the engine natively too.
+    if (ok === true) persistAudioInjectionFlag(`install_${source}`);
     // THE signal for the silent-injection bug: if this isn't 'installed' the
     // custom device isn't active and the remote will hear nothing injected.
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DEVICE, {
@@ -3057,7 +3085,7 @@ export function useTwilioVoice() {
         // Same disk-persist for the injection cohort, so the native Twilio module
         // -init installs the custom engine (not the stock device) — the fix for
         // the clobber that left injected audio inaudible to the far party.
-        persistAudioInjectionFlag();
+        persistAudioInjectionFlag('twilio_registered');
         // And the render-format-recheck cohort, read by the same device at
         // activation time. Off by default, so this is a no-op for everyone
         // outside the cohort.

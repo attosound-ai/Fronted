@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { DeviceEventEmitter, StyleSheet } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { House, CirclePlay, MessageCircle, Search } from 'lucide-react-native';
+import { analytics } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 import { ComingSoonModal } from '@/components/ui/ComingSoonModal';
 import { MessageNotificationBanner } from '@/components/ui/MessageNotificationBanner';
@@ -80,7 +81,13 @@ export default function TabsLayout() {
     // engine instead of the stock device. Writing it here, at app open, lands it
     // on disk before Twilio registration instantiates that module. See
     // persistAudioInjectionFlag / project_injection_device_not_pumped.
-    persistAudioInjectionFlag();
+    persistAudioInjectionFlag('app_open');
+    // Flags may not be loaded yet at app open (a fresh install, a cold start):
+    // write the gate again once they are, so no cold launch reads a stale false.
+    void analytics
+      .reloadFeatureFlags()
+      ?.then(() => persistAudioInjectionFlag('flags_reloaded'))
+      .catch(() => {});
     // Same again for the engine's render-format-recheck cohort. The engine reads
     // it during CallKit's audio activation, where PostHog cannot be consulted, so
     // the decision has to be on disk before the first call of the session.

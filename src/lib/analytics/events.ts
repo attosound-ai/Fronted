@@ -399,6 +399,8 @@ export const ANALYTICS_EVENTS = {
     // nothing). `outcome`: installed | install_returned_false | install_threw |
     // restored | restore_threw. Carries `reason` on failure + call_sid.
     AUDIO_INJECT_DEVICE: 'call_audio_inject_device',
+    /** The on disk injection gate the cold path reads: value, flag state, creator, and who wrote it. */
+    AUDIO_INJECTION_FLAG_PERSISTED: 'call_audio_injection_flag_persisted',
     // Diagnostic snapshot a few seconds AFTER injection starts — pinpoints why an
     // injected reel may not reach the far party even though JS reports "started".
     // render_fail_count>0 ⇒ the record engine's manual render is failing (format

@@ -34,7 +34,6 @@ import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
-import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { noteScreen, startAmbientTelemetry } from '@/lib/telemetry';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
@@ -447,10 +446,6 @@ function RootLayout() {
                               color: '#FFFFFF',
                               fontFamily: 'Archivo_700Bold',
                             },
-                            // Same frosted blur that dissolves downward as the home header
-                            // (David, Sep 23 2026), behind a transparent native bar.
-                            headerTransparent: true,
-                            headerBackground: () => <HeaderBlur />,
                           }}
                         />
                         <Stack.Screen

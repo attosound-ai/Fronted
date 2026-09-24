@@ -3979,10 +3979,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..96e3cf578f192d9e6fd0f6a4512a0beee5ed4957
+index 0000000000000000000000000000000000000000..c84ace4cca76a6d6c7e7936ab04b2b7998f71707
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,429 @@
+@@ -0,0 +1,444 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -4005,6 +4005,7 @@ index 0000000000000000000000000000000000000000..96e3cf578f192d9e6fd0f6a4512a0bee
 +@interface TwilioVoiceReactNative (AttoAudioInjection)
 ++ (BOOL)attoSetAudioDevice:(id)audioDevice;
 ++ (void)attoRestoreDefaultDevice;
+++ (BOOL)attoIsInjectionDeviceInstalled;
 +@end
 +
 +@implementation AttoAudioInjection {
@@ -4212,6 +4213,20 @@ index 0000000000000000000000000000000000000000..96e3cf578f192d9e6fd0f6a4512a0bee
 +}
 +
 +#pragma mark - Device installation
++
++/*
++ * Sep 24 2026: whether the custom engine is Twilio's audio device RIGHT NOW,
++ * whoever installed it. The cold path (AttoVoipBootstrap) and the CallKit
++ * accept handler install it natively before any media stack exists; JS never
++ * saw that and latched the call playback session into legacy mode, which is
++ * why the far party heard no playback on calls answered from the lock screen
++ * (Anthony, Sep 23: "Larry can't hear the playback"). Synchronous on purpose:
++ * the engine mode is decided at connect, in the same tick.
++ */
++RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isInjectionDeviceInstalled)
++{
++    return @([TwilioVoiceReactNative attoIsInjectionDeviceInstalled]);
++}
 +
 +RCT_EXPORT_METHOD(installInjectionDevice:(RCTPromiseResolveBlock)resolve
 +                  rejecter:(RCTPromiseRejectBlock)reject) {
@@ -5665,7 +5680,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc502
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..222e4062d93f4f63d49146dbbc78cc57c78a9a5b 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..75a876c4e959421c2e9f26b21fe671b24fbd0ae3 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
 @@ -11,6 +11,7 @@
@@ -5763,7 +5778,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..222e4062d93f4f63d49146dbbc78cc57
      }
  
      return self;
-@@ -142,6 +206,128 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
+@@ -142,6 +206,137 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
      return sTwilioAudioDevice;
  }
  
@@ -5774,6 +5789,15 @@ index 9832b501acdabd9720631b6af5969760802dbb55..222e4062d93f4f63d49146dbbc78cc57
 +// targets it. MUST be called by JS only with NO active call (Twilio forbids
 +// swapping the audio device mid-call). Default-OFF: if this is never called the
 +// stock TVODefaultAudioDevice is untouched, so base calls are byte-identical.
+++ (BOOL)attoIsInjectionDeviceInstalled {
++    @try {
++        id device = TwilioVoiceSDK.audioDevice;
++        return device != nil && [NSStringFromClass([device class]) isEqualToString:@"AttoAudioEngineDevice"];
++    } @catch (NSException *exception) {
++        return NO;
++    }
++}
++
 ++ (BOOL)attoSetAudioDevice:(id)audioDevice {
 +    if (!audioDevice) return NO;
 +    @try {

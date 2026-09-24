@@ -20,7 +20,7 @@ patchedDependencies:
     hash: 90da512d6c17d08fe733e075cea5b1cb8e2c1ea3da5b225187a9c2b96e024d24
     path: patches/@stripe__stripe-react-native@0.58.0.patch
   '@twilio/voice-react-native-sdk@1.7.0':
-    hash: 28d88768e9b4d773a1e87a4a2afc814467860f9af3c6f9da2c0ef20ce0b6814c
+    hash: c2062b6baeff6f9ea64110f16f6b5c54cb620e502c230441441c1aa0bb904785
     path: patches/@twilio__voice-react-native-sdk@1.7.0.patch
   expo-audio@55.0.11:
     hash: bbbaee07030d87803ae4907d47d7b7c982d4a222a89e6bccd2cfc56759d6d9c8
@@ -89,7 +89,7 @@ importers:
         version: 5.96.2(@tanstack/react-query@5.96.2(react@19.2.0))(react@19.2.0)
       '@twilio/voice-react-native-sdk':
         specifier: 1.7.0
-        version: 1.7.0(patch_hash=28d88768e9b4d773a1e87a4a2afc814467860f9af3c6f9da2c0ef20ce0b6814c)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 1.7.0(patch_hash=c2062b6baeff6f9ea64110f16f6b5c54cb620e502c230441441c1aa0bb904785)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       axios:
         specifier: 1.13.4
         version: 1.13.4
@@ -6919,7 +6919,7 @@ snapshots:
 
   '@twilio/voice-errors@1.8.0': {}
 
-  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=28d88768e9b4d773a1e87a4a2afc814467860f9af3c6f9da2c0ef20ce0b6814c)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
+  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=c2062b6baeff6f9ea64110f16f6b5c54cb620e502c230441441c1aa0bb904785)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@twilio/voice-errors': 1.8.0
       eventemitter3: 4.0.7

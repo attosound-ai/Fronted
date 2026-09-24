@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, Share, StyleSheet } from 'react-native';
+import { ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { HeaderBlur } from '@/components/ui/HeaderBlur';
 import { Stack, router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -77,6 +79,7 @@ export default function SettingsScreen() {
     });
   }, [storedMode, effectiveMode]);
 
+  const headerHeight = useHeaderHeight();
   const q = query.trim().toLowerCase();
   const show = (...titles: string[]) =>
     !q || titles.some((x) => x.toLowerCase().includes(q));
@@ -149,109 +152,173 @@ export default function SettingsScreen() {
   // native sheets render inside its content (sheets are modal, they do not
   // care where they mount).
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      contentInsetAdjustmentBehavior="automatic"
-    >
-      <Stack.Screen
-        options={{
-          title: t('settings.title'),
-          // iOS 26 puts the search in the bottom bar, like Apple's Settings; it filters the rows.
-          headerSearchBarOptions: {
-            placeholder: t('settings.search'),
-            placement: 'integratedCentered',
-            hideWhenScrolling: false,
-            autoFocus: false,
-            hideNavigationBar: false,
-            onChangeText: (e) => setQuery(e.nativeEvent.text),
-            onCancelButtonPress: () => setQuery(''),
-          },
-        }}
-      />
-      {
-        <EmbeddedSettings>
-          {show(user.displayName || user.username, user.username) && (
-            <InsetGroup>
-              <ProfileCardRow
-                name={user.displayName || user.username}
-                subtitle={`@${user.username} · ${roleLabel}`}
-                onPress={() => router.push('/edit-profile')}
-              />
-            </InsetGroup>
-          )}
-
-          {show(
-            t('account.sectionTitle'),
-            t('account.emailLabel'),
-            t('account.phoneLabel'),
-            t('account.statusLabel')
-          ) && (
-            <InsetGroup title={t('account.sectionTitle')}>
-              <ValueRow
-                title={t('account.emailLabel')}
-                value={user.email}
-                symbol="envelope.fill"
-                color="#0A84FF"
-              />
-              <ValueRow
-                title={t('account.phoneLabel')}
-                value={phone}
-                symbol="phone.fill"
-                color="#30D158"
-              />
-              <ValueRow
-                title={t('account.memberSinceLabel')}
-                value={new Date(user.createdAt).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-                symbol="calendar"
-                color="#FF453A"
-              />
-              <ValueRow
-                title={t('account.statusLabel')}
-                value={t('account.statusActive')}
-                valueColor={GREEN}
-                symbol="checkmark.shield.fill"
-                color="#636366"
-              />
-              {user.role === 'listener' && (
-                <ActionRow
-                  title={t('account.createCreatorAccount')}
-                  symbol="person.badge.plus"
-                  onPress={() => router.push('/(auth)/register?mode=creator')}
+    <>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+      >
+        <Stack.Screen
+          options={{
+            title: t('settings.title'),
+            // iOS 26 puts the search in the bottom bar, like Apple's Settings; it filters the rows.
+            headerSearchBarOptions: {
+              placeholder: t('settings.search'),
+              placement: 'integratedCentered',
+              hideWhenScrolling: false,
+              autoFocus: false,
+              hideNavigationBar: false,
+              onChangeText: (e) => setQuery(e.nativeEvent.text),
+              onCancelButtonPress: () => setQuery(''),
+            },
+          }}
+        />
+        {
+          <EmbeddedSettings>
+            {show(user.displayName || user.username, user.username) && (
+              <InsetGroup>
+                <ProfileCardRow
+                  name={user.displayName || user.username}
+                  subtitle={`@${user.username} · ${roleLabel}`}
+                  onPress={() => router.push('/edit-profile')}
                 />
-              )}
-            </InsetGroup>
-          )}
+              </InsetGroup>
+            )}
 
-          {user.role === 'creator' &&
-            show(
-              t('creator.sectionTitle'),
-              t('creator.creatorNameLabel'),
-              t('creator.inmateNumberLabel')
+            {show(
+              t('account.sectionTitle'),
+              t('account.emailLabel'),
+              t('account.phoneLabel'),
+              t('account.statusLabel')
             ) && (
-              <InsetGroup title={t('creator.sectionTitle')}>
+              <InsetGroup title={t('account.sectionTitle')}>
                 <ValueRow
-                  title={t('creator.creatorNameLabel')}
-                  value={user.creatorName ?? t('creator.creatorNameNotSet')}
+                  title={t('account.emailLabel')}
+                  value={user.email}
+                  symbol="envelope.fill"
+                  color="#0A84FF"
+                />
+                <ValueRow
+                  title={t('account.phoneLabel')}
+                  value={phone}
+                  symbol="phone.fill"
+                  color="#30D158"
+                />
+                <ValueRow
+                  title={t('account.memberSinceLabel')}
+                  value={new Date(user.createdAt).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                  symbol="calendar"
+                  color="#FF453A"
+                />
+                <ValueRow
+                  title={t('account.statusLabel')}
+                  value={t('account.statusActive')}
+                  valueColor={GREEN}
+                  symbol="checkmark.shield.fill"
+                  color="#636366"
+                />
+                {user.role === 'listener' && (
+                  <ActionRow
+                    title={t('account.createCreatorAccount')}
+                    symbol="person.badge.plus"
+                    onPress={() => router.push('/(auth)/register?mode=creator')}
+                  />
+                )}
+              </InsetGroup>
+            )}
+
+            {user.role === 'creator' &&
+              show(
+                t('creator.sectionTitle'),
+                t('creator.creatorNameLabel'),
+                t('creator.inmateNumberLabel')
+              ) && (
+                <InsetGroup title={t('creator.sectionTitle')}>
+                  <ValueRow
+                    title={t('creator.creatorNameLabel')}
+                    value={user.creatorName ?? t('creator.creatorNameNotSet')}
+                    symbol="music.mic"
+                    color="#BF5AF2"
+                  />
+                  <ValueRow
+                    title={t('creator.inmateNumberLabel')}
+                    value={user.inmateNumber ?? t('creator.inmateNumberNotSet')}
+                    symbol="person.text.rectangle"
+                    color="#636366"
+                  />
+                  <ValueRow
+                    title={t('creator.verifiedLabel')}
+                    value={
+                      user.profileVerified
+                        ? t('creator.verifiedYes')
+                        : t('creator.verifiedPending')
+                    }
+                    valueColor={user.profileVerified ? GREEN : AMBER}
+                    symbol="checkmark.seal.fill"
+                    color="#0A84FF"
+                  />
+                </InsetGroup>
+              )}
+
+            {user.role === 'representative' && show(t('representative.sectionTitle')) && (
+              <InsetGroup title={t('representative.sectionTitle')}>
+                <ValueRow
+                  title={t('representative.creatorNameLabel')}
+                  value={user.creatorName ?? t('representative.creatorNameNotSet')}
                   symbol="music.mic"
                   color="#BF5AF2"
                 />
                 <ValueRow
-                  title={t('creator.inmateNumberLabel')}
-                  value={user.inmateNumber ?? t('creator.inmateNumberNotSet')}
+                  title={t('representative.inmateNumberLabel')}
+                  value={user.inmateNumber ?? t('representative.inmateNumberNotSet')}
                   symbol="person.text.rectangle"
                   color="#636366"
                 />
                 <ValueRow
-                  title={t('creator.verifiedLabel')}
+                  title={t('representative.inmateStateLabel')}
+                  value={user.inmateState ?? t('representative.inmateStateNotSet')}
+                  symbol="mappin.and.ellipse"
+                  color="#FF453A"
+                />
+                <ValueRow
+                  title={t('representative.relationshipLabel')}
+                  value={user.relationship ?? t('representative.relationshipNotSet')}
+                  symbol="person.2.fill"
+                  color="#0A84FF"
+                />
+                <ValueRow
+                  title={t('representative.creatorEmailLabel')}
+                  value={user.creatorEmail ?? t('representative.creatorEmailNotSet')}
+                  symbol="envelope.fill"
+                  color="#0A84FF"
+                />
+                <ValueRow
+                  title={t('representative.creatorPhoneLabel')}
+                  value={user.creatorPhone ?? t('representative.creatorPhoneNotSet')}
+                  symbol="phone.fill"
+                  color="#30D158"
+                />
+                <ValueRow
+                  title={t('representative.consentToRecordLabel')}
+                  value={
+                    user.consentToRecording
+                      ? t('representative.consentYes')
+                      : t('representative.consentNo')
+                  }
+                  valueColor={user.consentToRecording ? GREEN : AMBER}
+                  symbol="mic.fill"
+                  color="#FF9F0A"
+                />
+                <ValueRow
+                  title={t('representative.verifiedLabel')}
                   value={
                     user.profileVerified
-                      ? t('creator.verifiedYes')
-                      : t('creator.verifiedPending')
+                      ? t('representative.verifiedYes')
+                      : t('representative.verifiedPending')
                   }
                   valueColor={user.profileVerified ? GREEN : AMBER}
                   symbol="checkmark.seal.fill"
@@ -260,270 +327,215 @@ export default function SettingsScreen() {
               </InsetGroup>
             )}
 
-          {user.role === 'representative' && show(t('representative.sectionTitle')) && (
-            <InsetGroup title={t('representative.sectionTitle')}>
-              <ValueRow
-                title={t('representative.creatorNameLabel')}
-                value={user.creatorName ?? t('representative.creatorNameNotSet')}
-                symbol="music.mic"
-                color="#BF5AF2"
-              />
-              <ValueRow
-                title={t('representative.inmateNumberLabel')}
-                value={user.inmateNumber ?? t('representative.inmateNumberNotSet')}
-                symbol="person.text.rectangle"
-                color="#636366"
-              />
-              <ValueRow
-                title={t('representative.inmateStateLabel')}
-                value={user.inmateState ?? t('representative.inmateStateNotSet')}
-                symbol="mappin.and.ellipse"
-                color="#FF453A"
-              />
-              <ValueRow
-                title={t('representative.relationshipLabel')}
-                value={user.relationship ?? t('representative.relationshipNotSet')}
-                symbol="person.2.fill"
-                color="#0A84FF"
-              />
-              <ValueRow
-                title={t('representative.creatorEmailLabel')}
-                value={user.creatorEmail ?? t('representative.creatorEmailNotSet')}
-                symbol="envelope.fill"
-                color="#0A84FF"
-              />
-              <ValueRow
-                title={t('representative.creatorPhoneLabel')}
-                value={user.creatorPhone ?? t('representative.creatorPhoneNotSet')}
-                symbol="phone.fill"
-                color="#30D158"
-              />
-              <ValueRow
-                title={t('representative.consentToRecordLabel')}
-                value={
-                  user.consentToRecording
-                    ? t('representative.consentYes')
-                    : t('representative.consentNo')
-                }
-                valueColor={user.consentToRecording ? GREEN : AMBER}
-                symbol="mic.fill"
-                color="#FF9F0A"
-              />
-              <ValueRow
-                title={t('representative.verifiedLabel')}
-                value={
-                  user.profileVerified
-                    ? t('representative.verifiedYes')
-                    : t('representative.verifiedPending')
-                }
-                valueColor={user.profileVerified ? GREEN : AMBER}
-                symbol="checkmark.seal.fill"
-                color="#0A84FF"
-              />
-            </InsetGroup>
-          )}
-
-          {bridgeVisible &&
-            show(t('bridgeNumber.sectionTitle'), t('bridgeNumber.numberLabel')) && (
-              <InsetGroup title={t('bridgeNumber.sectionTitle')}>
-                <ValueRow
-                  title={t('bridgeNumber.numberLabel')}
-                  value={
-                    bridgeLoading
-                      ? t('bridgeNumber.numberLoading')
-                      : (bridgeNumber ?? t('bridgeNumber.numberNotAssigned'))
-                  }
-                  symbol="phone.arrow.down.left.fill"
-                  color="#30D158"
-                />
-                <ValueRow
-                  title={t('bridgeNumber.statusLabel')}
-                  value={bridgeStatusText}
-                  valueColor={bridgeStatusColor}
-                  symbol="waveform"
-                  color="#636366"
-                />
-                {!!bridgeNumber && (
-                  <ActionRow
-                    title={t('bridgeNumber.copyButton')}
-                    symbol="doc.on.doc"
-                    onPress={copyBridge}
-                  />
-                )}
-                {!!bridgeNumber && (
-                  <ActionRow
-                    title={t('bridgeNumber.shareButton')}
-                    symbol="square.and.arrow.up"
-                    onPress={shareBridge}
-                  />
-                )}
-              </InsetGroup>
-            )}
-
-          {(freeSwitching || showSubscription) &&
-            show(t('subscription.pickerTitle'), t('subscription.sectionTitle')) && (
-              <InsetGroup
-                title={t('subscription.pickerTitle')}
-                footer={freeSwitching ? t('subscription.pickerNote') : undefined}
-              >
-                {freeSwitching ? (
-                  <NavRow
-                    title={t('subscription.pickerTitle')}
-                    value={planLabel}
-                    symbol="star.fill"
-                    color="#FF9F0A"
-                    onPress={() => router.push('/settings/plan')}
-                  />
-                ) : (
+            {bridgeVisible &&
+              show(t('bridgeNumber.sectionTitle'), t('bridgeNumber.numberLabel')) && (
+                <InsetGroup title={t('bridgeNumber.sectionTitle')}>
                   <ValueRow
-                    title={t('subscription.pickerTitle')}
-                    value={planLabel}
-                    symbol="star.fill"
-                    color="#FF9F0A"
+                    title={t('bridgeNumber.numberLabel')}
+                    value={
+                      bridgeLoading
+                        ? t('bridgeNumber.numberLoading')
+                        : (bridgeNumber ?? t('bridgeNumber.numberNotAssigned'))
+                    }
+                    symbol="phone.arrow.down.left.fill"
+                    color="#30D158"
                   />
-                )}
-                {showSubscription &&
-                  resolvedPlan !== 'connect_free' &&
-                  subscription?.expiresAt && (
-                    <ValueRow
-                      title={t('subscription.renewsLabel', { date: '' }).replace(
-                        /\s*$/,
-                        ''
-                      )}
-                      value={new Date(subscription.expiresAt).toLocaleDateString()}
-                      symbol="arrow.clockwise"
-                      color="#636366"
+                  <ValueRow
+                    title={t('bridgeNumber.statusLabel')}
+                    value={bridgeStatusText}
+                    valueColor={bridgeStatusColor}
+                    symbol="waveform"
+                    color="#636366"
+                  />
+                  {!!bridgeNumber && (
+                    <ActionRow
+                      title={t('bridgeNumber.copyButton')}
+                      symbol="doc.on.doc"
+                      onPress={copyBridge}
                     />
                   )}
-                {showSubscription && (
-                  <ActionRow
-                    title={
-                      resolvedPlan === 'connect_free'
-                        ? t('subscription.upgradePlan')
-                        : t('subscription.manageSubscription')
-                    }
-                    symbol="creditcard"
-                    onPress={() => router.push('/subscription')}
-                  />
-                )}
+                  {!!bridgeNumber && (
+                    <ActionRow
+                      title={t('bridgeNumber.shareButton')}
+                      symbol="square.and.arrow.up"
+                      onPress={shareBridge}
+                    />
+                  )}
+                </InsetGroup>
+              )}
+
+            {(freeSwitching || showSubscription) &&
+              show(t('subscription.pickerTitle'), t('subscription.sectionTitle')) && (
+                <InsetGroup
+                  title={t('subscription.pickerTitle')}
+                  footer={freeSwitching ? t('subscription.pickerNote') : undefined}
+                >
+                  {freeSwitching ? (
+                    <NavRow
+                      title={t('subscription.pickerTitle')}
+                      value={planLabel}
+                      symbol="star.fill"
+                      color="#FF9F0A"
+                      onPress={() => router.push('/settings/plan')}
+                    />
+                  ) : (
+                    <ValueRow
+                      title={t('subscription.pickerTitle')}
+                      value={planLabel}
+                      symbol="star.fill"
+                      color="#FF9F0A"
+                    />
+                  )}
+                  {showSubscription &&
+                    resolvedPlan !== 'connect_free' &&
+                    subscription?.expiresAt && (
+                      <ValueRow
+                        title={t('subscription.renewsLabel', { date: '' }).replace(
+                          /\s*$/,
+                          ''
+                        )}
+                        value={new Date(subscription.expiresAt).toLocaleDateString()}
+                        symbol="arrow.clockwise"
+                        color="#636366"
+                      />
+                    )}
+                  {showSubscription && (
+                    <ActionRow
+                      title={
+                        resolvedPlan === 'connect_free'
+                          ? t('subscription.upgradePlan')
+                          : t('subscription.manageSubscription')
+                      }
+                      symbol="creditcard"
+                      onPress={() => router.push('/subscription')}
+                    />
+                  )}
+                </InsetGroup>
+              )}
+
+            {show(t('security.sectionTitle'), t('security.twoFactorLabel')) && (
+              <InsetGroup title={t('security.sectionTitle')}>
+                <NavRow
+                  title={t('security.twoFactorLabel')}
+                  value={user.twoFactorEnabled ? t('settings.on') : t('settings.off')}
+                  symbol="lock.fill"
+                  color="#FF453A"
+                  onPress={() => router.push('/settings/security')}
+                />
               </InsetGroup>
             )}
 
-          {show(t('security.sectionTitle'), t('security.twoFactorLabel')) && (
-            <InsetGroup title={t('security.sectionTitle')}>
-              <NavRow
-                title={t('security.twoFactorLabel')}
-                value={user.twoFactorEnabled ? t('settings.on') : t('settings.off')}
-                symbol="lock.fill"
-                color="#FF453A"
-                onPress={() => router.push('/settings/security')}
-              />
-            </InsetGroup>
-          )}
+            {show(
+              t('settings.sectionTitle'),
+              t('settings.recorderLabel'),
+              t('settings.languageLabel'),
+              t('settings.appIconLabel', { defaultValue: 'App icon' }),
+              t('settings.analyticsLabel', { defaultValue: 'Analytics' })
+            ) && (
+              <InsetGroup title={t('settings.sectionTitle')}>
+                <NavRow
+                  title={t('settings.recorderLabel')}
+                  value={
+                    effectiveMode === 'pro'
+                      ? t('settings.recorderPro')
+                      : t('settings.recorderSimple')
+                  }
+                  symbol="waveform.badge.mic"
+                  color="#FF453A"
+                  onPress={() => router.push('/settings/recorder')}
+                />
+                <NavRow
+                  title={t('settings.languageLabel')}
+                  value={DISPLAY_CODE[currentLanguage] ?? currentLanguage}
+                  symbol="globe"
+                  color="#0A84FF"
+                  onPress={() => router.push('/settings/language')}
+                />
+                <NavRow
+                  title={t('settings.appIconLabel', { defaultValue: 'App icon' })}
+                  value={
+                    selectedIconSlot ??
+                    t('appIcon.defaultLabel', { defaultValue: 'Default' })
+                  }
+                  symbol="app.badge"
+                  color="#636366"
+                  onPress={() => {
+                    analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_PICKER_OPENED);
+                    setIconSheetVisible(true);
+                  }}
+                />
+                <ToggleRow
+                  title={t('settings.analyticsLabel', { defaultValue: 'Analytics' })}
+                  isOn={analyticsEnabled}
+                  symbol="chart.bar.fill"
+                  color="#30D158"
+                  onChange={(on) => {
+                    setAnalyticsEnabled(on);
+                    if (on) analytics.optIn();
+                    else analytics.optOut();
+                  }}
+                />
+              </InsetGroup>
+            )}
 
-          {show(
-            t('settings.sectionTitle'),
-            t('settings.recorderLabel'),
-            t('settings.languageLabel'),
-            t('settings.appIconLabel', { defaultValue: 'App icon' }),
-            t('settings.analyticsLabel', { defaultValue: 'Analytics' })
-          ) && (
-            <InsetGroup title={t('settings.sectionTitle')}>
-              <NavRow
-                title={t('settings.recorderLabel')}
-                value={
-                  effectiveMode === 'pro'
-                    ? t('settings.recorderPro')
-                    : t('settings.recorderSimple')
-                }
-                symbol="waveform.badge.mic"
-                color="#FF453A"
-                onPress={() => router.push('/settings/recorder')}
-              />
-              <NavRow
-                title={t('settings.languageLabel')}
-                value={DISPLAY_CODE[currentLanguage] ?? currentLanguage}
-                symbol="globe"
-                color="#0A84FF"
-                onPress={() => router.push('/settings/language')}
-              />
-              <NavRow
-                title={t('settings.appIconLabel', { defaultValue: 'App icon' })}
-                value={
-                  selectedIconSlot ??
-                  t('appIcon.defaultLabel', { defaultValue: 'Default' })
-                }
-                symbol="app.badge"
-                color="#636366"
-                onPress={() => {
-                  analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_PICKER_OPENED);
-                  setIconSheetVisible(true);
-                }}
-              />
-              <ToggleRow
-                title={t('settings.analyticsLabel', { defaultValue: 'Analytics' })}
-                isOn={analyticsEnabled}
-                symbol="chart.bar.fill"
-                color="#30D158"
-                onChange={(on) => {
-                  setAnalyticsEnabled(on);
-                  if (on) analytics.optIn();
-                  else analytics.optOut();
-                }}
-              />
-            </InsetGroup>
-          )}
+            {show(t('support.sectionTitle'), t('support.contactButton')) && (
+              <InsetGroup title={t('support.sectionTitle')}>
+                <NavRow
+                  title={t('support.contactButton')}
+                  symbol="questionmark.circle.fill"
+                  color="#0A84FF"
+                  onPress={() => router.push('/settings/support')}
+                />
+              </InsetGroup>
+            )}
 
-          {show(t('support.sectionTitle'), t('support.contactButton')) && (
-            <InsetGroup title={t('support.sectionTitle')}>
-              <NavRow
-                title={t('support.contactButton')}
-                symbol="questionmark.circle.fill"
-                color="#0A84FF"
-                onPress={() => router.push('/settings/support')}
-              />
-            </InsetGroup>
-          )}
-
-          {show(t('actions.logout'), t('actions.deleteAccount')) && (
-            <InsetGroup>
-              <ConfirmRow
-                title={t('actions.logout')}
-                question={t('settings.signOutQuestion')}
-                confirmLabel={t('actions.logout')}
-                cancelLabel={t('common:cancel', { defaultValue: 'Cancel' })}
-                isPresented={logoutAsk}
-                onPresentedChange={setLogoutAsk}
-                onConfirm={() => void handleLogout()}
-              />
-              <ActionRow
-                title={t('actions.deleteAccount')}
-                destructive
-                onPress={() => {
-                  analytics.capture(ANALYTICS_EVENTS.PROFILE.SETTINGS_ACTION, {
-                    action: 'delete_account_open',
-                  });
-                  setDeleteVisible(true);
-                }}
-              />
-            </InsetGroup>
-          )}
-        </EmbeddedSettings>
-      }
-      <AppIconPickerSheet
-        visible={iconSheetVisible}
-        onClose={() => setIconSheetVisible(false)}
-      />
-      <DeleteAccountBottomSheet
-        visible={deleteVisible}
-        onClose={() => setDeleteVisible(false)}
-        user={user}
-      />
-    </ScrollView>
+            {show(t('actions.logout'), t('actions.deleteAccount')) && (
+              <InsetGroup>
+                <ConfirmRow
+                  title={t('actions.logout')}
+                  question={t('settings.signOutQuestion')}
+                  confirmLabel={t('actions.logout')}
+                  cancelLabel={t('common:cancel', { defaultValue: 'Cancel' })}
+                  isPresented={logoutAsk}
+                  onPresentedChange={setLogoutAsk}
+                  onConfirm={() => void handleLogout()}
+                />
+                <ActionRow
+                  title={t('actions.deleteAccount')}
+                  destructive
+                  onPress={() => {
+                    analytics.capture(ANALYTICS_EVENTS.PROFILE.SETTINGS_ACTION, {
+                      action: 'delete_account_open',
+                    });
+                    setDeleteVisible(true);
+                  }}
+                />
+              </InsetGroup>
+            )}
+          </EmbeddedSettings>
+        }
+        <AppIconPickerSheet
+          visible={iconSheetVisible}
+          onClose={() => setIconSheetVisible(false)}
+        />
+        <DeleteAccountBottomSheet
+          visible={deleteVisible}
+          onClose={() => setDeleteVisible(false)}
+          user={user}
+        />
+      </ScrollView>
+      {/* The home header's frosted blur that dissolves downward, under the
+          transparent native bar (David, Sep 23 2026). It sits after the scroll
+          view so the scroll view stays the screen's first child. */}
+      <View pointerEvents="none" style={[styles.blur, { height: headerHeight }]}>
+        <HeaderBlur />
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.background.primary },
   content: { paddingBottom: 40 },
+  blur: { position: 'absolute', top: 0, left: 0, right: 0 },
 });

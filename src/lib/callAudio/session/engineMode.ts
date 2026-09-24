@@ -11,7 +11,10 @@
 import { NativeModules, Platform } from 'react-native';
 import { analytics } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
-import { isInjectionDeviceInstalled } from '@/hooks/useTwilioVoice';
+import {
+  isInjectionDeviceInstalled,
+  nativeInjectionDeviceInstalled,
+} from '@/hooks/useTwilioVoice';
 import { AUDIO_INJECTION_FLAG } from '@/lib/callAudio/createAudioInjector';
 import { isPreparerAvailable } from './preparer';
 import type { EngineMode } from './types';
@@ -43,6 +46,7 @@ export function resolveEngineMode(): EngineModeDecision {
   const role = useAuthStore.getState().user?.role ?? null;
   const isCreator = role === 'creator';
   const deviceInstalled = isInjectionDeviceInstalled();
+  const nativeDeviceInstalled = nativeInjectionDeviceInstalled();
   const nativeOk = nativeHasSession();
   const preparerOk = isPreparerAvailable();
   const engine =
@@ -67,6 +71,7 @@ export function resolveEngineMode(): EngineModeDecision {
       flag_video: videoOn,
       role,
       device_installed: deviceInstalled,
+      native_device_installed: nativeDeviceInstalled,
       native_session_api: nativeOk,
       preparer_available: preparerOk,
     },

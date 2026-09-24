@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   type LayoutChangeEvent,
   Platform,
   Pressable,
@@ -28,6 +29,7 @@ import { GOLD } from '@/constants/gold';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { COLORS } from '@/constants/theme';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
 import type { AttoMessage } from '../utils/messageAdapter';
 import { ReactionBar } from '../components/ReactionBar';
@@ -78,6 +80,8 @@ export interface MessageRowProps {
     edited: string;
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
+    /** "Last reply 2h ago", the grey half of Slack's thread footer. */
+    lastReply: (at: number) => string;
     replay: string;
     forwarded: string;
   };
@@ -98,6 +102,10 @@ export interface MessageRowProps {
   readLabel: string | null;
   /** Slack style thread footer under the bubble. */
   threadReplies?: number;
+  /** Who replied and when, for the faces and the "last reply" line. */
+  threadSummary?: { count: number; senderIds: string[]; lastReplyAt: number } | null;
+  /** Avatar for a sender id, so the footer can show the repliers' faces. */
+  avatarFor?: (userId: string) => string | null | undefined;
   onOpenThread?: (messageId: string) => void;
   /** Screen effects replay from the chat screen, which owns the overlay. */
   onReplayEffect?: (message: AttoMessage) => void;
@@ -166,6 +174,8 @@ function MessageRowInner({
   onTimesRevealed,
   readLabel,
   threadReplies = 0,
+  threadSummary = null,
+  avatarFor,
   onOpenThread,
   onReplayEffect,
 }: MessageRowProps) {
@@ -578,16 +588,42 @@ function MessageRowInner({
         </Pressable>
       ) : null}
       {threadReplies > 0 ? (
+        // Slack's thread footer, in ATTO's black and white: the faces of the
+        // people who replied, the count, and when the last reply landed.
         <Pressable
           onPress={() => onOpenThread?.(String(message._id))}
-          style={styles.threadFooter}
+          style={({ pressed }) => [styles.threadFooter, pressed && styles.threadFooterOn]}
+          hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel={labels.replies(threadReplies)}
         >
-          <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
+          {threadSummary && threadSummary.senderIds.length > 0 ? (
+            <View style={styles.threadFaces}>
+              {threadSummary.senderIds.slice(0, 3).map((id, i) => {
+                const uri = cloudinaryUrl(avatarFor?.(id), 'avatar_sm');
+                return (
+                  <View
+                    key={id}
+                    style={[styles.threadFace, i > 0 && styles.threadFaceStacked]}
+                  >
+                    {uri ? (
+                      <Image source={{ uri }} style={styles.threadFaceImage} />
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
+          )}
           <RNText style={styles.threadFooterText} maxFontSizeMultiplier={1.1}>
             {labels.replies(threadReplies)}
           </RNText>
+          {threadSummary && threadSummary.lastReplyAt > 0 ? (
+            <RNText style={styles.threadFooterTime} maxFontSizeMultiplier={1.1}>
+              {labels.lastReply(threadSummary.lastReplyAt)}
+            </RNText>
+          ) : null}
         </Pressable>
       ) : null}
       {readLabel ? (
@@ -1036,11 +1072,30 @@ const styles = StyleSheet.create({
     marginTop: TAIL_DROP + 2,
     paddingHorizontal: 6,
   },
+  threadFooterOn: { opacity: 0.6 },
   threadFooterText: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     fontFamily: 'Archivo_600SemiBold',
   },
+  threadFooterTime: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    fontFamily: 'Archivo_400Regular',
+  },
+  // Slack stacks the repliers' faces with a small overlap before the count.
+  threadFaces: { flexDirection: 'row', alignItems: 'center' },
+  threadFace: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1.5,
+    borderColor: '#0E0E10',
+    overflow: 'hidden',
+  },
+  threadFaceStacked: { marginLeft: -7 },
+  threadFaceImage: { width: '100%', height: '100%' },
   // The reaction spacer already clears the tail.
   readLabelAfterReactions: { marginTop: 2 },
   // Hangs from the bubble's bottom edge on the inner side, like Telegram's

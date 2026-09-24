@@ -62,6 +62,7 @@ import { ReplyFocus } from './ReplyFocus';
 import { usePinnedMessages } from '../hooks/usePinnedMessages';
 import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
+import { summarizeThreads } from '../thread/threadModel';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
 import { effectFromMetadata, type MessageEffect } from '../effects/effectCatalog';
@@ -323,6 +324,13 @@ export function ChatScreen({
   // Slack style threads: replies live in their own screen, the main list
   // only shows the root with a "N replies" footer.
   const threadCounts = useMemo(() => countThreadReplies(messages), [messages]);
+  // Slack's footer also needs the faces and the time of the last reply.
+  const threadSummaries = useMemo(() => summarizeThreads(messages), [messages]);
+  const avatarFor = useCallback(
+    (id: string) =>
+      id === userId ? (user?.avatar ?? null) : (participantProfile.avatarUri ?? null),
+    [userId, user?.avatar, participantProfile.avatarUri]
+  );
   // A thread reply stays in its thread, unless the sender ticked Slack's
   // "also send to the chat", in which case it shows in both.
   const mainMessages = useMemo(
@@ -1247,6 +1255,8 @@ export function ChatScreen({
           currentUserId={userId}
           initialUnreadCount={initialUnreadRef.current ?? 0}
           threadCounts={threadCounts}
+          threadSummaries={threadSummaries}
+          avatarFor={avatarFor}
           onOpenThread={openThread}
           onReplayEffect={replayEffect}
           justSentId={justSentId}

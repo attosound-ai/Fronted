@@ -1,34 +1,51 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActionSheetIOS,
+  Alert,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { Check, ChevronLeft } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Check, ChevronLeft, MoreHorizontal } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
-import { useSharedValue } from 'react-native-reanimated';
 
 import { COLORS } from '@/constants/theme';
+import { Text } from '@/components/ui/Text';
+import { showToast } from '@/components/ui/Toast';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { useThread } from '@/features/messages/hooks/useThread';
+import { useReactions } from '@/features/messages/hooks/useReactions';
+import { useMessageActions } from '@/features/messages/hooks/useMessageActions';
 import { useParticipantProfile } from '@/features/messages/hooks/useParticipantAvatar';
+import { useThreadFollowStore } from '@/features/messages/stores/threadFollowStore';
 import {
   toGiftedMessages,
   type AttoMessage,
 } from '@/features/messages/utils/messageAdapter';
-import { MessageRow } from '@/features/messages/thread/MessageRow';
+import { ChatThread, type ChatThreadHandle } from '@/features/messages/thread/ChatThread';
+import type { MenuItem } from '@/features/messages/thread/MessageRow';
+import { TapbackOverlay, type Anchor } from '@/features/messages/thread/TapbackOverlay';
 import {
   ChatComposer,
   type ChatComposerHandle,
 } from '@/features/messages/components/ChatComposer';
+import { ReactionPicker } from '@/features/messages/components/ReactionPicker';
 import { MediaMessage } from '@/features/messages/media/MediaMessage';
 
 /**
- * Slack's thread, and Slack's shape for it: not a card floating over the
- * conversation but a screen of its own, pushed from the right, with the
- * message that started it at the top, a rule that counts the replies, and a
- * composer that can also drop the reply back into the chat.
+ * Slack's thread, and Slack's shape for it: a screen of its own pushed from
+ * the right, the message that started it at the top, a rule that counts the
+ * replies, and every affordance the conversation has — reactions, the long
+ * press menu, grouping, day separators — because in Slack a reply is a
+ * message like any other (David, Sep 24 2026: the thread has to feel like
+ * Slack's, not like a cut down list).
  */
 export default function ChatThreadScreen() {
   const { t } = useTranslation('messages');
@@ -41,36 +58,53 @@ export default function ChatThreadScreen() {
   }>();
   const conversationId = String(params.conversationId ?? '');
   const threadId = String(params.threadId ?? '');
-  const userId = String(useAuthStore((s) => s.user?.id) ?? '');
+  const user = useAuthStore((s) => s.user);
+  const userId = user ? String(user.id) : '';
   const participant = useParticipantProfile(params.participantId ?? '');
   const participantName = participant.username || params.participantName || '';
   const { root, replies, isLoading, sendReply } = useThread(conversationId, threadId);
+  const { toggleReaction } = useReactions(conversationId);
+  const { editMessage, deleteMessage, canEditOrDelete } =
+    useMessageActions(conversationId);
+  const following = useThreadFollowStore((s) => s.isFollowing(threadId));
+  const setFollowing = useThreadFollowStore((s) => s.setFollowing);
 
+  const listRef = useRef<ChatThreadHandle>(null);
   const composerRef = useRef<ChatComposerHandle>(null);
   const draftRef = useRef('');
+  const [composerGeneration, setComposerGeneration] = useState(0);
+  const [editing, setEditing] = useState<AttoMessage | null>(null);
   const [justSentId, setJustSentId] = useState<string | null>(null);
   const [alsoSend, setAlsoSend] = useState(false);
-  const timesReveal = useSharedValue(0);
-
-  const rootRows = useMemo(
-    () =>
-      toGiftedMessages(
-        root ? [root] : [],
-        userId,
-        participantName,
-        participant.avatarUri ?? undefined
-      ),
-    [root, userId, participantName, participant.avatarUri]
+  const [tapback, setTapback] = useState<{ message: AttoMessage; rect: Anchor } | null>(
+    null
   );
-  const replyRows = useMemo(
-    () =>
-      toGiftedMessages(
-        replies,
-        userId,
-        participantName,
-        participant.avatarUri ?? undefined
-      ),
-    [replies, userId, participantName, participant.avatarUri]
+  const [pickerFor, setPickerFor] = useState<AttoMessage | null>(null);
+
+  /** Newest first for the inverted list, with the root last so it sits on top. */
+  const items = useMemo(() => {
+    const ordered = [...replies].reverse();
+    const all = root ? [...ordered, root] : ordered;
+    return toGiftedMessages(
+      all,
+      userId,
+      participantName,
+      participant.avatarUri ?? undefined
+    );
+  }, [replies, root, userId, participantName, participant.avatarUri]);
+
+  const creatorIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (user?.role === 'creator') ids.add(userId);
+    if (participant.role === 'creator' && params.participantId)
+      ids.add(String(params.participantId));
+    return ids;
+  }, [user?.role, userId, participant.role, params.participantId]);
+
+  const avatarFor = useCallback(
+    (id: string) =>
+      id === userId ? (user?.avatar ?? null) : (participant.avatarUri ?? null),
+    [userId, user?.avatar, participant.avatarUri]
   );
 
   const renderMedia = useCallback(
@@ -81,22 +115,103 @@ export default function ChatThreadScreen() {
     []
   );
 
-  const labels = useMemo(
-    () => ({
-      you: t('chat.you', { defaultValue: 'You' }),
-      deleted: t('actions.deleted', { defaultValue: 'Message deleted' }),
-      edited: t('actions.edited', { defaultValue: 'edited' }),
-      replies: (count: number) => t('thread.replies', { count }),
-      replay: t('effects.replay'),
-      forwarded: t('actions.forwarded'),
-    }),
-    [t]
+  const menuItemsFor = useCallback(
+    (msg: AttoMessage, isOwn: boolean): MenuItem[] => {
+      const items: MenuItem[] = [
+        {
+          actionKey: 'react',
+          actionTitle: t('actions.react', { defaultValue: 'React' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'face.smiling' } },
+        },
+        {
+          actionKey: 'copy',
+          actionTitle: t('actions.copy', { defaultValue: 'Copy' }),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'doc.on.doc' } },
+        },
+        {
+          actionKey: 'copyLink',
+          actionTitle: t('actions.copyLink'),
+          icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'link' } },
+        },
+      ];
+      if (isOwn && canEditOrDelete(String(msg._id))) {
+        items.push(
+          {
+            actionKey: 'edit',
+            actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
+            icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
+          },
+          {
+            actionKey: 'delete',
+            actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
+            icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'trash' } },
+            menuAttributes: ['destructive'],
+          }
+        );
+      }
+      return items;
+    },
+    [canEditOrDelete, t]
+  );
+
+  const handleMenuAction = useCallback(
+    (actionKey: string, msg: AttoMessage) => {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CONTEXT_MENU_ACTION, {
+        conversation_id: conversationId,
+        thread_id: threadId,
+        message_id: msg._id,
+        action: actionKey,
+        surface: 'thread',
+      });
+      switch (actionKey) {
+        case 'react':
+          setPickerFor(msg);
+          break;
+        case 'copy':
+          void Clipboard.setStringAsync(msg.text);
+          showToast(t('actions.copied', { defaultValue: 'Copied' }));
+          break;
+        case 'copyLink':
+          void Clipboard.setStringAsync(
+            `https://atto.sound/m/${conversationId}/${String(msg._id)}`
+          );
+          showToast(t('actions.linkCopied'));
+          break;
+        case 'edit':
+          draftRef.current = msg.text;
+          setComposerGeneration((g) => g + 1);
+          setEditing(msg);
+          break;
+        case 'delete':
+          Alert.alert(
+            t('actions.deleteConfirmTitle', { defaultValue: 'Delete Message' }),
+            t('actions.deleteConfirmBody', { defaultValue: 'This cannot be undone.' }),
+            [
+              { text: t('actions.cancel', { defaultValue: 'Cancel' }), style: 'cancel' },
+              {
+                text: t('actions.delete', { defaultValue: 'Delete' }),
+                style: 'destructive',
+                onPress: () => void deleteMessage(String(msg._id)),
+              },
+            ]
+          );
+          break;
+        default:
+          break;
+      }
+    },
+    [conversationId, threadId, deleteMessage, t]
   );
 
   const handleSend = useCallback(
     async (text: string) => {
-      // Slack's "also send to the channel": the reply stays in the thread
-      // and is shown in the conversation as well.
+      if (editing) {
+        await editMessage(String(editing._id), text);
+        setEditing(null);
+        return;
+      }
+      // Slack's "also send to the channel": the reply stays in the thread and
+      // is shown in the conversation as well.
       const sent = await sendReply(text, alsoSend ? { alsoSendToChat: true } : undefined);
       analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_REPLY_SENT, {
         conversation_id: conversationId,
@@ -104,44 +219,66 @@ export default function ChatThreadScreen() {
         also_sent_to_chat: alsoSend,
       });
       setJustSentId(sent.messageId);
+      listRef.current?.scrollToBottom(true);
     },
-    [alsoSend, conversationId, sendReply, threadId]
+    [alsoSend, conversationId, editing, editMessage, sendReply, threadId]
   );
 
-  const row = useCallback(
-    (item: AttoMessage) => (
-      <MessageRow
-        message={item}
-        isOwn={String(item.user._id) === userId}
-        position={{ first: true, last: true }}
-        currentUserId={userId}
-        justSent={justSentId === String(item._id)}
-        senderIsCreator={false}
-        menuItems={[]}
-        labels={labels}
-        onMenuAction={() => {}}
-        onReply={() => {}}
-        onDoubleTap={() => {}}
-        onToggleReaction={() => {}}
-        renderMedia={renderMedia}
-        dimmed={false}
-        timesReveal={timesReveal}
-        onTimesRevealed={() => {}}
-        readLabel={null}
-      />
-    ),
-    [justSentId, labels, renderMedia, timesReveal, userId]
-  );
+  const openOverflow = useCallback(() => {
+    void haptic('selection');
+    const follow = following ? t('thread.unfollowThread') : t('thread.followThread');
+    const copy = t('actions.copyLink');
+    const cancel = t('actions.cancel', { defaultValue: 'Cancel' });
+    const act = (index: number) => {
+      if (index === 0) {
+        setFollowing(threadId, !following);
+        showToast(following ? t('thread.unfollowed') : t('thread.following'));
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_FOLLOW_TOGGLED, {
+          conversation_id: conversationId,
+          thread_id: threadId,
+          following: !following,
+        });
+      } else if (index === 1) {
+        void Clipboard.setStringAsync(
+          `https://atto.sound/m/${conversationId}/${threadId}`
+        );
+        showToast(t('actions.linkCopied'));
+      }
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [follow, copy, cancel],
+          cancelButtonIndex: 2,
+          userInterfaceStyle: 'dark',
+        },
+        act
+      );
+    } else {
+      Alert.alert(t('thread.title'), undefined, [
+        { text: follow, onPress: () => act(0) },
+        { text: copy, onPress: () => act(1) },
+        { text: cancel, style: 'cancel' },
+      ]);
+    }
+  }, [conversationId, following, setFollowing, t, threadId]);
+
+  const tapbackMine = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of tapback?.message.reactions ?? [])
+      if (String(r.userId) === userId) set.add(r.emoji);
+    return set;
+  }, [tapback, userId]);
 
   return (
     <View style={styles.container}>
-      {/* Slack's header: back, the word Thread, and whose conversation it
-          belongs to underneath. */}
+      {/* Slack's header: back, the word Thread, whose conversation it belongs
+          to underneath, and the overflow that follows or unfollows it. */}
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Pressable
           onPress={() => router.back()}
           hitSlop={10}
-          style={styles.back}
+          style={styles.iconButton}
           accessibilityRole="button"
           accessibilityLabel={t('chatHeader.backAccessibilityLabel')}
         >
@@ -155,72 +292,115 @@ export default function ChatThreadScreen() {
             </Text>
           ) : null}
         </View>
-        <View style={styles.back} />
+        <Pressable
+          onPress={openOverflow}
+          hitSlop={10}
+          style={styles.iconButton}
+          accessibilityRole="button"
+          accessibilityLabel={t('thread.title')}
+        >
+          <MoreHorizontal size={22} color={COLORS.white} strokeWidth={2.25} />
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={styles.body}>
-        <FlatList
-          data={replyRows}
-          keyExtractor={(m) => String(m._id)}
-          contentContainerStyle={styles.list}
-          keyboardDismissMode="interactive"
-          ListHeaderComponent={
-            <View>
-              {rootRows.map((item) => (
-                <View key={String(item._id)}>{row(item)}</View>
-              ))}
-              {/* The rule that counts what came after, exactly where Slack
-                  puts it. */}
-              <View style={styles.countRow}>
-                <Text style={styles.countText}>
-                  {replies.length > 0
-                    ? t('thread.replies', { count: replies.length })
-                    : t('thread.noReplies')}
-                </Text>
-                <View style={styles.countRule} />
-              </View>
-            </View>
+        <ChatThread
+          ref={listRef}
+          messages={items}
+          currentUserId={userId}
+          threadRootId={root ? String(root.messageId) : null}
+          avatarFor={avatarFor}
+          justSentId={justSentId}
+          creatorIds={creatorIds}
+          isParticipantTyping={false}
+          participantName={participantName}
+          hasMore={false}
+          isFetchingMore={false}
+          onLoadMore={() => {}}
+          menuItemsFor={menuItemsFor}
+          onMenuAction={handleMenuAction}
+          onReply={() => {}}
+          onDoubleTap={(msg, rect) => setTapback({ message: msg, rect })}
+          onToggleReaction={(msg, emoji) =>
+            toggleReaction(String(msg._id), emoji, msg.reactions)
           }
-          renderItem={({ item }) => row(item)}
-          ListEmptyComponent={
-            !isLoading && !root ? (
-              <Text style={styles.empty}>{t('thread.rootMissing')}</Text>
-            ) : null
-          }
+          renderMedia={renderMedia}
+          focusedId={null}
+          readAt={null}
+          bottomInset={0}
+          topInset={0}
         />
+        {!isLoading && items.length === 0 ? (
+          <Text style={styles.empty}>{t('thread.rootMissing')}</Text>
+        ) : null}
 
         <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <ChatComposer
             ref={composerRef}
             conversationId={`${conversationId}:${threadId}`}
             draftRef={draftRef}
-            generation={0}
-            placeholder={t('thread.replyPlaceholder')}
+            generation={composerGeneration}
+            placeholder={
+              editing
+                ? t('actions.edit', { defaultValue: 'Edit' })
+                : t('thread.replyPlaceholder')
+            }
             onSend={(text) => void handleSend(text)}
-            // Slack keeps the broadcast checkbox inside the reply box,
-            // above what you are writing.
+            // Slack keeps the broadcast checkbox with the reply box, naming
+            // where the copy would land.
             preview={
               <Pressable
                 onPress={() => {
-                  haptic('selection');
+                  void haptic('selection');
                   setAlsoSend((v) => !v);
                 }}
                 style={styles.alsoRow}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: alsoSend }}
-                accessibilityLabel={t('thread.alsoSend')}
+                accessibilityLabel={t('thread.alsoSendNamed', {
+                  name: participantName || t('thread.title'),
+                })}
               >
                 <View style={[styles.checkbox, alsoSend && styles.checkboxOn]}>
                   {alsoSend ? (
                     <Check size={13} color={COLORS.black} strokeWidth={3} />
                   ) : null}
                 </View>
-                <Text style={styles.alsoText}>{t('thread.alsoSend')}</Text>
+                <Text style={styles.alsoText}>
+                  {t('thread.alsoSendNamed', {
+                    name: participantName || t('thread.title'),
+                  })}
+                </Text>
               </Pressable>
             }
           />
         </View>
       </KeyboardAvoidingView>
+
+      <TapbackOverlay
+        anchor={tapback?.rect ?? null}
+        mine={tapbackMine}
+        onPick={(emoji) => {
+          if (tapback)
+            toggleReaction(String(tapback.message._id), emoji, tapback.message.reactions);
+          setTapback(null);
+        }}
+        onMore={() => {
+          setPickerFor(tapback?.message ?? null);
+          setTapback(null);
+        }}
+        onClose={() => setTapback(null)}
+      />
+
+      <ReactionPicker
+        visible={pickerFor !== null}
+        onSelect={(emoji) => {
+          if (pickerFor)
+            toggleReaction(String(pickerFor._id), emoji, pickerFor.reactions ?? []);
+          setPickerFor(null);
+        }}
+        onClose={() => setPickerFor(null)}
+      />
     </View>
   );
 }
@@ -233,19 +413,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 8,
   },
-  back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1, alignItems: 'center' },
   title: { color: COLORS.white, fontSize: 17, fontFamily: 'Archivo_600SemiBold' },
   subtitle: { color: '#9A9AA0', fontSize: 12, fontFamily: 'Archivo_400Regular' },
   body: { flex: 1 },
-  list: { paddingHorizontal: 10, paddingTop: 4, paddingBottom: 12 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 12 },
-  countText: { color: '#9A9AA0', fontSize: 13, fontFamily: 'Archivo_500Medium' },
-  countRule: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
   empty: {
     color: '#888',
     textAlign: 'center',

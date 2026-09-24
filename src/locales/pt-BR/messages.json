@@ -131,7 +131,14 @@
     "empty": "Ainda não há respostas. Comece o tópico.",
     "rootMissing": "A mensagem não está mais disponível.",
     "noReplies": "Ainda sem respostas",
-    "alsoSend": "Enviar também para o chat"
+    "alsoSend": "Enviar também para o chat",
+    "lastReply": "Última resposta há {{time}}",
+    "alsoSendNamed": "Enviar também para {{name}}",
+    "followThread": "Seguir a conversa",
+    "unfollowThread": "Deixar de seguir",
+    "following": "Avisaremos sobre novas respostas",
+    "unfollowed": "Não avisaremos sobre novas respostas",
+    "rootLabel": "Mensagem original"
   },
   "composer": {
     "expand": "Expandir editor",

@@ -131,7 +131,14 @@
     "empty": "No replies yet. Start the thread.",
     "rootMissing": "The message is no longer available.",
     "noReplies": "No replies yet",
-    "alsoSend": "Also send to the chat"
+    "alsoSend": "Also send to the chat",
+    "lastReply": "Last reply {{time}} ago",
+    "alsoSendNamed": "Also send to {{name}}",
+    "followThread": "Follow thread",
+    "unfollowThread": "Unfollow thread",
+    "following": "You will be notified about new replies",
+    "unfollowed": "You will not be notified about new replies",
+    "rootLabel": "Thread starter"
   },
   "composer": {
     "expand": "Expand editor",

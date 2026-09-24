@@ -43,7 +43,9 @@ import {
   needsDayPill,
   shouldShowJumpPill,
   type ThreadItem,
+  type ThreadSummary,
 } from './threadModel';
+import { formatRelativeTime } from '@/utils/formatters';
 
 // Older rows slide up smoothly when a new bubble is inserted (Telegram),
 // instead of jumping the height of the new row in one frame.
@@ -57,6 +59,16 @@ export interface ChatThreadHandle {
 export interface ChatThreadProps {
   /** Replies per thread root, for the footer under a bubble. */
   threadCounts?: Map<string, number>;
+  /** Who replied and when, for Slack's faces and "last reply" line. */
+  threadSummaries?: Map<string, ThreadSummary>;
+  /** Avatar of a sender id, for the thread footer faces. */
+  avatarFor?: (userId: string) => string | null | undefined;
+  /**
+   * Inside a thread: the id of the message that started it. Its row keeps its
+   * own group and carries the rule that counts the replies underneath, where
+   * Slack draws it.
+   */
+  threadRootId?: string | null;
   onOpenThread?: (messageId: string) => void;
   /** Replay the message's iMessage style effect. */
   onReplayEffect?: (message: AttoMessage) => void;
@@ -112,6 +124,9 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       messages,
       currentUserId,
       initialUnreadCount = 0,
+      threadSummaries,
+      avatarFor,
+      threadRootId = null,
       threadCounts,
       onOpenThread,
       onReplayEffect,
@@ -207,6 +222,10 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
         replies: (count: number) => t('thread.replies', { count }),
+        lastReply: (at: number) =>
+          t('thread.lastReply', {
+            time: formatRelativeTime(new Date(at).toISOString()),
+          }),
         replay: t('effects.replay'),
         forwarded: t('actions.forwarded'),
       }),
@@ -289,7 +308,15 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
     const renderItem = useCallback(
       ({ item, index }: ListRenderItemInfo<AttoMessage>) => {
         const isOwn = String(item.user._id) === currentUserId;
-        const pos = positions[index] ?? { first: true, last: true };
+        const isThreadRoot = threadRootId !== null && String(item._id) === threadRootId;
+        // The root never shares a group with the replies, and the first reply
+        // starts its own, so the rule between them reads as Slack's does.
+        const rootIndex = threadRootId !== null ? items.length - 1 : -1;
+        const pos = isThreadRoot
+          ? { first: true, last: true }
+          : index === rootIndex - 1
+            ? { ...(positions[index] ?? { first: true, last: true }), first: true }
+            : (positions[index] ?? { first: true, last: true });
         const pill = needsDayPill(items, index)
           ? dayLabel(items[index].createdAt, Date.now(), dayWords)
           : null;
@@ -313,7 +340,13 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             timesReveal={timesReveal}
             onTimesRevealed={reportTimesRevealed}
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
-            threadReplies={threadCounts?.get(String(item._id)) ?? 0}
+            threadReplies={
+              threadCounts?.get(String(item._id)) ??
+              threadSummaries?.get(String(item._id))?.count ??
+              0
+            }
+            threadSummary={threadSummaries?.get(String(item._id)) ?? null}
+            avatarFor={avatarFor}
             onOpenThread={onOpenThread}
             onReplayEffect={onReplayEffect}
           />
@@ -345,6 +378,16 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
               </View>
             ) : null}
             {body}
+            {isThreadRoot ? (
+              <View style={styles.repliesRow}>
+                <RNText style={styles.repliesText} maxFontSizeMultiplier={1.1}>
+                  {items.length > 1
+                    ? t('thread.replies', { count: items.length - 1 })
+                    : t('thread.noReplies')}
+                </RNText>
+                <View style={styles.repliesRule} />
+              </View>
+            ) : null}
           </Animated.View>
         );
       },
@@ -370,6 +413,9 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         reportTimesRevealed,
         readLabelId,
         threadCounts,
+        threadSummaries,
+        avatarFor,
+        threadRootId,
         onOpenThread,
         onReplayEffect,
         readLabelText,
@@ -511,6 +557,25 @@ function TypingBubble() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  // Slack's rule under the message that started the thread.
+  repliesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  repliesText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    fontFamily: 'Archivo_500Medium',
+  },
+  repliesRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
   unreadRow: {
     flexDirection: 'row',
     alignItems: 'center',

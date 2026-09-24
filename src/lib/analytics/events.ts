@@ -519,6 +519,8 @@ export const ANALYTICS_EVENTS = {
     READ_RECEIPT: 'messages_read_receipt',
     THREAD_RENDERED: 'messages_thread_rendered',
     THREAD_OPENED: 'messages_thread_opened',
+    /** Slack's follow / unfollow on a thread (device local for now). */
+    THREAD_FOLLOW_TOGGLED: 'messages_thread_follow_toggled',
     THREAD_REPLY_SENT: 'messages_thread_reply_sent',
     THREAD_STARTED: 'messages_thread_started',
     HEADER_PROFILE_OPENED: 'messages_header_profile_opened',

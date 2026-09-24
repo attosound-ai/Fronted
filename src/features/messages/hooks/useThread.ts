@@ -66,13 +66,25 @@ export function useThread(conversationId: string, threadId: string) {
   const messages = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
     for (const m of query.data ?? []) byId.set(m.messageId, m);
-    for (const m of cachedReplies) if (!byId.has(m.messageId)) byId.set(m.messageId, m);
+    // The conversation cache is where live updates land (reactions, edits,
+    // deletes, realtime arrivals), so its copy wins over the fetched one;
+    // the fetch is what supplies replies older than the loaded pages.
+    for (const m of cachedReplies) byId.set(m.messageId, m);
     return [...byId.values()].sort(
       (a, b) => Date.parse(a.createdAt ?? '') - Date.parse(b.createdAt ?? '')
     );
   }, [query.data, cachedReplies]);
 
-  const root = messages.find((m) => m.messageId === threadId) ?? null;
+  // The message that started the thread also lives in the conversation, where
+  // its reactions and edits are kept up to date.
+  const cachedRoot = useMemo(
+    () =>
+      (conversationPages?.pages ?? [])
+        .flatMap((p) => p.messages)
+        .find((m) => m.messageId === threadId) ?? null,
+    [conversationPages, threadId]
+  );
+  const root = cachedRoot ?? messages.find((m) => m.messageId === threadId) ?? null;
   const replies = messages.filter((m) => m.messageId !== threadId);
 
   const sendReply = useCallback(

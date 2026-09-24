@@ -237,3 +237,48 @@ export function unreadDividerIndex(
   }
   return null;
 }
+
+/** What Slack's thread footer needs from the messages already loaded. */
+export interface ThreadSummary {
+  /** Replies only; the root message never counts itself. */
+  count: number;
+  /** Distinct repliers, most recent first, for the avatar row. */
+  senderIds: string[];
+  /** Epoch milliseconds of the newest reply. */
+  lastReplyAt: number;
+}
+
+/**
+ * Slack draws three things under a message that started a thread: who
+ * replied, how many replies, and how long ago the last one landed. This is
+ * all three, from the messages the conversation has in memory.
+ */
+export function summarizeThreads(
+  messages: {
+    threadId?: string | null;
+    senderId?: string | number | null;
+    createdAt?: string | number | null;
+  }[]
+): Map<string, ThreadSummary> {
+  const out = new Map<string, ThreadSummary>();
+  for (const m of messages) {
+    if (!m.threadId) continue;
+    const sender = String(m.senderId ?? '');
+    const at =
+      typeof m.createdAt === 'number' ? m.createdAt : Date.parse(m.createdAt ?? '') || 0;
+    const prev = out.get(m.threadId);
+    if (!prev) {
+      out.set(m.threadId, { count: 1, senderIds: [sender], lastReplyAt: at });
+      continue;
+    }
+    prev.count += 1;
+    if (at > prev.lastReplyAt) {
+      prev.lastReplyAt = at;
+      // Newest replier first, exactly the order Slack shows the faces in.
+      prev.senderIds = [sender, ...prev.senderIds.filter((id) => id !== sender)];
+    } else if (!prev.senderIds.includes(sender)) {
+      prev.senderIds.push(sender);
+    }
+  }
+  return out;
+}

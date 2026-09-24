@@ -644,7 +644,16 @@ export function ChatScreen({
           break;
       }
     },
-    [conversationId, deleteMessage, t, pin, unpin]
+    [
+      conversationId,
+      deleteMessage,
+      t,
+      pin,
+      unpin,
+      openThread,
+      setThreadFollowing,
+      threadFollowed,
+    ]
   );
 
   const handleBack = useCallback(() => {

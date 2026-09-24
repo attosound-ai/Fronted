@@ -59,7 +59,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "buildConfiguration": "Debug"
       },
       "env": {
         "SENTRY_ALLOW_FAILURE": "false",

@@ -1,12 +1,14 @@
 /**
  * Native (SwiftUI) building blocks for the settings screens, so they look and
  * navigate like Apple's Settings app (David, Sep 23 2026): inset grouped
- * lists, rows with a value and a chevron that push a screen, toggles, and
- * inline pickers with a checkmark. Everything here renders inside a Host.
+ * lists, rows with an icon square, a value and a chevron that push a screen,
+ * toggles, inline pickers with a checkmark, red destructive rows and a
+ * native confirmation sheet. Everything here renders inside a Host.
  */
 import type { ReactNode } from 'react';
 import {
   Button,
+  ConfirmationDialog,
   Form,
   HStack,
   Host,
@@ -18,10 +20,15 @@ import {
   Spacer,
   Text,
   Toggle,
+  VStack,
 } from '@expo/ui/swift-ui';
 import {
+  background,
   buttonStyle,
+  cornerRadius,
+  font,
   foregroundStyle,
+  frame,
   listStyle,
   pickerStyle,
   scrollContentBackground,
@@ -32,6 +39,7 @@ import {
 export { Section };
 
 const SECONDARY = '#8E8E93';
+const CHEVRON = '#5C5C61';
 
 /** A full screen settings form, scrolling on its own. */
 export function SettingsForm({ children }: { children: ReactNode }) {
@@ -77,30 +85,124 @@ export function EmbeddedSettingsForm({
   );
 }
 
-/** Title on the left, current value and a chevron on the right; pushes a screen. */
+/** Apple's rounded icon square in front of a row title. */
+function IconSquare({ symbol, color }: { symbol: string; color: string }) {
+  return (
+    <HStack
+      modifiers={[frame({ width: 29, height: 29 }), background(color), cornerRadius(7)]}
+    >
+      <Image systemName={symbol as never} size={15} color="#FFFFFF" />
+    </HStack>
+  );
+}
+
+function Chevron() {
+  return <Image systemName={'chevron.right' as never} size={13} color={CHEVRON} />;
+}
+
+/**
+ * Title on the left (with an optional icon square), value and chevron on the
+ * right; pushes a screen or opens a sheet.
+ */
 export function NavRow({
   title,
   value,
-  systemImage,
+  symbol,
+  color = '#636366',
   onPress,
 }: {
   title: string;
   value?: string;
-  systemImage?: string;
+  symbol?: string;
+  color?: string;
   onPress: () => void;
 }) {
   return (
     <Button onPress={onPress} modifiers={[buttonStyle('plain')]}>
-      <LabeledContent label={title}>
-        <HStack spacing={6}>
-          {value ? <Text modifiers={[foregroundStyle(SECONDARY)]}>{value}</Text> : null}
-          <Image
-            systemName={(systemImage ?? 'chevron.right') as never}
-            size={13}
-            color={SECONDARY}
-          />
-        </HStack>
-      </LabeledContent>
+      <HStack spacing={12}>
+        {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
+        <Text>{title}</Text>
+        <Spacer />
+        {value ? <Text modifiers={[foregroundStyle(SECONDARY)]}>{value}</Text> : null}
+        <Chevron />
+      </HStack>
+    </Button>
+  );
+}
+
+/** A read only row: label on the left, value on the right, no chevron. */
+export function ValueRow({
+  title,
+  value,
+  symbol,
+  color = '#636366',
+  valueColor,
+}: {
+  title: string;
+  value: string;
+  symbol?: string;
+  color?: string;
+  valueColor?: string;
+}) {
+  return (
+    <HStack spacing={12}>
+      {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
+      <Text>{title}</Text>
+      <Spacer />
+      <Text modifiers={[foregroundStyle(valueColor ?? SECONDARY)]}>{value}</Text>
+    </HStack>
+  );
+}
+
+/** A plain action row in the accent colour, like "Copy" or "Share" in Apple's lists. */
+export function ActionRow({
+  title,
+  symbol,
+  onPress,
+  destructive = false,
+}: {
+  title: string;
+  symbol?: string;
+  onPress: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <Button
+      onPress={onPress}
+      role={destructive ? 'destructive' : 'default'}
+      systemImage={symbol as never}
+      label={title}
+    />
+  );
+}
+
+/** The card at the top of Apple's Settings: avatar, name, subtitle, chevron. */
+export function ProfileCardRow({
+  name,
+  subtitle,
+  onPress,
+}: {
+  name: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  return (
+    <Button onPress={onPress} modifiers={[buttonStyle('plain')]}>
+      <HStack spacing={14}>
+        <Image
+          systemName={'person.crop.circle.fill' as never}
+          size={54}
+          color={SECONDARY}
+        />
+        <VStack alignment="leading" spacing={2}>
+          <Text modifiers={[font({ size: 20, weight: 'semibold' })]}>{name}</Text>
+          <Text modifiers={[foregroundStyle(SECONDARY), font({ size: 14 })]}>
+            {subtitle}
+          </Text>
+        </VStack>
+        <Spacer />
+        <Chevron />
+      </HStack>
     </Button>
   );
 }
@@ -109,12 +211,23 @@ export function ToggleRow({
   title,
   isOn,
   onChange,
+  symbol,
+  color = '#636366',
 }: {
   title: string;
   isOn: boolean;
   onChange: (on: boolean) => void;
+  symbol?: string;
+  color?: string;
 }) {
-  return <Toggle label={title} isOn={isOn} onIsOnChange={onChange} />;
+  return (
+    <Toggle isOn={isOn} onIsOnChange={onChange}>
+      <HStack spacing={12}>
+        {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
+        <Text>{title}</Text>
+      </HStack>
+    </Toggle>
+  );
 }
 
 /** Inline picker rows with a checkmark, like Settings > General > Language. */
@@ -146,6 +259,46 @@ export function FooterText({ children }: { children: string }) {
   return <Text modifiers={[foregroundStyle(SECONDARY)]}>{children}</Text>;
 }
 
-export function RowSpacer() {
-  return <Spacer />;
+/** A red row that asks first through the native confirmation sheet. */
+export function ConfirmRow({
+  title,
+  question,
+  confirmLabel,
+  cancelLabel,
+  isPresented,
+  onPresentedChange,
+  onConfirm,
+}: {
+  title: string;
+  question: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  isPresented: boolean;
+  onPresentedChange: (v: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ConfirmationDialog
+      title={question}
+      isPresented={isPresented}
+      onIsPresentedChange={onPresentedChange}
+      titleVisibility="visible"
+    >
+      <ConfirmationDialog.Trigger>
+        <Button
+          role="destructive"
+          label={title}
+          onPress={() => onPresentedChange(true)}
+        />
+      </ConfirmationDialog.Trigger>
+      <ConfirmationDialog.Actions>
+        <Button role="destructive" label={confirmLabel} onPress={onConfirm} />
+        <Button
+          role="cancel"
+          label={cancelLabel}
+          onPress={() => onPresentedChange(false)}
+        />
+      </ConfirmationDialog.Actions>
+    </ConfirmationDialog>
+  );
 }

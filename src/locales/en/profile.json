@@ -114,7 +114,10 @@
     "recorderSimple": "Simple",
     "recorderFooter": "Which screen a call lands on after you press 1.",
     "recorderProDetail": "The full studio: tracks, takes you can listen to before placing, effects, mixing and export.",
-    "recorderSimpleDetail": "Record and publish, nothing else on screen."
+    "recorderSimpleDetail": "Record and publish, nothing else on screen.",
+    "on": "On",
+    "off": "Off",
+    "signOutQuestion": "Sign out of ATTO on this iPhone?"
   },
   "support": {
     "sectionTitle": "Support",
@@ -253,4 +256,4 @@
     "close": "Close",
     "deleting": "Deleting your account..."
   }
-}
+}\n

@@ -47,6 +47,8 @@ type ActiveTab = 'posts' | 'saved' | 'settings';
 interface ProfileContentTabsProps {
   userId: number;
   settingsContent?: React.ReactNode;
+  /** When set, the person tab opens the native settings screen instead of the inline sections. */
+  onOpenSettings?: () => void;
 }
 
 // ─── sub-components ───────────────────────────────────────────────────────────
@@ -207,7 +209,7 @@ export interface ProfileContentTabsHandle {
 export const ProfileContentTabs = forwardRef<
   ProfileContentTabsHandle,
   ProfileContentTabsProps
->(function ProfileContentTabs({ userId, settingsContent }, ref) {
+>(function ProfileContentTabs({ userId, settingsContent, onOpenSettings }, ref) {
   const { t } = useTranslation('profile');
   const [activeTab, setActiveTab] = useState<ActiveTab>('posts');
 
@@ -333,7 +335,7 @@ export const ProfileContentTabs = forwardRef<
 
         <TouchableOpacity
           style={styles.tab}
-          onPress={() => setActiveTab('settings')}
+          onPress={() => (onOpenSettings ? onOpenSettings() : setActiveTab('settings'))}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'settings' }}
           accessibilityLabel={t('content.tabSettingsA11y')}

@@ -714,6 +714,8 @@ export const ANALYTICS_EVENTS = {
     SETTINGS_SCREEN_OPENED: 'settings_screen_opened',
     /** Profile > Settings > Recorder: pro or simple, from the effective mode before. */
     RECORDER_MODE_CHANGED: 'settings_recorder_mode_changed',
+    /** Actions taken from the native settings: logout, delete_account_open. */
+    SETTINGS_ACTION: 'settings_action',
     VIEWED: 'profile_viewed',
     EDIT_OPENED: 'profile_edit_opened',
     UPDATED: 'profile_updated',

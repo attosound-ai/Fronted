@@ -26,6 +26,9 @@ export default function SettingsLayout() {
       <Stack.Screen name="index" options={{ title: t('settings.title') }} />
       <Stack.Screen name="recorder" options={{ title: t('settings.recorderLabel') }} />
       <Stack.Screen name="language" options={{ title: t('settings.languageLabel') }} />
+      <Stack.Screen name="plan" options={{ title: t('subscription.pickerTitle') }} />
+      <Stack.Screen name="security" options={{ title: t('security.sectionTitle') }} />
+      <Stack.Screen name="support" options={{ title: t('support.sectionTitle') }} />
     </Stack>
   );
 }

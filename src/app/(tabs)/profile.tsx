@@ -151,6 +151,7 @@ export default function ProfileScreen() {
           <ProfileContentTabs
             ref={contentTabsRef}
             userId={user.id}
+            onOpenSettings={() => router.push('/settings')}
             settingsContent={
               <>
                 <ProfileAccountSection user={user} />

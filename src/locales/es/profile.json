@@ -114,7 +114,10 @@
     "recorderSimple": "Sencillo",
     "recorderFooter": "La pantalla en la que cae una llamada después de pulsar 1.",
     "recorderProDetail": "El estudio completo: pistas, tomas que escuchas antes de colocar, efectos, mezcla y exportación.",
-    "recorderSimpleDetail": "Grabar y publicar, nada más en pantalla."
+    "recorderSimpleDetail": "Grabar y publicar, nada más en pantalla.",
+    "on": "Activada",
+    "off": "Desactivada",
+    "signOutQuestion": "¿Cerrar sesión de ATTO en este iPhone?"
   },
   "support": {
     "sectionTitle": "Soporte",
@@ -253,4 +256,4 @@
     "close": "Cerrar",
     "deleting": "Eliminando tu cuenta..."
   }
-}
+}\n

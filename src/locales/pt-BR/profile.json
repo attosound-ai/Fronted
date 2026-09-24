@@ -114,7 +114,10 @@
     "recorderSimple": "Simples",
     "recorderFooter": "A tela em que uma chamada cai depois de apertar 1.",
     "recorderProDetail": "O estúdio completo: faixas, takes que você ouve antes de colocar, efeitos, mixagem e exportação.",
-    "recorderSimpleDetail": "Gravar e publicar, nada mais na tela."
+    "recorderSimpleDetail": "Gravar e publicar, nada mais na tela.",
+    "on": "Ativada",
+    "off": "Desativada",
+    "signOutQuestion": "Sair do ATTO neste iPhone?"
   },
   "support": {
     "sectionTitle": "Suporte",
@@ -253,4 +256,4 @@
     "close": "Fechar",
     "deleting": "Excluindo sua conta..."
   }
-}
+}\n

@@ -384,15 +384,20 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
                 <View style={styles.unreadLine} />
               </View>
             ) : null}
-            {body}
+            {isThreadRoot ? <View style={styles.rootBand}>{body}</View> : body}
             {isThreadRoot ? (
-              <View style={styles.repliesRow}>
-                <RNText style={styles.repliesText} maxFontSizeMultiplier={1.1}>
-                  {items.length > 1
-                    ? t('thread.replies', { count: items.length - 1 })
-                    : t('thread.noReplies')}
-                </RNText>
-                <View style={styles.repliesRule} />
+              // Slack frames the count between two hairlines, with the message
+              // that started the thread in its own tinted band above.
+              <View>
+                <View style={styles.rootHairline} />
+                <View style={styles.repliesRow}>
+                  <RNText style={styles.repliesText} maxFontSizeMultiplier={1.1}>
+                    {items.length > 1
+                      ? t('thread.replies', { count: items.length - 1 })
+                      : t('thread.noReplies')}
+                  </RNText>
+                </View>
+                <View style={styles.rootHairline} />
               </View>
             ) : null}
           </Animated.View>
@@ -565,24 +570,29 @@ function TypingBubble() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  // Slack's rule under the message that started the thread.
+  // Slack tints the message that started the thread and frames the reply
+  // count between two hairlines under it.
+  rootBand: {
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    marginHorizontal: -12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  rootHairline: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    marginHorizontal: -12,
+  },
   repliesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 14,
-    marginBottom: 6,
+    minHeight: 40,
     paddingHorizontal: 4,
   },
   repliesText: {
     color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    fontFamily: 'Archivo_500Medium',
-  },
-  repliesRule: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    fontSize: 15,
+    fontFamily: 'Archivo_400Regular',
   },
   unreadRow: {
     flexDirection: 'row',

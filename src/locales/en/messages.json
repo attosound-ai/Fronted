@@ -257,6 +257,7 @@
     "unmute": "Unmute",
     "profile": "Profile",
     "media": "Media",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "pinned": "Pinned messages"
   }
 }

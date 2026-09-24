@@ -54,13 +54,20 @@ export default function ChatDetailsScreen() {
   const toggleMuted = useConversationPrefsStore((s) => s.toggleMuted);
   const [wallpaperVisible, setWallpaperVisible] = useState(false);
 
-  /** Every picture and video this conversation has loaded, newest first. */
+  /**
+   * Every picture this conversation has loaded, newest first. A media message
+   * carries its url as the content (MediaMessage reads message.text); a video
+   * only shows here when it came with a thumbnail, so no tile is ever blank.
+   */
   const media = useMemo(
     () =>
       messages
-        // A media message carries its url as the content, the way the chat
-        // renders it (MediaMessage reads message.text).
-        .filter((m) => isVisualContentType(m.contentType) && !!m.content)
+        .filter((m) => isVisualContentType(m.contentType))
+        .map((m) => ({
+          id: m.messageId,
+          uri: m.contentType === 'image' ? m.content : (m.metadata?.thumbnailUrl ?? ''),
+        }))
+        .filter((m) => !!m.uri)
         .slice(0, 12),
     [messages]
   );
@@ -188,8 +195,8 @@ export default function ChatDetailsScreen() {
             >
               {media.map((m) => (
                 <Image
-                  key={m.messageId}
-                  source={{ uri: cloudinaryUrl(m.content, 'post_thumb') ?? m.content }}
+                  key={m.id}
+                  source={{ uri: cloudinaryUrl(m.uri, 'post_thumb') ?? m.uri }}
                   style={styles.mediaThumb}
                 />
               ))}
@@ -206,7 +213,7 @@ export default function ChatDetailsScreen() {
           >
             <Pin size={18} color="#9A9AA0" strokeWidth={2.25} />
             <Text style={styles.rowLabel}>
-              {t('pinned.title', { defaultValue: 'Pinned messages' })}
+              {t('details.pinned', { defaultValue: 'Pinned messages' })}
             </Text>
             <Text style={styles.rowValue}>{pinned.length}</Text>
             <ChevronRight size={16} color="#5C5C61" strokeWidth={2.25} />
@@ -267,9 +274,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  hero: { alignItems: 'center', gap: 8 },
-  name: { color: COLORS.white, fontSize: 24, fontFamily: 'Archivo_700Bold' },
-  role: { color: '#9A9AA0', fontSize: 14, fontFamily: 'Archivo_400Regular' },
+  hero: { alignItems: 'center' },
+  name: {
+    color: COLORS.white,
+    fontSize: 24,
+    // The shared Text sets a 20 pt line box for its body variant, which clips
+    // the top of 24 pt glyphs; the name carries its own.
+    lineHeight: 30,
+    fontFamily: 'Archivo_700Bold',
+    marginTop: 14,
+  },
+  role: {
+    color: '#9A9AA0',
+    fontSize: 14,
+    fontFamily: 'Archivo_400Regular',
+    marginTop: 4,
+  },
   actions: { flexDirection: 'row', gap: 10 },
   actionChip: {
     flex: 1,

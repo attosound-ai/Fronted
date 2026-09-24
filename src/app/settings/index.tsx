@@ -178,10 +178,17 @@ export default function SettingsScreen() {
           headerTransparent: true,
           headerBlurEffect: 'systemChromeMaterialDark',
           headerLargeStyle: { backgroundColor: COLORS.background.primary },
+          // Build 24 drew the large title in the default label colour, black on
+          // black; the collapsed title takes the root header style already.
+          headerLargeTitleStyle: { color: '#FFFFFF', fontFamily: 'Archivo_700Bold' },
           headerSearchBarOptions: {
             placeholder: t('settings.search'),
             placement: 'integratedCentered',
             hideWhenScrolling: false,
+            // Build 24 opened with the search focused and the navigation bar
+            // hidden behind it; the bar stays, the field waits for a tap.
+            autoFocus: false,
+            hideNavigationBar: false,
             onChangeText: (e) => setQuery(e.nativeEvent.text),
             onCancelButtonPress: () => setQuery(''),
           },

@@ -489,6 +489,12 @@ function RootLayout() {
                             animation: 'slide_from_bottom',
                           }}
                         />
+                        {/* Telegram and WhatsApp open the chat's own details
+                            when you tap the name at the top. */}
+                        <Stack.Screen
+                          name="chat-details"
+                          options={{ headerShown: false, animation: 'slide_from_right' }}
+                        />
                         <Stack.Screen
                           name="chat-thread"
                           options={{

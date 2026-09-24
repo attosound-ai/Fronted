@@ -69,6 +69,11 @@ export interface ChatThreadProps {
    * Slack draws it.
    */
   threadRootId?: string | null;
+  /**
+   * Short content sits at the TOP, the way a thread reads in Slack, instead
+   * of hanging above the composer the way a conversation does.
+   */
+  anchorTop?: boolean;
   onOpenThread?: (messageId: string) => void;
   /** Replay the message's iMessage style effect. */
   onReplayEffect?: (message: AttoMessage) => void;
@@ -127,6 +132,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       threadSummaries,
       avatarFor,
       threadRootId = null,
+      anchorTop = false,
       threadCounts,
       onOpenThread,
       onReplayEffect,
@@ -340,6 +346,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             timesReveal={timesReveal}
             onTimesRevealed={reportTimesRevealed}
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
+            hideQuoteFor={threadRootId}
             threadReplies={
               threadCounts?.get(String(item._id)) ??
               threadSummaries?.get(String(item._id))?.count ??
@@ -459,6 +466,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           contentContainerStyle={{
             paddingTop: bottomInset + 8,
             paddingBottom: topInset + 12,
+            ...(anchorTop ? { flexGrow: 1, justifyContent: 'flex-end' as const } : null),
           }}
           ListHeaderComponent={
             isParticipantTyping ? (

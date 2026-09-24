@@ -100,6 +100,11 @@ export interface MessageRowProps {
   onTimesRevealed?: () => void;
   /** "Read 12:17 AM" under this bubble (only the newest own message the other side read). */
   readLabel: string | null;
+  /**
+   * Inside a thread every reply carries the root as its quote; the root is
+   * already at the top of the screen, so Slack shows no quote at all there.
+   */
+  hideQuoteFor?: string | null;
   /** Slack style thread footer under the bubble. */
   threadReplies?: number;
   /** Who replied and when, for the faces and the "last reply" line. */
@@ -173,6 +178,7 @@ function MessageRowInner({
   timesReveal,
   onTimesRevealed,
   readLabel,
+  hideQuoteFor = null,
   threadReplies = 0,
   threadSummary = null,
   avatarFor,
@@ -338,7 +344,8 @@ function MessageRowInner({
   // does it: no frame of colour around it, just the rounded picture. A reply
   // keeps its bubble, since the quote above the picture needs the ground.
   // (`message.text` carries the media url for these, never a caption.)
-  const isBareVisual = isVisual && !message.replyToId;
+  const isBareVisual =
+    isVisual && (!message.replyToId || message.replyToId === hideQuoteFor);
   // A shared post keeps its bubble, but the cover has to reach the bubble's
   // own edges: the padding moves inside the card.
   const isPostCard = message.contentType === 'post';
@@ -447,7 +454,9 @@ function MessageRowInner({
           </RNText>
         </View>
       ) : null}
-      {message.replyToId && message.replyToContent ? (
+      {message.replyToId &&
+      message.replyToContent &&
+      message.replyToId !== hideQuoteFor ? (
         <View
           style={[
             styles.quote,
@@ -574,7 +583,11 @@ function MessageRowInner({
         ) : null}
       </View>
       {hasReactions ? <View style={styles.reactionsSpace} /> : null}
-      {effect ? (
+      {/* One line under a bubble, never three: a message that started a
+          thread shows its thread row and nothing else, the way Slack and
+          Telegram do (David, Sep 24 2026). The double tick inside the bubble
+          already carries the read state. */}
+      {effect && threadReplies === 0 && hideQuoteFor === null ? (
         <Pressable
           onPress={replay}
           hitSlop={6}
@@ -626,7 +639,7 @@ function MessageRowInner({
           ) : null}
         </Pressable>
       ) : null}
-      {readLabel ? (
+      {readLabel && threadReplies === 0 ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
           style={[styles.readLabel, hasReactions && styles.readLabelAfterReactions]}

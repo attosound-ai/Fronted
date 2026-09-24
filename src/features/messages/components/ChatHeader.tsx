@@ -27,6 +27,8 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 const MenuHost: React.ComponentType<any> = ContextMenuView ?? View;
 
 interface ChatHeaderProps {
+  /** The conversation this header belongs to, for its details screen. */
+  conversationId: string;
   participantName: string;
   participantId: string;
   onBack: () => void;
@@ -36,6 +38,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({
+  conversationId,
   participantName,
   participantId,
   onBack,
@@ -49,6 +52,15 @@ export function ChatHeader({
   const { avatarUri, username, role } = useParticipantProfile(participantId);
   const name = username || participantName || t('conversation.fallbackUserName');
   const isInCall = useCallStore((s) => s.activeCall !== null);
+  const openDetails = () => {
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_DETAILS_OPENED, {
+      participant_id: participantId,
+    });
+    router.push({
+      pathname: '/chat-details',
+      params: { conversationId, participantId, participantName: name },
+    });
+  };
   const openProfile = () => {
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.HEADER_PROFILE_OPENED, {
       participant_id: participantId,
@@ -112,7 +124,7 @@ export function ChatHeader({
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={t('chatHeader.openProfileAccessibilityLabel', { name })}
-            onPress={openProfile}
+            onPress={openDetails}
           >
             <Avatar
               uri={avatarUri}

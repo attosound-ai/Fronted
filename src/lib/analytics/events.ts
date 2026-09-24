@@ -523,6 +523,9 @@ export const ANALYTICS_EVENTS = {
     THREAD_FOLLOW_TOGGLED: 'messages_thread_follow_toggled',
     THREAD_REPLY_SENT: 'messages_thread_reply_sent',
     THREAD_STARTED: 'messages_thread_started',
+    /** The chat's own details screen, the way Telegram and WhatsApp open it. */
+    HEADER_DETAILS_OPENED: 'messages_header_details_opened',
+    DETAILS_ACTION: 'messages_details_action',
     HEADER_PROFILE_OPENED: 'messages_header_profile_opened',
     HEADER_MENU_ACTION: 'messages_header_menu_action',
     WALLPAPER_CHANGED: 'messages_wallpaper_changed',

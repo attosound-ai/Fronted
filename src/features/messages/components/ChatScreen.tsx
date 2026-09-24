@@ -1241,6 +1241,7 @@ export function ChatScreen({
         }}
       />
       <ChatHeader
+        conversationId={conversationId}
         onOpenWallpaper={() => setWallpaperPickerVisible(true)}
         participantName={participantName}
         participantId={participantId || ''}

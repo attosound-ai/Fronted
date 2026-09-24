@@ -247,5 +247,16 @@
     "fileTooBig": "That file weighs {{actual}} MB and the limit is {{mb}} MB.",
     "audioTooLong": "That audio is longer than {{minutes}} minutes.",
     "generic": "This file cannot be sent."
+  },
+  "details": {
+    "roleCreator": "Creator",
+    "roleRepresentative": "Representative",
+    "roleListener": "Listener",
+    "call": "Call",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "profile": "Profile",
+    "media": "Media",
+    "notifications": "Notifications"
   }
 }

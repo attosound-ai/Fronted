@@ -247,5 +247,16 @@
     "fileTooBig": "Ese archivo pesa {{actual}} MB y el límite es {{mb}} MB.",
     "audioTooLong": "Ese audio dura más de {{minutes}} minutos.",
     "generic": "Este archivo no se puede enviar."
+  },
+  "details": {
+    "roleCreator": "Creador",
+    "roleRepresentative": "Representante",
+    "roleListener": "Oyente",
+    "call": "Llamar",
+    "mute": "Silenciar",
+    "unmute": "Activar",
+    "profile": "Perfil",
+    "media": "Multimedia",
+    "notifications": "Notificaciones"
   }
 }

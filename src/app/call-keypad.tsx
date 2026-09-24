@@ -20,6 +20,8 @@ import { Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-nat
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import { IN_CALL_BAR_HEIGHT } from '@/hooks/useInCallChrome';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -49,7 +51,8 @@ const CORNER_RADIUS = 38;
  *  is the point of the glass (the client, Sep 22 2026: "we can actually enjoy
  *  the liquid glass display"; David, Sep 23: even more translucent). The tint
  *  stays ultra thin so the feed's colour comes through. */
-const BLUR_INTENSITY = 22;
+// Lighter still (David, Sep 24 2026): the feed reads through, the bar stays crisp above.
+const BLUR_INTENSITY = 12;
 /** After the last digit on an inbound call, how long the pad waits for another
  *  digit before it slides away and the editor opens. */
 const ACCEPT_HANDOFF_MS = 1500;
@@ -157,11 +160,19 @@ export default function CallKeypadScreen() {
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
 
   return (
-    <View style={styles.root}>
-      {/* One sheet of glass over the whole screen (David, Sep 23 2026): the
-          pad's blur joins the call bar's blur at the top instead of stopping
-          at the panel's edge, so the feed reads through a single frost. */}
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+    <View style={styles.root} pointerEvents="box-none">
+      {/* One sheet of glass under the call bar (David, Sep 23 and 24 2026): the
+          pad's blur meets the bar's blur instead of stopping at the panel's
+          edge, so the feed reads through a single frost, while the bar's
+          buttons stay crisp and tappable above it. */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.backdrop,
+          { top: insets.top + IN_CALL_BAR_HEIGHT },
+          backdropStyle,
+        ]}
+      >
         {Platform.OS === 'ios' ? (
           <BlurView
             intensity={BLUR_INTENSITY}
@@ -185,7 +196,7 @@ export default function CallKeypadScreen() {
 
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.panel, panelStyle]}>
-          <View style={[styles.body, { paddingBottom: insets.bottom + 8 }]}>
+          <View style={[styles.body, { paddingBottom: insets.bottom + 44 }]}>
             <View style={styles.readout}>
               <RNText
                 style={styles.readoutText}
@@ -231,19 +242,23 @@ export default function CallKeypadScreen() {
               disabled={!isConnected}
             />
 
-            <Pressable
-              onPress={() => {
-                void haptic('light');
-                close();
-              }}
-              accessibilityRole="button"
-              style={styles.hide}
-              hitSlop={8}
-            >
-              <RNText style={styles.hideText} allowFontScaling={false}>
-                {t('active.hideKeypad', 'Hide')}
-              </RNText>
-            </Pressable>
+            {/* Hide as a Liquid Glass pill, bigger than a key label so it
+                reads as the way out (David, Sep 24 2026). */}
+            <GlassSurface radius={26} style={styles.hideGlass}>
+              <Pressable
+                onPress={() => {
+                  void haptic('light');
+                  close();
+                }}
+                accessibilityRole="button"
+                style={styles.hide}
+                hitSlop={8}
+              >
+                <RNText style={styles.hideText} allowFontScaling={false}>
+                  {t('active.hideKeypad', 'Hide')}
+                </RNText>
+              </Pressable>
+            </GlassSurface>
           </View>
         </Animated.View>
       </GestureDetector>
@@ -290,14 +305,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textAlign: 'center',
   },
+  hideGlass: {
+    marginTop: 24,
+  },
   hide: {
-    marginTop: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 44,
+    alignItems: 'center',
   },
   hideText: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '400',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });

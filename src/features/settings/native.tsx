@@ -23,8 +23,10 @@ import {
   VStack,
 } from '@expo/ui/swift-ui';
 import {
+  accessibilityLabel,
   background,
   buttonStyle,
+  defaultScrollAnchor,
   cornerRadius,
   font,
   foregroundStyle,
@@ -45,7 +47,8 @@ const CHEVRON = '#5C5C61';
 export function SettingsForm({ children }: { children: ReactNode }) {
   return (
     <Host style={{ flex: 1 }} colorScheme="dark">
-      <Form>{children}</Form>
+      {/* Build 22 opened the form scrolled to its end; anchor it to the top. */}
+      <Form modifiers={[defaultScrollAnchor('top')]}>{children}</Form>
     </Host>
   );
 }
@@ -118,7 +121,13 @@ export function NavRow({
   onPress: () => void;
 }) {
   return (
-    <Button onPress={onPress} modifiers={[buttonStyle('plain')]}>
+    <Button
+      onPress={onPress}
+      modifiers={[
+        buttonStyle('plain'),
+        accessibilityLabel(value ? `${title}, ${value}` : title),
+      ]}
+    >
       <HStack spacing={12}>
         {symbol ? <IconSquare symbol={symbol} color={color} /> : null}
         <Text>{title}</Text>
@@ -187,7 +196,10 @@ export function ProfileCardRow({
   onPress: () => void;
 }) {
   return (
-    <Button onPress={onPress} modifiers={[buttonStyle('plain')]}>
+    <Button
+      onPress={onPress}
+      modifiers={[buttonStyle('plain'), accessibilityLabel(name)]}
+    >
       <HStack spacing={14}>
         <Image
           systemName={'person.crop.circle.fill' as never}

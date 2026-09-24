@@ -177,9 +177,7 @@
     "plans": {
       "record": {
         "name": "Record",
-        "features": [
-          "Grabación Ilimitada"
-        ]
+        "features": ["Grabación Ilimitada"]
       },
       "recordPro": {
         "name": "Record Pro",

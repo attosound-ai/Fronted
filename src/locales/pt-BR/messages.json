@@ -138,7 +138,9 @@
     "unfollowThread": "Deixar de seguir",
     "following": "Avisaremos sobre novas respostas",
     "unfollowed": "Não avisaremos sobre novas respostas",
-    "rootLabel": "Mensagem original"
+    "rootLabel": "Mensagem original",
+    "newReplies_one": "{{count}} resposta nova",
+    "newReplies_other": "{{count}} respostas novas"
   },
   "composer": {
     "expand": "Expandir editor",

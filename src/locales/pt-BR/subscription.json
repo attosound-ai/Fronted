@@ -19,9 +19,7 @@
     "record": {
       "name": "Record",
       "price": "R$99/ano",
-      "features": [
-        "Gravação Ilimitada"
-      ]
+      "features": ["Gravação Ilimitada"]
     },
     "record_pro": {
       "name": "Record Pro",

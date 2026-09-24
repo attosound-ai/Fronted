@@ -209,3 +209,27 @@ test('summarizeThreads survives missing senders and dates', () => {
   assert.equal(summaries.get('root')?.senderIds[0], '7');
   assert.equal(summaries.get('root')?.lastReplyAt, 1_700_000_000_000);
 });
+
+test('summarizeThreads marks replies from others as unread until the thread is seen', () => {
+  const msgs = [
+    { threadId: 'root', senderId: '2', createdAt: '2026-09-24T10:00:00.000Z' },
+    { threadId: 'root', senderId: '2', createdAt: '2026-09-24T10:05:00.000Z' },
+    { threadId: 'root', senderId: '1', createdAt: '2026-09-24T10:06:00.000Z' },
+  ];
+  const fresh = summarizeThreads(msgs, {}, '1');
+  assert.equal(fresh.get('root')?.unread, 2);
+  const seen = summarizeThreads(
+    msgs,
+    { root: Date.parse('2026-09-24T10:02:00.000Z') },
+    '1'
+  );
+  assert.equal(seen.get('root')?.unread, 1);
+  const allSeen = summarizeThreads(
+    msgs,
+    { root: Date.parse('2026-09-24T11:00:00.000Z') },
+    '1'
+  );
+  assert.equal(allSeen.get('root')?.unread, 0);
+  // Without a self id every reply counts, which is what a fresh install sees.
+  assert.equal(summarizeThreads(msgs).get('root')?.unread, 3);
+});

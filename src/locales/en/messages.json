@@ -138,7 +138,9 @@
     "unfollowThread": "Unfollow thread",
     "following": "You will be notified about new replies",
     "unfollowed": "You will not be notified about new replies",
-    "rootLabel": "Thread starter"
+    "rootLabel": "Thread starter",
+    "newReplies_one": "{{count}} new reply",
+    "newReplies_other": "{{count}} new replies"
   },
   "composer": {
     "expand": "Expand editor",

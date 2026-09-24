@@ -63,6 +63,7 @@ import { usePinnedMessages } from '../hooks/usePinnedMessages';
 import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { summarizeThreads } from '../thread/threadModel';
+import { useThreadSeenStore } from '../stores/threadSeenStore';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
 import { effectFromMetadata, type MessageEffect } from '../effects/effectCatalog';
@@ -325,7 +326,11 @@ export function ChatScreen({
   // only shows the root with a "N replies" footer.
   const threadCounts = useMemo(() => countThreadReplies(messages), [messages]);
   // Slack's footer also needs the faces and the time of the last reply.
-  const threadSummaries = useMemo(() => summarizeThreads(messages), [messages]);
+  const threadSeen = useThreadSeenStore((s) => s.seenAt);
+  const threadSummaries = useMemo(
+    () => summarizeThreads(messages, threadSeen, userId),
+    [messages, threadSeen, userId]
+  );
   const avatarFor = useCallback(
     (id: string) =>
       id === userId ? (user?.avatar ?? null) : (participantProfile.avatarUri ?? null),

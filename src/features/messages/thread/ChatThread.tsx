@@ -228,6 +228,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
         replies: (count: number) => t('thread.replies', { count }),
+        newReplies: (count: number) => t('thread.newReplies', { count }),
         lastReply: (at: number) =>
           t('thread.lastReply', {
             time: formatRelativeTime(new Date(at).toISOString()),

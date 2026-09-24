@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -25,6 +25,7 @@ import { useReactions } from '@/features/messages/hooks/useReactions';
 import { useMessageActions } from '@/features/messages/hooks/useMessageActions';
 import { useParticipantProfile } from '@/features/messages/hooks/useParticipantAvatar';
 import { useThreadFollowStore } from '@/features/messages/stores/threadFollowStore';
+import { useThreadSeenStore } from '@/features/messages/stores/threadSeenStore';
 import {
   toGiftedMessages,
   type AttoMessage,
@@ -66,6 +67,7 @@ export default function ChatThreadScreen() {
   const { toggleReaction } = useReactions(conversationId);
   const { editMessage, deleteMessage, canEditOrDelete } =
     useMessageActions(conversationId);
+  const markSeen = useThreadSeenStore((s) => s.markSeen);
   const following = useThreadFollowStore((s) => s.isFollowing(threadId));
   const setFollowing = useThreadFollowStore((s) => s.setFollowing);
 
@@ -80,6 +82,15 @@ export default function ChatThreadScreen() {
     null
   );
   const [pickerFor, setPickerFor] = useState<AttoMessage | null>(null);
+
+  // Opening a thread clears its unread mark in the conversation, as in Slack.
+  useEffect(() => {
+    const newest = replies.reduce(
+      (max, r) => Math.max(max, Date.parse(r.createdAt ?? '') || 0),
+      0
+    );
+    if (newest > 0) markSeen(threadId, newest);
+  }, [replies, markSeen, threadId]);
 
   /** Newest first for the inverted list, with the root last so it sits on top. */
   const items = useMemo(() => {

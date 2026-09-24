@@ -246,6 +246,8 @@ export interface ThreadSummary {
   senderIds: string[];
   /** Epoch milliseconds of the newest reply. */
   lastReplyAt: number;
+  /** Replies from someone else since this device last opened the thread. */
+  unread: number;
 }
 
 /**
@@ -258,7 +260,11 @@ export function summarizeThreads(
     threadId?: string | null;
     senderId?: string | number | null;
     createdAt?: string | number | null;
-  }[]
+  }[],
+  /** When this device last opened each thread, for Slack's unread count. */
+  seenAt: Record<string, number> = {},
+  /** Replies of your own are never unread. */
+  selfId = ''
 ): Map<string, ThreadSummary> {
   const out = new Map<string, ThreadSummary>();
   for (const m of messages) {
@@ -266,12 +272,19 @@ export function summarizeThreads(
     const sender = String(m.senderId ?? '');
     const at =
       typeof m.createdAt === 'number' ? m.createdAt : Date.parse(m.createdAt ?? '') || 0;
+    const isNew = sender !== String(selfId) && at > (seenAt[m.threadId] ?? 0);
     const prev = out.get(m.threadId);
     if (!prev) {
-      out.set(m.threadId, { count: 1, senderIds: [sender], lastReplyAt: at });
+      out.set(m.threadId, {
+        count: 1,
+        senderIds: [sender],
+        lastReplyAt: at,
+        unread: isNew ? 1 : 0,
+      });
       continue;
     }
     prev.count += 1;
+    if (isNew) prev.unread += 1;
     if (at > prev.lastReplyAt) {
       prev.lastReplyAt = at;
       // Newest replier first, exactly the order Slack shows the faces in.

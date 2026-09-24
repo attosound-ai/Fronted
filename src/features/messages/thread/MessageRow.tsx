@@ -82,6 +82,8 @@ export interface MessageRowProps {
     replies: (count: number) => string;
     /** "Last reply 2h ago", the grey half of Slack's thread footer. */
     lastReply: (at: number) => string;
+    /** "2 new replies", when someone answered since you last looked. */
+    newReplies: (count: number) => string;
     replay: string;
     forwarded: string;
   };
@@ -108,7 +110,12 @@ export interface MessageRowProps {
   /** Slack style thread footer under the bubble. */
   threadReplies?: number;
   /** Who replied and when, for the faces and the "last reply" line. */
-  threadSummary?: { count: number; senderIds: string[]; lastReplyAt: number } | null;
+  threadSummary?: {
+    count: number;
+    senderIds: string[];
+    lastReplyAt: number;
+    unread?: number;
+  } | null;
   /** Avatar for a sender id, so the footer can show the repliers' faces. */
   avatarFor?: (userId: string) => string | null | undefined;
   onOpenThread?: (messageId: string) => void;
@@ -629,8 +636,16 @@ function MessageRowInner({
           ) : (
             <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
           )}
-          <RNText style={styles.threadFooterText} maxFontSizeMultiplier={1.1}>
-            {labels.replies(threadReplies)}
+          <RNText
+            style={[
+              styles.threadFooterText,
+              (threadSummary?.unread ?? 0) > 0 && styles.threadFooterUnread,
+            ]}
+            maxFontSizeMultiplier={1.1}
+          >
+            {(threadSummary?.unread ?? 0) > 0
+              ? labels.newReplies(threadSummary?.unread ?? 0)
+              : labels.replies(threadReplies)}
           </RNText>
           {threadSummary && threadSummary.lastReplyAt > 0 ? (
             <RNText style={styles.threadFooterTime} maxFontSizeMultiplier={1.1}>
@@ -1091,6 +1106,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Archivo_600SemiBold',
   },
+  // A thread with answers you have not seen reads in solid white, the way
+  // Slack turns its count bold and blue.
+  threadFooterUnread: { color: '#FFFFFF' },
   threadFooterTime: {
     color: 'rgba(255,255,255,0.4)',
     fontSize: 12,

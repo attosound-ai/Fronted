@@ -633,89 +633,99 @@ function MessageRowInner({
       ) : null}
       {threadReplies > 0 ? (
         // Slack's thread footer, in ATTO's black and white: the faces of the
-        // people who replied, the count, and when the last reply landed.
-        <Pressable
-          onPress={() => onOpenThread?.(String(message._id))}
-          style={({ pressed }) => [styles.threadFooter, pressed && styles.threadFooterOn]}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={labels.replies(threadReplies)}
-        >
-          {threadSummary && threadSummary.senderIds.length > 0 ? (
-            <View style={styles.threadFaces}>
-              {threadSummary.senderIds.slice(0, 3).map((id, i) => {
-                const uri = cloudinaryUrl(avatarFor?.(id), 'avatar_sm');
-                return (
-                  <View
-                    key={id}
-                    style={[styles.threadFace, i > 0 && styles.threadFaceStacked]}
-                  >
-                    {uri ? (
-                      <Image source={{ uri }} style={styles.threadFaceImage} />
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
-          )}
-          <RNText
-            style={[
-              styles.threadFooterText,
-              (threadSummary?.unread ?? 0) > 0 && styles.threadFooterUnread,
+        // people who replied, the count, when the last reply landed, and at
+        // the end the three of Slack's toolbar, which on a phone has nowhere
+        // to hover.
+        <View style={styles.threadRow}>
+          <Pressable
+            onPress={() => onOpenThread?.(String(message._id))}
+            style={({ pressed }) => [
+              styles.threadFooter,
+              pressed && styles.threadFooterOn,
             ]}
-            maxFontSizeMultiplier={1.1}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={labels.replies(threadReplies)}
           >
-            {(threadSummary?.unread ?? 0) > 0
-              ? labels.newReplies(threadSummary?.unread ?? 0)
-              : labels.replies(threadReplies)}
-          </RNText>
-          {threadSummary && threadSummary.lastReplyAt > 0 ? (
-            <RNText style={styles.threadFooterTime} maxFontSizeMultiplier={1.1}>
-              {labels.lastReply(threadSummary.lastReplyAt)}
+            {threadSummary && threadSummary.senderIds.length > 0 ? (
+              <View style={styles.threadFaces}>
+                {threadSummary.senderIds.slice(0, 3).map((id, i) => {
+                  const uri = cloudinaryUrl(avatarFor?.(id), 'avatar_sm');
+                  return (
+                    <View
+                      key={id}
+                      style={[styles.threadFace, i > 0 && styles.threadFaceStacked]}
+                    >
+                      {uri ? (
+                        <Image source={{ uri }} style={styles.threadFaceImage} />
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <MessageSquare size={13} color="rgba(255,255,255,0.7)" strokeWidth={2.25} />
+            )}
+            <RNText
+              style={[
+                styles.threadFooterText,
+                (threadSummary?.unread ?? 0) > 0 && styles.threadFooterUnread,
+              ]}
+              maxFontSizeMultiplier={1.1}
+            >
+              {(threadSummary?.unread ?? 0) > 0
+                ? labels.newReplies(threadSummary?.unread ?? 0)
+                : labels.replies(threadReplies)}
             </RNText>
+            {threadSummary && threadSummary.lastReplyAt > 0 ? (
+              <RNText style={styles.threadFooterTime} maxFontSizeMultiplier={1.1}>
+                {labels.lastReply(threadSummary.lastReplyAt)}
+              </RNText>
+            ) : null}
+          </Pressable>
+          {threadActions ? (
+            // Outside the rule's own Pressable, so a tap here never opens the
+            // thread by accident.
+            <View style={styles.threadTools}>
+              <Pressable
+                onPress={threadActions.onSave}
+                hitSlop={8}
+                style={styles.threadTool}
+                accessibilityRole="button"
+                accessibilityState={{ selected: threadActions.saved }}
+                accessibilityLabel={labels.save}
+              >
+                <Bookmark
+                  size={14}
+                  color={threadActions.saved ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+                  fill={threadActions.saved ? '#FFFFFF' : 'transparent'}
+                  strokeWidth={2}
+                />
+              </Pressable>
+              <Pressable
+                onPress={threadActions.onForward}
+                hitSlop={8}
+                style={styles.threadTool}
+                accessibilityRole="button"
+                accessibilityLabel={labels.forward}
+              >
+                <CornerUpRight size={14} color="rgba(255,255,255,0.55)" strokeWidth={2} />
+              </Pressable>
+              <Pressable
+                onPress={threadActions.onMore}
+                hitSlop={8}
+                style={styles.threadTool}
+                accessibilityRole="button"
+                accessibilityLabel={labels.more}
+              >
+                <MoreHorizontal
+                  size={14}
+                  color="rgba(255,255,255,0.55)"
+                  strokeWidth={2}
+                />
+              </Pressable>
+            </View>
           ) : null}
-        </Pressable>
-      ) : null}
-      {threadReplies > 0 && threadActions ? (
-        // The three that Slack keeps at the end of its toolbar. They sit
-        // outside the rule's own Pressable so a tap here never opens the
-        // thread by accident.
-        <View style={styles.threadTools}>
-          <Pressable
-            onPress={threadActions.onSave}
-            hitSlop={8}
-            style={styles.threadTool}
-            accessibilityRole="button"
-            accessibilityState={{ selected: threadActions.saved }}
-            accessibilityLabel={labels.save}
-          >
-            <Bookmark
-              size={14}
-              color={threadActions.saved ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
-              fill={threadActions.saved ? '#FFFFFF' : 'transparent'}
-              strokeWidth={2}
-            />
-          </Pressable>
-          <Pressable
-            onPress={threadActions.onForward}
-            hitSlop={8}
-            style={styles.threadTool}
-            accessibilityRole="button"
-            accessibilityLabel={labels.forward}
-          >
-            <CornerUpRight size={14} color="rgba(255,255,255,0.55)" strokeWidth={2} />
-          </Pressable>
-          <Pressable
-            onPress={threadActions.onMore}
-            hitSlop={8}
-            style={styles.threadTool}
-            accessibilityRole="button"
-            accessibilityLabel={labels.more}
-          >
-            <MoreHorizontal size={14} color="rgba(255,255,255,0.55)" strokeWidth={2} />
-          </Pressable>
         </View>
       ) : null}
       {readLabel && threadReplies === 0 ? (
@@ -1161,16 +1171,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: TAIL_DROP + 2,
     paddingHorizontal: 6,
   },
   threadFooterOn: { opacity: 0.6 },
+  threadRow: { flexDirection: 'row', alignItems: 'center', marginTop: TAIL_DROP + 2 },
   threadTools: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginTop: 4,
-    paddingHorizontal: 6,
+    gap: 13,
+    paddingLeft: 10,
+    paddingRight: 6,
   },
   threadTool: { paddingVertical: 2 },
   threadFooterText: {

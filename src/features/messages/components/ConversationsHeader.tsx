@@ -51,8 +51,8 @@ interface ConversationsHeaderProps {
 /**
  * Header of the messages tab.
  *
- * Left: the views button, Slack's sidebar in one menu — all messages, unread,
- * threads, drafts, archived. The list itself stays the WhatsApp and Telegram
+ * Left: the views button, Slack's sidebar in one menu: all messages,
+ * unread, threads, drafts, archived. The list itself stays the WhatsApp and Telegram
  * shape everybody already knows, so the Slack part is something you go and
  * ask for rather than something that greets you (David, Sep 24 2026).
  *

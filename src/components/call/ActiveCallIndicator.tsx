@@ -5,7 +5,11 @@ import { Phone } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallStore } from '@/stores/callStore';
-import { isOnCallScreen, useScreenTopInset } from '@/hooks/useInCallChrome';
+import {
+  isOnCallScreen,
+  useCallBarVisible,
+  useScreenTopInset,
+} from '@/hooks/useInCallChrome';
 
 /**
  * ActiveCallIndicator — a minimal, always-present "on a call" status pill at the
@@ -20,6 +24,12 @@ import { isOnCallScreen, useScreenTopInset } from '@/hooks/useInCallChrome';
  * opens the call screen, where the call can be managed and ended.
  *
  * Monochrome by design (ATTO is black & white): white pill, black content.
+ *
+ * Sep 24 2026, the client: "I'd rather just not have it there." The call bar
+ * that sits above it already says a call is up, times it and hangs it up, so
+ * the pill was a second badge repeating the same thing with the raw number
+ * attached. It now yields to the bar and only appears where the bar is not
+ * drawn, which keeps the Sep 8 protection wired without showing two badges.
  */
 export function ActiveCallIndicator() {
   const { t } = useTranslation('calls');
@@ -28,6 +38,8 @@ export function ActiveCallIndicator() {
   // Sits just under the in call bar (or under the status bar when the bar is
   // hidden) so it never covers the bar's mute, speaker and keypad buttons.
   const topInset = useScreenTopInset();
+  // The bar carries the call on every screen but the call screen itself.
+  const callBarVisible = useCallBarVisible();
   const pulse = useRef(new Animated.Value(1)).current;
 
   const isConnected =
@@ -53,6 +65,7 @@ export function ActiveCallIndicator() {
   // the pathname says nothing about what is underneath: stay out of the way.
   if (
     !isConnected ||
+    callBarVisible ||
     isOnCallScreen(pathname) ||
     pathname.includes('/recording') ||
     pathname.includes('/call-keypad')

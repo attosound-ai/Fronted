@@ -34,6 +34,14 @@ function mapBackendMessage(m: BackendMessage): ChatMessage {
 }
 
 /**
+ * Where a typing indicator is kept: the conversation on its own, or the
+ * conversation and the thread the reply is being written in.
+ */
+export function typingKey(conversationId: string, threadId?: string | null): string {
+  return threadId ? `${conversationId}:${threadId}` : conversationId;
+}
+
+/**
  * Hook that manages the Phoenix Channel subscription for a conversation.
  * Handles real-time message delivery, typing indicators, and read receipts.
  */
@@ -142,10 +150,18 @@ export function useRealtimeChat(conversationId: string) {
         });
       },
       onTyping: (payload) => {
-        const { user_id, is_typing } = payload as { user_id: string; is_typing: boolean };
-        setTyping(conversationId, user_id, is_typing);
+        const { user_id, is_typing, thread_id } = payload as {
+          user_id: string;
+          is_typing: boolean;
+          thread_id?: string | null;
+        };
+        // A reply being written belongs to its thread, not to the chat, so it
+        // is kept under the thread's own key and only the thread screen shows
+        // it. Slack does the same: the channel stays quiet.
+        setTyping(typingKey(conversationId, thread_id), user_id, is_typing);
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.TYPING_RECEIVED, {
           conversation_id: conversationId,
+          thread_id: thread_id ?? null,
           user_id,
           is_typing,
         });

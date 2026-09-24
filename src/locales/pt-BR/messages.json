@@ -2,7 +2,19 @@
   "header": {
     "title": "Mensagens",
     "newMessageAccessibility": "Nova mensagem",
-    "settingsAccessibility": "Configurações de mensagens"
+    "settingsAccessibility": "Configurações de mensagens",
+    "menuAccessibility": "Visualizações",
+    "viewAll": "Todas as mensagens",
+    "viewUnread": "Não lidas",
+    "viewThreads": "Tópicos",
+    "viewDrafts": "Rascunhos",
+    "viewArchived": "Arquivadas",
+    "titleUnread": "Não lidas",
+    "titleDrafts": "Rascunhos",
+    "titleArchived": "Arquivadas",
+    "emptyUnread": "Nada não lido",
+    "emptyDrafts": "Sem rascunhos",
+    "emptyArchived": "Nada arquivado"
   },
   "empty": {
     "title": "Nenhuma mensagem ainda",
@@ -63,7 +75,12 @@
     "forwardTitle": "Encaminhar para",
     "forwarded": "Encaminhada",
     "linkCopied": "Link copiado",
-    "copyLink": "Copiar link"
+    "copyLink": "Copiar link",
+    "save": "Salvar para depois",
+    "unsave": "Remover dos salvos",
+    "moreActions": "Mais",
+    "savedToast": "Salvo para depois",
+    "unsavedToast": "Removido dos salvos"
   },
   "chatHeader": {
     "backAccessibilityLabel": "Voltar",
@@ -261,5 +278,19 @@
     "media": "Mídia",
     "notifications": "Notificações",
     "pinned": "Mensagens fixadas"
+  },
+  "threads": {
+    "title": "Tópicos",
+    "subtitle": "Respostas dos tópicos que você segue",
+    "empty": "Ainda não há tópicos",
+    "emptyBody": "Responda a uma mensagem dentro de um tópico e ela aparece aqui, com todos os tópicos que você segue.",
+    "error": "Não foi possível carregar os tópicos",
+    "unreadOnly": "Somente não lidos",
+    "showAll": "Ver todos",
+    "markAllRead": "Marcar tudo como lido",
+    "allRead": "Todos os tópicos estão lidos",
+    "unfollowed": "Não está seguindo",
+    "repliedBy": "Você respondeu",
+    "accessibility": "Tópico com {{name}}, {{count}} respostas"
   }
 }

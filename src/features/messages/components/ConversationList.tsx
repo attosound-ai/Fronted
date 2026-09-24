@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   RefreshControl,
@@ -25,8 +25,8 @@ import {
   orderConversations,
   useConversationPrefsStore,
 } from '../stores/conversationPrefsStore';
+import { useConversationViewStore } from '../stores/conversationViewStore';
 import { ConversationSwipeRow } from './ConversationSwipeRow';
-import { useMemo, useState } from 'react';
 import { ConversationsHeader } from './ConversationsHeader';
 import { ConversationItem } from './ConversationItem';
 import { EmptyConversations } from './EmptyConversations';
@@ -68,16 +68,24 @@ export function ConversationList({
       ),
     [rawConversations, archived]
   );
-  const conversations = useMemo(
-    () =>
-      orderConversations(
-        rawConversations.filter(
-          (c) => !isArchived(archived, c.conversationId, c.lastMessageAt)
-        ),
-        pinned
-      ),
-    [rawConversations, pinned, archived]
-  );
+  // Which slice the views button in the header asked for. "All" is the
+  // WhatsApp and Telegram list everybody sees by default.
+  const view = useConversationViewStore((s) => s.view);
+  const drafts = useConversationPrefsStore((s) => s.drafts);
+  const conversations = useMemo(() => {
+    const live = rawConversations.filter(
+      (c) => !isArchived(archived, c.conversationId, c.lastMessageAt)
+    );
+    const slice =
+      view === 'unread'
+        ? live.filter((c) => c.unreadCount > 0)
+        : view === 'drafts'
+          ? live.filter((c) => (drafts[c.conversationId] ?? '').trim().length > 0)
+          : view === 'archived'
+            ? archivedList
+            : live;
+    return orderConversations(slice, pinned);
+  }, [rawConversations, pinned, archived, archivedList, drafts, view]);
   const header = useCollapsibleHeader();
 
   const handleConversationPress = useCallback(
@@ -101,7 +109,7 @@ export function ConversationList({
   // WhatsApp keeps an "Archived" row at the end of the list; tapping it shows
   // the hidden chats, and tapping one of those brings it back.
   const archivedFooter =
-    archivedList.length > 0 ? (
+    archivedList.length > 0 && view === 'all' ? (
       <View>
         <TouchableOpacity
           onPress={() => setShowArchived((v) => !v)}
@@ -238,7 +246,21 @@ export function ConversationList({
             progressViewOffset={header.height}
           />
         }
-        ListEmptyComponent={EmptyConversations}
+        ListEmptyComponent={
+          view === 'all' ? (
+            EmptyConversations
+          ) : (
+            <View style={styles.emptyView}>
+              <Text variant="body" style={styles.emptyViewText}>
+                {view === 'unread'
+                  ? t('header.emptyUnread')
+                  : view === 'drafts'
+                    ? t('header.emptyDrafts')
+                    : t('header.emptyArchived')}
+              </Text>
+            </View>
+          )
+        }
         ListFooterComponent={archivedFooter}
         showsVerticalScrollIndicator={false}
       />
@@ -301,6 +323,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   archivedLabel: { color: COLORS.gray[500] },
+  emptyView: {
+    alignItems: 'center',
+    paddingTop: SPACING.xl * 2,
+    paddingHorizontal: SPACING.lg,
+  },
+  emptyViewText: { color: COLORS.gray[500], textAlign: 'center' },
   fab: {
     position: 'absolute',
     bottom: 24,

@@ -26,6 +26,10 @@ import { useMessageActions } from '@/features/messages/hooks/useMessageActions';
 import { useParticipantProfile } from '@/features/messages/hooks/useParticipantAvatar';
 import { useThreadFollowStore } from '@/features/messages/stores/threadFollowStore';
 import { useThreadSeenStore } from '@/features/messages/stores/threadSeenStore';
+import { useThreadsInbox } from '@/features/messages/hooks/useThreadsInbox';
+import { typingKey } from '@/features/messages/hooks/useRealtimeChat';
+import { useChatStore } from '@/features/messages/stores/chatStore';
+import { phoenixSocket } from '@/lib/api/phoenixSocket';
 import {
   toGiftedMessages,
   type AttoMessage,
@@ -70,6 +74,16 @@ export default function ChatThreadScreen() {
   const markSeen = useThreadSeenStore((s) => s.markSeen);
   const following = useThreadFollowStore((s) => s.isFollowing(threadId));
   const setFollowing = useThreadFollowStore((s) => s.setFollowing);
+  // The unread count and the follow flag also live on the server, so they
+  // agree on the phone and the iPad and survive a reinstall.
+  const inbox = useThreadsInbox();
+  // Slack puts "typing" inside the thread, never in the channel, so the
+  // indicator is kept under the thread's own key.
+  const threadTypingKey = typingKey(conversationId, threadId);
+  const typingUsers = useChatStore((s) => s.typingUsers[threadTypingKey]);
+  const isParticipantTyping = (typingUsers?.size ?? 0) > 0;
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const listRef = useRef<ChatThreadHandle>(null);
   const composerRef = useRef<ChatComposerHandle>(null);
@@ -91,6 +105,45 @@ export default function ChatThreadScreen() {
     );
     if (newest > 0) markSeen(threadId, newest);
   }, [replies, markSeen, threadId]);
+
+  // The same thing on the server, once per open, so the threads inbox drops
+  // the count on every device rather than only on this one.
+  const markedReadRef = useRef(false);
+  const markInboxRead = inbox.markRead;
+  useEffect(() => {
+    if (markedReadRef.current || !conversationId || !threadId) return;
+    markedReadRef.current = true;
+    markInboxRead(conversationId, threadId);
+  }, [conversationId, threadId, markInboxRead]);
+
+  // Stop the indicator when the thread closes, so the other side never sees
+  // "typing" from a screen nobody is on.
+  useEffect(
+    () => () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (isTypingRef.current) phoenixSocket.sendTyping(conversationId, false, threadId);
+    },
+    [conversationId, threadId]
+  );
+
+  /** Every keystroke in the reply box, debounced the way the chat does it. */
+  const handleTypingActivity = useCallback(
+    (text: string) => {
+      draftRef.current = text;
+      if (text.length > 0 && !isTypingRef.current) {
+        isTypingRef.current = true;
+        phoenixSocket.sendTyping(conversationId, true, threadId);
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        if (isTypingRef.current) {
+          isTypingRef.current = false;
+          phoenixSocket.sendTyping(conversationId, false, threadId);
+        }
+      }, 2000);
+    },
+    [conversationId, threadId]
+  );
 
   /** Newest first for the inverted list, with the root last so it sits on top. */
   const items = useMemo(() => {
@@ -229,6 +282,10 @@ export default function ChatThreadScreen() {
         thread_id: threadId,
         also_sent_to_chat: alsoSend,
       });
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        phoenixSocket.sendTyping(conversationId, false, threadId);
+      }
       setJustSentId(sent.messageId);
       listRef.current?.scrollToBottom(true);
     },
@@ -243,12 +300,8 @@ export default function ChatThreadScreen() {
     const act = (index: number) => {
       if (index === 0) {
         setFollowing(threadId, !following);
+        inbox.setFollowing(conversationId, threadId, !following);
         showToast(following ? t('thread.unfollowed') : t('thread.following'));
-        analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_FOLLOW_TOGGLED, {
-          conversation_id: conversationId,
-          thread_id: threadId,
-          following: !following,
-        });
       } else if (index === 1) {
         void Clipboard.setStringAsync(
           `https://atto.sound/m/${conversationId}/${threadId}`
@@ -272,7 +325,7 @@ export default function ChatThreadScreen() {
         { text: cancel, style: 'cancel' },
       ]);
     }
-  }, [conversationId, following, setFollowing, t, threadId]);
+  }, [conversationId, following, inbox, setFollowing, t, threadId]);
 
   const tapbackMine = useMemo(() => {
     const set = new Set<string>();
@@ -324,7 +377,7 @@ export default function ChatThreadScreen() {
           avatarFor={avatarFor}
           justSentId={justSentId}
           creatorIds={creatorIds}
-          isParticipantTyping={false}
+          isParticipantTyping={isParticipantTyping}
           participantName={participantName}
           hasMore={false}
           isFetchingMore={false}
@@ -358,6 +411,7 @@ export default function ChatThreadScreen() {
                 : t('thread.replyPlaceholder')
             }
             onSend={(text) => void handleSend(text)}
+            onTextActivity={handleTypingActivity}
             // Slack keeps the broadcast checkbox with the reply box, naming
             // where the copy would land.
             preview={

@@ -2,7 +2,19 @@
   "header": {
     "title": "Messages",
     "newMessageAccessibility": "New message",
-    "settingsAccessibility": "Messages settings"
+    "settingsAccessibility": "Messages settings",
+    "menuAccessibility": "Views",
+    "viewAll": "All messages",
+    "viewUnread": "Unread",
+    "viewThreads": "Threads",
+    "viewDrafts": "Drafts",
+    "viewArchived": "Archived",
+    "titleUnread": "Unread",
+    "titleDrafts": "Drafts",
+    "titleArchived": "Archived",
+    "emptyUnread": "Nothing unread",
+    "emptyDrafts": "No drafts",
+    "emptyArchived": "Nothing archived"
   },
   "empty": {
     "title": "No messages yet",
@@ -108,7 +120,12 @@
     "forwardTitle": "Forward to",
     "forwarded": "Forwarded",
     "linkCopied": "Link copied",
-    "copyLink": "Copy link"
+    "copyLink": "Copy link",
+    "save": "Save for later",
+    "unsave": "Remove from saved",
+    "moreActions": "More",
+    "savedToast": "Saved for later",
+    "unsavedToast": "Removed from saved"
   },
   "listActions": {
     "pin": "Pin",
@@ -261,5 +278,19 @@
     "media": "Media",
     "notifications": "Notifications",
     "pinned": "Pinned messages"
+  },
+  "threads": {
+    "title": "Threads",
+    "subtitle": "Replies to messages you follow",
+    "empty": "No threads yet",
+    "emptyBody": "Reply to a message in a thread and it shows up here, with every thread you follow.",
+    "error": "Threads could not be loaded",
+    "unreadOnly": "Unread only",
+    "showAll": "Show all",
+    "markAllRead": "Mark all as read",
+    "allRead": "Every thread is read",
+    "unfollowed": "Not following",
+    "repliedBy": "You replied",
+    "accessibility": "Thread with {{name}}, {{count}} replies"
   }
 }

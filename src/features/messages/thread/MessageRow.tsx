@@ -22,7 +22,15 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { ArrowUpLeft, Clock, AlertCircle, MessageSquare } from 'lucide-react-native';
+import {
+  ArrowUpLeft,
+  Clock,
+  AlertCircle,
+  Bookmark,
+  CornerUpRight,
+  MessageSquare,
+  MoreHorizontal,
+} from 'lucide-react-native';
 import Svg, { Defs, LinearGradient as SvgGradient, Path, Stop } from 'react-native-svg';
 import { GOLD } from '@/constants/gold';
 
@@ -86,6 +94,10 @@ export interface MessageRowProps {
     newReplies: (count: number) => string;
     replay: string;
     forwarded: string;
+    /** The three on the reply rule: save for later, forward, more. */
+    save: string;
+    forward: string;
+    more: string;
   };
   onMenuAction: (actionKey: string, message: AttoMessage) => void;
   onReply: (message: AttoMessage) => void;
@@ -119,6 +131,17 @@ export interface MessageRowProps {
   /** Avatar for a sender id, so the footer can show the repliers' faces. */
   avatarFor?: (userId: string) => string | null | undefined;
   onOpenThread?: (messageId: string) => void;
+  /**
+   * Slack's toolbar, on the reply rule rather than on hover, since a phone
+   * has none: save the thread for later, forward the message, or open the
+   * same menu a long press opens.
+   */
+  threadActions?: {
+    saved: boolean;
+    onSave: () => void;
+    onForward: () => void;
+    onMore: () => void;
+  } | null;
   /** Screen effects replay from the chat screen, which owns the overlay. */
   onReplayEffect?: (message: AttoMessage) => void;
   onToggleReaction: (message: AttoMessage, emoji: string) => void;
@@ -190,6 +213,7 @@ function MessageRowInner({
   threadSummary = null,
   avatarFor,
   onOpenThread,
+  threadActions = null,
   onReplayEffect,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
@@ -654,6 +678,46 @@ function MessageRowInner({
           ) : null}
         </Pressable>
       ) : null}
+      {threadReplies > 0 && threadActions ? (
+        // The three that Slack keeps at the end of its toolbar. They sit
+        // outside the rule's own Pressable so a tap here never opens the
+        // thread by accident.
+        <View style={styles.threadTools}>
+          <Pressable
+            onPress={threadActions.onSave}
+            hitSlop={8}
+            style={styles.threadTool}
+            accessibilityRole="button"
+            accessibilityState={{ selected: threadActions.saved }}
+            accessibilityLabel={labels.save}
+          >
+            <Bookmark
+              size={14}
+              color={threadActions.saved ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+              fill={threadActions.saved ? '#FFFFFF' : 'transparent'}
+              strokeWidth={2}
+            />
+          </Pressable>
+          <Pressable
+            onPress={threadActions.onForward}
+            hitSlop={8}
+            style={styles.threadTool}
+            accessibilityRole="button"
+            accessibilityLabel={labels.forward}
+          >
+            <CornerUpRight size={14} color="rgba(255,255,255,0.55)" strokeWidth={2} />
+          </Pressable>
+          <Pressable
+            onPress={threadActions.onMore}
+            hitSlop={8}
+            style={styles.threadTool}
+            accessibilityRole="button"
+            accessibilityLabel={labels.more}
+          >
+            <MoreHorizontal size={14} color="rgba(255,255,255,0.55)" strokeWidth={2} />
+          </Pressable>
+        </View>
+      ) : null}
       {readLabel && threadReplies === 0 ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
@@ -1101,6 +1165,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   threadFooterOn: { opacity: 0.6 },
+  threadTools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 4,
+    paddingHorizontal: 6,
+  },
+  threadTool: { paddingVertical: 2 },
   threadFooterText: {
     color: 'rgba(255,255,255,0.7)',
     fontSize: 12,

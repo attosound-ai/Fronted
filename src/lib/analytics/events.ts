@@ -521,6 +521,9 @@ export const ANALYTICS_EVENTS = {
     THREAD_OPENED: 'messages_thread_opened',
     /** Slack's follow / unfollow on a thread (device local for now). */
     THREAD_FOLLOW_TOGGLED: 'messages_thread_follow_toggled',
+    // Which slice of the messages list the views button opened.
+    VIEW_PICKED: 'messages_view_picked',
+    THREAD_INBOX_ACTION: 'messages_thread_inbox_action',
     THREAD_REPLY_SENT: 'messages_thread_reply_sent',
     THREAD_STARTED: 'messages_thread_started',
     /** The chat's own details screen, the way Telegram and WhatsApp open it. */

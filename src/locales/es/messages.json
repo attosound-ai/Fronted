@@ -2,7 +2,19 @@
   "header": {
     "title": "Mensajes",
     "newMessageAccessibility": "Nuevo mensaje",
-    "settingsAccessibility": "Configuración de mensajes"
+    "settingsAccessibility": "Configuración de mensajes",
+    "menuAccessibility": "Vistas",
+    "viewAll": "Todos los mensajes",
+    "viewUnread": "No leídos",
+    "viewThreads": "Hilos",
+    "viewDrafts": "Borradores",
+    "viewArchived": "Archivados",
+    "titleUnread": "No leídos",
+    "titleDrafts": "Borradores",
+    "titleArchived": "Archivados",
+    "emptyUnread": "Nada sin leer",
+    "emptyDrafts": "Sin borradores",
+    "emptyArchived": "Nada archivado"
   },
   "empty": {
     "title": "Aún no hay mensajes",
@@ -108,7 +120,12 @@
     "forwardTitle": "Reenviar a",
     "forwarded": "Reenviado",
     "linkCopied": "Enlace copiado",
-    "copyLink": "Copiar enlace"
+    "copyLink": "Copiar enlace",
+    "save": "Guardar para después",
+    "unsave": "Quitar de guardados",
+    "moreActions": "Más",
+    "savedToast": "Guardado para después",
+    "unsavedToast": "Quitado de guardados"
   },
   "listActions": {
     "pin": "Fijar",
@@ -261,5 +278,19 @@
     "media": "Multimedia",
     "notifications": "Notificaciones",
     "pinned": "Mensajes fijados"
+  },
+  "threads": {
+    "title": "Hilos",
+    "subtitle": "Respuestas de los hilos que sigues",
+    "empty": "Todavía no hay hilos",
+    "emptyBody": "Responde a un mensaje dentro de un hilo y aparecerá aquí, junto a los hilos que sigues.",
+    "error": "No se pudieron cargar los hilos",
+    "unreadOnly": "Solo no leídos",
+    "showAll": "Ver todos",
+    "markAllRead": "Marcar todo como leído",
+    "allRead": "Todos los hilos están leídos",
+    "unfollowed": "No lo sigues",
+    "repliedBy": "Respondiste",
+    "accessibility": "Hilo con {{name}}, {{count}} respuestas"
   }
 }

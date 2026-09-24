@@ -6,7 +6,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Alert, Keyboard, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  ActionSheetIOS,
+  View,
+  Alert,
+  Keyboard,
+  Platform,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -64,6 +72,7 @@ import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { summarizeThreads } from '../thread/threadModel';
 import { useThreadSeenStore } from '../stores/threadSeenStore';
+import { useThreadSavedStore } from '../stores/threadSavedStore';
 import { useThreadFollowStore } from '../stores/threadFollowStore';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
@@ -339,6 +348,11 @@ export function ChatScreen({
       id === userId ? (user?.avatar ?? null) : (participantProfile.avatarUri ?? null),
     [userId, user?.avatar, participantProfile.avatarUri]
   );
+  // Slack's toolbar, which on a phone has nowhere to hover, so it sits at the
+  // end of the reply rule: save the thread for later, forward the message
+  // that started it, or open the same menu a long press opens.
+  const savedThreads = useThreadSavedStore((s) => s.saved);
+  const toggleSavedThread = useThreadSavedStore((s) => s.toggle);
   // A thread reply stays in its thread, unless the sender ticked Slack's
   // "also send to the chat", in which case it shows in both.
   const mainMessages = useMemo(
@@ -1191,6 +1205,77 @@ export function ChatScreen({
     [pinnedIds, t, threadCounts, threadFollowed]
   );
 
+  /**
+   * The three at the end of the reply rule. "More" reuses the long press
+   * menu rather than inventing a second list, so a message has one set of
+   * actions no matter how you reach them.
+   */
+  const threadActionsFor = useCallback(
+    (messageId: string) => {
+      const msg = giftedMessages.find((m) => String(m._id) === messageId);
+      if (!msg) return null;
+      const isOwn = String(msg.user._id) === userId;
+      return {
+        saved: savedThreads[messageId] === true,
+        onSave: () => {
+          void haptic('selection');
+          const now = toggleSavedThread(messageId);
+          showToast(now ? t('actions.savedToast') : t('actions.unsavedToast'));
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.THREAD_INBOX_ACTION, {
+            conversation_id: conversationId,
+            thread_id: messageId,
+            action: 'save',
+            saved: now,
+            surface: 'reply_rule',
+          });
+        },
+        onForward: () => {
+          void haptic('selection');
+          handleMenuAction('forward', msg);
+        },
+        onMore: () => {
+          void haptic('selection');
+          const items = menuItemsFor(msg, isOwn);
+          const cancel = t('actions.cancel', { defaultValue: 'Cancel' });
+          const destructive = items.findIndex((item) =>
+            item.menuAttributes?.includes('destructive')
+          );
+          if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+              {
+                options: [...items.map((item) => item.actionTitle), cancel],
+                cancelButtonIndex: items.length,
+                ...(destructive >= 0 ? { destructiveButtonIndex: destructive } : null),
+                userInterfaceStyle: 'dark',
+              },
+              (index) => {
+                if (index < items.length) handleMenuAction(items[index].actionKey, msg);
+              }
+            );
+            return;
+          }
+          Alert.alert(t('actions.title'), undefined, [
+            ...items.map((item) => ({
+              text: item.actionTitle,
+              onPress: () => handleMenuAction(item.actionKey, msg),
+            })),
+            { text: cancel, style: 'cancel' as const },
+          ]);
+        },
+      };
+    },
+    [
+      conversationId,
+      giftedMessages,
+      handleMenuAction,
+      menuItemsFor,
+      savedThreads,
+      t,
+      toggleSavedThread,
+      userId,
+    ]
+  );
+
   const handleSwipeReply = useCallback(
     (msg: AttoMessage) => {
       setReplyMessage(msg);
@@ -1303,6 +1388,7 @@ export function ChatScreen({
           initialUnreadCount={initialUnreadRef.current ?? 0}
           threadCounts={threadCounts}
           threadSummaries={threadSummaries}
+          threadActionsFor={threadActionsFor}
           avatarFor={avatarFor}
           onOpenThread={openThread}
           onReplayEffect={replayEffect}

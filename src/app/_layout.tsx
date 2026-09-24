@@ -492,6 +492,15 @@ function RootLayout() {
                         {/* Telegram and WhatsApp open the chat's own details
                             when you tap the name at the top. */}
                         <Stack.Screen
+                          name="threads"
+                          options={{
+                            // Slack's threads inbox: its own screen, because
+                            // its rows are threads and not conversations.
+                            headerShown: false,
+                            animation: 'slide_from_right',
+                          }}
+                        />
+                        <Stack.Screen
                           name="chat-details"
                           options={{ headerShown: false, animation: 'slide_from_right' }}
                         />

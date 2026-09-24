@@ -216,3 +216,36 @@ export interface ChatWallpaper {
 // Constants
 
 export const MESSAGES_PAGE_SIZE = 50;
+
+/**
+ * A row of the threads inbox: one thread the signed in user takes part in,
+ * wherever it lives. The server keeps the unread count and the follow flag,
+ * so both survive a reinstall and agree across devices.
+ */
+export interface BackendThreadSummary {
+  thread_id: string;
+  conversation_id: string;
+  participant_id: string;
+  participant_name: string;
+  root_preview: string;
+  reply_preview: string;
+  last_reply_sender_id: string;
+  reply_count: number;
+  unread: number;
+  following: boolean;
+  last_reply_at: string | null;
+}
+
+export interface InboxThread {
+  threadId: string;
+  conversationId: string;
+  participantId: string;
+  participantName: string;
+  rootPreview: string;
+  replyPreview: string;
+  lastReplySenderId: string;
+  replyCount: number;
+  unread: number;
+  following: boolean;
+  lastReplyAt: number;
+}

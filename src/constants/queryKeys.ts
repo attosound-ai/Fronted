@@ -57,6 +57,8 @@ export const QUERY_KEYS = {
       ['messages', 'conversation', 'by-participant', participantId] as const,
     WALLPAPERS: ['messages', 'wallpapers'] as const,
     PINNED: (chatId: string) => ['messages', 'pinned', chatId] as const,
+    // Every thread the signed in user takes part in, across conversations.
+    THREADS: () => ['messages', 'threads'] as const,
   },
 
   // Payments

@@ -404,10 +404,17 @@ class PhoenixSocketManager {
     });
   }
 
-  /** Send a typing indicator. */
-  sendTyping(conversationId: string, isTyping: boolean): void {
+  /**
+   * Send a typing indicator. Slack shows it inside the thread rather than in
+   * the channel, so a reply names the thread it is being written in; the main
+   * chat sends none, which is what every older build sends.
+   */
+  sendTyping(conversationId: string, isTyping: boolean, threadId?: string | null): void {
     const channel = this.channels.get(conversationId);
-    channel?.push('typing', { is_typing: isTyping });
+    channel?.push('typing', {
+      is_typing: isTyping,
+      ...(threadId ? { thread_id: threadId } : null),
+    });
   }
 
   /** Add an emoji reaction to a message. */

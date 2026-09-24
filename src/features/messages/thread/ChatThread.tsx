@@ -75,6 +75,13 @@ export interface ChatThreadProps {
    */
   anchorTop?: boolean;
   onOpenThread?: (messageId: string) => void;
+  /** Slack's toolbar on the reply rule: save for later, forward, more. */
+  threadActionsFor?: (messageId: string) => {
+    saved: boolean;
+    onSave: () => void;
+    onForward: () => void;
+    onMore: () => void;
+  } | null;
   /** Replay the message's iMessage style effect. */
   onReplayEffect?: (message: AttoMessage) => void;
   /**
@@ -130,6 +137,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       currentUserId,
       initialUnreadCount = 0,
       threadSummaries,
+      threadActionsFor,
       avatarFor,
       threadRootId = null,
       anchorTop = false,
@@ -235,6 +243,9 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           }),
         replay: t('effects.replay'),
         forwarded: t('actions.forwarded'),
+        save: t('actions.save'),
+        forward: t('actions.forward'),
+        more: t('actions.moreActions'),
       }),
       [t]
     );
@@ -354,6 +365,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
               0
             }
             threadSummary={threadSummaries?.get(String(item._id)) ?? null}
+            threadActions={threadActionsFor?.(String(item._id)) ?? null}
             avatarFor={avatarFor}
             onOpenThread={onOpenThread}
             onReplayEffect={onReplayEffect}
@@ -427,6 +439,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         readLabelId,
         threadCounts,
         threadSummaries,
+        threadActionsFor,
         avatarFor,
         threadRootId,
         onOpenThread,

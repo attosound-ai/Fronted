@@ -422,6 +422,8 @@ export const ANALYTICS_EVENTS = {
     // How a screen joined the call's playback session: adopted an existing
     // one or had to build it. 'adopted' is the healthy path on a remount.
     PLAYBACK_ATTACH: 'call_playback_attach',
+    // Play or pause pressed on the call bar, away from the owning screen.
+    PLAYBACK_TRANSPORT_FROM_BAR: 'call_playback_transport_from_bar',
     PLAYBACK_TIMELINE_ENDED: 'call_playback_timeline_ended',
     /** The record sheet used inside a call: open, start, stop, listen, discard, place. */
     TAKE_SHEET: 'call_take_sheet',

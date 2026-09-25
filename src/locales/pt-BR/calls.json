@@ -120,5 +120,9 @@
     "title": "Áudio",
     "earpiece": "iPhone (ouvido)",
     "speaker": "Alto-falante"
+  },
+  "controls": {
+    "play": "Reproduzir",
+    "pause": "Pausar"
   }
 }

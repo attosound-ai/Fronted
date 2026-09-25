@@ -120,5 +120,9 @@
     "title": "Audio",
     "earpiece": "iPhone",
     "speaker": "Speaker"
+  },
+  "controls": {
+    "play": "Play",
+    "pause": "Pause"
   }
 }

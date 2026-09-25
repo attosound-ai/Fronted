@@ -10,6 +10,8 @@ import {
   Phone,
   Grid3x3,
   SlidersHorizontal,
+  Pause,
+  Play,
   Radio,
   Square,
   SignalLow,
@@ -96,6 +98,34 @@ export function InCallTopBar() {
   // To transmit something else, toggle transmit off then on with it playing.
   const [transmitMode, setTransmitMode] = useState(false);
   const [lockedSource, setLockedSource] = useState<typeof nowPlaying>(null);
+
+  /**
+   * The call's session is playing something and the screen in front of the
+   * user is not the one that owns it, so this bar is the only place left to
+   * stop it. The editor draws its own transport, so there this stays away.
+   */
+  const ownerScreenIsUp =
+    playback.surface === 'timeline' && pathname.startsWith('/project/');
+  const showTransport =
+    engineMode &&
+    !ownerScreenIsUp &&
+    (playback.status === 'playing' || playback.status === 'paused');
+
+  const onTransport = () => {
+    void haptic('selection');
+    const controller = getCallPlaybackController();
+    const owner = playback.ownerId;
+    if (!owner) return;
+    analytics.capture(ANALYTICS_EVENTS.CALL.PLAYBACK_TRANSPORT_FROM_BAR, {
+      action: playback.status === 'playing' ? 'pause' : 'play',
+      owner_id: owner,
+      owner_surface: playback.surface,
+      transmit: playback.transmit,
+      position_ms: Math.round(playback.positionMs),
+    });
+    if (playback.status === 'playing') void controller.pause(owner);
+    else void controller.play(owner);
+  };
 
   const onTransmit = () => {
     void haptic('selection');
@@ -713,6 +743,33 @@ export function InCallTopBar() {
                 <Square size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
               ) : (
                 <Radio size={20} color="#FFF" strokeWidth={2.25} />
+              )}
+            </TouchableOpacity>
+          </GlassSurface>
+        ) : null}
+
+        {/* Transport, only away from the screen that owns the session.
+            The session belongs to the call and no longer dies when a screen
+            unmounts (Sep 25 2026), so walking out of the editor with a track
+            running must not leave audio nobody can stop. On the editor itself
+            this stays hidden: that screen has its own transport, and a second
+            button for the same thing is what the client complained about. */}
+        {showTransport ? (
+          <GlassSurface radius={21} style={styles.glassBtn}>
+            <TouchableOpacity
+              style={styles.glassBtnInner}
+              onPress={onTransport}
+              accessibilityRole="button"
+              accessibilityLabel={
+                playback.status === 'playing'
+                  ? t('controls.pause', { defaultValue: 'Pause' })
+                  : t('controls.play', { defaultValue: 'Play' })
+              }
+            >
+              {playback.status === 'playing' ? (
+                <Pause size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
+              ) : (
+                <Play size={18} color="#FFF" fill="#FFF" strokeWidth={2.25} />
               )}
             </TouchableOpacity>
           </GlassSurface>

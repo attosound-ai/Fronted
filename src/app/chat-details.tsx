@@ -146,10 +146,17 @@ export default function ChatDetailsScreen() {
 
   const archiveChat = useCallback(() => {
     void haptic('light');
-    archive(conversationId, null);
+    // The mark has to carry when the chat last moved, or the list keeps it
+    // hidden for good instead of bringing it back on the next message.
+    const lastAt = messages.reduce<string | null>(
+      (latest, m) =>
+        m.createdAt && (!latest || m.createdAt > latest) ? m.createdAt : latest,
+      null
+    );
+    archive(conversationId, lastAt);
     showToast(t('details.archived'));
     router.dismissAll();
-  }, [archive, conversationId, t]);
+  }, [archive, conversationId, messages, t]);
 
   /**
    * The same delete the list offers on a left swipe: for this user only, and

@@ -395,6 +395,9 @@ export default function ChatDetailsScreen() {
             <View style={styles.switchBox} pointerEvents="none">
               <Switch
                 value={!muted}
+                onValueChange={() => {
+                  toggleMuted(conversationId);
+                }}
                 trackColor={{ false: '#333333', true: '#FFFFFF' }}
                 thumbColor={muted ? '#FFFFFF' : '#000000'}
                 ios_backgroundColor="#333333"
@@ -417,6 +420,9 @@ export default function ChatDetailsScreen() {
             <View style={styles.switchBox} pointerEvents="none">
               <Switch
                 value={isPinned}
+                onValueChange={() => {
+                  togglePinned(conversationId);
+                }}
                 trackColor={{ false: '#333333', true: '#FFFFFF' }}
                 thumbColor={isPinned ? '#000000' : '#FFFFFF'}
                 ios_backgroundColor="#333333"

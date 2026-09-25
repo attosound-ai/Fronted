@@ -6,8 +6,9 @@ import { useCallStore } from '@/stores/callStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
-import { isOnCallScreen, isCallConnected } from '@/hooks/useInCallChrome';
+import { isCallConnected } from '@/hooks/useInCallChrome';
 import { useCallKeypadRouteMounted } from '@/lib/callKeypadRoute';
+import { decideLanding } from './callLandingModel';
 
 /**
  * Gates auto-opening the Record Pro editor on a connected call. DEFAULT OFF
@@ -147,90 +148,71 @@ export function useConnectedCallLanding(): void {
     const autoLand =
       autoLandFlagReactive ||
       analytics.isFeatureEnabled(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
-    if (!autoLand) {
-      blockedBy('flag_off');
-      return;
-    }
-    if (!appActive) {
-      blockedBy('not_active');
-      return; // only act once we're actually foregrounded
-    }
-    if (!navReady) {
-      blockedBy('nav_not_ready');
-      return;
-    }
-    // The keypad is up: WAIT. Almost every inbound call here is a Securus call
-    // that only connects once the creator presses 1, and this navigation used to
-    // replace the keypad route about a second after it auto opened (Sep 22 2026:
-    // keypad at 02:02:04.107, this landing at 02:02:05.961, call dead at 64 s
-    // with no digit ever sent). The ticker re-evaluates every 1.5 s, so the
-    // recorder still opens the moment the creator puts the pad away.
-    if (keypadRouteMounted || keypadVisible) {
-      blockedBy('keypad_open', { keypad_route_mounted: keypadRouteMounted });
-      return;
-    }
-    // Inbound (Sep 23 2026, the client's flow): the call lands on the FEED
-    // with the glass keypad over it, and only the creator's digit opens the
-    // editor. Until that digit, bring a stray screen home once and wait.
-    if (direction === 'inbound' && dtmfSentSid !== callSid) {
-      if (
-        homedForSid.current !== callSid &&
-        !isOnCallScreen(pathname) &&
-        pathname !== '/'
-      ) {
+
+    // The decision itself is pure and lives in callLandingModel, where every
+    // case an incoming call can arrive in is written down as a test. This
+    // hook owns only the consequences.
+    const decision = decideLanding({
+      connected: isCallConnected(callState),
+      callSid,
+      direction: direction === 'inbound' || direction === 'outbound' ? direction : null,
+      dtmfSentSid,
+      autoLandEnabled: autoLand,
+      appActive,
+      navReady,
+      keypadUp: keypadRouteMounted || keypadVisible,
+      pathname,
+      role,
+      recordUpload,
+      subscriptionFetchFailed: lastFetchFailed,
+      alreadyFetchedSubscription: fetchedForSid.current === callSid,
+      alreadySentHome: homedForSid.current === callSid,
+      alreadyLanded: landedForSid.current === callSid,
+    });
+
+    switch (decision.kind) {
+      case 'idle':
+        // A definitive answer: record it once, and stop asking.
+        if (decision.reason !== 'no_call' && decision.reason !== 'already_landed') {
+          if (decision.reason === 'already_on_target') landedForSid.current = callSid;
+          logSkip(callSid, decision.reason, { pathname, role: role ?? null });
+        }
+        return;
+
+      case 'wait':
+        blockedBy(decision.reason, {
+          pathname,
+          keypad_route_mounted: keypadRouteMounted,
+        });
+        return;
+
+      case 'home':
         homedForSid.current = callSid;
         analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_HOME, {
           call_sid: callSid,
           from_pathname: pathname,
         });
         router.replace('/(tabs)');
-      }
-      blockedBy('awaiting_digit', { pathname });
-      return;
-    }
-    // /call owns its own hand-off; the recorder means we already landed.
-    if (isOnCallScreen(pathname) || pathname.includes('/recording')) {
-      landedForSid.current = callSid;
-      logSkip(callSid, 'already_on_target', { pathname });
-      return;
-    }
-    if (role !== 'creator') {
-      // Definitive for this call (role does not change mid-call).
-      logSkip(callSid, 'not_creator', { role: role ?? null });
-      return;
-    }
+        return;
 
-    // "active subscription": true → go; false → never; null → resolve it first.
-    if (recordUpload === false) {
-      logSkip(callSid, 'no_entitlement');
-      return;
-    }
-    if (recordUpload === null) {
-      if (fetchedForSid.current !== callSid) {
+      case 'fetchSubscription':
         fetchedForSid.current = callSid;
         void useSubscriptionStore.getState().fetchSubscription();
         return;
-      }
-      // Already fetched for this call. Still loading → the ticker re-checks. If
-      // the fetch FAILED (transient network on cold launch), don't strand the
-      // creator — land optimistically; the recorder tolerates an unresolved sub.
-      if (!lastFetchFailed) {
-        blockedBy('sub_unresolved');
-        return;
-      }
-    }
 
-    // recordUpload === true, OR a creator whose sub fetch failed transiently.
-    landedForSid.current = callSid;
-    analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_RECORD, {
-      outcome: 'reached_record',
-      trigger: 'global_landing',
-      entitlement_record_upload: recordUpload,
-      fetch_failed: recordUpload === null,
-      app_state: AppState.currentState,
-      ticks_to_land: tickN,
-    });
-    router.replace('/(tabs)/recording');
+      case 'land':
+        landedForSid.current = callSid;
+        analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_RECORD, {
+          outcome: 'reached_record',
+          trigger: 'global_landing',
+          entitlement_record_upload: recordUpload,
+          fetch_failed: recordUpload === null,
+          app_state: AppState.currentState,
+          ticks_to_land: tickN,
+        });
+        router.replace('/(tabs)/recording');
+        return;
+    }
   }, [
     callState,
     callSid,

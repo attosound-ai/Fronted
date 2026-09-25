@@ -53,9 +53,19 @@ const CORNER_RADIUS = 38;
  *  stays ultra thin so the feed's colour comes through. */
 // Lighter still (David, Sep 24 2026): the feed reads through, the bar stays crisp above.
 const BLUR_INTENSITY = 12;
-/** After the last digit on an inbound call, how long the pad waits for another
- *  digit before it slides away and the editor opens. */
-const ACCEPT_HANDOFF_MS = 1500;
+/**
+ * After the last digit on an inbound call, how long the pad waits for another
+ * digit before it slides away and the editor opens.
+ *
+ * It was a second and a half, and that wait is what the creator feels after
+ * pressing 1 to take the call: the pad just sits there (the client, Sep 25
+ * 2026: "nothing is smooth and seamless about the transition from one screen
+ * to another"). Measured on his own call, the digit landed at 22:53:00.351
+ * and the pad only moved at 22:53:01.896. Half a second still catches a
+ * second digit from anyone typing an extension, and every further digit
+ * restarts the wait, so nothing that needs more than one is cut short.
+ */
+const ACCEPT_HANDOFF_MS = 500;
 const OPEN_SPRING = { damping: 26, stiffness: 260, mass: 1 };
 
 export default function CallKeypadScreen() {

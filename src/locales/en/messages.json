@@ -282,7 +282,17 @@
     "profile": "Profile",
     "media": "Media",
     "notifications": "Notifications",
-    "pinned": "Pinned messages"
+    "pinned": "Pinned messages",
+    "linksFiles": "Links and files",
+    "links": "Links",
+    "files": "Files",
+    "pinConversation": "Pin conversation",
+    "archive": "Archive conversation",
+    "archived": "Conversation archived",
+    "deleteChat": "Delete chat",
+    "usernameCopied": "Username copied",
+    "mediaEmpty": "Nothing shared yet",
+    "settings": "Chat"
   },
   "threads": {
     "title": "Threads",

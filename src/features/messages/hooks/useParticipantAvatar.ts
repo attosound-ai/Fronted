@@ -4,8 +4,9 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 
 /**
- * Fetch a participant's profile (avatar + display name).
- * Used by ConversationItem, ChatHeader, etc.
+ * Fetch a participant's profile. Used by ConversationItem, ChatHeader and the
+ * chat details screen, which also shows the real name and the bio the way
+ * Telegram does.
  */
 export function useParticipantProfile(participantId: string) {
   const numericId = Number(participantId);
@@ -24,6 +25,8 @@ export function useParticipantProfile(participantId: string) {
     avatarUri: (data?.avatar as string | null) ?? null,
     username: (data?.username as string | null) ?? null,
     role: (data?.role as string | null) ?? null,
+    displayName: (data?.displayName as string | null) ?? null,
+    bio: (data?.bio as string | null) ?? null,
   };
 }
 

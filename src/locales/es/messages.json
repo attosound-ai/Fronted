@@ -282,7 +282,17 @@
     "profile": "Perfil",
     "media": "Multimedia",
     "notifications": "Notificaciones",
-    "pinned": "Mensajes fijados"
+    "pinned": "Mensajes fijados",
+    "linksFiles": "Enlaces y archivos",
+    "links": "Enlaces",
+    "files": "Archivos",
+    "pinConversation": "Fijar conversación",
+    "archive": "Archivar conversación",
+    "archived": "Conversación archivada",
+    "deleteChat": "Eliminar chat",
+    "usernameCopied": "Usuario copiado",
+    "mediaEmpty": "Todavía no han compartido nada",
+    "settings": "Chat"
   },
   "threads": {
     "title": "Hilos",

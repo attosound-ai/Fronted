@@ -282,7 +282,17 @@
     "profile": "Perfil",
     "media": "Mídia",
     "notifications": "Notificações",
-    "pinned": "Mensagens fixadas"
+    "pinned": "Mensagens fixadas",
+    "linksFiles": "Links e arquivos",
+    "links": "Links",
+    "files": "Arquivos",
+    "pinConversation": "Fixar conversa",
+    "archive": "Arquivar conversa",
+    "archived": "Conversa arquivada",
+    "deleteChat": "Excluir conversa",
+    "usernameCopied": "Usuário copiado",
+    "mediaEmpty": "Nada compartilhado ainda",
+    "settings": "Conversa"
   },
   "threads": {
     "title": "Tópicos",

@@ -75,6 +75,13 @@ export interface ChatThreadProps {
    */
   anchorTop?: boolean;
   onOpenThread?: (messageId: string) => void;
+  /**
+   * The day pill that floats under the header while scrolling. A thread is
+   * one screen anchored to the top, so its floating copy lands exactly on
+   * the pill already in the list and the day reads twice (David, Sep 24:
+   * "con doble día arriba").
+   */
+  showFloatingDay?: boolean;
   /** Slack's toolbar on the reply rule: save for later, forward, more. */
   threadActionsFor?: (messageId: string) => {
     saved: boolean;
@@ -140,6 +147,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       threadActionsFor,
       avatarFor,
       threadRootId = null,
+      showFloatingDay = true,
       anchorTop = false,
       threadCounts,
       onOpenThread,
@@ -397,20 +405,19 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
                 <View style={styles.unreadLine} />
               </View>
             ) : null}
-            {isThreadRoot ? <View style={styles.rootBand}>{body}</View> : body}
+            {body}
             {isThreadRoot ? (
-              // Slack frames the count between two hairlines, with the message
-              // that started the thread in its own tinted band above.
-              <View>
-                <View style={styles.rootHairline} />
-                <View style={styles.repliesRow}>
-                  <RNText style={styles.repliesText} maxFontSizeMultiplier={1.1}>
-                    {items.length > 1
-                      ? t('thread.replies', { count: items.length - 1 })
-                      : t('thread.noReplies')}
-                  </RNText>
-                </View>
-                <View style={styles.rootHairline} />
+              // Slack frames the count between two hairlines. The tinted band
+              // that used to sit behind the first message went (David, Sep 24:
+              // "ese mensaje con background gris, no me gusta nada"); the two
+              // rules already say where the thread starts.
+              <View style={styles.repliesRow}>
+                <RNText style={styles.repliesText} maxFontSizeMultiplier={1.1}>
+                  {items.length > 1
+                    ? t('thread.replies', { count: items.length - 1 })
+                    : t('thread.noReplies')}
+                </RNText>
+                <View style={styles.repliesRule} />
               </View>
             ) : null}
           </Animated.View>
@@ -515,7 +522,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           showsVerticalScrollIndicator={false}
         />
 
-        {floatingDay && dayVisible ? (
+        {showFloatingDay && floatingDay && dayVisible ? (
           <Animated.View
             entering={FadeInDown.duration(160)}
             exiting={FadeOutDown.duration(220)}
@@ -584,29 +591,25 @@ function TypingBubble() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  // Slack tints the message that started the thread and frames the reply
-  // count between two hairlines under it.
-  rootBand: {
-    backgroundColor: 'rgba(255,255,255,0.045)',
-    marginHorizontal: -12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  rootHairline: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    marginHorizontal: -12,
-  },
+  // Slack's own separator: the count on the left with a single rule running
+  // out from it. Two full width lines around it read as a banner, which is
+  // not what a thread needs to say here.
   repliesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 40,
+    gap: 10,
+    minHeight: 38,
     paddingHorizontal: 4,
   },
+  repliesRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
   repliesText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
-    fontFamily: 'Archivo_400Regular',
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 13,
+    fontFamily: 'Archivo_600SemiBold',
   },
   unreadRow: {
     flexDirection: 'row',

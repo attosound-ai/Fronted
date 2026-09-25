@@ -374,6 +374,7 @@ export default function ChatThreadScreen() {
           currentUserId={userId}
           threadRootId={root ? String(root.messageId) : null}
           anchorTop
+          showFloatingDay={false}
           avatarFor={avatarFor}
           justSentId={justSentId}
           creatorIds={creatorIds}

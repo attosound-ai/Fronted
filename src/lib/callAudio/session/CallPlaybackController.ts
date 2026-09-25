@@ -74,6 +74,13 @@ export class CallPlaybackController {
   private pendingPlay: { fromMs: number } | null = null;
   private listeners = new Set<Listener>();
   private callSid: string | null = null;
+  /**
+   * How many times the session changed hands during this call. A healthy call
+   * is 0 or 1; the Sep 25 2026 failure was 285. Reported with every
+   * transmission so a regression of the ownership rule shows up on its own
+   * instead of waiting for someone to count supersede events.
+   */
+  private ownerTakeovers = 0;
   /** Open only while the gate is open, to measure what reached the far party. */
   private gateWindow: {
     at: number;
@@ -205,6 +212,7 @@ export class CallPlaybackController {
       this.prepareToken = null;
     }
     if (previousOwner && previousOwner !== ownerId && previousStatus !== 'idle') {
+      this.ownerTakeovers += 1;
       this.deps.telemetry.capture(PLAYBACK_EVENTS.TRANSPORT, {
         ...this.baseProps(),
         action: 'superseded',
@@ -568,6 +576,7 @@ export class CallPlaybackController {
       frames_before: open.frames,
       frames_after: after,
       closed_from: surface,
+      owner_takeovers: this.ownerTakeovers,
     });
   }
 
@@ -681,6 +690,7 @@ export class CallPlaybackController {
   /** The call ended (sid → null): unload, close the gate, drop the mode. */
   async resetForCallEnd(): Promise<void> {
     await this.stop(null, 'call_ended');
+    this.ownerTakeovers = 0;
     const native = this.deps.native;
     if (native && this.mode.engine) {
       try {

@@ -531,3 +531,36 @@ describe('one session per call, not one per mount', () => {
     assert.equal(stolen[0].props.by_owner, 'feed:9');
   });
 });
+
+describe('takeovers are counted so a regression shows itself', () => {
+  it('reports zero when one owner keeps the session all call', async () => {
+    const { controller, telemetry } = make({ frames: [0, 100] });
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    await controller.setTransmit(true, { surface: 'timeline' });
+    await controller.setTransmit(false, { surface: 'timeline' });
+
+    const summary = telemetry.events.find(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSMIT_SUMMARY
+    );
+    assert.equal(summary?.props.owner_takeovers, 0);
+  });
+
+  it('counts each time a different owner takes it', async () => {
+    const { controller, telemetry } = make({ frames: [0, 100] });
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.claim('feed:1', 'feed_audio', post);
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    await controller.setTransmit(true, { surface: 'timeline' });
+    await controller.setTransmit(false, { surface: 'timeline' });
+
+    const summary = telemetry.events.find(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSMIT_SUMMARY
+    );
+    assert.equal(summary?.props.owner_takeovers, 2);
+  });
+});

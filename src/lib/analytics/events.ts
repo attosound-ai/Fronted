@@ -121,6 +121,9 @@ export const ANALYTICS_EVENTS = {
 
   // ── Feed ───────────────────────────────────────
   FEED: {
+    // Someone tagged in a post from the caption's @ list.
+    POST_MENTION_PICKED: 'feed_post_mention_picked',
+    POST_MENTION_OPENED: 'feed_post_mention_opened',
     AUDIO_PLAY: 'feed_audio_play',
     AUDIO_PAUSE: 'feed_audio_pause',
     POST_PUBLISH_NAV: 'feed_post_publish_nav',

@@ -27,7 +27,10 @@
     "message_one": "{{actor}} te envió un mensaje",
     "message_many": "{{actor}} te envió {{count}} mensajes",
     "new_post_one": "{{actor}} acaba de publicar",
-    "welcome": "¡Bienvenido a ATTO SOUND!"
+    "welcome": "¡Bienvenido a ATTO SOUND!",
+    "mention_one": "{{actor}} te etiquetó en un post",
+    "mention_two": "{{actor1}} y {{actor2}} te etiquetaron en un post",
+    "mention_many": "{{actor1}}, {{actor2}} y {{count}} más te etiquetaron en un post"
   },
   "empty": {
     "title": "Sin notificaciones",

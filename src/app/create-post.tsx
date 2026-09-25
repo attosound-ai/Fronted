@@ -25,6 +25,14 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMediaPreview';
+import { MentionSuggestions } from '@/features/feed/components/create/MentionSuggestions';
+import {
+  activeMention,
+  applyMention,
+  survivingTags,
+  type ActiveMention,
+  type TaggedPerson,
+} from '@/features/feed/utils/mentions';
 import { ProjectPickerSheet } from '@/features/projects/components/ProjectPickerSheet';
 import { useCreatePost } from '@/features/feed/hooks/useCreatePost';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -77,6 +85,14 @@ export default function CreatePostScreen() {
   const canPublishAudio = user?.role === 'creator' && hasRecordUpload;
 
   const [textContent, setTextContent] = useState('');
+  // Tagging people, the way Instagram does it: type @, pick from the list,
+  // and the name you picked rides with the post so the link still works for
+  // whoever reads it (David, Sep 25 2026).
+  const [tagged, setTagged] = useState<TaggedPerson[]>([]);
+  const [mention, setMention] = useState<ActiveMention | null>(null);
+  // Set once after a pick so the caret lands after the name, then released,
+  // because a caption whose selection is always controlled fights the keyboard.
+  const [forcedCaret, setForcedCaret] = useState<{ start: number; end: number }>();
   const [media, setMedia] = useState<PickedMedia[]>([]);
   const [attachmentType, setAttachmentType] = useState<PostType | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -297,6 +313,33 @@ export default function CreatePostScreen() {
     }
   };
 
+  /**
+   * Every keystroke decides whether a mention is being written at the caret.
+   * A name the author deleted stops being a tag, so nobody is notified for a
+   * post that no longer names them.
+   */
+  const handleCaption = useCallback((next: string) => {
+    setTextContent(next);
+    setTagged((current) => survivingTags(next, current));
+  }, []);
+
+  const pickMention = useCallback(
+    (person: TaggedPerson) => {
+      if (!mention) return;
+      const { text, caret } = applyMention(textContent, mention, person.username);
+      setTextContent(text);
+      setForcedCaret({ start: caret, end: caret });
+      setMention(null);
+      setTagged((current) =>
+        current.some((p) => p.id === person.id) ? current : [...current, person]
+      );
+      analytics.capture(ANALYTICS_EVENTS.FEED.POST_MENTION_PICKED, {
+        tagged_count: tagged.length + 1,
+      });
+    },
+    [mention, tagged.length, textContent]
+  );
+
   // ── Publish ──
 
   const canPost = textContent.trim().length > 0 || media.length > 0;
@@ -314,6 +357,7 @@ export default function CreatePostScreen() {
         media,
         caption: isTextOnly ? '' : textContent,
         poemText: isTextOnly ? textContent : '',
+        tagged,
         coverUri: postType === 'audio' && coverUri ? coverUri : undefined,
         onProgress: setUploadProgress,
       });
@@ -449,12 +493,28 @@ export default function CreatePostScreen() {
             placeholderTextColor="#666666"
             multiline
             value={textContent}
-            onChangeText={setTextContent}
+            onChangeText={handleCaption}
+            onSelectionChange={(e) => {
+              const at = e.nativeEvent.selection.end;
+              if (forcedCaret) setForcedCaret(undefined);
+              setMention(activeMention(textContent, at));
+            }}
+            selection={forcedCaret}
             maxLength={MAX_CHARS}
             autoFocus
             maxFontSizeMultiplier={1.0}
           />
         </View>
+
+        {mention ? (
+          <View style={styles.mentionCard}>
+            <MentionSuggestions
+              query={mention.query}
+              selfId={user ? String(user.id) : ''}
+              onPick={pickMention}
+            />
+          </View>
+        ) : null}
 
         {/* Inline media preview */}
         {attachmentType && media.length > 0 && (
@@ -635,6 +695,15 @@ export default function CreatePostScreen() {
 }
 
 const styles = StyleSheet.create({
+  // The list of people to tag sits right under the caption, where Instagram
+  // puts it, and floats over whatever comes next in the composer.
+  mentionCard: {
+    marginHorizontal: 12,
+    marginTop: 4,
+    borderRadius: 14,
+    backgroundColor: '#161618',
+    overflow: 'hidden',
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background.primary,

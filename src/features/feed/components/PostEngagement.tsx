@@ -29,7 +29,9 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
             {post.author.username}
           </Text>
           {'  '}
-          <LinkedText style={styles.caption}>{post.description}</LinkedText>
+          <LinkedText style={styles.caption} mentions={post.mentions}>
+            {post.description}
+          </LinkedText>
         </Text>
       )}
 

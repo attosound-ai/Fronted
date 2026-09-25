@@ -477,6 +477,7 @@ function ReelItem({
               style={styles.description}
               numberOfLines={captionExpanded ? undefined : 2}
               maxFontSizeMultiplier={1.2}
+              mentions={post.mentions}
             >
               {post.description}
             </LinkedText>

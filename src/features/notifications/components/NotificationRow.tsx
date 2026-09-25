@@ -56,6 +56,7 @@ function navigateForType(type: NotificationType, group: GroupedNotification) {
     case 'repost':
     case 'share':
     case 'new_post':
+    case 'mention':
       if (group.referenceId) {
         router.navigate({
           pathname: '/post/[id]',

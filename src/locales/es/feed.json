@@ -72,7 +72,11 @@
     "coverSet": "Lista. Toca la imagen para cambiarla.",
     "coverAdd": "Agregar carátula",
     "coverChange": "Cambiar carátula",
-    "coverRemove": "Quitar carátula"
+    "coverRemove": "Quitar carátula",
+    "mentionHint": "Sigue escribiendo para encontrar a alguien",
+    "mentionSearching": "Buscando…",
+    "mentionEmpty": "Nadie con ese nombre",
+    "taggedWith": "Con {{names}}"
   },
   "verification": {
     "bannerTitle": "Autorización pendiente",

@@ -72,7 +72,11 @@
     "coverSet": "Ready. Tap the image to change it.",
     "coverAdd": "Add cover art",
     "coverChange": "Change cover art",
-    "coverRemove": "Remove cover art"
+    "coverRemove": "Remove cover art",
+    "mentionHint": "Keep typing to find someone",
+    "mentionSearching": "Looking…",
+    "mentionEmpty": "Nobody by that name",
+    "taggedWith": "With {{names}}"
   },
   "verification": {
     "bannerTitle": "Authorization pending",

@@ -72,7 +72,11 @@
     "coverSet": "Pronta. Toque na imagem para trocar.",
     "coverAdd": "Adicionar capa",
     "coverChange": "Trocar capa",
-    "coverRemove": "Remover capa"
+    "coverRemove": "Remover capa",
+    "mentionHint": "Continue digitando para encontrar alguém",
+    "mentionSearching": "Procurando…",
+    "mentionEmpty": "Ninguém com esse nome",
+    "taggedWith": "Com {{names}}"
   },
   "verification": {
     "bannerTitle": "Autorização pendente",

@@ -27,7 +27,10 @@
     "message_one": "{{actor}} sent you a message",
     "message_many": "{{actor}} sent you {{count}} messages",
     "new_post_one": "{{actor}} just posted",
-    "welcome": "Welcome to ATTO SOUND!"
+    "welcome": "Welcome to ATTO SOUND!",
+    "mention_one": "{{actor}} tagged you in a post",
+    "mention_two": "{{actor1}} and {{actor2}} tagged you in a post",
+    "mention_many": "{{actor1}}, {{actor2}} and {{count}} others tagged you in a post"
   },
   "empty": {
     "title": "No notifications yet",

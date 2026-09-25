@@ -49,6 +49,12 @@ export interface FeedPost {
   createdAt: string;
   /** true if viewer follows the author, false = "Suggested for you" */
   isFollowingAuthor?: boolean;
+  /**
+   * username (lowercased) to user id for the people this caption tags, read
+   * from the post's metadata so a tapped name opens the right profile with
+   * no lookup.
+   */
+  mentions?: Record<string, string>;
   // Edit state
   isEdited?: boolean;
   // Ads

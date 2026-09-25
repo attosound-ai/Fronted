@@ -7,7 +7,9 @@ export type NotificationType =
   | 'share'
   | 'message'
   | 'welcome'
-  | 'new_post';
+  | 'new_post'
+  // Tagged in someone's post, Instagram style.
+  | 'mention';
 
 export interface NotificationActor {
   id: string;

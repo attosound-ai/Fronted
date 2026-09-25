@@ -9,6 +9,7 @@ import { getTokenUserId } from '@/lib/auth/jwt';
 import type { PostType } from '@/types/post';
 import type { PickedMedia } from '../types';
 import { buildPostMetadata } from '../utils/coverArt';
+import { tagMetadata, type TaggedPerson } from '../utils/mentions';
 
 /**
  * The identity a post will be attributed to is the TOKEN's subject (the
@@ -44,6 +45,8 @@ interface CreatePostParams {
   poemText: string;
   /** Local image to publish as the audio post's cover. Optional by design. */
   coverUri?: string;
+  /** People tagged from the caption's @ list, Instagram style. */
+  tagged?: TaggedPerson[];
   onProgress?: (progress: number) => void;
 }
 
@@ -65,6 +68,7 @@ export function useCreatePost() {
       caption,
       poemText,
       coverUri,
+      tagged,
       onProgress,
     }: CreatePostParams) => {
       // Who this post will belong to. Checked BEFORE the (slow) media upload so
@@ -117,12 +121,17 @@ export function useCreatePost() {
       // Build metadata. Persisting the media's native dimensions lets the feed
       // render the correct aspect ratio immediately, instead of starting at a
       // 1:1 box and snapping once the player decodes the first frame.
-      const metadata = buildPostMetadata({
-        durationSec: media[0]?.duration,
-        width: media[0]?.width,
-        height: media[0]?.height,
-        coverPublicId,
-      });
+      const metadata = {
+        ...buildPostMetadata({
+          durationSec: media[0]?.duration,
+          width: media[0]?.width,
+          height: media[0]?.height,
+          coverPublicId,
+        }),
+        // Who the caption names, so the reader's tap lands on the right
+        // profile and the server can tell them they were tagged.
+        ...tagMetadata(tagged ?? []),
+      };
 
       // Create the post via API
       const textContent = postType === 'text' ? poemText : caption;

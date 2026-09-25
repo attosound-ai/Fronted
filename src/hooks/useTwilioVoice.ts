@@ -15,6 +15,24 @@ import { showToast } from '@/components/ui/Toast';
 import i18n from '@/lib/i18n';
 import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
+import {
+  startCallTelemetry,
+  registerCallCadenceListener,
+  endCallTelemetry,
+  telemetryCounters,
+  captureCallAudioSnapshot,
+  setSpeakerOutput,
+  registerCallStatsSampler,
+} from '@/lib/telemetry';
+// Not re-exported from '@/lib/telemetry', so imported from the module directly, the
+// same way useVoipReportTelemetry does. This is the LIVE AVAudioSession read
+// (category / mode / ports / sample rate) that every session-write record below
+// uses for its before/after pair.
+import {
+  getCallAudioState,
+  resolveRouteChangeReason,
+  formatRouteChangeRing,
+} from '@/lib/telemetry/deviceSnapshot';
 
 // ── Mid-call process-death detection ────────────────────────────────────────
 // A crash/jetsam/force-quit DURING a call kills the process with no chance to
@@ -66,24 +84,6 @@ function reportInterruptedCallIfAny(): void {
     clearActiveCallMarker();
   }
 }
-import {
-  startCallTelemetry,
-  registerCallCadenceListener,
-  endCallTelemetry,
-  telemetryCounters,
-  captureCallAudioSnapshot,
-  setSpeakerOutput,
-  registerCallStatsSampler,
-} from '@/lib/telemetry';
-// Not re-exported from '@/lib/telemetry', so imported from the module directly, the
-// same way useVoipReportTelemetry does. This is the LIVE AVAudioSession read
-// (category / mode / ports / sample rate) that every session-write record below
-// uses for its before/after pair.
-import {
-  getCallAudioState,
-  resolveRouteChangeReason,
-  formatRouteChangeRing,
-} from '@/lib/telemetry/deviceSnapshot';
 
 // Lazy-load Twilio Voice SDK — the native module requires Firebase (google-services.json)
 // which is not yet configured for Android. Importing at module level crashes Android on launch.
@@ -3042,18 +3042,29 @@ export function useTwilioVoice() {
     setTimeout(reportInterruptedCallIfAny, 6000);
     // Poll ladder (b148): the handoff can land at ANY moment during the ring
     // window (the user may answer 5-40s after the module boots), so fixed 3s/10s
-    // retries missed answers outside those instants. Poll every 2s for 40s
-    // (CallKit's ring window), stopping as soon as a call is adopted or JS
-    // already tracks one. Each tick is one cheap native getCalls round-trip.
+    // retries missed answers outside those instants. Each tick is one cheap
+    // native getCalls round-trip, stopping as soon as a call is adopted or JS
+    // already tracks one.
+    //
+    // The interval used to be a flat two seconds, and that is dead time the
+    // creator stares at: he answers on Apple's screen and the app shows him
+    // nothing until the next tick happens to look. Measured on David's phone
+    // Sep 25 2026, cold: answered at 23:50:49, adopted at 23:50:52.093 by
+    // `poll_26s`. Four hundred milliseconds covers the same forty second ring
+    // window at a granularity nobody can feel, and the whole ladder is still
+    // only a hundred cheap calls in the worst case, all of which stop the
+    // instant a call is found.
+    const PROBE_MS = 400;
+    const PROBE_WINDOW_MS = 40_000;
     let probeTicks = 0;
     const probeInterval = setInterval(() => {
       probeTicks += 1;
-      if (probeTicks > 20 || useCallStore.getState().activeCall) {
+      if (probeTicks * PROBE_MS > PROBE_WINDOW_MS || useCallStore.getState().activeCall) {
         clearInterval(probeInterval);
         return;
       }
-      void adoptNativeColdCall(`poll_${probeTicks * 2}s`);
-    }, 2000);
+      void adoptNativeColdCall(`poll_${((probeTicks * PROBE_MS) / 1000).toFixed(1)}s`);
+    }, PROBE_MS);
     const coldProbeSub = AppState.addEventListener('change', (s) => {
       if (s === 'active') void adoptNativeColdCall('foreground_probe');
     });

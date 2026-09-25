@@ -212,6 +212,14 @@ export interface PlaybackPreparer {
 }
 
 /** Telemetry sink the controller writes to (analytics + breadcrumbs). */
+/**
+ * How many frames the injector has handed to the call so far. This is the one
+ * number that says whether the far party received anything: the controller
+ * reads it when the gate opens and again when it closes, and reports the
+ * difference, so "did they hear it" stops being a subtraction across samples.
+ */
+export type FramesToCallReader = () => Promise<number | null>;
+
 export interface PlaybackTelemetry {
   capture(event: string, props: Record<string, unknown>): void;
   breadcrumb(message: string, data?: Record<string, unknown>): void;

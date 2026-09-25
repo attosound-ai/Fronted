@@ -10,6 +10,7 @@ import * as Sentry from '@sentry/react-native';
 import { analytics } from '@/lib/analytics';
 import { useCallStore } from '@/stores/callStore';
 import { CallPlaybackController } from './CallPlaybackController';
+import { mixerService } from '@/lib/callAudio/mixerService';
 import { nativePreparer } from './preparer';
 import type {
   NativeSessionModule,
@@ -63,7 +64,18 @@ let instance: CallPlaybackController | null = null;
 export function getCallPlaybackController(): CallPlaybackController {
   if (instance) return instance;
   const native = nativeSession();
-  instance = new CallPlaybackController({ native, preparer: nativePreparer, telemetry });
+  instance = new CallPlaybackController({
+    native,
+    preparer: nativePreparer,
+    telemetry,
+    // The injector's own count of frames handed to the call. It is the only
+    // number that says the far party received anything.
+    framesToCall: async () => {
+      const diag = await mixerService.getMixDiagnostics();
+      const frames = diag?.injectFramesToCapture;
+      return typeof frames === 'number' ? frames : null;
+    },
+  });
   instance.subscribe((snapshot) => {
     useCallStore.getState().setPlayback(snapshot);
   });

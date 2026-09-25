@@ -419,6 +419,9 @@ export const ANALYTICS_EVENTS = {
     /** Every 5 s while the engine session plays: position, stems, gate, frames. */
     PLAYBACK_PROGRESS: 'call_playback_progress',
     /** The timeline's stems reached their end (position vs the timeline total). */
+    // How a screen joined the call's playback session: adopted an existing
+    // one or had to build it. 'adopted' is the healthy path on a remount.
+    PLAYBACK_ATTACH: 'call_playback_attach',
     PLAYBACK_TIMELINE_ENDED: 'call_playback_timeline_ended',
     /** The record sheet used inside a call: open, start, stop, listen, discard, place. */
     TAKE_SHEET: 'call_take_sheet',

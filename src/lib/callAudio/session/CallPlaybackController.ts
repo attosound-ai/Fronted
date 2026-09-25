@@ -27,6 +27,7 @@ import {
   type PlaybackSource,
   type PlaybackSurface,
   type PlaybackTelemetry,
+  type FramesToCallReader,
   type PrepareToken,
   type StemSource,
 } from './types';
@@ -40,6 +41,8 @@ export const PLAYBACK_EVENTS = {
   ENGINE_MODE: 'call_playback_engine_mode',
   /** Every native session event that carries a reason or changes the state. */
   NATIVE_EVENT: 'call_playback_native_event',
+  /** One per transmission: how much audio actually left for the far party. */
+  TRANSMIT_SUMMARY: 'call_transmit_summary',
 } as const;
 
 /** Native event reasons that mean "the engine rescheduled itself". */
@@ -55,6 +58,8 @@ export interface ControllerDeps {
   native: NativeSessionModule | null;
   preparer: PlaybackPreparer;
   telemetry: PlaybackTelemetry;
+  /** Frames handed to the call so far; absent in tests and off iOS. */
+  framesToCall?: FramesToCallReader;
   now?: () => number;
 }
 
@@ -69,6 +74,13 @@ export class CallPlaybackController {
   private pendingPlay: { fromMs: number } | null = null;
   private listeners = new Set<Listener>();
   private callSid: string | null = null;
+  /** Open only while the gate is open, to measure what reached the far party. */
+  private gateWindow: {
+    at: number;
+    frames: number | null;
+    playingMs: number;
+    playingSince: number | null;
+  } | null = null;
   private readonly now: () => number;
 
   constructor(private readonly deps: ControllerDeps) {
@@ -486,6 +498,12 @@ export class CallPlaybackController {
 
   // ── Gates ──────────────────────────────────────────────────────────────
 
+  /**
+   * Open or close the gate to the far party. It never starts, stops, pauses or
+   * resumes anything: what you hear is the transport's business, and whether
+   * they hear the same thing is this switch's. Every combination is valid,
+   * including paused with the gate open.
+   */
   async setTransmit(
     on: boolean,
     context: { surface?: string | null; micMuted?: boolean } = {}
@@ -500,6 +518,8 @@ export class CallPlaybackController {
     });
     this.deps.telemetry.breadcrumb(on ? 'transmit_on' : 'transmit_off', { wasPlaying });
     this.emit({ transmit: on });
+    if (on) this.openGateWindow();
+    else void this.closeGateWindow(context.surface ?? null);
     const native = this.deps.native;
     if (!native || !this.mode.engine) return;
     try {
@@ -507,6 +527,56 @@ export class CallPlaybackController {
     } catch {
       // The next status tick reports the true gate; the UI follows it.
     }
+  }
+
+  // ── What actually left for the far party ──────────────────────────────
+  // The gate being open is not proof that anything was sent. These two read
+  // the injector's frame counter at each edge and report the difference, so
+  // "did they hear it" is one number per transmission instead of a
+  // subtraction across diagnostic samples (the client, Sep 25 2026: "Larry
+  // did hear it for a little bit, but not a lot").
+
+  private openGateWindow(): void {
+    this.gateWindow = {
+      at: this.now(),
+      frames: null,
+      playingMs: 0,
+      playingSince: this.snapshot.status === 'playing' ? this.now() : null,
+    };
+    void this.deps.framesToCall?.().then((frames) => {
+      if (this.gateWindow && this.gateWindow.frames === null)
+        this.gateWindow.frames = frames;
+    });
+  }
+
+  private async closeGateWindow(surface: string | null): Promise<void> {
+    const open = this.gateWindow;
+    this.gateWindow = null;
+    if (!open) return;
+    this.accrueGatePlaying();
+    const after = (await this.deps.framesToCall?.()) ?? null;
+    const delivered =
+      after !== null && open.frames !== null ? Math.max(0, after - open.frames) : null;
+    const openMs = this.now() - open.at;
+    this.deps.telemetry.capture(PLAYBACK_EVENTS.TRANSMIT_SUMMARY, {
+      ...this.baseProps(),
+      gate_open_ms: Math.round(openMs),
+      // Time the transport was actually running while the gate was open: the
+      // only span that should have produced audio for them.
+      playing_while_open_ms: Math.round(open.playingMs),
+      frames_to_call: delivered,
+      frames_before: open.frames,
+      frames_after: after,
+      closed_from: surface,
+    });
+  }
+
+  /** Fold the current run of playback into the open gate window. */
+  private accrueGatePlaying(): void {
+    const open = this.gateWindow;
+    if (!open || open.playingSince === null) return;
+    open.playingMs += this.now() - open.playingSince;
+    open.playingSince = null;
   }
 
   async setMonitor(on: boolean): Promise<void> {
@@ -533,8 +603,10 @@ export class CallPlaybackController {
       paused: 'paused',
       ended: 'ended',
     };
+    const next = map[status.state] ?? this.snapshot.status;
+    this.trackGatePlaying(next);
     this.emit({
-      status: map[status.state] ?? this.snapshot.status,
+      status: next,
       positionMs: status.positionMs,
       durationMs: status.durationMs,
       transmit: status.transmit,
@@ -545,6 +617,17 @@ export class CallPlaybackController {
       tickAt: this.now(),
       reason,
     });
+  }
+
+  /** Keep the open gate window's playing time honest across every transition. */
+  private trackGatePlaying(next: PlaybackSnapshot['status']): void {
+    const open = this.gateWindow;
+    if (!open) return;
+    if (next === 'playing') {
+      if (open.playingSince === null) open.playingSince = this.now();
+      return;
+    }
+    this.accrueGatePlaying();
   }
 
   /** Fed by the native event emitter (AttoCallPlaybackEvent). */

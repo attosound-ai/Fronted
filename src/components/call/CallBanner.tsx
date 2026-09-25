@@ -27,8 +27,18 @@ export function CallBanner() {
 
   const isConnected =
     activeCall?.state === 'connected' || activeCall?.state === 'reconnecting';
+  /**
+   * Screens that already carry a record control of their own. The banner is a
+   * shortcut to reach one of them, so on top of one it is a second button for
+   * the same thing, and in the editor it lands squarely on the transport row,
+   * covering copy, cut, silence, trim, undo and loop (the client, Sep 25 2026:
+   * "the record button is over some of the buttons that you need to access").
+   * The editor's own microphone is the one that records there.
+   */
   const isOnRecordingScreen =
-    pathname === '/recording' || pathname === '/(tabs)/recording';
+    pathname === '/recording' ||
+    pathname === '/(tabs)/recording' ||
+    pathname.startsWith('/project/');
 
   // Pulsing white dot
   useEffect(() => {

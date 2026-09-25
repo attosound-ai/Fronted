@@ -152,11 +152,24 @@ class Recorder implements PlaybackTelemetry {
 const post: PlaybackSource = { type: 'file', kind: 'post', uri: 'https://cdn/a.m4a' };
 const ON = { engine: true, timeline: true, video: true };
 
-function make(opts: { native?: boolean } = {}) {
+function make(opts: { native?: boolean; frames?: number[] } = {}) {
   const native = opts.native === false ? null : new FakeNative();
   const preparer = new FakePreparer();
   const telemetry = new Recorder();
-  const controller = new CallPlaybackController({ native, preparer, telemetry });
+  // Successive reads of the injector's frame counter, so a test can say what
+  // the far party received between the gate opening and closing.
+  const queue = [...(opts.frames ?? [])];
+  let lastFrames: number | null = null;
+  const framesToCall = async () => {
+    if (queue.length > 0) lastFrames = queue.shift() ?? null;
+    return lastFrames;
+  };
+  const controller = new CallPlaybackController({
+    native,
+    preparer,
+    telemetry,
+    framesToCall: opts.frames ? framesToCall : undefined,
+  });
   return { controller, native, preparer, telemetry };
 }
 
@@ -421,5 +434,100 @@ describe('call lifecycle', () => {
     );
     assert.equal(controller.getSnapshot().status, 'idle');
     assert.equal(controller.getSnapshot().reason, 'engine_mode_off');
+  });
+});
+
+/**
+ * The contract David confirmed on Sep 25 2026: one session for the call, the
+ * transport says what you hear, and transmitting is a separate switch that
+ * never touches it.
+ */
+describe('transmit is a gate, never a transport', () => {
+  it('leaves the transport exactly where it was, in both directions', async () => {
+    const { controller, native } = make();
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    assert.equal(controller.getSnapshot().status, 'playing');
+
+    const before = native!.calls.length;
+    await controller.setTransmit(true, { surface: 'timeline' });
+    assert.equal(controller.getSnapshot().status, 'playing');
+    await controller.setTransmit(false, { surface: 'timeline' });
+    assert.equal(controller.getSnapshot().status, 'playing');
+
+    // Only the two gate writes reached the engine; no play, pause or seek.
+    const added = native!.calls.slice(before);
+    assert.deepEqual(added, ['sessionSetTransmit', 'sessionSetTransmit']);
+  });
+
+  it('can be left open while paused, and pausing does not close it', async () => {
+    const { controller } = make();
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    await controller.setTransmit(true, { surface: 'timeline' });
+    await controller.pause('timeline');
+    assert.equal(controller.getSnapshot().status, 'paused');
+    assert.equal(controller.getSnapshot().transmit, true);
+  });
+
+  it('reports how many frames reached the far party while the gate was open', async () => {
+    const { controller, telemetry } = make({ frames: [1000, 4000] });
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    await controller.setTransmit(true, { surface: 'timeline' });
+    await controller.setTransmit(false, { surface: 'timeline' });
+
+    const summary = telemetry.events.find(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSMIT_SUMMARY
+    );
+    assert.ok(summary, 'a transmission reports what it delivered');
+    assert.equal(summary.props.frames_to_call, 3000);
+    assert.equal(summary.props.frames_before, 1000);
+    assert.equal(summary.props.frames_after, 4000);
+  });
+
+  it('says nothing was delivered when the counter never moved', async () => {
+    const { controller, telemetry } = make({ frames: [7000, 7000] });
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.play('timeline');
+    await controller.setTransmit(true, { surface: 'timeline' });
+    await controller.setTransmit(false, { surface: 'timeline' });
+
+    const summary = telemetry.events.find(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSMIT_SUMMARY
+    );
+    assert.equal(summary?.props.frames_to_call, 0);
+  });
+});
+
+describe('one session per call, not one per mount', () => {
+  it('a second claim from the same owner never takes the session from itself', async () => {
+    const { controller, telemetry } = make();
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.claim('timeline', 'timeline', post);
+
+    const stolen = telemetry.events.filter(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSPORT && e.props.action === 'superseded'
+    );
+    assert.equal(stolen.length, 0);
+    assert.equal(controller.getSnapshot().ownerId, 'timeline');
+  });
+
+  it('a different owner does take it, and says who took it', async () => {
+    const { controller, telemetry } = make();
+    await controller.setEngineMode(ON, 'CA1', { flag: true });
+    await controller.claim('timeline', 'timeline', post);
+    await controller.claim('feed:9', 'feed_audio', post);
+
+    const stolen = telemetry.events.filter(
+      (e) => e.event === PLAYBACK_EVENTS.TRANSPORT && e.props.action === 'superseded'
+    );
+    assert.equal(stolen.length, 1);
+    assert.equal(stolen[0].props.by_owner, 'feed:9');
   });
 });

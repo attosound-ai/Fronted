@@ -51,15 +51,28 @@ export interface UseTimelineEnginePlaybackProps {
   positionSv?: SharedValue<number>;
 }
 
-let ownerSeq = 0;
+/**
+ * One session per call, not one per mount.
+ *
+ * This used to be `timeline:${++ownerSeq}`, a fresh id on every mount of the
+ * editor. Each new id claimed the session away from the previous one, and the
+ * previous one released it on its way out, so two copies of the same screen
+ * fought over the same audio. On Sep 25 2026 the client lived it: the editor
+ * mounted three times inside one call and the telemetry counted 257 claims and
+ * 285 takeovers in four minutes, after which the transport would neither play
+ * nor stop, because the buttons belonged to an owner that no longer held the
+ * session.
+ *
+ * The owner is the call's timeline itself. A remount finds the session already
+ * loaded under this same id and adopts it where it stands.
+ */
+const OWNER_ID = 'timeline';
 
 export function useTimelineEnginePlayback(props: UseTimelineEnginePlaybackProps): {
   active: boolean;
 } {
   const active = useCallStore((s) => s.playback.engineTimeline);
-  const ownerIdRef = useRef<string>('');
-  if (!ownerIdRef.current) ownerIdRef.current = `timeline:${++ownerSeq}`;
-  const ownerId = ownerIdRef.current;
+  const ownerId = OWNER_ID;
 
   const totalMs = useMemo(() => getTimelineDuration(props.clips), [props.clips]);
   const segmentUris = useMemo(() => {
@@ -85,7 +98,12 @@ export function useTimelineEnginePlayback(props: UseTimelineEnginePlaybackProps)
         : null,
     [active, built.stems, setKey]
   );
-  const engine = useCallPlayback(ownerId, 'timeline', source, { requires: 'timeline' });
+  // The session outlives this screen: it belongs to the call and is released
+  // when the call ends. A screen leaving must never take the audio with it.
+  const engine = useCallPlayback(ownerId, 'timeline', source, {
+    requires: 'timeline',
+    releaseOnUnmount: false,
+  });
 
   // Latest props for the rAF loop and the debounced structure handler.
   const propsRef = useRef(props);
@@ -119,6 +137,28 @@ export function useTimelineEnginePlayback(props: UseTimelineEnginePlaybackProps)
           const owned =
             snap.ownerId === ownerId && snap.status !== 'idle' && snap.status !== 'error';
           const nextKeys = built.stems.map((s) => stemContentKey(s));
+
+          // A remount of the editor finds the call's session already holding
+          // exactly these stems. Adopt it where it stands: re claiming would
+          // reload the same audio, lose the position and cut what is playing.
+          if (
+            owned &&
+            snap.source?.type === 'stems' &&
+            snap.source.key === setKey &&
+            claimedKeyRef.current === null
+          ) {
+            claimedKeyRef.current = setKey;
+            claimedStemKeysRef.current = nextKeys;
+            analytics.capture(ANALYTICS_EVENTS.CALL.PLAYBACK_ATTACH, {
+              owner_id: ownerId,
+              outcome: 'adopted',
+              status: snap.status,
+              position_ms: Math.round(snap.positionMs),
+              transmit: snap.transmit,
+              stem_count: nextKeys.length,
+            });
+            return;
+          }
           const prevKeys = claimedStemKeysRef.current;
           const sameCount = owned && prevKeys.length === nextKeys.length;
           if (sameCount) {
@@ -134,6 +174,16 @@ export function useTimelineEnginePlayback(props: UseTimelineEnginePlaybackProps)
               ? (snapRef.current?.positionMs ?? propsRef.current.playbackPositionMs)
               : -1;
             const result = await controller.claim(ownerId, 'timeline', source);
+            analytics.capture(ANALYTICS_EVENTS.CALL.PLAYBACK_ATTACH, {
+              owner_id: ownerId,
+              outcome: result.ok ? 'claimed' : (result.reason ?? 'failed'),
+              // Why the stems had to be rebuilt rather than adopted.
+              cause: claimedKeyRef.current === null ? 'first_open' : 'stem_set_changed',
+              was_playing: wasPlaying,
+              resume_at_ms: Math.round(resumeAt),
+              stem_count: nextKeys.length,
+              previous_stem_count: prevKeys.length,
+            });
             if (result.ok && wasPlaying) {
               await controller.play(ownerId, resumeAt);
             }

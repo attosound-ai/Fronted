@@ -379,6 +379,7 @@
     },
     "musicLibraryDenied": "O ATTO precisa de acesso à sua biblioteca de música",
     "musicLibraryFailed": "Não foi possível importar essa música. Músicas de assinatura são protegidas.",
-    "recordButton": "Gravar"
+    "recordButton": "Gravar",
+    "import": "Importar"
   }
 }

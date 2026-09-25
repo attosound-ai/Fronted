@@ -36,8 +36,15 @@ export function ClipActionsBar({
   const { t } = useTranslation('projects');
   return (
     <View style={styles.bar}>
+      {/* This pill opens the file picker: it is the only way audio gets into
+          the timeline since the studio layout replaced the old toolbar, whose
+          import button had a folder icon and said Import. Calling it Insert
+          hid it in plain sight (the client, Sep 25 2026: "I didn't know how
+          to import anything because there's no import button until I saw the
+          insert button"). It says what it does; with a range selected the
+          imported audio lands over that range, so there it says Replace. */}
       <StudioPill
-        label={hasRange ? t('studio.replace') : t('studio.insert')}
+        label={hasRange ? t('studio.replace') : t('studio.import')}
         onPress={onInsertOrReplace}
         disabled={!canInsertOrReplace}
         style={styles.pill}

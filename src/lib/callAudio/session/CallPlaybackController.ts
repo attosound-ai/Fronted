@@ -87,6 +87,8 @@ export class CallPlaybackController {
     frames: number | null;
     playingMs: number;
     playingSince: number | null;
+    /** Engine schedule counter when the gate opened. */
+    generation: number;
   } | null = null;
   private readonly now: () => number;
 
@@ -550,6 +552,7 @@ export class CallPlaybackController {
       frames: null,
       playingMs: 0,
       playingSince: this.snapshot.status === 'playing' ? this.now() : null,
+      generation: this.snapshot.generation,
     };
     void this.deps.framesToCall?.().then((frames) => {
       if (this.gateWindow && this.gateWindow.frames === null)
@@ -577,6 +580,14 @@ export class CallPlaybackController {
       frames_after: after,
       closed_from: surface,
       owner_takeovers: this.ownerTakeovers,
+      // How many times the engine tore down its schedule and built a new one
+      // while the gate was open. Every one of those orphans the completion
+      // callbacks of the schedule it replaced, which is the whole of what
+      // `spurious_completion_ignored_count` counts: correctly discarded
+      // callbacks, not a fault. A healthy transmission is a handful; the Sep
+      // 25 2026 call ran 73 of them in four minutes because the session was
+      // being claimed back and forth.
+      engine_reschedules: Math.max(0, this.snapshot.generation - open.generation),
     });
   }
 

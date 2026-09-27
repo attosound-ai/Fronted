@@ -784,6 +784,10 @@ export const ANALYTICS_EVENTS = {
     // Carries ms_since_<action> for recent blocking actions (audio_play,
     // call_ended, ...). Sep 14 2026 freeze after a call.
     JS_STALL: 'runtime_js_stall',
+    // La puerta de actualización obligatoria se pintó, y el usuario tocó el
+    // botón. Si aparece mucho y nadie lo toca, es que el destino no abre.
+    UPDATE_GATE_SHOWN: 'runtime_update_gate_shown',
+    UPDATE_GATE_OPENED: 'runtime_update_gate_opened',
   },
 
   // ── Network ────────────────────────────────────

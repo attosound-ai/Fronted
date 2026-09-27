@@ -99,6 +99,11 @@ export const API_ENDPOINTS = {
   APP_LOGO: {
     // Public: the current main header logo, admin-settable from atto-web.
     CURRENT: '/content/app-logo',
+    // Public: the minimum build the app may run, and what the blocking screen
+    // says. Its own endpoint on purpose: the logo answers `data: null` when
+    // none is configured, and a gate that stops the whole app cannot depend on
+    // an unrelated setting being present.
+    RELEASE: '/content/app-release',
   },
 
   NOTIFICATIONS: {

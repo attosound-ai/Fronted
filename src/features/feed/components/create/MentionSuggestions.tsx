@@ -1,30 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Host,
-  HStack,
-  Image,
-  List,
-  Spacer,
-  Text,
-  VStack,
-  ZStack,
-} from '@expo/ui/swift-ui';
+import { Host, HStack, Image, Spacer, Text, VStack } from '@expo/ui/swift-ui';
 import {
   aspectRatio,
   background,
   clipShape,
+  contentShape,
   font,
   foregroundStyle,
   frame,
-  listRowBackground,
-  listRowInsets,
-  listRowSeparator,
-  listStyle,
   onTapGesture,
   padding,
   resizable,
-  scrollContentBackground,
+  shapes,
 } from '@expo/ui/swift-ui/modifiers';
 
 import { haptic } from '@/lib/haptics/hapticService';
@@ -42,11 +30,14 @@ interface MentionSuggestionsProps {
 
 const INK = '#FFFFFF';
 const SECUNDARIO = '#8E8E93';
-const FONDO = '#000000';
 const HUECO = '#333333';
 const CARA = 38;
-/** Como Instagram: cinco filas caben, el resto se desplaza. */
-const ALTO = 220;
+/**
+ * Cinco, que es lo que enseña Instagram antes de que haya que desplazar. Aquí
+ * además es un tope necesario: esta lista no scrollea (ver abajo), así que no
+ * puede crecer hasta comerse el teclado.
+ */
+const MAXIMO = 5;
 
 /**
  * Las mismas iniciales que pinta el Avatar de la app: "john.doe" da "JD" y
@@ -64,25 +55,27 @@ function iniciales(texto: string): string {
 }
 
 /**
- * La lista que Instagram deja caer bajo la leyenda en cuanto escribes "@".
+ * La lista que Instagram deja caer bajo la leyenda en cuanto escribes "@",
+ * hecha con vistas nativas de SwiftUI (David, 27 de septiembre de 2026).
  *
- * Es una `List` de SwiftUI de verdad, no una FlatList pintada para parecerlo
- * (David, 27 de septiembre de 2026): el desplazamiento, el rebote y el resalte
- * al tocar los pone el sistema, igual que en la pantalla de ajustes. Va sin
- * marco ni línea superior, pegada al texto.
+ * Va con `Host matchContents` y un `VStack`, que es el mismo montaje que usa la
+ * pantalla de ajustes y el único que funciona aquí. Con un `List` de SwiftUI la
+ * lista salía en el árbol de accesibilidad pero no pintaba un solo píxel: el
+ * `List` trae su propio desplazamiento y dentro de un padre de React Native que
+ * no es flex se queda sin dibujar. Por eso no scrollea y por eso hay un tope de
+ * cinco.
  *
- * Dos detalles que costaron una vuelta. El `Image` de SwiftUI no viene
- * `resizable`, así que sin ese modificador pinta el avatar a su tamaño real y
- * el `frame` lo recorta en vez de encogerlo. Y mientras la cara no está, la
- * fila enseña las iniciales sobre un círculo gris, que es lo que hace el resto
- * de la app, no el símbolo de persona del sistema.
+ * Y el `Image` de SwiftUI no viene `resizable`, así que sin ese modificador
+ * pinta el avatar a su tamaño real y el `frame` lo recorta en vez de encogerlo.
+ * Mientras la cara no ha bajado, la fila enseña el círculo con las iniciales,
+ * que es lo que hace el resto de la app.
  */
 export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestionsProps) {
   const { t } = useTranslation('feed');
   const { results, isLoading } = useUserSearch(query);
 
   const people = useMemo(
-    () => results.filter((u) => String(u.id) !== selfId).slice(0, 12),
+    () => results.filter((u) => String(u.id) !== selfId).slice(0, MAXIMO),
     [results, selfId]
   );
 
@@ -111,7 +104,7 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
           ? t('create.mentionSearching')
           : t('create.mentionEmpty');
     return (
-      <Host matchContents colorScheme="dark">
+      <Host matchContents style={{ width: '100%' }} colorScheme="dark">
         <Text
           modifiers={[
             padding({ horizontal: 16, vertical: 12 }),
@@ -126,14 +119,8 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
   }
 
   return (
-    <Host style={{ height: ALTO }} colorScheme="dark">
-      <List
-        modifiers={[
-          listStyle('plain'),
-          scrollContentBackground('hidden'),
-          background(FONDO),
-        ]}
-      >
+    <Host matchContents style={{ width: '100%' }} colorScheme="dark">
+      <VStack spacing={0} modifiers={[padding({ vertical: 4 })]}>
         {people.map((u) => {
           const ruta = u.avatar ? caras[u.avatar] : undefined;
           return (
@@ -142,17 +129,27 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
               spacing={12}
               modifiers={[
                 frame({ maxWidth: 10000 }),
-                padding({ vertical: 5 }),
-                listRowInsets({ top: 0, bottom: 0, leading: 16, trailing: 16 }),
-                listRowBackground(FONDO),
-                listRowSeparator('hidden'),
+                padding({ horizontal: 16, vertical: 6 }),
+                // Sin esto solo recoge el toque lo que tiene pintura encima, y
+                // el hueco a la derecha del nombre se quedaría muerto.
+                contentShape(shapes.rectangle()),
                 onTapGesture(() => {
                   void haptic('selection');
                   onPick({ id: String(u.id), username: u.username });
                 }),
               ]}
             >
-              <ZStack modifiers={[frame({ width: CARA, height: CARA })]}>
+              {ruta ? (
+                <Image
+                  uiImage={ruta}
+                  modifiers={[
+                    resizable(),
+                    aspectRatio({ contentMode: 'fill' }),
+                    frame({ width: CARA, height: CARA }),
+                    clipShape('circle'),
+                  ]}
+                />
+              ) : (
                 <Text
                   modifiers={[
                     frame({ width: CARA, height: CARA }),
@@ -164,18 +161,7 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
                 >
                   {iniciales(u.username)}
                 </Text>
-                {ruta ? (
-                  <Image
-                    uiImage={ruta}
-                    modifiers={[
-                      resizable(),
-                      aspectRatio({ contentMode: 'fill' }),
-                      frame({ width: CARA, height: CARA }),
-                      clipShape('circle'),
-                    ]}
-                  />
-                ) : null}
-              </ZStack>
+              )}
               <VStack alignment="leading" spacing={1}>
                 <Text
                   modifiers={[
@@ -195,7 +181,7 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
             </HStack>
           );
         })}
-      </List>
+      </VStack>
     </Host>
   );
 }

@@ -17,6 +17,7 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 
 import { haptic } from '@/lib/haptics/hapticService';
+import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { useUserSearch } from '@/features/messages/hooks/useUserSearch';
 import { avatarEnDisco } from './avatarCache';
 import type { TaggedPerson } from '../../utils/mentions';
@@ -95,10 +96,15 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
   useEffect(() => {
     let vivo = true;
     people.forEach((u) => {
-      if (!u.avatar || caras[u.avatar]) return;
-      void avatarEnDisco(u.avatar).then((ruta) => {
-        if (vivo && ruta)
-          setCaras((previo) => ({ ...previo, [u.avatar as string]: ruta }));
+      // Lo que guarda el usuario no es una URL sino el identificador de
+      // Cloudinary, igual que en el Avatar de la app: sin pasarlo por
+      // cloudinaryUrl no hay nada que descargar y la cara no aparecía nunca.
+      // El preset grande, de 200, y no el pequeño de 40: el círculo mide 38
+      // puntos, que a 3x son 114 píxeles, y encima el video lo amplía.
+      const url = cloudinaryUrl(u.avatar, 'avatar_lg');
+      if (!url || caras[url]) return;
+      void avatarEnDisco(url).then((ruta) => {
+        if (vivo && ruta) setCaras((previo) => ({ ...previo, [url]: ruta }));
       });
     });
     return () => {
@@ -132,7 +138,8 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
     <Host matchContents style={{ width: '100%' }} colorScheme="dark">
       <VStack spacing={0} modifiers={[padding({ vertical: 4 })]}>
         {people.map((u) => {
-          const ruta = u.avatar ? caras[u.avatar] : undefined;
+          const url = cloudinaryUrl(u.avatar, 'avatar_lg');
+          const ruta = url ? caras[url] : undefined;
           return (
             <HStack
               key={String(u.id)}

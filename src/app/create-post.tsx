@@ -16,7 +16,7 @@ import { CoverArtPicker } from '@/features/feed/components/create/CoverArtPicker
 import * as ImagePicker from 'expo-image-picker';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { useAuthStore } from '@/stores/authStore';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { X, Images, Video, Film, Music, Camera, FolderOpen } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -26,6 +26,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMediaPreview';
 import { MentionSuggestions } from '@/features/feed/components/create/MentionSuggestions';
+import { GlassGroup, GlassSurface } from '@/components/navigation/GlassSurface';
 import {
   activeMention,
   applyMention,
@@ -58,23 +59,30 @@ function ToolbarButton({
   disabled: boolean;
   onPress: () => void;
 }) {
-  const color = active ? '#FFFFFF' : disabled ? '#333333' : '#888888';
+  const color = active ? '#FFFFFF' : disabled ? '#3A3A3C' : '#C7C7CC';
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled}
-      style={styles.toolbarIcon}
-      activeOpacity={0.6}
+    <GlassSurface
+      radius={18}
+      glassStyle="clear"
+      tintColor={active ? 'rgba(255,255,255,0.16)' : undefined}
+      style={styles.toolbarPill}
     >
-      <Icon size={20} color={color} strokeWidth={2.25} />
-      <Text
-        style={[styles.toolbarLabel, { color }]}
-        numberOfLines={1}
-        maxFontSizeMultiplier={1.0}
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled}
+        style={styles.toolbarIcon}
+        activeOpacity={0.6}
       >
-        {label}
-      </Text>
-    </TouchableOpacity>
+        <Icon size={19} color={color} strokeWidth={2.25} />
+        <Text
+          style={[styles.toolbarLabel, { color }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.0}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    </GlassSurface>
   );
 }
 
@@ -83,6 +91,11 @@ export default function CreatePostScreen() {
   const user = useAuthStore((s) => s.user);
   const hasRecordUpload = useSubscriptionStore((s) => s.hasEntitlement('record_upload'));
   const canPublishAudio = user?.role === 'creator' && hasRecordUpload;
+
+  // El hueco de abajo lo pone la barra, no la pantalla: con SafeAreaView
+  // reservándolo siempre, quedaba una franja muerta entre los botones y el
+  // teclado (David, 27 de septiembre de 2026).
+  const insets = useSafeAreaInsets();
 
   const [textContent, setTextContent] = useState('');
   // Tagging people, the way Instagram does it: type @, pick from the list,
@@ -457,7 +470,7 @@ export default function CreatePostScreen() {
   const nearLimit = charCount > MAX_CHARS - 100;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
@@ -564,9 +577,9 @@ export default function CreatePostScreen() {
       </ScrollView>
 
       {/* Attachment toolbar — sticky above keyboard */}
-      <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
-        <View style={styles.toolbar}>
-          <View style={styles.toolbarIcons}>
+      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+        <View style={[styles.toolbar, { paddingBottom: 8 + insets.bottom }]}>
+          <GlassGroup style={styles.toolbarIcons} spacing={10}>
             <ToolbarButton
               Icon={Images}
               label={t('create.attachPhoto')}
@@ -597,7 +610,7 @@ export default function CreatePostScreen() {
                 onPress={handlePickProject}
               />
             )}
-          </View>
+          </GlassGroup>
 
           <Text
             variant="small"
@@ -722,11 +735,7 @@ const styles = StyleSheet.create({
   // The list of people to tag sits right under the caption, where Instagram
   // puts it, and floats over whatever comes next in the composer.
   mentionCard: {
-    marginHorizontal: 12,
-    marginTop: 4,
-    borderRadius: 14,
-    backgroundColor: '#161618',
-    overflow: 'hidden',
+    marginTop: 2,
   },
   container: {
     flex: 1,
@@ -794,19 +803,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#222222',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   toolbarIcons: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 8,
+  },
+  toolbarPill: {
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   toolbarIcon: {
     alignItems: 'center',
-    gap: 3,
-    padding: 4,
+    gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   toolbarLabel: {
     fontSize: 10,

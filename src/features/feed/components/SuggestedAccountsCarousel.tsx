@@ -57,7 +57,7 @@ function UserBubble({ user, isFollowing, onFollow }: BubbleProps) {
         >
           <Avatar
             uri={user.avatar}
-            size="lg"
+            size="story"
             creatorRing={isCreator}
             fallbackText={user.username}
           />
@@ -147,7 +147,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   bubble: {
-    width: 76,
+    // 79 del círculo con su anillo, más aire para el nombre debajo.
+    width: 88,
     alignItems: 'center',
     gap: 6,
   },
@@ -157,15 +158,15 @@ const styles = StyleSheet.create({
   avatarWrapper: {
     borderWidth: 1.5,
     borderColor: '#2a2a2a',
-    borderRadius: 32,
+    borderRadius: 40,
   },
   followBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 23,
+    height: 23,
+    borderRadius: 11.5,
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: '#000',
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    width: 76,
+    width: 88,
   },
   username: {
     fontSize: 11,
@@ -197,8 +198,8 @@ const styles = StyleSheet.create({
   },
   // Skeleton styles
   skeletonAvatar: {
-    width: 68,
-    height: 68,
+    width: 79,
+    height: 79,
     borderRadius: 34,
     backgroundColor: '#111',
   },

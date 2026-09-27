@@ -4,7 +4,7 @@ import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import { Logo } from './Logo';
 import { GoldRing } from './GoldRing';
 
-type AvatarSize = 'sm' | 'md' | 'lg' | 'xl';
+type AvatarSize = 'sm' | 'md' | 'lg' | 'story' | 'xl';
 
 interface AvatarProps {
   uri?: string | null;
@@ -19,14 +19,23 @@ const SIZES: Record<AvatarSize, number> = {
   sm: 32,
   md: 44,
   lg: 64,
+  // El círculo de la fila de arriba del feed. Medido contra Instagram en el
+  // mismo iPhone: los suyos son 238 px de diámetro con el anillo incluido y los
+  // nuestros eran 201. El anillo añade 4 puntos, así que 75 + 4 dan 237 px y
+  // quedan iguales (petición del cliente, 27 de septiembre de 2026).
+  story: 75,
   xl: 100,
 };
 
-const PRESET_MAP: Record<AvatarSize, 'avatar_sm' | 'avatar_md' | 'avatar_lg'> = {
+const PRESET_MAP: Record<
+  AvatarSize,
+  'avatar_sm' | 'avatar_md' | 'avatar_lg' | 'avatar_xl'
+> = {
   sm: 'avatar_sm',
   md: 'avatar_md',
   lg: 'avatar_lg',
-  xl: 'avatar_lg',
+  story: 'avatar_xl',
+  xl: 'avatar_xl',
 };
 
 function getInitials(text: string): string {

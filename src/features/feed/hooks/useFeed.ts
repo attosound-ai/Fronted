@@ -9,6 +9,7 @@ import {
   snapshotPostCaches,
   rollbackPostCaches,
   removePostFromCaches,
+  invalidarTrasBorrarPost,
 } from '../utils/postCacheSync';
 
 /**
@@ -63,14 +64,7 @@ export function useFeed() {
     },
     onSuccess: (_, postId) => {
       analytics.capture(ANALYTICS_EVENTS.FEED.POST_DELETED, { post_id: postId });
-      if (currentUserId) {
-        queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.FEED.USER_POSTS(Number(currentUserId)),
-        });
-        queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.USERS.PROFILE(Number(currentUserId)),
-        });
-      }
+      invalidarTrasBorrarPost(queryClient, postId, currentUserId);
     },
   });
 

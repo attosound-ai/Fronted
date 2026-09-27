@@ -178,3 +178,27 @@ export function findPostInCaches(qc: QueryClient, postId: string): Post | undefi
 
   return undefined;
 }
+
+/**
+ * Lo que hay que refrescar después de borrar un post, en un solo sitio.
+ *
+ * Existía dos veces, en `useFeed` y dentro de la pantalla del post, y las dos
+ * copias se desincronizaron: la de la pantalla refrescaba la rejilla del perfil
+ * pero no el perfil en sí, que es de donde sale el contador de publicaciones.
+ * Resultado: borrabas un post, la foto desaparecía de la rejilla y el número
+ * seguía diciendo lo mismo hasta que volvías a entrar (David, 27 de septiembre
+ * de 2026).
+ */
+export function invalidarTrasBorrarPost(
+  qc: QueryClient,
+  postId: string,
+  currentUserId?: number | string | null
+) {
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.FEED.ALL });
+  qc.removeQueries({ queryKey: QUERY_KEYS.FEED.POST(postId) });
+  if (currentUserId === undefined || currentUserId === null) return;
+  const id = Number(currentUserId);
+  if (Number.isNaN(id)) return;
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.FEED.USER_POSTS(id) });
+  qc.invalidateQueries({ queryKey: QUERY_KEYS.USERS.PROFILE(id) });
+}

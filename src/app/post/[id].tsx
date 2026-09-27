@@ -35,6 +35,7 @@ import type { Post } from '@/types';
 import type { FeedPost, PostAuthor, PostType } from '@/types/post';
 import { COLORS } from '@/constants/theme';
 import { resolveCoverUrl } from '@/features/feed/utils/coverArt';
+import { invalidarTrasBorrarPost } from '@/features/feed/utils/postCacheSync';
 
 // ── Post → FeedPost conversion ───────────────────────────────────────────────
 
@@ -204,13 +205,7 @@ export default function PostDetailScreen() {
           onPress: async () => {
             try {
               await feedService.deletePost(postId);
-              queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.ALL });
-              if (currentUserId) {
-                queryClient.invalidateQueries({
-                  queryKey: QUERY_KEYS.FEED.USER_POSTS(currentUserId),
-                });
-              }
-              queryClient.removeQueries({ queryKey: QUERY_KEYS.FEED.POST(postId) });
+              invalidarTrasBorrarPost(queryClient, postId, currentUserId);
               router.back();
             } catch {
               Alert.alert(t('common:errors.title'), t('post.deleteFailed'));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Dimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Host, HStack, Image, Text, VStack } from '@expo/ui/swift-ui';
 import {
@@ -38,6 +39,15 @@ const CARA = 38;
  * puede crecer hasta comerse el teclado.
  */
 const MAXIMO = 5;
+/**
+ * El ancho de la fila, en números y no en `maxWidth`.
+ *
+ * Dentro de un `Host matchContents` un `maxWidth` deja la anchura propuesta sin
+ * resolver, y SwiftUI reparte lo que sobra como quiere: con una fila el nombre
+ * salía entero y con dos quedaba aplastado a un par de píxeles. Con la medida
+ * real de la pantalla no hay nada que repartir.
+ */
+const ANCHO = Math.round(Dimensions.get('window').width);
 
 /**
  * Las mismas iniciales que pinta el Avatar de la app: "john.doe" da "JD" y
@@ -128,12 +138,11 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
               key={String(u.id)}
               spacing={12}
               modifiers={[
-                // A todo el ancho pero alineada al principio. Sin `alignment`
-                // hacía falta un Spacer al final, y dentro de un Host
-                // `matchContents` ese Spacer se quedaba con todo el espacio y
-                // aplastaba el nombre a anchura cero: salía el círculo con las
-                // iniciales y al lado nada.
-                frame({ maxWidth: 10000, alignment: 'leading' }),
+                // Ancho exacto y alineada al principio. Antes había un Spacer
+                // al final, y dentro de un Host `matchContents` ese Spacer se
+                // quedaba con todo el espacio y aplastaba el nombre a anchura
+                // cero: salía el círculo con las iniciales y al lado nada.
+                frame({ width: ANCHO - 32, alignment: 'leading' }),
                 padding({ horizontal: 16, vertical: 6 }),
                 // Sin esto solo recoge el toque lo que tiene pintura encima, y
                 // el hueco a la derecha del nombre se quedaría muerto.
@@ -176,7 +185,10 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
                 >
                   {u.username}
                 </Text>
-                {u.displayName ? (
+                {/* Solo si dice algo distinto del nombre de usuario: muchas
+                    cuentas tienen los dos iguales y salía repetido. */}
+                {u.displayName &&
+                u.displayName.toLowerCase() !== u.username.toLowerCase() ? (
                   <Text modifiers={[font({ size: 13 }), foregroundStyle(SECUNDARIO)]}>
                     {u.displayName}
                   </Text>

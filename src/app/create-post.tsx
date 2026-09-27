@@ -26,7 +26,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMediaPreview';
 import { MentionSuggestions } from '@/features/feed/components/create/MentionSuggestions';
-import { GlassGroup, GlassSurface } from '@/components/navigation/GlassSurface';
+import { GlassSurface } from '@/components/navigation/GlassSurface';
 import {
   activeMention,
   applyMention,
@@ -61,28 +61,21 @@ function ToolbarButton({
 }) {
   const color = active ? '#FFFFFF' : disabled ? '#3A3A3C' : '#C7C7CC';
   return (
-    <GlassSurface
-      radius={18}
-      glassStyle="clear"
-      tintColor={active ? 'rgba(255,255,255,0.16)' : undefined}
-      style={styles.toolbarPill}
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.toolbarIcon, active && styles.toolbarIconActive]}
+      activeOpacity={0.6}
     >
-      <TouchableOpacity
-        onPress={onPress}
-        disabled={disabled}
-        style={styles.toolbarIcon}
-        activeOpacity={0.6}
+      <Icon size={19} color={color} strokeWidth={2.25} />
+      <Text
+        style={[styles.toolbarLabel, { color }]}
+        numberOfLines={1}
+        maxFontSizeMultiplier={1.0}
       >
-        <Icon size={19} color={color} strokeWidth={2.25} />
-        <Text
-          style={[styles.toolbarLabel, { color }]}
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.0}
-        >
-          {label}
-        </Text>
-      </TouchableOpacity>
-    </GlassSurface>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -473,9 +466,18 @@ export default function CreatePostScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <X size={24} color="#FFFFFF" strokeWidth={2.25} />
-        </TouchableOpacity>
+        {/* La X va en cristal como el resto del cromo de la app, no suelta
+            sobre el fondo (David, 27 de septiembre de 2026). */}
+        <GlassSurface radius={18} glassStyle="clear" style={styles.closePill}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            hitSlop={10}
+            style={styles.closeHit}
+            activeOpacity={0.6}
+          >
+            <X size={20} color="#FFFFFF" strokeWidth={2.4} />
+          </TouchableOpacity>
+        </GlassSurface>
         <TouchableOpacity
           style={[styles.postButton, !canPost && styles.postButtonDisabled]}
           onPress={handlePost}
@@ -578,48 +580,50 @@ export default function CreatePostScreen() {
 
       {/* Attachment toolbar — sticky above keyboard */}
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
-        <View style={[styles.toolbar, { paddingBottom: 8 + insets.bottom }]}>
-          <GlassGroup style={styles.toolbarIcons} spacing={10}>
-            <ToolbarButton
-              Icon={Images}
-              label={t('create.attachPhoto')}
-              active={attachmentType === 'image'}
-              disabled={attachmentType !== null && attachmentType !== 'image'}
-              onPress={handlePickPhoto}
-            />
-            <ToolbarButton
-              Icon={Video}
-              label={t('create.attachVideo')}
-              active={attachmentType === 'video'}
-              disabled={attachmentType !== null && attachmentType !== 'video'}
-              onPress={handlePickVideo}
-            />
-            <ToolbarButton
-              Icon={Film}
-              label={t('create.attachReel')}
-              active={attachmentType === 'reel'}
-              disabled={attachmentType !== null && attachmentType !== 'reel'}
-              onPress={handlePickReel}
-            />
-            {canPublishAudio && (
+        <View style={[styles.toolbarWrap, { paddingBottom: 8 + insets.bottom }]}>
+          <GlassSurface radius={26} glassStyle="regular" style={styles.toolbar}>
+            <View style={styles.toolbarIcons}>
               <ToolbarButton
-                Icon={Music}
-                label={t('create.attachProject')}
-                active={attachmentType === 'audio'}
-                disabled={attachmentType !== null && attachmentType !== 'audio'}
-                onPress={handlePickProject}
+                Icon={Images}
+                label={t('create.attachPhoto')}
+                active={attachmentType === 'image'}
+                disabled={attachmentType !== null && attachmentType !== 'image'}
+                onPress={handlePickPhoto}
               />
-            )}
-          </GlassGroup>
+              <ToolbarButton
+                Icon={Video}
+                label={t('create.attachVideo')}
+                active={attachmentType === 'video'}
+                disabled={attachmentType !== null && attachmentType !== 'video'}
+                onPress={handlePickVideo}
+              />
+              <ToolbarButton
+                Icon={Film}
+                label={t('create.attachReel')}
+                active={attachmentType === 'reel'}
+                disabled={attachmentType !== null && attachmentType !== 'reel'}
+                onPress={handlePickReel}
+              />
+              {canPublishAudio && (
+                <ToolbarButton
+                  Icon={Music}
+                  label={t('create.attachProject')}
+                  active={attachmentType === 'audio'}
+                  disabled={attachmentType !== null && attachmentType !== 'audio'}
+                  onPress={handlePickProject}
+                />
+              )}
+            </View>
 
-          <Text
-            variant="small"
-            style={[styles.charCount, nearLimit && styles.charCountWarn]}
-            numberOfLines={1}
-            maxFontSizeMultiplier={1.0}
-          >
-            {charCount}/{MAX_CHARS}
-          </Text>
+            <Text
+              variant="small"
+              style={[styles.charCount, nearLimit && styles.charCountWarn]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.0}
+            >
+              {charCount}/{MAX_CHARS}
+            </Text>
+          </GlassSurface>
         </View>
       </KeyboardStickyView>
 
@@ -799,34 +803,50 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
+  toolbarWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  // Una sola pieza de cristal con todo dentro, contador incluido, en vez de
+  // cuatro pastillas sueltas (David, 27 de septiembre de 2026).
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
   },
   toolbarIcons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 2,
   },
-  toolbarPill: {
+  closePill: {
     borderRadius: 18,
     overflow: 'hidden',
+  },
+  closeHit: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toolbarIcon: {
     alignItems: 'center',
     gap: 2,
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     paddingVertical: 7,
+    borderRadius: 20,
+  },
+  toolbarIconActive: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   toolbarLabel: {
     fontSize: 10,
     fontFamily: 'Archivo_500Medium',
   },
   charCount: {
-    color: '#666666',
+    color: '#8A8A8F',
+    paddingRight: 10,
   },
   charCountWarn: {
     color: '#FFFFFF',

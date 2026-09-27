@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Host, HStack, Image, List, Spacer, Text, VStack } from '@expo/ui/swift-ui';
 import {
+  Host,
+  HStack,
+  Image,
+  List,
+  Spacer,
+  Text,
+  VStack,
+  ZStack,
+} from '@expo/ui/swift-ui';
+import {
+  aspectRatio,
   background,
+  clipShape,
   font,
   foregroundStyle,
   frame,
@@ -12,6 +23,7 @@ import {
   listStyle,
   onTapGesture,
   padding,
+  resizable,
   scrollContentBackground,
 } from '@expo/ui/swift-ui/modifiers';
 
@@ -31,9 +43,25 @@ interface MentionSuggestionsProps {
 const INK = '#FFFFFF';
 const SECUNDARIO = '#8E8E93';
 const FONDO = '#000000';
+const HUECO = '#333333';
 const CARA = 38;
 /** Como Instagram: cinco filas caben, el resto se desplaza. */
 const ALTO = 220;
+
+/**
+ * Las mismas iniciales que pinta el Avatar de la app: "john.doe" da "JD" y
+ * "valeromadrid_" da "V". Se repite aquí en vez de importarse porque aquella
+ * función vive dentro de un componente de React Native y esto es SwiftUI.
+ */
+function iniciales(texto: string): string {
+  return texto
+    .trim()
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((palabra) => palabra[0]?.toUpperCase() ?? '')
+    .join('');
+}
 
 /**
  * La lista que Instagram deja caer bajo la leyenda en cuanto escribes "@".
@@ -43,9 +71,11 @@ const ALTO = 220;
  * al tocar los pone el sistema, igual que en la pantalla de ajustes. Va sin
  * marco ni línea superior, pegada al texto.
  *
- * Busca desde el segundo carácter, que es lo que responde el buscador de
- * usuarios; con solo la "@" escrita dice qué hacer en vez de enseñar una caja
- * vacía.
+ * Dos detalles que costaron una vuelta. El `Image` de SwiftUI no viene
+ * `resizable`, así que sin ese modificador pinta el avatar a su tamaño real y
+ * el `frame` lo recorta en vez de encogerlo. Y mientras la cara no está, la
+ * fila enseña las iniciales sobre un círculo gris, que es lo que hace el resto
+ * de la app, no el símbolo de persona del sistema.
  */
 export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestionsProps) {
   const { t } = useTranslation('feed');
@@ -56,8 +86,8 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
     [results, selfId]
   );
 
-  // Las caras, en disco, porque SwiftUI no pinta una URL remota. Entran cuando
-  // llegan: la lista ya se ve antes, con el símbolo de persona en su sitio.
+  // Las caras, en disco, porque SwiftUI solo pinta un archivo local y además lo
+  // lee de forma síncrona: bajarlas aparte evita que escribir espere a la red.
   const [caras, setCaras] = useState<Record<string, string>>({});
   useEffect(() => {
     let vivo = true;
@@ -84,7 +114,7 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
       <Host matchContents colorScheme="dark">
         <Text
           modifiers={[
-            padding({ horizontal: 16, vertical: 14 }),
+            padding({ horizontal: 16, vertical: 12 }),
             font({ size: 13 }),
             foregroundStyle(SECUNDARIO),
           ]}
@@ -122,13 +152,30 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
                 }),
               ]}
             >
-              <Image
-                systemName={ruta ? undefined : 'person.crop.circle.fill'}
-                uiImage={ruta}
-                size={CARA}
-                color={SECUNDARIO}
-                modifiers={[frame({ width: CARA, height: CARA })]}
-              />
+              <ZStack modifiers={[frame({ width: CARA, height: CARA })]}>
+                <Text
+                  modifiers={[
+                    frame({ width: CARA, height: CARA }),
+                    background(HUECO),
+                    clipShape('circle'),
+                    font({ size: Math.round(CARA * 0.35), weight: 'semibold' }),
+                    foregroundStyle(INK),
+                  ]}
+                >
+                  {iniciales(u.username)}
+                </Text>
+                {ruta ? (
+                  <Image
+                    uiImage={ruta}
+                    modifiers={[
+                      resizable(),
+                      aspectRatio({ contentMode: 'fill' }),
+                      frame({ width: CARA, height: CARA }),
+                      clipShape('circle'),
+                    ]}
+                  />
+                ) : null}
+              </ZStack>
               <VStack alignment="leading" spacing={1}>
                 <Text
                   modifiers={[

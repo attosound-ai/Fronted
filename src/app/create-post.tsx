@@ -64,7 +64,7 @@ function ToolbarButton({
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      style={[styles.toolbarIcon, active && styles.toolbarIconActive]}
+      style={styles.toolbarIcon}
       activeOpacity={0.6}
     >
       <Icon size={19} color={color} strokeWidth={2.25} />
@@ -580,50 +580,48 @@ export default function CreatePostScreen() {
 
       {/* Attachment toolbar — sticky above keyboard */}
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
-        <View style={[styles.toolbarWrap, { paddingBottom: 8 + insets.bottom }]}>
-          <GlassSurface radius={26} glassStyle="regular" style={styles.toolbar}>
-            <View style={styles.toolbarIcons}>
+        <View style={[styles.toolbar, { paddingBottom: 8 + insets.bottom }]}>
+          <View style={styles.toolbarIcons}>
+            <ToolbarButton
+              Icon={Images}
+              label={t('create.attachPhoto')}
+              active={attachmentType === 'image'}
+              disabled={attachmentType !== null && attachmentType !== 'image'}
+              onPress={handlePickPhoto}
+            />
+            <ToolbarButton
+              Icon={Video}
+              label={t('create.attachVideo')}
+              active={attachmentType === 'video'}
+              disabled={attachmentType !== null && attachmentType !== 'video'}
+              onPress={handlePickVideo}
+            />
+            <ToolbarButton
+              Icon={Film}
+              label={t('create.attachReel')}
+              active={attachmentType === 'reel'}
+              disabled={attachmentType !== null && attachmentType !== 'reel'}
+              onPress={handlePickReel}
+            />
+            {canPublishAudio && (
               <ToolbarButton
-                Icon={Images}
-                label={t('create.attachPhoto')}
-                active={attachmentType === 'image'}
-                disabled={attachmentType !== null && attachmentType !== 'image'}
-                onPress={handlePickPhoto}
+                Icon={Music}
+                label={t('create.attachProject')}
+                active={attachmentType === 'audio'}
+                disabled={attachmentType !== null && attachmentType !== 'audio'}
+                onPress={handlePickProject}
               />
-              <ToolbarButton
-                Icon={Video}
-                label={t('create.attachVideo')}
-                active={attachmentType === 'video'}
-                disabled={attachmentType !== null && attachmentType !== 'video'}
-                onPress={handlePickVideo}
-              />
-              <ToolbarButton
-                Icon={Film}
-                label={t('create.attachReel')}
-                active={attachmentType === 'reel'}
-                disabled={attachmentType !== null && attachmentType !== 'reel'}
-                onPress={handlePickReel}
-              />
-              {canPublishAudio && (
-                <ToolbarButton
-                  Icon={Music}
-                  label={t('create.attachProject')}
-                  active={attachmentType === 'audio'}
-                  disabled={attachmentType !== null && attachmentType !== 'audio'}
-                  onPress={handlePickProject}
-                />
-              )}
-            </View>
+            )}
+          </View>
 
-            <Text
-              variant="small"
-              style={[styles.charCount, nearLimit && styles.charCountWarn]}
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.0}
-            >
-              {charCount}/{MAX_CHARS}
-            </Text>
-          </GlassSurface>
+          <Text
+            variant="small"
+            style={[styles.charCount, nearLimit && styles.charCountWarn]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.0}
+          >
+            {charCount}/{MAX_CHARS}
+          </Text>
         </View>
       </KeyboardStickyView>
 
@@ -803,22 +801,20 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
-  toolbarWrap: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
-  },
-  // Una sola pieza de cristal con todo dentro, contador incluido, en vez de
-  // cuatro pastillas sueltas (David, 27 de septiembre de 2026).
+  // Sin cristal, sin fondos y sin la línea que separaba esta sección de la de
+  // arriba: cada botón es su icono y su nombre, y ya (David, 27 de septiembre
+  // de 2026). El hueco de abajo lo pone la barra, no el SafeAreaView, para que
+  // no quede una franja muerta entre los botones y el teclado.
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 6,
-    paddingVertical: 5,
+    paddingHorizontal: 16,
+    paddingTop: 10,
   },
   toolbarIcons: {
     flexDirection: 'row',
-    gap: 2,
+    gap: 20,
   },
   closePill: {
     borderRadius: 18,
@@ -832,21 +828,15 @@ const styles = StyleSheet.create({
   },
   toolbarIcon: {
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 20,
-  },
-  toolbarIconActive: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    gap: 3,
+    padding: 4,
   },
   toolbarLabel: {
     fontSize: 10,
     fontFamily: 'Archivo_500Medium',
   },
   charCount: {
-    color: '#8A8A8F',
-    paddingRight: 10,
+    color: '#666666',
   },
   charCountWarn: {
     color: '#FFFFFF',

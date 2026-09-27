@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -318,15 +318,38 @@ export default function CreatePostScreen() {
    * A name the author deleted stops being a tag, so nobody is notified for a
    * post that no longer names them.
    */
+  /**
+   * Lo que la leyenda dice ahora mismo y dónde está el cursor.
+   *
+   * La mención que se está escribiendo depende de las dos cosas a la vez, y
+   * `textContent` leído dentro de `onSelectionChange` es el valor del render
+   * ANTERIOR. Eso dejaba la lista un carácter por detrás (con "@andrey" aún
+   * decía "sigue escribiendo") y, al elegir, hacía que `applyMention` cortara
+   * con una longitud equivocada: la última letra escrita reaparecía DESPUÉS
+   * del nombre insertado. Un solo origen para los dos fallos.
+   */
+  const captionRef = useRef('');
+  const caretRef = useRef(0);
+
   const handleCaption = useCallback((next: string) => {
+    // El cursor real llega en `onSelectionChange`, que puede ir detrás de esta
+    // llamada; mientras tanto se estima con lo que creció o menguó el texto,
+    // que es exacto al escribir y al borrar, que es lo que importa aquí.
+    const moved = next.length - captionRef.current.length;
+    const caret = Math.max(0, Math.min(caretRef.current + moved, next.length));
+    captionRef.current = next;
+    caretRef.current = caret;
     setTextContent(next);
+    setMention(activeMention(next, caret));
     setTagged((current) => survivingTags(next, current));
   }, []);
 
   const pickMention = useCallback(
     (person: TaggedPerson) => {
       if (!mention) return;
-      const { text, caret } = applyMention(textContent, mention, person.username);
+      const { text, caret } = applyMention(captionRef.current, mention, person.username);
+      captionRef.current = text;
+      caretRef.current = caret;
       setTextContent(text);
       setForcedCaret({ start: caret, end: caret });
       setMention(null);
@@ -337,7 +360,7 @@ export default function CreatePostScreen() {
         tagged_count: tagged.length + 1,
       });
     },
-    [mention, tagged.length, textContent]
+    [mention, tagged.length]
   );
 
   // ── Publish ──
@@ -496,8 +519,9 @@ export default function CreatePostScreen() {
             onChangeText={handleCaption}
             onSelectionChange={(e) => {
               const at = e.nativeEvent.selection.end;
+              caretRef.current = at;
               if (forcedCaret) setForcedCaret(undefined);
-              setMention(activeMention(textContent, at));
+              setMention(activeMention(captionRef.current, at));
             }}
             selection={forcedCaret}
             maxLength={MAX_CHARS}

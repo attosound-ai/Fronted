@@ -75,3 +75,33 @@ test('a post with no tags carries no metadata and maps to nothing', () => {
   assert.deepEqual(tagMapFrom(undefined), {});
   assert.deepEqual(tagMapFrom({ taggedUserIds: '1' }), {});
 });
+
+// Los dos fallos que David encontró el 27 de septiembre de 2026 grabando el
+// video, y que salían del mismo sitio: la pantalla calculaba la mención con el
+// texto del render anterior. Aquí se fija la regla que lo evita.
+
+test('a name with a dot in it is found by what is written, not by one letter less', () => {
+  const texto = 'En el estudio con @andrey.';
+  const activa = activeMention(texto, texto.length);
+  assert.deepEqual(activa, { start: 18, query: 'andrey.' });
+});
+
+test('picking leaves nothing of what was typed after the inserted name', () => {
+  const texto = 'En el estudio con @andrey.';
+  const activa = activeMention(texto, texto.length);
+  assert.ok(activa);
+  const { text, caret } = applyMention(texto, activa, 'andrey.plazas');
+  assert.equal(text, 'En el estudio con @andrey.plazas ');
+  assert.equal(caret, text.length);
+});
+
+test('a mention computed one keystroke late is what stranded the last letter', () => {
+  // Con la mención vieja ("andrey") sobre el texto nuevo ("@andrey."), el punto
+  // sobrevive y acaba detrás del nombre. Ese era el bug.
+  const texto = 'En el estudio con @andrey.';
+  const vieja = { start: 18, query: 'andrey' };
+  assert.equal(
+    applyMention(texto, vieja, 'andrey.plazas').text,
+    'En el estudio con @andrey.plazas .'
+  );
+});

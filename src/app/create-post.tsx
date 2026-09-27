@@ -334,6 +334,8 @@ export default function CreatePostScreen() {
    * con una longitud equivocada: la última letra escrita reaparecía DESPUÉS
    * del nombre insertado. Un solo origen para los dos fallos.
    */
+  /** El campo, para devolverle el foco cuando la lista nativa se lo quita. */
+  const campoRef = useRef<TextInput>(null);
   const captionRef = useRef('');
   const caretRef = useRef(0);
 
@@ -359,6 +361,11 @@ export default function CreatePostScreen() {
       setTextContent(text);
       setForcedCaret({ start: caret, end: caret });
       setMention(null);
+      // La lista es una vista nativa de SwiftUI, así que al tocarla se lleva el
+      // primer respondedor y el teclado se cierra. En Instagram no pasa: eliges
+      // y sigues escribiendo. Se lo devolvemos en cuanto la fila desaparece
+      // (David, 27 de septiembre de 2026).
+      requestAnimationFrame(() => campoRef.current?.focus());
       setTagged((current) =>
         current.some((p) => p.id === person.id) ? current : [...current, person]
       );
@@ -526,6 +533,7 @@ export default function CreatePostScreen() {
             style={styles.avatar}
           />
           <TextInput
+            ref={campoRef}
             style={styles.textInput}
             placeholder={t('create.placeholder')}
             placeholderTextColor="#666666"

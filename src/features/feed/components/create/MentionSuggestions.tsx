@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Host, HStack, Image, Spacer, Text, VStack } from '@expo/ui/swift-ui';
+import { Host, HStack, Image, Text, VStack } from '@expo/ui/swift-ui';
 import {
   aspectRatio,
   background,
@@ -128,7 +128,12 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
               key={String(u.id)}
               spacing={12}
               modifiers={[
-                frame({ maxWidth: 10000 }),
+                // A todo el ancho pero alineada al principio. Sin `alignment`
+                // hacía falta un Spacer al final, y dentro de un Host
+                // `matchContents` ese Spacer se quedaba con todo el espacio y
+                // aplastaba el nombre a anchura cero: salía el círculo con las
+                // iniciales y al lado nada.
+                frame({ maxWidth: 10000, alignment: 'leading' }),
                 padding({ horizontal: 16, vertical: 6 }),
                 // Sin esto solo recoge el toque lo que tiene pintura encima, y
                 // el hueco a la derecha del nombre se quedaría muerto.
@@ -177,7 +182,6 @@ export function MentionSuggestions({ query, selfId, onPick }: MentionSuggestions
                   </Text>
                 ) : null}
               </VStack>
-              <Spacer />
             </HStack>
           );
         })}

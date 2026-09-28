@@ -270,9 +270,12 @@ struct AttoTimelineGeometry {
 // MARK: - Ruler intervals
 
 enum AttoTimelineRuler {
+  /// Los escalones van de una centésima a una hora. Los tres primeros son para
+  /// el zoom profundo: a 4000 puntos por segundo la pantalla cubre 80 ms, y sin
+  /// ellos el escalón más pequeño era 100 ms y cabía UNA etiqueta en pantalla.
   private static let majorCandidatesMs: [Double] = [
-    100, 200, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000,
-    300000, 600000, 1_200_000, 1_800_000, 3_600_000,
+    10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 30000, 60000,
+    120000, 300000, 600000, 1_200_000, 1_800_000, 3_600_000,
   ]
 
   /// Major (labelled) and minor tick spacing for a zoom level. Labels keep at
@@ -300,6 +303,9 @@ enum AttoTimelineRuler {
 
   /// Plain seconds, the other marker SoundLab offers: 5, 30, 125.
   static func secondsLabel(ms: Double, majorMs: Double) -> String {
+    if majorMs < 100 {
+      return String(format: "%.2f", ms / 1000)
+    }
     if majorMs < 1000 {
       return String(format: "%.1f", ms / 1000)
     }
@@ -318,7 +324,12 @@ enum AttoTimelineRuler {
     } else {
       text = String(format: "%02d:%02d", minutes, seconds)
     }
-    if majorMs < 1000 {
+    if majorMs < 100 {
+      // Centésimas: con escalones de 10 o 20 ms, las décimas repetirían la
+      // misma etiqueta en ticks distintos.
+      let hundredths = Int((ms.truncatingRemainder(dividingBy: 1000)) / 10)
+      text += String(format: ".%02d", hundredths)
+    } else if majorMs < 1000 {
       let tenths = Int((ms.truncatingRemainder(dividingBy: 1000)) / 100)
       text += ".\(tenths)"
     }

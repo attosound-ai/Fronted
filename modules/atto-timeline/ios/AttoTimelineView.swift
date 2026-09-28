@@ -240,11 +240,20 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
 
   /// Las ondas, por función y no por prop. El porqué está en
   /// AttoTimelineWaveformRecord: como prop costaban un giga de memoria.
+  ///
+  /// MEZCLA en vez de sustituir. Al ampliar mucho, la ventana de detalle de un
+  /// clip cambia varias veces por segundo mientras alguien desplaza la vista;
+  /// si esto sustituyera el juego entero, cada una de esas veces volvería a
+  /// cruzar también la envolvente completa de los demás clips. Quien manda
+  /// solo manda lo que cambió, y las que sobran las tira `setClips` cuando su
+  /// clip desaparece.
   func setWaveforms(_ records: [AttoTimelineWaveformRecord]) {
-    var mapa: [String: AttoTimelineWaveform] = [:]
+    var mapa = renderer.waveforms
     for record in records where !record.clipId.isEmpty {
       if let onda = AttoTimelineWaveform(record: record) {
         mapa[record.clipId] = onda
+      } else {
+        mapa.removeValue(forKey: record.clipId)
       }
     }
     renderer.waveforms = mapa

@@ -2023,11 +2023,25 @@ export function TimelineEditor({
     isUploadingRecording,
     recordingElapsedMs,
   ]);
-  // Se reenvían también cuando cambian los clips: si la vista se reciclara,
-  // los clips volverían sin onda y este efecto es lo que las repone.
+  // Solo lo que cambió. Al ampliar mucho, la ventana de detalle de un clip
+  // cambia varias veces por segundo mientras uno desplaza la vista; mandar la
+  // lista entera cada vez volvería a cruzar la envolvente completa de los
+  // demás clips, que es justo lo que se quería dejar de hacer.
+  const ondasEnviadasRef = useRef(new Map<string, number[]>());
   useEffect(() => {
-    void timelineRef.current?.setWaveforms(waveforms);
-  }, [waveforms, nativeClips]);
+    const enviadas = ondasEnviadasRef.current;
+    const cambiadas = waveforms.filter((w) => enviadas.get(w.clipId) !== w.peaks);
+    // Y las de los clips que ya no tienen onda, para que la vista las suelte.
+    const vivos = new Set(waveforms.map((w) => w.clipId));
+    const borradas = [...enviadas.keys()]
+      .filter((id) => !vivos.has(id))
+      .map((clipId) => ({ clipId, peaks: [] as number[] }));
+    if (cambiadas.length === 0 && borradas.length === 0) return;
+
+    enviadas.clear();
+    for (const w of waveforms) enviadas.set(w.clipId, w.peaks);
+    void timelineRef.current?.setWaveforms([...cambiadas, ...borradas]);
+  }, [waveforms]);
 
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;
   const panelInset = panelsCollapsed ? 0 : STUDIO.panelWidth;

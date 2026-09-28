@@ -195,9 +195,12 @@ export interface TimelineViewRef {
    */
   setZoom(pixelsPerSecond: number, anchorMs?: number | null): Promise<void>;
   /**
-   * Las ondas de todos los clips que tengan una. Sustituye el juego entero:
-   * lo que no venga en la lista se queda sin onda. Ver TimelineWaveform para
-   * por qué esto es una función y no una prop.
+   * Las ondas de los clips que hayan cambiado. MEZCLA, no sustituye: manda
+   * solo lo que cambió, que al ampliar mucho es una ventana de un clip y no
+   * las envolventes de todos. Una entrada con `peaks` vacío borra la onda de
+   * ese clip, y las de los clips que desaparecen se van con ellos.
+   *
+   * Ver TimelineWaveform para por qué esto es una función y no una prop.
    */
   setWaveforms(waveforms: TimelineWaveform[]): Promise<void>;
 }

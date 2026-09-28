@@ -51,6 +51,11 @@ final class AttoTimelineRenderer {
       byLane[clip.trackIndex].append(clip)
     }
     clipsByLane = byLane.map { $0.sorted { $0.startMs < $1.startMs } }
+    // Las ondas de los clips que ya no están se van con ellos; si no, un
+    // proyecto largo de edición iría acumulando arrays de miles de valores de
+    // clips borrados.
+    let vivos = Set(newClips.map(\.id))
+    waveforms = waveforms.filter { vivos.contains($0.key) }
     podarCacheDePicos()
   }
 

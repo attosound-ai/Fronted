@@ -8,7 +8,10 @@ import {
   getAudioInjector,
   AUDIO_INJECTION_FLAG,
 } from '@/lib/callAudio/createAudioInjector';
-import { installInjectionDeviceIfEnabled } from '@/hooks/useTwilioVoice';
+import {
+  installInjectionDeviceIfEnabled,
+  nativeInjectionDeviceInstalled,
+} from '@/hooks/useTwilioVoice';
 import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
 import { showToast } from '@/components/ui/Toast';
 import i18n from '@/lib/i18n';
@@ -174,6 +177,36 @@ export function CallAudioInjectionHost() {
   useEffect(() => {
     if (Platform.OS !== 'ios' || !flagEnabled || activeCallSid) return;
     void installInjectionDeviceIfEnabled('preinstall');
+  }, [flagEnabled, activeCallSid, activeUserId]);
+
+  // RE-ASSERT the device the moment a call is connected, whichever way it got
+  // there.
+  //
+  // El 27 de septiembre de 2026 el cliente se quedó una llamada entera sin
+  // audio: el preinstalado devolvió false y nadie lo reintentó. En la
+  // telemetría de ese día no existe UNA SOLA fila con source 'connect', aunque
+  // el código creía reafirmar el dispositivo en cada llamada: esa instalación
+  // solo vive en aceptar una invitación y en llamar tú, y hay CINCO caminos
+  // distintos hasta el estado conectado. Los otros tres son los de CallKit y
+  // la adopción en frío, justo por donde entran las llamadas del cliente.
+  //
+  // Va aquí, en el sitio que ya es dueño del ciclo de vida del dispositivo, y
+  // no repartido por los cinco: eso es lo que dejó el agujero.
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !flagEnabled || !activeCallSid) return;
+    let vivo = true;
+    void (async () => {
+      await installInjectionDeviceIfEnabled('connect');
+      // Un reintento corto: el fallo del cliente ocurrió con la pila de medios
+      // todavía deshaciéndose de la llamada anterior, que es transitorio.
+      if (!vivo || nativeInjectionDeviceInstalled()) return;
+      await new Promise((r) => setTimeout(r, 1200));
+      if (!vivo) return;
+      await installInjectionDeviceIfEnabled('connect_retry');
+    })();
+    return () => {
+      vivo = false;
+    };
   }, [flagEnabled, activeCallSid, activeUserId]);
 
   return null;

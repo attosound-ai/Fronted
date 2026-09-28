@@ -2,8 +2,7 @@ import { useCallback } from 'react';
 import { useCallStore } from '@/stores/callStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
-import { useFeatureFlag } from '@/lib/analytics';
-import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { useFeatureFlag, analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   getAudioInjector,
   AUDIO_INJECTION_FLAG,
@@ -42,6 +41,13 @@ async function showInjectFailureToast(reason?: InjectReason): Promise<void> {
     });
   };
   if (reason === 'superseded' || reason === 'not_permitted') return;
+  // Antes que nada lo que el usuario puede arreglar. Un audio demasiado largo
+  // no tiene nada que ver con la red, y mandarlo por el grupo de abajo le
+  // hacía revisar su conexión mientras el problema estaba en su archivo.
+  if (reason === 'too_long') {
+    toastResult('too_long', i18n.t('calls:transmit.tooLong'));
+    return;
+  }
   if (reason === 'prepare_timeout' || reason === 'prepare_failed') {
     const conn = await getConnectivity();
     if (!conn.online) {

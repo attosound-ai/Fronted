@@ -502,7 +502,12 @@ export class CallPlaybackController {
         outcome: token.cancelled ? 'cancelled' : 'failed',
         error: error instanceof Error ? error.message : String(error),
       });
-      return { ok: false, reason: 'prepare_failed' };
+      const texto = error instanceof Error ? error.message : String(error);
+      // El nativo manda ERR_RENDER_TOO_LONG; el mensaje se comprueba también
+      // por si un build viejo del módulo solo trae el texto.
+      const demasiadoLargo =
+        texto.includes('ERR_RENDER_TOO_LONG') || texto.includes('longer than the');
+      return { ok: false, reason: demasiadoLargo ? 'too_long' : 'prepare_failed' };
     }
   }
 

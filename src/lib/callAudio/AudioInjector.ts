@@ -53,6 +53,11 @@ export type InjectReason =
   // say "weak signal, tap to retry" (the file may arrive for the retry) rather
   // than a flat "couldn't prepare".
   | 'prepare_timeout'
+  // El audio es más largo de lo que el mezclador sabe rendir. Es la única
+  // causa de este grupo que el usuario puede entender y arreglar, así que
+  // merece su propia razón y su propio aviso: mandarla por prepare_failed
+  // acababa diciéndole que revisara su conexión (cliente, 27 sep 2026).
+  | 'too_long'
   | 'engine_error'
   | 'not_supported'
   | 'engine_unavailable'

@@ -109,7 +109,8 @@
     "mutedByMic": "Seu microfone está mudo, então eles não ouvem nada.",
     "a11yOn": "Parar de compartilhar o que você ouve com a chamada",
     "a11yOff": "Compartilhar o que você ouve com a chamada",
-    "silentDetected": "A chamada pode não estar recebendo o áudio. Desligue e ligue o botão de compartilhar."
+    "silentDetected": "A chamada pode não estar recebendo o áudio. Desligue e ligue o botão de compartilhar.",
+    "tooLong": "Esse áudio é longo demais para tocar em uma chamada. O limite é 90 minutos."
   },
   "playback": {
     "preparing": "Preparando...",

@@ -109,7 +109,8 @@
     "mutedByMic": "Your mic is muted, so they hear nothing.",
     "a11yOn": "Stop sharing what you hear with the call",
     "a11yOff": "Share what you hear with the call",
-    "silentDetected": "The call may not be receiving the audio. Tap the share button off and on."
+    "silentDetected": "The call may not be receiving the audio. Tap the share button off and on.",
+    "tooLong": "That track is too long to play into a call. The limit is 90 minutes."
   },
   "playback": {
     "preparing": "Preparing...",

@@ -1987,7 +1987,7 @@ export function nativeInjectionDeviceInstalled(): boolean {
 }
 
 export async function installInjectionDeviceIfEnabled(
-  source: 'connect' | 'preinstall' = 'connect'
+  source: 'connect' | 'connect_retry' | 'preinstall' = 'connect'
 ): Promise<void> {
   if (!IS_IOS) return;
   // Creator-only device install, mirroring persistAudioInjectionFlag. Flag is

@@ -85,6 +85,10 @@ export type PlaybackReason =
   | 'engine_mode_off'
   | 'account_switch'
   | 'prepare_failed'
+  // El audio pasa del tope que el mezclador sabe rendir. Separado de
+  // prepare_failed porque es lo único de este grupo que el usuario puede
+  // arreglar, y merece que se lo digan con esas palabras.
+  | 'too_long'
   | 'prepare_cancelled'
   | 'engine_error'
   | 'not_supported'

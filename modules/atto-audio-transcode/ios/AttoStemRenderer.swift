@@ -39,9 +39,23 @@ enum AttoStemRenderer {
   /// Frames per mix block. Also the capacity of every per clip read buffer.
   static let blockFrames: AVAudioFrameCount = 4096
 
-  /// Hard cap on stem length: 30 minutes at the canonical rate.
+  /// Tope duro de longitud de un stem: 90 minutos a la tasa canónica.
+  ///
+  /// Eran 30, y el 27 de septiembre de 2026 el cliente importó un instrumental
+  /// de 35,6 minutos que se quedó sin sonar: la importación decía "succeeded" y
+  /// el fallo salía después, en la llamada, como "Couldn't send that into the
+  /// call", que no tiene nada que ver.
+  ///
+  /// El tope no era una barrera técnica. El mezclador de abajo trabaja con
+  /// memoria constante, en bloques de 4096 muestras, así que lo único que
+  /// crece es el archivo: mono de 16 bits a 48 kHz son 96 KB por segundo, o
+  /// sea 173 MB a los 30 minutos y 518 MB a los 90. Ese, y no la memoria, es el
+  /// motivo de que exista un tope.
   static let maxTotalFrames: Int64 =
-    Int64(AttoAudioTranscodeModule.canonicalSampleRate) * 60 * 30
+    Int64(AttoAudioTranscodeModule.canonicalSampleRate) * 60 * 90
+
+  /// El mismo tope en minutos, para poder decírselo al usuario.
+  static var maxMinutes: Int { 90 }
 
   // MARK: - cancellation
 
@@ -126,10 +140,19 @@ enum AttoStemRenderer {
       throw AttoStemRenderError(
         code: "ERR_RENDER_SPEC", message: "totalFrames is missing or not a number")
     }
-    guard totalFrames > 0, totalFrames <= maxTotalFrames else {
+    guard totalFrames > 0 else {
       throw AttoStemRenderError(
         code: "ERR_RENDER_SPEC",
         message: "totalFrames must be in 1...\(maxTotalFrames), got \(totalFrames)")
+    }
+    // Código propio para lo que el usuario sí puede entender y arreglar: su
+    // audio es más largo de lo que sabemos mezclar. Un ERR_RENDER_SPEC genérico
+    // acababa en un aviso que hablaba de la llamada y no del archivo.
+    guard totalFrames <= maxTotalFrames else {
+      let minutos = Int(Double(totalFrames) / AttoAudioTranscodeModule.canonicalSampleRate / 60.0)
+      throw AttoStemRenderError(
+        code: "ERR_RENDER_TOO_LONG",
+        message: "audio is \(minutos) min, longer than the \(maxMinutes) min limit")
     }
     var rawClips: [[String: Any]] = []
     if let clipsValue = spec["clips"] {

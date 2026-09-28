@@ -692,6 +692,18 @@ export const ANALYTICS_EVENTS = {
     // long enough to be force-killed (REACT-NATIVE-3W) with zero telemetry
     // saying why. Emitted on editor mount and stamped on clip deletion.
     TIMELINE_SCALE: 'project_timeline_scale',
+    /**
+     * La memoria a cada paso de darle a reproducir en el editor.
+     *
+     * Existe porque el 28 de septiembre de 2026 se midió que reproducir un
+     * proyecto de 41 minutos sube la memoria de 240 MB a 1185 y el sistema
+     * mata la app, mientras que con uno de 11 segundos no se mueve. Con el
+     * total no se puede saber QUÉ paso la gasta: esto marca la memoria antes
+     * de cargar, después de apuntar cada pista a su archivo, después de
+     * esperar a que carguen y unos segundos después de sonar, con la duración
+     * del segmento de cada pista al lado.
+     */
+    PLAYBACK_MEMORY: 'project_playback_memory',
     /** Master effects committed in the editor (pitch, tempo, reverb, EQ). */
     MASTER_EFFECTS_SET: 'project_master_effects_set',
     /** A volume automation envelope was edited on a clip. */

@@ -9,6 +9,7 @@ import type { AudioSegment } from '@/types/call';
 import { getTimelineDuration } from '../utils/clipOperations';
 import { computeLaneEffectiveVolume, hasAnySoloedLane } from '../utils/laneMixer';
 import { useTimelineEnginePlayback } from './useTimelineEnginePlayback';
+import { RecorridoDeMemoria } from './playbackMemory';
 
 interface UseTimelinePlaybackProps {
   clips: LocalClip[];
@@ -27,6 +28,8 @@ interface UseTimelinePlaybackProps {
    * re-render was the single biggest source of timeline jank.
    */
   positionSv?: SharedValue<number>;
+  /** Solo para la telemetría de memoria al reproducir. */
+  projectId?: string;
 }
 
 /**
@@ -103,7 +106,10 @@ export function useTimelinePlayback({
   onPositionChange,
   onPlayingChange,
   positionSv,
+  projectId,
 }: UseTimelinePlaybackProps) {
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
   // Configure audio routing.
   // During a Twilio call, Twilio owns the AVAudioSession (.playAndRecord).
   // Calling setAudioModeAsync would reconfigure it and kill call audio,
@@ -345,14 +351,27 @@ export function useTimelinePlayback({
       // Start playhead animation immediately — don't block on audio loading
       startAnimation();
 
+      // Una fila por pulsación de play con la memoria en cada paso. Ver
+      // playbackMemory.ts: reproducir un proyecto largo se come un giga y el
+      // sistema mata la app, y el total no dice qué paso lo gasta.
+      const recorrido = new RecorridoDeMemoria({
+        projectId: projectIdRef.current ?? '',
+        totalDurationMs: getTimelineDuration(clipsRef.current),
+        laneCount: lanes.length,
+        clipCount: clipsRef.current.length,
+      });
+      let posterior: ReturnType<typeof setTimeout> | undefined;
+
       // Load and play audio in the background (best-effort)
       (async () => {
         try {
+          await recorrido.marcar('antes');
           // 1. Sync all lane players (load sources + seek)
           await Promise.all(
             lanes.map((lane) => syncLanePlayer(lane, playbackPositionMs))
           );
           if (cancelled) return;
+          await recorrido.marcar('fuentes');
 
           // 2. Wait for all players to be loaded (with timeout fallback)
           await Promise.all(
@@ -368,6 +387,7 @@ export function useTimelinePlayback({
             })
           );
           if (cancelled) return;
+          await recorrido.marcar('cargados');
 
           // 3. Play all loaded players
           for (const lane of lanes) {
@@ -377,13 +397,33 @@ export function useTimelinePlayback({
               player.play();
             }
           }
+          await recorrido.marcar('sonando');
+          // Y otra vez con unos segundos de música encima, que es donde se vio
+          // crecer: el salto no fue al cargar, fue mientras sonaba.
+          posterior = setTimeout(() => {
+            void recorrido.marcar('5s').then(() => {
+              recorrido.cerrar({
+                segment_durations_ms: lanes.map((lane) => {
+                  const id = activeClipIdsRef.current.get(lane);
+                  const clip = id ? clipsRef.current.find((c) => c.id === id) : null;
+                  const seg = clip
+                    ? segmentsRef.current.find((s) => s.id === clip.segmentId)
+                    : null;
+                  return seg?.durationMs ?? null;
+                }),
+              });
+            });
+          }, 5000);
         } catch {
           // Audio playback is best-effort; animation continues regardless
+          recorrido.cerrar({ outcome: 'error' });
         }
       })();
 
       return () => {
         cancelled = true;
+        clearTimeout(posterior);
+        recorrido.cancelar();
         stopAnimation();
       };
     } else {

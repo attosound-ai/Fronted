@@ -649,6 +649,7 @@ export function TimelineEditor({
     onPositionChange: setPlaybackPosition,
     onPlayingChange: setPlaying,
     positionSv,
+    projectId,
   });
 
   const totalDuration = getTimelineDuration(state.clips);

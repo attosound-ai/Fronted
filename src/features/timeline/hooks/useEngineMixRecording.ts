@@ -100,7 +100,31 @@ export function useEngineMixRecording({
   }, [isRecording]);
 
   const startRecording = useCallback(async () => {
-    if (isRecording || isUploading || armingRef.current) return;
+    // El único camino de toda esta función que no decía nada.
+    //
+    // El 27 de septiembre de 2026 el cliente reportó "Record still doesn't
+    // work" y en doce horas no había UN SOLO call_audio_mix_record: ni ok, ni
+    // native_unavailable, ni failed. O sea que la grabación no arrancó nunca,
+    // pero era imposible saber si él pulsó y no pasó nada o si no llegó a
+    // pulsar. Una acción que el usuario pulsa no puede quedarse muda: deja
+    // rastro, y si el pestillo está trabado también se lo decimos.
+    if (isRecording || isUploading || armingRef.current) {
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_MIX_RECORD, {
+        action: 'start',
+        engine: 'engine_mix',
+        outcome: 'busy',
+        is_recording: isRecording,
+        is_uploading: isUploading,
+        arming: armingRef.current,
+        call_sid: activeCall?.callSid ?? null,
+      });
+      // Grabando ya no necesita aviso: el usuario lo ve. Los otros dos son
+      // estados invisibles en los que el botón parece vivo y no hace nada.
+      if (!isRecording) {
+        showToast(t('toasts.recordingBusy', 'Finishing the last take, one moment'));
+      }
+      return;
+    }
     armingRef.current = true;
     const t0 = Date.now();
     try {

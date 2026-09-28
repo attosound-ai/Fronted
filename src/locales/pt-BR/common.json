@@ -44,7 +44,8 @@
     "recordUseCallMode": "Não dá para gravar assim durante uma chamada. Use o gravador de chamada.",
     "callDroppedConnection": "A chamada caiu por conexão, não foi desligada. Podem ligar de novo.",
     "injectUseHeadphones": "No alto-falante. Use fones para ouvir sua faixa com clareza.",
-    "callCrashRecovered": "Sua última chamada terminou de forma inesperada. Estamos verificando. Podem ligar de novo."
+    "callCrashRecovered": "Sua última chamada terminou de forma inesperada. Estamos verificando. Podem ligar de novo.",
+    "recordingBusy": "Finalizando a gravação anterior, um momento"
   },
   "time": {
     "now": "agora",

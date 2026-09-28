@@ -44,7 +44,8 @@
     "recordUseCallMode": "No se puede grabar así durante una llamada. Usa el grabador de llamada.",
     "callDroppedConnection": "La llamada se cayó por conexión, no fue un cuelgue. Pueden volver a llamar.",
     "injectUseHeadphones": "Estás en altavoz. Usa audífonos para oír tu pista con claridad.",
-    "callCrashRecovered": "Tu última llamada se cerró de forma inesperada. Lo estamos revisando. Pueden volver a llamar."
+    "callCrashRecovered": "Tu última llamada se cerró de forma inesperada. Lo estamos revisando. Pueden volver a llamar.",
+    "recordingBusy": "Terminando la toma anterior, un momento"
   },
   "time": {
     "now": "ahora",

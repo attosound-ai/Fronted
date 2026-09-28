@@ -44,7 +44,8 @@
     "recordUseCallMode": "Can't record this way during a call. Use the call recorder.",
     "callDroppedConnection": "Call dropped from a connection issue, not a hang-up. They can call back.",
     "injectUseHeadphones": "Playing on speaker. Use headphones to hear your track clearly.",
-    "callCrashRecovered": "Your last call ended unexpectedly. We are on it. They can call back."
+    "callCrashRecovered": "Your last call ended unexpectedly. We are on it. They can call back.",
+    "recordingBusy": "Finishing the last take, one moment"
   },
   "time": {
     "now": "now",

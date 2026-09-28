@@ -47,6 +47,13 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   private static let playheadHeadWidth: CGFloat = 12
   private static let playheadHeadHeight: CGFloat = 7
 
+  /// How far out a pinch may go, in points per second. JS owns it because JS
+  /// is what decides the floor for THIS project: never past the zoom that
+  /// shows the whole thing (see zoomFloorFor). Without the prop the pinch
+  /// clamped at the fixed 2 pt/s while JS clamped at 10, so a pinch out on a
+  /// long project sprang back the instant the fingers lifted.
+  private var minPixelsPerSecond: CGFloat = AttoTimelineGeometry.minPixelsPerSecond
+
   // MARK: Views and layers
 
   private let renderer = AttoTimelineRenderer()
@@ -305,6 +312,21 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     needsContentRebuild = true
   }
 
+  func setMinPixelsPerSecond(_ value: Double) {
+    guard value.isFinite, value > 0 else { return }
+    let next = min(
+      AttoTimelineGeometry.maxPixelsPerSecond,
+      max(AttoTimelineGeometry.absoluteMinPixelsPerSecond, CGFloat(value)))
+    guard next != minPixelsPerSecond else { return }
+    minPixelsPerSecond = next
+    // The floor can rise (the project got shorter, or the panels opened and
+    // left less room). Anything already below it has to come back up, or the
+    // view would keep showing a zoom no control can reach again.
+    if renderer.geometry.pixelsPerSecond < next {
+      setPixelsPerSecond(Double(next))
+    }
+  }
+
   func setColors(_ record: AttoTimelineColorsRecord?) {
     renderer.colors = AttoTimelineColors(record: record)
     applyOverlayColors()
@@ -514,7 +536,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
 
   private func clampZoom(_ pps: CGFloat) -> CGFloat {
     guard pps.isFinite else { return renderer.geometry.pixelsPerSecond }
-    return min(AttoTimelineGeometry.maxPixelsPerSecond, max(AttoTimelineGeometry.minPixelsPerSecond, pps))
+    return min(AttoTimelineGeometry.maxPixelsPerSecond, max(minPixelsPerSecond, pps))
   }
 
   private func clampOffsetX(_ x: CGFloat) -> CGFloat {

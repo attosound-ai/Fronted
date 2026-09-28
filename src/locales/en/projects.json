@@ -201,6 +201,7 @@
       "close": "Close automation",
       "helpText": "Tap the waveform to add control points. Drag control points to shape the volume envelope. Drag control points off the edge to delete them."
     },
+    "zoomFit": "Fit the whole project",
     "zoomOut": "Zoom out",
     "zoomIn": "Zoom in",
     "play": "Play",
@@ -290,7 +291,7 @@
       "effect": "After you select a range, tap the Effect button to choose from the range effects. A range effect applies only to the selected range, not to the entire track.",
       "undo": "Every editing operation can be undone or redone as many times as you want. This is very useful when you are fine tuning effect parameters: undo an imperfect result and tweak the parameters until you are satisfied.",
       "move": "Long press the middle of a clip to move it along the track. Dragging on the blank area of a track moves all the clips within that track.",
-      "zoom": "Pinch the waveform with two fingers or tap the zoom buttons to zoom in or out. Scroll the view to move the viewport. This only moves the view and never alters the audio.",
+      "zoom": "Pinch the waveform with two fingers or tap the zoom buttons to zoom in or out. The first button fits the whole project on one screen. Scroll the view to move the viewport. This only moves the view and never alters the audio.",
       "close": "Close tips"
     },
     "effects": {

@@ -165,7 +165,12 @@ struct AttoTimelineGeometry {
 
   /// Vertical padding between the lane edge and the clip box.
   static let clipPadding: CGFloat = 3
+  /// The floor when JS has not said otherwise: about 28 seconds across a phone.
   static let minPixelsPerSecond: CGFloat = 2
+  /// The floor JS may lower to. One point is 50 seconds, so a three hour
+  /// project still fits in 216 points; below this the ruler labels start
+  /// landing on top of each other and a tap cannot pick anything useful.
+  static let absoluteMinPixelsPerSecond: CGFloat = 0.02
   static let maxPixelsPerSecond: CGFloat = 4000
 
   func x(forMs ms: Double) -> CGFloat {

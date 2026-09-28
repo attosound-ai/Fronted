@@ -73,18 +73,18 @@ function keepSelectedIfPresent(
  * Pure reducer. Every case that changes `clips` also clears the region
  * `selection` (the range it described may no longer exist).
  */
-// The ONE definition of the zoom range. The reducer clamps to it, and the
-// toolbar's detents/slider and the editor's pinch preview must use the same
-// symbols, or a control can ask for a level the timeline will not show.
-export const ZOOM_MIN = 0.1;
-export const ZOOM_MAX = 4;
-export function clampZoom(level: number): number {
-  // Callable from the pinch gesture's UI-thread worklet. A plain function
-  // reference is NOT callable on the UI runtime; calling it is the same fatal
-  // jsi JSError that killed build 169 mid-call (Sentry REACT-NATIVE-4W).
-  'worklet';
-  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
-}
+// The zoom range lives in utils/zoomRange (pure, no React), and is re-exported
+// here because every caller has always imported it from this hook.
+import { clampZoom } from '../utils/zoomRange';
+
+export {
+  ZOOM_MIN,
+  ZOOM_MAX,
+  ZOOM_FLOOR,
+  clampZoom,
+  fitZoomFor,
+  zoomFloorFor,
+} from '../utils/zoomRange';
 
 export function timelineReducer(
   state: TimelineState,

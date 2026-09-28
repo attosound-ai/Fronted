@@ -17,7 +17,14 @@ import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { LaneEditSheet } from './LaneEditSheet';
-import { useTimeline, clampZoom, ZOOM_MIN, ZOOM_MAX } from '../hooks/useTimeline';
+import {
+  useTimeline,
+  clampZoom,
+  fitZoomFor,
+  zoomFloorFor,
+  ZOOM_MIN,
+  ZOOM_MAX,
+} from '../hooks/useTimeline';
 import { useTimelinePlayback } from '../hooks/useTimelinePlayback';
 import {
   getAudioInjector,
@@ -632,6 +639,15 @@ export function TimelineEditor({
   const totalDuration = getTimelineDuration(state.clips);
   const totalWidth = msToPixels(totalDuration + 5000, state.zoomLevel);
 
+  // ── Zoom range ──
+  // Measured, not assumed: the native view is the full screen width and the
+  // track panels sit over its left inset, so what a project has to fit into
+  // is the measured width minus that inset. `zoomFloorRef` exists because
+  // commitZoom is defined before the inset is known and reads it at gesture
+  // time, when it is always current.
+  const [surfaceWidth, setSurfaceWidth] = useState(0);
+  const zoomFloorRef = useRef(ZOOM_MIN);
+
   // ── Editor scale telemetry ──
   // The mounted timeline's native-view count is the freeze risk: Fabric commits
   // mount/unmount as ONE synchronous main-thread transaction, and the Aug 3
@@ -678,7 +694,9 @@ export function TimelineEditor({
     (level: number) => {
       // SoundLab's "Keep Playing on Zoom": off means a zoom stops playback.
       if (!studioPrefs.keepPlayingOnZoom()) setPlaying(false);
-      setZoom(clampZoom(level));
+      // The floor is per project (the zoom that shows all of it), so it is
+      // applied here and not inside clampZoom, which knows no duration.
+      setZoom(Math.max(zoomFloorRef.current, clampZoom(level)));
     },
     [setZoom, setPlaying]
   );
@@ -1867,6 +1885,44 @@ export function TimelineEditor({
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;
   const panelInset = panelsCollapsed ? 0 : STUDIO.panelWidth;
 
+  // A few points so the last clip's edge is not flush against the screen.
+  const laneWidth = Math.max(0, surfaceWidth - panelInset - 8);
+  // The whole project across the lane area, and how far out this project may
+  // be zoomed (never past that point, never tighter than the old ZOOM_MIN).
+  const fitZoom = fitZoomFor(totalDuration, laneWidth);
+  const zoomFloor = zoomFloorFor(totalDuration, laneWidth);
+  zoomFloorRef.current = zoomFloor;
+  const atFitZoom = state.zoomLevel <= fitZoom * 1.02;
+
+  // The floor can rise: delete half the project and the zoom that used to show
+  // all of it is now further out than anything can reach. Bring the state back
+  // up so the buttons and the native view agree on where the end is.
+  useEffect(() => {
+    if (state.zoomLevel < zoomFloor - 1e-9) setZoom(zoomFloor);
+  }, [zoomFloor, state.zoomLevel, setZoom]);
+
+  /**
+   * The whole project on one screen, from the start.
+   *
+   * Anthony, Sep 28 2026: "Its so much easier when we can see the whole
+   * project we are working on by zooming out and focus on one thing by
+   * zooming in". Reaching it by tapping the minus button took a dozen taps on
+   * a long project, so it is one control: the zoom that fits, and the scroll
+   * back to zero that makes it visible.
+   */
+  const fitToProject = () => {
+    if (totalDuration <= 0) return;
+    commitZoom(fitZoom);
+    void timelineRef.current?.scrollToMs(0, true);
+    analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_SCALE, {
+      trigger: 'fit',
+      project_id: projectId,
+      fit_zoom: fitZoom,
+      lane_width_px: Math.round(laneWidth),
+      total_duration_ms: totalDuration,
+    });
+  };
+
   // Output meters: fed by the native engine when it reports levels; idle
   // otherwise. Shared values so the bars never render in JS.
   const leftLevelSv = useSharedValue(0);
@@ -1929,7 +1985,12 @@ export function TimelineEditor({
           outer ScrollView only scrolls vertically when the lanes overflow.
           The JS track panels sit over the view's left inset and scroll with
           it vertically. */}
-      <View ref={tracksRef} collapsable={false} style={styles.timelineContainer}>
+      <View
+        ref={tracksRef}
+        collapsable={false}
+        style={styles.timelineContainer}
+        onLayout={(e) => setSurfaceWidth(e.nativeEvent.layout.width)}
+      >
         <ScrollView
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
@@ -1943,6 +2004,9 @@ export function TimelineEditor({
               tracks={nativeTracks}
               clips={nativeClips}
               pixelsPerSecond={state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1}
+              // Same floor the buttons use, or a pinch out on a long project
+              // would spring back the moment the fingers lifted.
+              minPixelsPerSecond={zoomFloor * PIXELS_PER_SECOND_AT_ZOOM_1}
               selectionLineMs={selectionLineMs}
               selection={
                 hasRange && region
@@ -2055,7 +2119,9 @@ export function TimelineEditor({
         onToggleAutomation={() => setAutomationActive((v) => !v)}
         onZoomOut={zoomOut}
         onZoomIn={zoomIn}
-        canZoomOut={state.zoomLevel > ZOOM_MIN + 0.001}
+        onFit={fitToProject}
+        canFit={totalDuration > 0 && !atFitZoom}
+        canZoomOut={state.zoomLevel > zoomFloor * 1.001}
         canZoomIn={state.zoomLevel < ZOOM_MAX - 0.001}
         zoomRef={zoomRef}
       />

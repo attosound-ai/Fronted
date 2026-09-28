@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Minus, Plus } from 'lucide-react-native';
+import { Minus, Plus, UnfoldHorizontal } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { StudioIconButton, StudioPill } from './StudioButton';
@@ -11,6 +11,9 @@ interface Props {
   onToggleAutomation: () => void;
   onZoomOut: () => void;
   onZoomIn: () => void;
+  /** Sets the zoom that shows the whole project and scrolls back to its start. */
+  onFit: () => void;
+  canFit: boolean;
   canZoomOut: boolean;
   canZoomIn: boolean;
   /** Measured by the tips overlay to frame the zoom buttons. */
@@ -19,13 +22,19 @@ interface Props {
 
 /**
  * The row under the tracks: the volume automation toggle in the center and
- * the zoom pair on the right, exactly where SoundLab keeps them.
+ * the zoom controls on the right, exactly where SoundLab keeps them.
+ *
+ * Three buttons, not two. Anthony, Sep 28 2026: seeing a whole track or album
+ * took so many taps on the minus that it read as impossible, so the first
+ * button jumps straight to the zoom where the whole project fits.
  */
 export function ZoomRow({
   automationActive,
   onToggleAutomation,
   onZoomOut,
   onZoomIn,
+  onFit,
+  canFit,
   canZoomOut,
   canZoomIn,
   zoomRef,
@@ -41,6 +50,16 @@ export function ZoomRow({
       />
       <View style={styles.side}>
         <View ref={zoomRef} collapsable={false} style={styles.zoom}>
+          <StudioIconButton
+            icon={
+              <UnfoldHorizontal size={18} color={STUDIO_COLORS.text} strokeWidth={2.25} />
+            }
+            onPress={onFit}
+            disabled={!canFit}
+            size={32}
+            accessibilityLabel={t('studio.zoomFit')}
+            style={styles.zoomFit}
+          />
           <StudioIconButton
             icon={<Minus size={18} color={STUDIO_COLORS.text} strokeWidth={2.5} />}
             onPress={onZoomOut}
@@ -80,5 +99,8 @@ const styles = StyleSheet.create({
   },
   zoomIn: {
     marginLeft: 8,
+  },
+  zoomFit: {
+    marginRight: 8,
   },
 });

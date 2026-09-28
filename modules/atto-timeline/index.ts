@@ -130,6 +130,12 @@ export interface AttoTimelineViewProps {
   clips: TimelineClip[];
   /** Zoom. Source of truth whenever it changes; pinches are reported by onZoom. */
   pixelsPerSecond: number;
+  /**
+   * How far out a pinch may go, in points per second. Default 2. JS sets it
+   * per project so the pinch stops exactly where the minus button does: at
+   * the zoom that shows the whole project and not one step further.
+   */
+  minPixelsPerSecond?: number;
   playheadMs: number;
   /** The orange line placed by a tap, or null. */
   selectionLineMs?: number | null;

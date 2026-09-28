@@ -201,6 +201,7 @@
       "close": "Fechar automação",
       "helpText": "Toque na onda para adicionar pontos de controle. Arraste os pontos para moldar a envoltória de volume. Arraste um ponto para fora da borda para apagá lo."
     },
+    "zoomFit": "Ver o projeto inteiro",
     "zoomOut": "Afastar",
     "zoomIn": "Aproximar",
     "play": "Reproduzir",
@@ -290,7 +291,7 @@
       "effect": "Depois de selecionar um trecho, toque no botão Efeito para escolher entre os efeitos de trecho. Um efeito de trecho se aplica só ao trecho selecionado, não à faixa inteira.",
       "undo": "Toda operação de edição pode ser desfeita ou refeita quantas vezes quiser. É muito útil ao ajustar parâmetros de efeitos: desfaça um resultado imperfeito e ajuste os parâmetros até ficar satisfeito.",
       "move": "Mantenha pressionado o meio de um clipe para movê lo pela faixa. Arrastar na área vazia de uma faixa move todos os clipes dessa faixa.",
-      "zoom": "Faça o gesto de pinça na onda com dois dedos ou toque nos botões de zoom para aproximar ou afastar. Role a vista para mover o enquadramento. Isso só move a vista e nunca altera o áudio.",
+      "zoom": "Faça o gesto de pinça na onda com dois dedos ou toque nos botões de zoom para aproximar ou afastar. O primeiro botão mostra o projeto inteiro em uma tela. Role a vista para mover o enquadramento. Isso só move a vista e nunca altera o áudio.",
       "close": "Fechar dicas"
     },
     "effects": {

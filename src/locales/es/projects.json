@@ -201,6 +201,7 @@
       "close": "Cerrar automatización",
       "helpText": "Toca la onda para agregar puntos de control. Arrastra los puntos para dar forma a la envolvente de volumen. Arrastra un punto fuera del borde para borrarlo."
     },
+    "zoomFit": "Ver todo el proyecto",
     "zoomOut": "Alejar",
     "zoomIn": "Acercar",
     "play": "Reproducir",
@@ -290,7 +291,7 @@
       "effect": "Después de seleccionar un rango, toca el botón Efecto para elegir entre los efectos de rango. Un efecto de rango se aplica solo al rango seleccionado, no a toda la pista.",
       "undo": "Toda operación de edición se puede deshacer o rehacer tantas veces como quieras. Es muy útil al afinar parámetros de efectos: deshaz un resultado imperfecto y ajusta los parámetros hasta quedar satisfecho.",
       "move": "Mantén presionado el centro de un clip para moverlo por la pista. Arrastrar sobre el área vacía de una pista mueve todos los clips de esa pista.",
-      "zoom": "Pellizca la onda con dos dedos o toca los botones de zoom para acercar o alejar. Desplaza la vista para mover el encuadre. Esto solo mueve la vista y nunca altera el audio.",
+      "zoom": "Pellizca la onda con dos dedos o toca los botones de zoom para acercar o alejar. El primer botón muestra el proyecto entero en una pantalla. Desplaza la vista para mover el encuadre. Esto solo mueve la vista y nunca altera el audio.",
       "close": "Cerrar consejos"
     },
     "effects": {

@@ -61,7 +61,7 @@ export function useTwilioCallRecording({
   projectId,
   activeLaneIndex,
   getRecordStartMs,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   addClip: _addClip,
 }: UseTwilioCallRecordingOptions) {
   const { t } = useTranslation('common');

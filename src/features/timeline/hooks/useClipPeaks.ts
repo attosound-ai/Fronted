@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 
 import { projectService } from '@/lib/api/projectService';
 import type { LocalClip } from '../types';
-import { WAVEFORM_PEAKS } from './useWaveformData';
+import { peaksParaDuracion } from './useWaveformData';
 
 /**
  * One dense envelope per segment (same query key as useWaveformData, so
@@ -19,12 +19,19 @@ export function useClipPeaks(
     () => Array.from(new Set(clips.map((c) => c.segmentId))).sort(),
     [clips]
   );
+  // La resolución la manda la duración del segmento, no un número fijo: un
+  // clip largo necesita muchos más picos para que al ampliar siga habiendo
+  // forma que dibujar. La clave lleva el número, así que dos segmentos de
+  // duraciones distintas no se pisan la caché.
   const results = useQueries({
-    queries: segmentIds.map((segmentId) => ({
-      queryKey: ['waveform', segmentId, WAVEFORM_PEAKS],
-      queryFn: () => projectService.getWaveform(segmentId, WAVEFORM_PEAKS),
-      staleTime: Infinity,
-    })),
+    queries: segmentIds.map((segmentId) => {
+      const picos = peaksParaDuracion(segmentDurationMs.get(segmentId));
+      return {
+        queryKey: ['waveform', segmentId, picos],
+        queryFn: () => projectService.getWaveform(segmentId, picos),
+        staleTime: Infinity,
+      };
+    }),
   });
   // A fingerprint of which segments have data, so the map below is rebuilt
   // when an envelope arrives and not on every render. A spread dependency

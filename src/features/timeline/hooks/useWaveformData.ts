@@ -1,5 +1,12 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { projectService } from '@/lib/api/projectService';
+import {
+  peaksParaDuracion,
+  WAVEFORM_PEAKS_MAX,
+  WAVEFORM_PEAKS_MIN,
+} from './waveformResolution';
+
+export { peaksParaDuracion, WAVEFORM_PEAKS_MAX, WAVEFORM_PEAKS_MIN };
 
 /**
  * Peak buckets fetched per segment. ONE dense envelope per segment, fetched

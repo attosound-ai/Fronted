@@ -2038,9 +2038,14 @@ export function TimelineEditor({
       .map((clipId) => ({ clipId, peaks: [] as number[] }));
     if (cambiadas.length === 0 && borradas.length === 0) return;
 
+    // Si la vista todavía no está, no se apunta nada como enviado y el
+    // próximo cambio vuelve a mandarlo entero.
+    const vista = timelineRef.current;
+    if (!vista) return;
+
     enviadas.clear();
     for (const w of waveforms) enviadas.set(w.clipId, w.peaks);
-    void timelineRef.current?.setWaveforms([...cambiadas, ...borradas]);
+    void vista.setWaveforms([...cambiadas, ...borradas]);
   }, [waveforms]);
 
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;

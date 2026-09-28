@@ -7,7 +7,12 @@ import {
   type ComponentType,
   type Ref,
 } from 'react';
-import { Platform, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modules-core';
 
 /**
@@ -174,6 +179,8 @@ export interface AttoTimelineViewProps {
   /** Auto scroll while playing so the playhead stays visible. */
   followPlayhead?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** El primer onLayout es la señal de que la vista nativa ya existe. */
+  onLayout?: (event: LayoutChangeEvent) => void;
 
   onTap?: (event: NativeEvent<TimelineTapEvent>) => void;
   onDoubleTap?: (event: NativeEvent<TimelineDoubleTapEvent>) => void;

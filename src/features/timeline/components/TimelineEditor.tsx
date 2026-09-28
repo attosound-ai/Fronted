@@ -2055,8 +2055,14 @@ export function TimelineEditor({
     // cruza deja el clip dibujado como una raya, y sin esto no habría ni un
     // error donde mirarlo. Pasó exactamente eso el 28 de septiembre de 2026.
     for (const w of [...cambiadas, ...borradas]) {
-      vista
-        .setWaveform(w.clipId, w.peaks, w.startMs ?? 0, w.endMs ?? 0)
+      const mandar = () =>
+        vista.setWaveform(w.clipId, w.peaks, w.startMs ?? 0, w.endMs ?? 0);
+      // Un reintento corto por si la vista aún no está registrada (la señal de
+      // montaje llega un fotograma antes que el registro en alguna versión);
+      // si vuelve a fallar, se reporta y se descuenta para que el siguiente
+      // cambio lo intente de nuevo.
+      mandar()
+        .catch(() => new Promise((r) => setTimeout(r, 250)).then(mandar))
         .catch((err: unknown) => {
           enviadas.delete(w.clipId);
           analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_SCALE, {

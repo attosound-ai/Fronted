@@ -73,6 +73,24 @@ export const TimelineSurface = memo(
     );
     const animatedProps = useAnimatedProps(() => ({ playheadMs: positionSv.value }));
     const nativeRef = useRef<NativeInstance>(null);
+
+    // Las funciones de la vista buscan la vista nativa por su tag, y el tag no
+    // existe hasta que Fabric la monta, que pasa DESPUÉS de que React termine
+    // su commit. Un efecto que llame a setWaveform nada más montar el editor
+    // llega antes: "Unable to find the 'AttoTimelineView' view with tag".
+    // Así fue como los clips salieron sin onda el 28 de septiembre de 2026.
+    // El primer onLayout es la señal de que la vista ya está; todo lo que
+    // necesite la vista espera a eso.
+    const montadaRef = useRef<{ promesa: Promise<void>; resolver: () => void } | null>(
+      null
+    );
+    if (!montadaRef.current) {
+      let resolver: () => void = () => {};
+      const promesa = new Promise<void>((r) => {
+        resolver = r;
+      });
+      montadaRef.current = { promesa, resolver };
+    }
     useImperativeHandle(
       ref,
       () => ({
@@ -87,6 +105,7 @@ export const TimelineSurface = memo(
           }
         },
         async setWaveform(clipId, peaks, startMs, endMs) {
+          await montadaRef.current?.promesa;
           const fn = nativeRef.current?.setWaveform;
           if (typeof fn !== 'function') {
             throw new Error('setWaveform no está en la vista nativa');
@@ -114,6 +133,7 @@ export const TimelineSurface = memo(
         playheadMs={0}
         colors={colors}
         animatedProps={animatedProps}
+        onLayout={() => montadaRef.current?.resolver()}
         rulerHeight={STUDIO.rulerHeight}
         style={[styles.view, { height }]}
       />

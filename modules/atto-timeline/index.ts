@@ -39,7 +39,7 @@ export interface TimelineClip {
  * La onda de un clip: sus picos y, si no cubren el clip entero, el tramo que
  * cubren.
  *
- * Entra por `setWaveforms` (función del ref) y NO por una prop, a propósito.
+ * Entra por `setWaveform` (función del ref) y NO por una prop, a propósito.
  * Una prop de Fabric se reconvierte entera cada vez que cambia cualquier otra
  * prop de la misma vista, aunque esa no haya cambiado. Mientras suena, la
  * cabeza de reproducción viaja como prop animada a 60 por segundo, así que los
@@ -195,14 +195,23 @@ export interface TimelineViewRef {
    */
   setZoom(pixelsPerSecond: number, anchorMs?: number | null): Promise<void>;
   /**
-   * Las ondas de los clips que hayan cambiado. MEZCLA, no sustituye: manda
-   * solo lo que cambió, que al ampliar mucho es una ventana de un clip y no
-   * las envolventes de todos. Una entrada con `peaks` vacío borra la onda de
-   * ese clip, y las de los clips que desaparecen se van con ellos.
+   * La onda de UN clip. Se llama una vez por clip que cambió, no con la lista
+   * entera: al ampliar mucho lo que cambia es la ventana de un clip, y mandar
+   * el resto sería volver a cruzar envolventes que ya están.
    *
-   * Ver TimelineWaveform para por qué esto es una función y no una prop.
+   * Los argumentos son sueltos y no un objeto a propósito: con un array de
+   * Records la llamada se rechazaba en silencio y los clips salían sin onda.
+   *
+   * `peaks` vacío borra la onda de ese clip. `endMs <= startMs` significa que
+   * los picos cubren el clip entero. Ver TimelineWaveform para por qué esto es
+   * una función y no una prop.
    */
-  setWaveforms(waveforms: TimelineWaveform[]): Promise<void>;
+  setWaveform(
+    clipId: string,
+    peaks: number[],
+    startMs: number,
+    endMs: number
+  ): Promise<void>;
 }
 
 // Native view functions are attached to the component prototype by
@@ -210,7 +219,12 @@ export interface TimelineViewRef {
 type NativeViewInstance = Component<AttoTimelineViewProps> & {
   scrollToMs?: (ms: number, animated: boolean) => Promise<void>;
   setZoom?: (pixelsPerSecond: number, anchorMs: number | null) => Promise<void>;
-  setWaveforms?: (waveforms: TimelineWaveform[]) => Promise<void>;
+  setWaveform?: (
+    clipId: string,
+    peaks: number[],
+    startMs: number,
+    endMs: number
+  ) => Promise<void>;
 };
 
 const nativeModule = requireOptionalNativeModule('AttoTimeline');
@@ -259,9 +273,12 @@ export const AttoTimelineView = forwardRef<TimelineViewRef, AttoTimelineViewProp
             await fn.call(nativeRef.current, pixelsPerSecond, anchorMs ?? null);
           }
         },
-        async setWaveforms(waveforms) {
-          const fn = nativeRef.current?.setWaveforms;
-          if (typeof fn === 'function') await fn.call(nativeRef.current, waveforms);
+        async setWaveform(clipId, peaks, startMs, endMs) {
+          const fn = nativeRef.current?.setWaveform;
+          if (typeof fn !== 'function') {
+            throw new Error('setWaveform no está en la vista nativa');
+          }
+          await fn.call(nativeRef.current, clipId, peaks, startMs, endMs);
         },
       }),
       []

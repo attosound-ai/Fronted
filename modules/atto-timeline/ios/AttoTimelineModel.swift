@@ -41,14 +41,11 @@ struct AttoTimelineClipRecord: Record {
  * Por eso la onda entra por una función y no por una prop: cruza una vez
  * cuando cambia, y las props se quedan con lo que de verdad es pequeño.
  */
-struct AttoTimelineWaveformRecord: Record {
-  @Field var clipId: String = ""
-  @Field var peaks: [Double] = []
-  /// El tramo que cubren, en ms desde el principio del clip. endMs <= startMs
-  /// (o los dos a cero) significa el clip entero.
-  @Field var startMs: Double = 0
-  @Field var endMs: Double = 0
-}
+// Nota: la onda NO viaja como Record. Entra por `setWaveform` con argumentos
+// sueltos (texto, array de números, dos números), que es el tipo más simple
+// que la conversión a nativo sabe hacer sin dudas. Con un array de Records la
+// llamada se rechazaba en silencio y los clips salían sin onda, y como la
+// promesa iba a la basura no había ni un error donde mirarlo.
 
 struct AttoTimelineSelectionRecord: Record {
   @Field var trackIndex: Int = 0
@@ -114,12 +111,12 @@ struct AttoTimelineWaveform {
   /// a recorrer miles de valores.
   let signature: Int
 
-  init?(record: AttoTimelineWaveformRecord) {
-    guard !record.peaks.isEmpty else { return nil }
-    peaks = record.peaks.map { Float(min(1, max(0, $0))) }
-    let tieneVentana = record.endMs > record.startMs
-    startMs = tieneVentana ? max(0, record.startMs) : nil
-    endMs = tieneVentana ? record.endMs : nil
+  init?(peaks crudos: [Double], startMs desde: Double, endMs hasta: Double) {
+    guard !crudos.isEmpty else { return nil }
+    peaks = crudos.map { Float(min(1, max(0, $0))) }
+    let tieneVentana = hasta > desde
+    startMs = tieneVentana ? max(0, desde) : nil
+    endMs = tieneVentana ? hasta : nil
     var hasher = Hasher()
     hasher.combine(peaks.count)
     hasher.combine(startMs ?? -1)

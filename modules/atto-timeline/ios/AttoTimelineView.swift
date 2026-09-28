@@ -247,14 +247,13 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   /// cruzar también la envolvente completa de los demás clips. Quien manda
   /// solo manda lo que cambió, y las que sobran las tira `setClips` cuando su
   /// clip desaparece.
-  func setWaveforms(_ records: [AttoTimelineWaveformRecord]) {
+  func setWaveform(clipId: String, peaks: [Double], startMs: Double, endMs: Double) {
+    guard !clipId.isEmpty else { return }
     var mapa = renderer.waveforms
-    for record in records where !record.clipId.isEmpty {
-      if let onda = AttoTimelineWaveform(record: record) {
-        mapa[record.clipId] = onda
-      } else {
-        mapa.removeValue(forKey: record.clipId)
-      }
+    if let onda = AttoTimelineWaveform(peaks: peaks, startMs: startMs, endMs: endMs) {
+      mapa[clipId] = onda
+    } else {
+      mapa.removeValue(forKey: clipId)
     }
     renderer.waveforms = mapa
     redrawAllCanvases()

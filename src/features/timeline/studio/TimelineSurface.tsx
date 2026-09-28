@@ -15,7 +15,6 @@ import {
   isTimelineViewAvailable,
   type AttoTimelineViewProps,
   type TimelineViewRef,
-  type TimelineWaveform,
 } from '../../../../modules/atto-timeline';
 import { STUDIO, STUDIO_COLORS } from './studioTheme';
 
@@ -24,7 +23,12 @@ import { STUDIO, STUDIO_COLORS } from './studioTheme';
 type NativeInstance = Component<AttoTimelineViewProps> & {
   scrollToMs?: (ms: number, animated: boolean) => Promise<void>;
   setZoom?: (pixelsPerSecond: number, anchorMs: number | null) => Promise<void>;
-  setWaveforms?: (waveforms: TimelineWaveform[]) => Promise<void>;
+  setWaveform?: (
+    clipId: string,
+    peaks: number[],
+    startMs: number,
+    endMs: number
+  ) => Promise<void>;
 };
 const NativeTimeline = isTimelineViewAvailable()
   ? requireNativeViewManager<AttoTimelineViewProps>('AttoTimeline', 'AttoTimelineView')
@@ -82,9 +86,12 @@ export const TimelineSurface = memo(
             await fn.call(nativeRef.current, pixelsPerSecond, anchorMs ?? null);
           }
         },
-        async setWaveforms(waveforms) {
-          const fn = nativeRef.current?.setWaveforms;
-          if (typeof fn === 'function') await fn.call(nativeRef.current, waveforms);
+        async setWaveform(clipId, peaks, startMs, endMs) {
+          const fn = nativeRef.current?.setWaveform;
+          if (typeof fn !== 'function') {
+            throw new Error('setWaveform no está en la vista nativa');
+          }
+          await fn.call(nativeRef.current, clipId, peaks, startMs, endMs);
         },
       }),
       []

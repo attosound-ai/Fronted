@@ -2035,7 +2035,12 @@ export function TimelineEditor({
     const vivos = new Set(waveforms.map((w) => w.clipId));
     const borradas = [...enviadas.keys()]
       .filter((id) => !vivos.has(id))
-      .map((clipId) => ({ clipId, peaks: [] as number[] }));
+      .map((clipId) => ({
+        clipId,
+        peaks: [] as number[],
+        startMs: undefined as number | undefined,
+        endMs: undefined as number | undefined,
+      }));
     if (cambiadas.length === 0 && borradas.length === 0) return;
 
     // Si la vista todavía no está, no se apunta nada como enviado y el
@@ -2045,7 +2050,24 @@ export function TimelineEditor({
 
     enviadas.clear();
     for (const w of waveforms) enviadas.set(w.clipId, w.peaks);
-    void vista.setWaveforms([...cambiadas, ...borradas]);
+
+    // Una llamada por clip, y el fallo NO se tira a la basura: una onda que no
+    // cruza deja el clip dibujado como una raya, y sin esto no habría ni un
+    // error donde mirarlo. Pasó exactamente eso el 28 de septiembre de 2026.
+    for (const w of [...cambiadas, ...borradas]) {
+      vista
+        .setWaveform(w.clipId, w.peaks, w.startMs ?? 0, w.endMs ?? 0)
+        .catch((err: unknown) => {
+          enviadas.delete(w.clipId);
+          analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_SCALE, {
+            trigger: 'waveform_failed',
+            project_id: projectId,
+            clip_id: w.clipId,
+            peak_count: w.peaks.length,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    }
   }, [waveforms]);
 
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;

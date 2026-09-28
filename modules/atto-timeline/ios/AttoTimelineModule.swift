@@ -94,8 +94,9 @@ public class AttoTimelineModule: Module {
       // Las ondas entran por aquí y NO por una prop. Ver
       // AttoTimelineWaveformRecord: como prop se reconvertían enteras sesenta
       // veces por segundo mientras sonaba, y el sistema mataba la app.
-      AsyncFunction("setWaveforms") { (view: AttoTimelineView, records: [AttoTimelineWaveformRecord]) in
-        view.setWaveforms(records)
+      AsyncFunction("setWaveform") {
+        (view: AttoTimelineView, clipId: String, peaks: [Double], startMs: Double, endMs: Double) in
+        view.setWaveform(clipId: clipId, peaks: peaks, startMs: startMs, endMs: endMs)
       }
     }
   }

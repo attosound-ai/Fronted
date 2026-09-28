@@ -1911,6 +1911,24 @@ export function TimelineEditor({
     state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1,
     visibleRange
   );
+  // Una vez por sesión de editor, cuando la primera ventana de detalle llega:
+  // sirve para saber si este camino se usa de verdad y a qué zoom, que es lo
+  // único que no se puede saber desde aquí.
+  const detalleAvisadoRef = useRef(false);
+  useEffect(() => {
+    if (detalleAvisadoRef.current || detailPeaks.size === 0) return;
+    detalleAvisadoRef.current = true;
+    const primera = detailPeaks.values().next().value;
+    analytics.capture(ANALYTICS_EVENTS.PROJECT.TIMELINE_SCALE, {
+      trigger: 'detail',
+      project_id: projectId,
+      zoom_level: state.zoomLevel,
+      pixels_per_second: Math.round(state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1),
+      window_ms: primera ? Math.round(primera.endMs - primera.startMs) : null,
+      window_peaks: primera ? primera.peaks.length : null,
+      clips_with_detail: detailPeaks.size,
+    });
+  }, [detailPeaks, projectId, state.zoomLevel]);
   const nativeTracks = useMemo(
     () =>
       Array.from({ length: state.laneCount }, (_, i) => ({

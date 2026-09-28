@@ -1926,17 +1926,33 @@ export function TimelineEditor({
     state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1,
     visibleRange
   );
-  // Lo único que cambia cuando alguien se desplaza a zoom profundo.
-  const clipDetail = useMemo(
-    () =>
-      Array.from(detailPeaks.entries()).map(([clipId, d]) => ({
-        clipId,
-        peaks: d.peaks,
-        startMs: d.startMs,
-        endMs: d.endMs,
-      })),
-    [detailPeaks]
-  );
+  // Las ondas: la envolvente del segmento, o la ventana de detalle cuando la
+  // hay. Se mandan por función y no por prop (ver nativeClips arriba).
+  const waveforms = useMemo(() => {
+    const lista: {
+      clipId: string;
+      peaks: number[];
+      startMs?: number;
+      endMs?: number;
+    }[] = [];
+    for (const clip of state.clips) {
+      const detalle = detailPeaks.get(clip.id);
+      if (detalle) {
+        lista.push({
+          clipId: clip.id,
+          peaks: detalle.peaks,
+          startMs: detalle.startMs,
+          endMs: detalle.endMs,
+        });
+        continue;
+      }
+      const envolvente = clipPeaks.get(clip.id);
+      if (envolvente && envolvente.length > 0) {
+        lista.push({ clipId: clip.id, peaks: envolvente });
+      }
+    }
+    return lista;
+  }, [state.clips, clipPeaks, detailPeaks]);
 
   // Una vez por sesión de editor, cuando la primera ventana de detalle llega:
   // sirve para saber si este camino se usa de verdad y a qué zoom, que es lo
@@ -1964,12 +1980,16 @@ export function TimelineEditor({
       })),
     [state.laneCount]
   );
-  // OJO con las dependencias de esto: la onda de detalle NO entra aquí.
-  // Cuando entraba, cada cambio de ventana (o sea, cada desplazamiento a zoom
-  // profundo) reenviaba el array entero de clips con sus envolventes de hasta
-  // 24000 valores cada una. Reproduciendo, con la vista siguiendo sola a la
-  // cabeza, eso fueron 758 MB y el sistema mató la app. El detalle viaja en su
-  // propia prop, `clipDetail`.
+  // NINGUNA onda entra aquí, y es lo importante de este bloque.
+  //
+  // Los picos iban dentro de cada clip, y los clips son una prop. Una prop de
+  // Fabric se reconvierte ENTERA cada vez que cambia cualquier otra prop de la
+  // misma vista, aunque esa no haya cambiado. Mientras suena, la cabeza viaja
+  // como prop animada a 60 por segundo, así que los 60.000 picos de un
+  // proyecto largo se recorrían tres veces por fotograma en el hilo principal:
+  // 280 MB cada cinco segundos hasta que el sistema mataba la app (medido en
+  // el teléfono el 28 de septiembre de 2026). Las ondas entran por
+  // `setWaveforms`, que cruza una vez cuando cambian.
   const nativeClips = useMemo(() => {
     const list = state.clips.map((c) => {
       return {
@@ -1977,7 +1997,6 @@ export function TimelineEditor({
         trackIndex: c.laneIndex,
         startMs: c.positionInTimeline,
         durationMs: c.endInSegment - c.startInSegment,
-        peaks: clipPeaks.get(c.id) ?? [],
         selected: c.id === state.selectedClipId,
         muted: state.laneMeta[c.laneIndex]?.muted === true,
         color: state.laneMeta[c.laneIndex]?.color || undefined,
@@ -1990,7 +2009,6 @@ export function TimelineEditor({
         trackIndex: recordingLaneRef.current,
         startMs: recordingStartMsRef.current,
         durationMs: Math.max(50, recordingElapsedMs),
-        peaks: [],
         selected: true,
         muted: false,
         color: state.laneMeta[recordingLaneRef.current]?.color || undefined,
@@ -2001,11 +2019,16 @@ export function TimelineEditor({
     state.clips,
     state.selectedClipId,
     state.laneMeta,
-    clipPeaks,
     isRecording,
     isUploadingRecording,
     recordingElapsedMs,
   ]);
+  // Se reenvían también cuando cambian los clips: si la vista se reciclara,
+  // los clips volverían sin onda y este efecto es lo que las repone.
+  useEffect(() => {
+    void timelineRef.current?.setWaveforms(waveforms);
+  }, [waveforms, nativeClips]);
+
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;
   const panelInset = panelsCollapsed ? 0 : STUDIO.panelWidth;
 
@@ -2134,7 +2157,6 @@ export function TimelineEditor({
               // Same floor the buttons use, or a pinch out on a long project
               // would spring back the moment the fingers lifted.
               minPixelsPerSecond={zoomFloor * PIXELS_PER_SECOND_AT_ZOOM_1}
-              clipDetail={clipDetail}
               selectionLineMs={selectionLineMs}
               selection={
                 hasRange && region

@@ -13,27 +13,39 @@ struct AttoTimelineClipRecord: Record {
   @Field var trackIndex: Int = 0
   @Field var startMs: Double = 0
   @Field var durationMs: Double = 0
-  @Field var peaks: [Double] = []
   @Field var selected: Bool? = nil
   @Field var muted: Bool? = nil
   @Field var color: String? = nil
 }
 
 /**
- * La onda de detalle de UN clip: el tramo que se está mirando, a resolución
- * de pantalla, para cuando la envolvente del segmento se queda sin puntos.
+ * La onda de un clip: sus picos y el tramo que cubren.
  *
- * Viaja en su propia prop y no dentro del clip a propósito. Yendo dentro, cada
- * vez que la ventana cambiaba (o sea, cada vez que alguien desplaza la vista a
- * zoom profundo) se reenviaba el array ENTERO de clips, con sus envolventes de
- * hasta 24000 valores cada una. Reproduciendo, con la vista siguiendo sola a
- * la cabeza, eso eran varios megas por segundo cruzando a nativo: la memoria
- * se fue a 758 MB y el sistema mató la app (28 de septiembre de 2026).
+ * NO es una prop, y eso es lo importante de este archivo.
+ *
+ * Los picos iban dentro del clip, y el clip es una prop. Una prop de Fabric se
+ * reconvierte ENTERA cada vez que cambia cualquier otra prop de la misma
+ * vista, aunque esa no haya cambiado: expo-modules pasa todas de folly a
+ * objetos, de objetos a Swift, y compara la nueva con la anterior castea a
+ * AnyHashable. Tres recorridos completos por cada valor.
+ *
+ * Mientras suena, la cabeza de reproducción viaja como prop animada a 60 por
+ * segundo. Con un proyecto de 41 minutos, los picos de sus clips son unos
+ * 60.000 números, así que eran tres recorridos por 60.000 valores, sesenta
+ * veces por segundo, en el hilo principal. Medido el 28 de septiembre de 2026
+ * en el teléfono: la huella subía 280 MB cada cinco segundos con el hilo
+ * principal al 93 por ciento dentro de swift_dynamicCast, hasta que el sistema
+ * mataba la app a los 1185 MB. Con un proyecto de 11 segundos no se movía,
+ * porque son 2000 números en vez de 60.000.
+ *
+ * Por eso la onda entra por una función y no por una prop: cruza una vez
+ * cuando cambia, y las props se quedan con lo que de verdad es pequeño.
  */
-struct AttoTimelineDetailRecord: Record {
+struct AttoTimelineWaveformRecord: Record {
   @Field var clipId: String = ""
   @Field var peaks: [Double] = []
-  /// El tramo que cubren, en ms desde el principio del clip.
+  /// El tramo que cubren, en ms desde el principio del clip. endMs <= startMs
+  /// (o los dos a cero) significa el clip entero.
   @Field var startMs: Double = 0
   @Field var endMs: Double = 0
 }
@@ -74,14 +86,10 @@ struct AttoTimelineClip {
   let trackIndex: Int
   let startMs: Double
   let durationMs: Double
-  let peaks: [Float]
   let selected: Bool
   let muted: Bool
   /// The lane's colour, when the editor sends one (track colour picker).
   let color: UIColor?
-  /// Cheap fingerprint of the peaks array so the downsample cache can tell a
-  /// reload apart from an unchanged array without hashing 4000 values.
-  let peaksSignature: Int
 
   var endMs: Double { startMs + durationMs }
 
@@ -90,40 +98,32 @@ struct AttoTimelineClip {
     trackIndex = max(0, record.trackIndex)
     startMs = max(0, record.startMs)
     durationMs = max(0, record.durationMs)
-    peaks = record.peaks.map { Float(min(1, max(0, $0))) }
     selected = record.selected ?? false
     muted = record.muted ?? false
     color = record.color.flatMap { UIColor(hex: $0) }
-    var hasher = Hasher()
-    hasher.combine(peaks.count)
-    if !peaks.isEmpty {
-      let stride = max(1, peaks.count / 16)
-      var i = 0
-      while i < peaks.count {
-        hasher.combine(peaks[i])
-        i += stride
-      }
-    }
-    peaksSignature = hasher.finalize()
   }
 }
 
-/// Lo mismo que `AttoTimelineDetailRecord`, ya saneado y con su huella.
-struct AttoTimelineDetail {
+/// Lo mismo que `AttoTimelineWaveformRecord`, ya saneado y con su huella.
+struct AttoTimelineWaveform {
   let peaks: [Float]
-  let startMs: Double
-  let endMs: Double
+  /// Tramo cubierto, o nil cuando cubren el clip entero.
+  let startMs: Double?
+  let endMs: Double?
+  /// Huella barata para que la caché de reducción sepa si cambió, sin volver
+  /// a recorrer miles de valores.
   let signature: Int
 
-  init?(record: AttoTimelineDetailRecord) {
-    guard !record.peaks.isEmpty, record.endMs > record.startMs else { return nil }
+  init?(record: AttoTimelineWaveformRecord) {
+    guard !record.peaks.isEmpty else { return nil }
     peaks = record.peaks.map { Float(min(1, max(0, $0))) }
-    startMs = max(0, record.startMs)
-    endMs = record.endMs
+    let tieneVentana = record.endMs > record.startMs
+    startMs = tieneVentana ? max(0, record.startMs) : nil
+    endMs = tieneVentana ? record.endMs : nil
     var hasher = Hasher()
     hasher.combine(peaks.count)
-    hasher.combine(startMs)
-    hasher.combine(endMs)
+    hasher.combine(startMs ?? -1)
+    hasher.combine(endMs ?? -1)
     let stride = max(1, peaks.count / 16)
     var i = 0
     while i < peaks.count {

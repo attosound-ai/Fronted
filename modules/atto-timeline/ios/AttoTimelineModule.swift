@@ -69,9 +69,6 @@ public class AttoTimelineModule: Module {
         view.setMinPixelsPerSecond(value)
       }
 
-      Prop("clipDetail") { (view: AttoTimelineView, value: [AttoTimelineDetailRecord]) in
-        view.setClipDetail(value)
-      }
 
       Prop("colors") { (view: AttoTimelineView, value: AttoTimelineColorsRecord?) in
         view.setColors(value)
@@ -92,6 +89,13 @@ public class AttoTimelineModule: Module {
 
       AsyncFunction("setZoom") { (view: AttoTimelineView, pixelsPerSecond: Double, anchorMs: Double?) in
         view.setZoom(pixelsPerSecond, anchorMs: anchorMs)
+      }
+
+      // Las ondas entran por aquí y NO por una prop. Ver
+      // AttoTimelineWaveformRecord: como prop se reconvertían enteras sesenta
+      // veces por segundo mientras sonaba, y el sistema mataba la app.
+      AsyncFunction("setWaveforms") { (view: AttoTimelineView, records: [AttoTimelineWaveformRecord]) in
+        view.setWaveforms(records)
       }
     }
   }

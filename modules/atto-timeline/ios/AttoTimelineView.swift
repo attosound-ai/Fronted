@@ -238,16 +238,17 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     needsFullRedraw = true
   }
 
-  /// La onda de detalle, en su propia prop: cambiarla no reenvía los clips.
-  func setClipDetail(_ records: [AttoTimelineDetailRecord]) {
-    var mapa: [String: AttoTimelineDetail] = [:]
-    for record in records {
-      if let d = AttoTimelineDetail(record: record), !record.clipId.isEmpty {
-        mapa[record.clipId] = d
+  /// Las ondas, por función y no por prop. El porqué está en
+  /// AttoTimelineWaveformRecord: como prop costaban un giga de memoria.
+  func setWaveforms(_ records: [AttoTimelineWaveformRecord]) {
+    var mapa: [String: AttoTimelineWaveform] = [:]
+    for record in records where !record.clipId.isEmpty {
+      if let onda = AttoTimelineWaveform(record: record) {
+        mapa[record.clipId] = onda
       }
     }
-    renderer.detail = mapa
-    needsFullRedraw = true
+    renderer.waveforms = mapa
+    redrawAllCanvases()
   }
 
   func setPixelsPerSecond(_ value: Double) {

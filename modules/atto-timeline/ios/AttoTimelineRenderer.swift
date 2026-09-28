@@ -57,27 +57,24 @@ final class AttoTimelineRenderer {
   /// Tira las filas de caché cuyo clip desapareció, o cuya onda cambió: la
   /// del propio clip o la ventana de detalle que lleve encima.
   private func podarCacheDePicos() {
-    var firmas: [String: Int] = [:]
-    for clip in clips {
-      firmas[clip.id] = detail[clip.id].map { clip.peaksSignature ^ $0.signature }
-        ?? clip.peaksSignature
-    }
     peaksCache = peaksCache.filter { key, entry in
-      firmas[key.clipId] == entry.signature
+      waveforms[key.clipId]?.signature == entry.signature
     }
   }
 
-  /// La onda de detalle por clip, cuando JS la manda. Vive aquí y no en el
-  /// clip para que cambiarla no obligue a reenviar todos los clips.
-  var detail: [String: AttoTimelineDetail] = [:] {
+  /// La onda de cada clip. Entra por una función y no por una prop; el porqué
+  /// está en AttoTimelineWaveformRecord y cuesta un giga de memoria.
+  var waveforms: [String: AttoTimelineWaveform] = [:] {
     didSet { podarCacheDePicos() }
   }
 
-  /// El tramo que cubren los picos de un clip: su ventana de detalle, o todo.
+  /// El tramo que cubren los picos de un clip: su ventana, o el clip entero.
   func ventana(_ clip: AttoTimelineClip) -> (startMs: Double, endMs: Double, completa: Bool) {
-    guard let d = detail[clip.id] else { return (0, clip.durationMs, true) }
-    let inicio = max(0, min(d.startMs, clip.durationMs))
-    let fin = min(d.endMs, clip.durationMs)
+    guard let w = waveforms[clip.id], let inicioW = w.startMs, let finW = w.endMs else {
+      return (0, clip.durationMs, true)
+    }
+    let inicio = max(0, min(inicioW, clip.durationMs))
+    let fin = min(finW, clip.durationMs)
     if fin <= inicio { return (0, clip.durationMs, true) }
     return (inicio, fin, fin - inicio >= clip.durationMs - 0.5)
   }
@@ -105,9 +102,8 @@ final class AttoTimelineRenderer {
   func peaks(for clip: AttoTimelineClip) -> [Float] {
     let bucket = zoomBucket(geometry.pixelsPerSecond)
     let key = PeaksCacheKey(clipId: clip.id, bucket: bucket)
-    let d = detail[clip.id]
-    // La huella mezcla las dos: el mismo clip con otra ventana es otra onda.
-    let firma = d.map { clip.peaksSignature ^ $0.signature } ?? clip.peaksSignature
+    guard let onda = waveforms[clip.id] else { return [] }
+    let firma = onda.signature
     if let cached = peaksCache[key], cached.signature == firma {
       return cached.peaks
     }
@@ -116,7 +112,7 @@ final class AttoTimelineRenderer {
     let cubiertoMs = max(1, v.endMs - v.startMs)
     let widthAtBucket = CGFloat(cubiertoMs) * representativePixelsPerSecond(bucket: bucket) / 1000
     let target = max(2, Int(widthAtBucket.rounded(.up)))
-    let source = d?.peaks ?? clip.peaks
+    let source = onda.peaks
     let result: [Float]
     if source.count <= target {
       result = source

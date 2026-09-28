@@ -29,11 +29,6 @@ export interface TimelineClip {
   trackIndex: number;
   startMs: number;
   durationMs: number;
-  /**
-   * Mono peaks in 0..1 spread evenly across the clip (200 to 4000 values).
-   * May be empty while loading: the clip then shows a thin centre line.
-   */
-  peaks: number[];
   selected?: boolean;
   muted?: boolean;
   /** The lane's colour (hex); the waveform and border take it. Absent = palette waveform. */
@@ -41,20 +36,27 @@ export interface TimelineClip {
 }
 
 /**
- * La onda de detalle de un clip: el tramo que se está mirando, a resolución de
- * pantalla, para cuando la envolvente del segmento se queda sin puntos que dar.
+ * La onda de un clip: sus picos y, si no cubren el clip entero, el tramo que
+ * cubren.
  *
- * Va en su propia prop (`clipDetail`) y no dentro del clip: yendo dentro, cada
- * vez que la ventana cambia se reenvía el array entero de clips con sus
- * envolventes de hasta 24000 valores, y reproduciendo a zoom profundo eso
- * mató la app por memoria.
+ * Entra por `setWaveforms` (función del ref) y NO por una prop, a propósito.
+ * Una prop de Fabric se reconvierte entera cada vez que cambia cualquier otra
+ * prop de la misma vista, aunque esa no haya cambiado. Mientras suena, la
+ * cabeza de reproducción viaja como prop animada a 60 por segundo, así que los
+ * picos de un proyecto largo (unos 60.000 números) se recorrían tres veces por
+ * fotograma en el hilo principal: 280 MB cada cinco segundos hasta que el
+ * sistema mataba la app (medido el 28 de septiembre de 2026).
  */
-export interface TimelineClipDetail {
+export interface TimelineWaveform {
   clipId: string;
+  /** Picos de 0 a 1, repartidos por igual sobre el tramo que cubren. */
   peaks: number[];
-  /** El tramo que cubren, en ms desde el principio del clip. */
-  startMs: number;
-  endMs: number;
+  /**
+   * Tramo cubierto, en ms desde el principio del clip. Omitidos, o con
+   * endMs <= startMs, cubren el clip entero.
+   */
+  startMs?: number;
+  endMs?: number;
 }
 
 export interface TimelineSelection {
@@ -153,8 +155,6 @@ export interface AttoTimelineViewProps {
    * the zoom that shows the whole project and not one step further.
    */
   minPixelsPerSecond?: number;
-  /** Ondas de detalle por clip, si las hay. Ver TimelineClipDetail. */
-  clipDetail?: TimelineClipDetail[];
   playheadMs: number;
   /** The orange line placed by a tap, or null. */
   selectionLineMs?: number | null;
@@ -194,6 +194,12 @@ export interface TimelineViewRef {
    * when omitted). Emits onZoom with phase 'end' so JS can persist it.
    */
   setZoom(pixelsPerSecond: number, anchorMs?: number | null): Promise<void>;
+  /**
+   * Las ondas de todos los clips que tengan una. Sustituye el juego entero:
+   * lo que no venga en la lista se queda sin onda. Ver TimelineWaveform para
+   * por qué esto es una función y no una prop.
+   */
+  setWaveforms(waveforms: TimelineWaveform[]): Promise<void>;
 }
 
 // Native view functions are attached to the component prototype by
@@ -201,6 +207,7 @@ export interface TimelineViewRef {
 type NativeViewInstance = Component<AttoTimelineViewProps> & {
   scrollToMs?: (ms: number, animated: boolean) => Promise<void>;
   setZoom?: (pixelsPerSecond: number, anchorMs: number | null) => Promise<void>;
+  setWaveforms?: (waveforms: TimelineWaveform[]) => Promise<void>;
 };
 
 const nativeModule = requireOptionalNativeModule('AttoTimeline');
@@ -248,6 +255,10 @@ export const AttoTimelineView = forwardRef<TimelineViewRef, AttoTimelineViewProp
           if (typeof fn === 'function') {
             await fn.call(nativeRef.current, pixelsPerSecond, anchorMs ?? null);
           }
+        },
+        async setWaveforms(waveforms) {
+          const fn = nativeRef.current?.setWaveforms;
+          if (typeof fn === 'function') await fn.call(nativeRef.current, waveforms);
         },
       }),
       []

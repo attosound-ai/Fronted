@@ -238,6 +238,18 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     needsFullRedraw = true
   }
 
+  /// La onda de detalle, en su propia prop: cambiarla no reenvía los clips.
+  func setClipDetail(_ records: [AttoTimelineDetailRecord]) {
+    var mapa: [String: AttoTimelineDetail] = [:]
+    for record in records {
+      if let d = AttoTimelineDetail(record: record), !record.clipId.isEmpty {
+        mapa[record.clipId] = d
+      }
+    }
+    renderer.detail = mapa
+    needsFullRedraw = true
+  }
+
   func setPixelsPerSecond(_ value: Double) {
     // Echoes of our own onZoom events during a pinch must not snap the view.
     if isPinching { return }

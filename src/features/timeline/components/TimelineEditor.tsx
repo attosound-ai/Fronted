@@ -1925,6 +1925,18 @@ export function TimelineEditor({
     state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1,
     visibleRange
   );
+  // Lo único que cambia cuando alguien se desplaza a zoom profundo.
+  const clipDetail = useMemo(
+    () =>
+      Array.from(detailPeaks.entries()).map(([clipId, d]) => ({
+        clipId,
+        peaks: d.peaks,
+        startMs: d.startMs,
+        endMs: d.endMs,
+      })),
+    [detailPeaks]
+  );
+
   // Una vez por sesión de editor, cuando la primera ventana de detalle llega:
   // sirve para saber si este camino se usa de verdad y a qué zoom, que es lo
   // único que no se puede saber desde aquí.
@@ -1951,23 +1963,20 @@ export function TimelineEditor({
       })),
     [state.laneCount]
   );
+  // OJO con las dependencias de esto: la onda de detalle NO entra aquí.
+  // Cuando entraba, cada cambio de ventana (o sea, cada desplazamiento a zoom
+  // profundo) reenviaba el array entero de clips con sus envolventes de hasta
+  // 24000 valores cada una. Reproduciendo, con la vista siguiendo sola a la
+  // cabeza, eso fueron 758 MB y el sistema mató la app. El detalle viaja en su
+  // propia prop, `clipDetail`.
   const nativeClips = useMemo(() => {
     const list = state.clips.map((c) => {
-      // Si hay ventana de detalle para este clip, va esa y se le dice qué
-      // tramo cubre; si no, la envolvente del segmento entera, como siempre.
-      const detalle = detailPeaks.get(c.id);
       return {
         id: c.id,
         trackIndex: c.laneIndex,
         startMs: c.positionInTimeline,
         durationMs: c.endInSegment - c.startInSegment,
-        peaks: detalle ? detalle.peaks : (clipPeaks.get(c.id) ?? []),
-        // Siempre números, nunca undefined: la vista nativa los decodifica
-        // como Double y -1 es su forma de decir "el clip entero". Mandar
-        // undefined dependería de que la conversión lo trate como ausente, y
-        // un valor que se quedara pegado dibujaría la onda donde no va.
-        peaksStartMs: detalle ? detalle.startMs : 0,
-        peaksEndMs: detalle ? detalle.endMs : -1,
+        peaks: clipPeaks.get(c.id) ?? [],
         selected: c.id === state.selectedClipId,
         muted: state.laneMeta[c.laneIndex]?.muted === true,
         color: state.laneMeta[c.laneIndex]?.color || undefined,
@@ -1981,8 +1990,6 @@ export function TimelineEditor({
         startMs: recordingStartMsRef.current,
         durationMs: Math.max(50, recordingElapsedMs),
         peaks: [],
-        peaksStartMs: 0,
-        peaksEndMs: -1,
         selected: true,
         muted: false,
         color: state.laneMeta[recordingLaneRef.current]?.color || undefined,
@@ -1994,7 +2001,6 @@ export function TimelineEditor({
     state.selectedClipId,
     state.laneMeta,
     clipPeaks,
-    detailPeaks,
     isRecording,
     isUploadingRecording,
     recordingElapsedMs,
@@ -2127,6 +2133,7 @@ export function TimelineEditor({
               // Same floor the buttons use, or a pinch out on a long project
               // would spring back the moment the fingers lifted.
               minPixelsPerSecond={zoomFloor * PIXELS_PER_SECOND_AT_ZOOM_1}
+              clipDetail={clipDetail}
               selectionLineMs={selectionLineMs}
               selection={
                 hasRange && region

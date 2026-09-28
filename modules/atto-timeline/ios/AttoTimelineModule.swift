@@ -69,6 +69,10 @@ public class AttoTimelineModule: Module {
         view.setMinPixelsPerSecond(value)
       }
 
+      Prop("clipDetail") { (view: AttoTimelineView, value: [AttoTimelineDetailRecord]) in
+        view.setClipDetail(value)
+      }
+
       Prop("colors") { (view: AttoTimelineView, value: AttoTimelineColorsRecord?) in
         view.setColors(value)
       }

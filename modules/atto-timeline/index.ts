@@ -34,21 +34,27 @@ export interface TimelineClip {
    * May be empty while loading: the clip then shows a thin centre line.
    */
   peaks: number[];
-  /**
-   * The slice of the clip `peaks` covers, in ms from the clip's start. Omitted
-   * they cover the whole clip, which is the usual case. JS narrows them when
-   * the zoom is deeper than the segment's own envelope can draw and fetches a
-   * detailed envelope of just what is on screen.
-   *
-   * `peaksEndMs` at -1 (or anything at or below the start) means the whole
-   * clip, which is how a clip without a window says so.
-   */
-  peaksStartMs?: number;
-  peaksEndMs?: number;
   selected?: boolean;
   muted?: boolean;
   /** The lane's colour (hex); the waveform and border take it. Absent = palette waveform. */
   color?: string;
+}
+
+/**
+ * La onda de detalle de un clip: el tramo que se está mirando, a resolución de
+ * pantalla, para cuando la envolvente del segmento se queda sin puntos que dar.
+ *
+ * Va en su propia prop (`clipDetail`) y no dentro del clip: yendo dentro, cada
+ * vez que la ventana cambia se reenvía el array entero de clips con sus
+ * envolventes de hasta 24000 valores, y reproduciendo a zoom profundo eso
+ * mató la app por memoria.
+ */
+export interface TimelineClipDetail {
+  clipId: string;
+  peaks: number[];
+  /** El tramo que cubren, en ms desde el principio del clip. */
+  startMs: number;
+  endMs: number;
 }
 
 export interface TimelineSelection {
@@ -147,6 +153,8 @@ export interface AttoTimelineViewProps {
    * the zoom that shows the whole project and not one step further.
    */
   minPixelsPerSecond?: number;
+  /** Ondas de detalle por clip, si las hay. Ver TimelineClipDetail. */
+  clipDetail?: TimelineClipDetail[];
   playheadMs: number;
   /** The orange line placed by a tap, or null. */
   selectionLineMs?: number | null;

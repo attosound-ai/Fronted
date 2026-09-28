@@ -51,11 +51,35 @@ final class AttoTimelineRenderer {
       byLane[clip.trackIndex].append(clip)
     }
     clipsByLane = byLane.map { $0.sorted { $0.startMs < $1.startMs } }
-    // Drop cache rows whose clip disappeared or whose peaks changed.
-    let signatures = Dictionary(newClips.map { ($0.id, $0.peaksSignature) }, uniquingKeysWith: { a, _ in a })
-    peaksCache = peaksCache.filter { key, entry in
-      signatures[key.clipId] == entry.signature
+    podarCacheDePicos()
+  }
+
+  /// Tira las filas de caché cuyo clip desapareció, o cuya onda cambió: la
+  /// del propio clip o la ventana de detalle que lleve encima.
+  private func podarCacheDePicos() {
+    var firmas: [String: Int] = [:]
+    for clip in clips {
+      firmas[clip.id] = detail[clip.id].map { clip.peaksSignature ^ $0.signature }
+        ?? clip.peaksSignature
     }
+    peaksCache = peaksCache.filter { key, entry in
+      firmas[key.clipId] == entry.signature
+    }
+  }
+
+  /// La onda de detalle por clip, cuando JS la manda. Vive aquí y no en el
+  /// clip para que cambiarla no obligue a reenviar todos los clips.
+  var detail: [String: AttoTimelineDetail] = [:] {
+    didSet { podarCacheDePicos() }
+  }
+
+  /// El tramo que cubren los picos de un clip: su ventana de detalle, o todo.
+  func ventana(_ clip: AttoTimelineClip) -> (startMs: Double, endMs: Double, completa: Bool) {
+    guard let d = detail[clip.id] else { return (0, clip.durationMs, true) }
+    let inicio = max(0, min(d.startMs, clip.durationMs))
+    let fin = min(d.endMs, clip.durationMs)
+    if fin <= inicio { return (0, clip.durationMs, true) }
+    return (inicio, fin, fin - inicio >= clip.durationMs - 0.5)
   }
 
   func clipsOnLane(_ index: Int) -> [AttoTimelineClip] {
@@ -81,15 +105,18 @@ final class AttoTimelineRenderer {
   func peaks(for clip: AttoTimelineClip) -> [Float] {
     let bucket = zoomBucket(geometry.pixelsPerSecond)
     let key = PeaksCacheKey(clipId: clip.id, bucket: bucket)
-    if let cached = peaksCache[key], cached.signature == clip.peaksSignature {
+    let d = detail[clip.id]
+    // La huella mezcla las dos: el mismo clip con otra ventana es otra onda.
+    let firma = d.map { clip.peaksSignature ^ $0.signature } ?? clip.peaksSignature
+    if let cached = peaksCache[key], cached.signature == firma {
       return cached.peaks
     }
-    // The width of what the peaks COVER, which is the whole clip unless JS
-    // sent a detail window for a deep zoom.
-    let cubiertoMs = max(1, clip.peaksEndMs - clip.peaksStartMs)
+    // Lo que CUBREN los picos: el clip entero, o la ventana de detalle.
+    let v = ventana(clip)
+    let cubiertoMs = max(1, v.endMs - v.startMs)
     let widthAtBucket = CGFloat(cubiertoMs) * representativePixelsPerSecond(bucket: bucket) / 1000
     let target = max(2, Int(widthAtBucket.rounded(.up)))
-    let source = clip.peaks
+    let source = d?.peaks ?? clip.peaks
     let result: [Float]
     if source.count <= target {
       result = source
@@ -109,7 +136,7 @@ final class AttoTimelineRenderer {
       }
       result = out
     }
-    peaksCache[key] = PeaksCacheEntry(signature: clip.peaksSignature, peaks: result)
+    peaksCache[key] = PeaksCacheEntry(signature: firma, peaks: result)
     return result
   }
 
@@ -280,12 +307,12 @@ final class AttoTimelineRenderer {
     // user never sees: a window is only ever sent when the clip is wider than
     // the screen and the window already covers all of it.
     let inset: CGFloat = 1
-    let ventana = clip.peaksEndMs - clip.peaksStartMs < clip.durationMs - 0.5
+    let v = ventana(clip)
     let x0: CGFloat
     let width: CGFloat
-    if ventana {
-      x0 = box.minX + geometry.px(forDurationMs: clip.peaksStartMs)
-      width = max(1, geometry.px(forDurationMs: clip.peaksEndMs - clip.peaksStartMs))
+    if !v.completa {
+      x0 = box.minX + geometry.px(forDurationMs: v.startMs)
+      width = max(1, geometry.px(forDurationMs: v.endMs - v.startMs))
       ctx.setFillColor(color.withAlphaComponent(0.7).cgColor)
       let lx0 = max(box.minX, visible.minX - 2)
       let lx1 = min(box.maxX, visible.maxX + 2)

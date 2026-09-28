@@ -163,6 +163,17 @@ interface TimelineEditorProps {
 const PIXELS_PER_SECOND_AT_ZOOM_1 = 100;
 /** Cada cuánto, como mucho, se recalcula la ventana de la onda de detalle. */
 const VISIBLE_COMMIT_MS = 140;
+/**
+ * Y cada cuánto mientras suena.
+ *
+ * Reproduciendo, la vista se desplaza sola para seguir la cabeza, así que la
+ * ventana se queda atrás sin que nadie toque nada. A 4000 puntos por segundo
+ * la cabeza cruza tres pantallas en un cuarto de segundo: con el freno normal
+ * serían cuatro peticiones y cuatro renderizados por segundo solo por estar
+ * escuchando. Nadie mira el detalle de la onda mientras pasa volando, así que
+ * mientras suena se refresca mucho más despacio.
+ */
+const VISIBLE_COMMIT_PLAYING_MS = 700;
 
 /** m:ss for the record button's counter (whole seconds). */
 function formatElapsedSeconds(seconds: number): string {
@@ -664,6 +675,8 @@ export function TimelineEditor({
   // se veía ANTES de ampliar hasta que alguien volviera a desplazar.
   const zoomPpsRef = useRef(0);
   zoomPpsRef.current = state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1;
+  const frenoRef = useRef(VISIBLE_COMMIT_MS);
+  frenoRef.current = state.isPlaying ? VISIBLE_COMMIT_PLAYING_MS : VISIBLE_COMMIT_MS;
   // Freno de tiempo. A zoom profundo la pantalla cubre décimas de segundo, así
   // que un arrastre rápido se sale de la holgura decenas de veces por segundo,
   // y cada vez sería un renderizado del editor entero. Como mucho uno cada
@@ -701,11 +714,12 @@ export function TimelineEditor({
 
       visiblePendienteRef.current = rango;
       clearTimeout(visibleTimerRef.current);
+      const freno = frenoRef.current;
       const desdeElUltimo = Date.now() - visibleUltimoRef.current;
-      if (desdeElUltimo >= VISIBLE_COMMIT_MS) {
+      if (desdeElUltimo >= freno) {
         aplicar();
       } else {
-        visibleTimerRef.current = setTimeout(aplicar, VISIBLE_COMMIT_MS - desdeElUltimo);
+        visibleTimerRef.current = setTimeout(aplicar, freno - desdeElUltimo);
       }
     },
     []

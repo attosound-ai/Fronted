@@ -161,6 +161,8 @@ interface TimelineEditorProps {
 // The native view takes pixels per second; the reducer keeps its zoom level
 // where 1 means 100 px per second (see timelineCalculations).
 const PIXELS_PER_SECOND_AT_ZOOM_1 = 100;
+/** Cada cuánto, como mucho, se recalcula la ventana de la onda de detalle. */
+const VISIBLE_COMMIT_MS = 140;
 
 /** m:ss for the record button's counter (whole seconds). */
 function formatElapsedSeconds(seconds: number): string {
@@ -662,24 +664,49 @@ export function TimelineEditor({
   // se veía ANTES de ampliar hasta que alguien volviera a desplazar.
   const zoomPpsRef = useRef(0);
   zoomPpsRef.current = state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1;
+  // Freno de tiempo. A zoom profundo la pantalla cubre décimas de segundo, así
+  // que un arrastre rápido se sale de la holgura decenas de veces por segundo,
+  // y cada vez sería un renderizado del editor entero. Como mucho uno cada
+  // VISIBLE_COMMIT_MS, y siempre uno al final, que es el que importa.
+  const visibleUltimoRef = useRef(0);
+  const visiblePendienteRef = useRef<RangoVisible | null>(null);
+  const visibleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(visibleTimerRef.current), []);
+
   const handleTimelineScroll = useCallback(
     (e: { nativeEvent: { offsetMs: number; visibleMs: number } }) => {
       if (zoomPpsRef.current < DETALLE_DESDE_PPS) return;
       const { offsetMs, visibleMs } = e.nativeEvent;
       if (!(visibleMs > 0)) return;
-      setVisibleRange((previo) => {
-        // Un cuarto de pantalla de holgura: la ventana que se pide cubre tres,
-        // así que moverse menos que eso no cambia nada de lo que se dibuja.
-        const holgura = visibleMs / 4;
-        if (
-          previo &&
-          Math.abs(previo.startMs - offsetMs) < holgura &&
-          Math.abs(previo.endMs - (offsetMs + visibleMs)) < holgura
-        ) {
-          return previo;
-        }
-        return { startMs: offsetMs, endMs: offsetMs + visibleMs };
-      });
+      const rango = { startMs: offsetMs, endMs: offsetMs + visibleMs };
+
+      const aplicar = () => {
+        visibleUltimoRef.current = Date.now();
+        const pendiente = visiblePendienteRef.current;
+        if (!pendiente) return;
+        setVisibleRange((previo) => {
+          // Un cuarto de pantalla de holgura: la ventana que se pide cubre
+          // tres, así que moverse menos que eso no cambia lo que se dibuja.
+          const holgura = (pendiente.endMs - pendiente.startMs) / 4;
+          if (
+            previo &&
+            Math.abs(previo.startMs - pendiente.startMs) < holgura &&
+            Math.abs(previo.endMs - pendiente.endMs) < holgura
+          ) {
+            return previo;
+          }
+          return pendiente;
+        });
+      };
+
+      visiblePendienteRef.current = rango;
+      clearTimeout(visibleTimerRef.current);
+      const desdeElUltimo = Date.now() - visibleUltimoRef.current;
+      if (desdeElUltimo >= VISIBLE_COMMIT_MS) {
+        aplicar();
+      } else {
+        visibleTimerRef.current = setTimeout(aplicar, VISIBLE_COMMIT_MS - desdeElUltimo);
+      }
     },
     []
   );

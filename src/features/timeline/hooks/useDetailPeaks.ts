@@ -92,8 +92,11 @@ export function useDetailPeaks(
       queryFn: () =>
         projectService.getWaveform(p.segmentId, DETALLE_PICOS, p.fromRatio, p.toRatio),
       staleTime: Infinity,
-      // Media hora en memoria: al volver sobre el mismo sitio se pinta sin red.
-      gcTime: 30 * 60_000,
+      // Dos minutos y no media hora. Reproduciendo al tope, la vista sigue a
+      // la cabeza y pide una ventana nueva cada 700 ms: media hora de eso son
+      // miles de arrays de 2048 números retenidos por nada. Volver a pedir
+      // una ventana cuesta una lectura por rango de unos veinte kilobytes.
+      gcTime: 2 * 60_000,
       retry: 1,
     })),
   });

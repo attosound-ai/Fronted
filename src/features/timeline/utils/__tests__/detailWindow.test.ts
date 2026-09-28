@@ -5,6 +5,7 @@ import {
   necesitaDetalle,
   msPorPico,
   ventanaDeDetalle,
+  detalleMientrasSuena,
   DETALLE_DESDE_PPS,
 } from '../detailWindow';
 
@@ -71,4 +72,16 @@ test('lo que no se ve no se pide', () => {
   assert.equal(ventanaDeDetalle(10_000, 10_200, 20_000, 30_000), null);
   assert.equal(ventanaDeDetalle(40_000, 40_200, 20_000, 30_000), null);
   assert.equal(ventanaDeDetalle(10_000, 10_000, 0, LARGO), null);
+});
+
+test('sonando, el detalle solo se pide si la pantalla dura al menos un segundo', () => {
+  // Zona de pistas de 312 puntos. A 200 pt/s la pantalla dura 1,56 s: sí.
+  assert.equal(detalleMientrasSuena(200, 312), true);
+  // A 312 pt/s dura justo un segundo: todavía sí.
+  assert.equal(detalleMientrasSuena(312, 312), true);
+  // A 400 pt/s dura 0,78 s: pasa volando, no.
+  assert.equal(detalleMientrasSuena(400, 312), false);
+  // Al tope, 4000 pt/s, 78 ms por pantalla: ni hablar.
+  assert.equal(detalleMientrasSuena(4000, 312), false);
+  assert.equal(detalleMientrasSuena(0, 312), false);
 });

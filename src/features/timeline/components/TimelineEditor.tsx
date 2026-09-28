@@ -52,7 +52,7 @@ import {
 } from '../../../../modules/atto-audio-transcode';
 import { useClipPeaks } from '../hooks/useClipPeaks';
 import { useDetailPeaks, type RangoVisible } from '../hooks/useDetailPeaks';
-import { DETALLE_DESDE_PPS } from '../utils/detailWindow';
+import { DETALLE_DESDE_PPS, detalleMientrasSuena } from '../utils/detailWindow';
 import { useOverdubStems } from '../hooks/useOverdubStems';
 import { StudioTopBar } from '../studio/StudioTopBar';
 import { ClipActionsBar } from '../studio/ClipActionsBar';
@@ -678,6 +678,13 @@ export function TimelineEditor({
   zoomPpsRef.current = state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1;
   const frenoRef = useRef(VISIBLE_COMMIT_MS);
   frenoRef.current = state.isPlaying ? VISIBLE_COMMIT_PLAYING_MS : VISIBLE_COMMIT_MS;
+  // Sonando a un zoom donde la pantalla dura menos de un segundo, el detalle
+  // no se puede leer y pedirlo solo mueve memoria (detalleMientrasSuena). En
+  // ese caso el rango visible se sigue en un ref, sin renderizar nada, y se
+  // vuelca al estado en el momento de pausar para que el detalle aparezca
+  // justo donde se quedó la cabeza.
+  const detalleCongeladoRef = useRef(false);
+  const ultimoRangoRef = useRef<RangoVisible | null>(null);
   // Freno de tiempo. A zoom profundo la pantalla cubre décimas de segundo, así
   // que un arrastre rápido se sale de la holgura decenas de veces por segundo,
   // y cada vez sería un renderizado del editor entero. Como mucho uno cada
@@ -693,6 +700,8 @@ export function TimelineEditor({
       const { offsetMs, visibleMs } = e.nativeEvent;
       if (!(visibleMs > 0)) return;
       const rango = { startMs: offsetMs, endMs: offsetMs + visibleMs };
+      ultimoRangoRef.current = rango;
+      if (detalleCongeladoRef.current) return;
 
       const aplicar = () => {
         visibleUltimoRef.current = Date.now();
@@ -1918,13 +1927,27 @@ export function TimelineEditor({
 
   // ── Native timeline data ──
   const clipPeaks = useClipPeaks(state.clips, segmentDurationMap);
+  const panelInset = panelsCollapsed ? 0 : STUDIO.panelWidth;
+  // A few points so the last clip's edge is not flush against the screen.
+  const laneWidth = Math.max(0, surfaceWidth - panelInset - 8);
+  const detalleCongelado =
+    state.isPlaying &&
+    !detalleMientrasSuena(state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1, laneWidth);
+  detalleCongeladoRef.current = detalleCongelado;
+  useEffect(() => {
+    // Al descongelar (pausa, o zoom más suave), lo último que vio la vista
+    // pasa al estado y el detalle se pide para ahí.
+    if (!detalleCongelado && ultimoRangoRef.current) {
+      setVisibleRange(ultimoRangoRef.current);
+    }
+  }, [detalleCongelado]);
   // La onda de detalle: solo a zoom profundo, solo de lo que se ve, y solo
   // para los clips cuya envolvente ya no tiene puntos que dar.
   const detailPeaks = useDetailPeaks(
     state.clips,
     segmentDurationMap,
     state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1,
-    visibleRange
+    detalleCongelado ? null : visibleRange
   );
   // Las ondas: la envolvente del segmento, o la ventana de detalle cuando la
   // hay. Se mandan por función y no por prop (ver nativeClips arriba).
@@ -2077,10 +2100,7 @@ export function TimelineEditor({
   }, [waveforms]);
 
   const timelineHeight = STUDIO.rulerHeight + STUDIO.trackHeight * state.laneCount;
-  const panelInset = panelsCollapsed ? 0 : STUDIO.panelWidth;
 
-  // A few points so the last clip's edge is not flush against the screen.
-  const laneWidth = Math.max(0, surfaceWidth - panelInset - 8);
   // The whole project across the lane area, and how far out this project may
   // be zoomed (never past that point, never tighter than the old ZOOM_MIN).
   const fitZoom = fitZoomFor(totalDuration, laneWidth);

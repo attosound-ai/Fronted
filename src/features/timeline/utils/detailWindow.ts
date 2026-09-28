@@ -88,3 +88,21 @@ export function ventanaDeDetalle(
   if (!(endMs > startMs)) return null;
   return { startMs, endMs };
 }
+
+/**
+ * Si vale la pena pedir detalle MIENTRAS SUENA a este zoom.
+ *
+ * Reproduciendo, la vista sigue a la cabeza. Si una pantalla dura menos de un
+ * segundo, pasa volando y el detalle no se puede leer; pedirlo sería una
+ * ventana nueva cada pocos cientos de milisegundos, con su petición, su
+ * renderizado del editor y su cruce a nativo, para nada. Medido el 28 de
+ * septiembre de 2026: al tope, sonando, la memoria subía unos 50 MB por
+ * minuto solo por ese churn. En pausa el detalle vuelve enseguida.
+ */
+export function detalleMientrasSuena(
+  pixelsPerSecond: number,
+  laneWidthPx: number
+): boolean {
+  if (!(pixelsPerSecond > 0) || !(laneWidthPx > 0)) return false;
+  return (laneWidthPx / pixelsPerSecond) * 1000 >= 1000;
+}

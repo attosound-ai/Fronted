@@ -20,12 +20,28 @@
 // whatever shows the WHOLE project (see `zoomFloorFor`), and this constant is
 // only the floor when the project is shorter than that.
 export const ZOOM_MIN = 0.1;
-export const ZOOM_MAX = 4;
+/**
+ * El techo: 4000 puntos por segundo, un punto cada cuarto de milisegundo.
+ *
+ * Era 4 (400 puntos por segundo) y no por gusto: la envolvente del segmento
+ * trae un pico cada 15 ms, o sea 6 puntos por pico a ese zoom, y más allá la
+ * onda se dibujaba como una escalera. Sube ahora porque a partir de
+ * DETALLE_DESDE_PPS ya no se dibuja con esa envolvente sino con una de lo que
+ * se ve (detailWindow.ts), que tiene resolución de pantalla a cualquier zoom.
+ *
+ * 4000 es donde para la vista nativa (maxPixelsPerSecond), y es del orden de
+ * lo que llega SoundLab, que es con lo que el cliente compara.
+ */
+export const ZOOM_MAX = 40;
 /**
  * The absolute floor, 0.02 px per second: one point is 50 seconds, so a three
- * hour project still fits in 216 points. It exists so a corrupt duration (or a
- * division that went to zero) can never ask for a zoom that makes the whole
- * timeline a single pixel.
+ * hour project still fits in 216 points.
+ *
+ * It is where the native ruler runs out of labels: its largest step is one
+ * hour, and one hour at 0.02 px per second is 72 points, exactly the minimum
+ * spacing it keeps between two labels. Further out they would overlap. It
+ * also stops a corrupt duration from asking for a zoom that would draw the
+ * whole timeline into one pixel.
  */
 export const ZOOM_FLOOR = 0.0002;
 
@@ -64,4 +80,3 @@ export function zoomFloorFor(durationMs: number, usableWidthPx: number): number 
   'worklet';
   return Math.min(ZOOM_MIN, fitZoomFor(durationMs, usableWidthPx));
 }
-

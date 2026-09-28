@@ -51,6 +51,8 @@ import {
   pickFromMusicLibrary,
 } from '../../../../modules/atto-audio-transcode';
 import { useClipPeaks } from '../hooks/useClipPeaks';
+import { useDetailPeaks, type RangoVisible } from '../hooks/useDetailPeaks';
+import { DETALLE_DESDE_PPS } from '../utils/detailWindow';
 import { useOverdubStems } from '../hooks/useOverdubStems';
 import { StudioTopBar } from '../studio/StudioTopBar';
 import { ClipActionsBar } from '../studio/ClipActionsBar';
@@ -647,6 +649,40 @@ export function TimelineEditor({
   // time, when it is always current.
   const [surfaceWidth, setSurfaceWidth] = useState(0);
   const zoomFloorRef = useRef(ZOOM_MIN);
+
+  // Lo que se ve, para la onda de detalle. Solo se sigue a partir de
+  // DETALLE_DESDE_PPS (ver useDetailPeaks): a zoom normal esto se queda en
+  // null y no cuesta ni un renderizado, porque la vista nativa manda su
+  // desplazamiento treinta veces por segundo.
+  const [visibleRange, setVisibleRange] = useState<RangoVisible | null>(null);
+  // El zoom de ahora mismo, leído dentro del manejador. El manejador va
+  // siempre enganchado a propósito: si se enganchara solo al pasar el umbral,
+  // el evento que la vista manda JUSTO al aplicar ese zoom podría llegar antes
+  // que el enganche, y entonces la ventana de detalle se quedaría con lo que
+  // se veía ANTES de ampliar hasta que alguien volviera a desplazar.
+  const zoomPpsRef = useRef(0);
+  zoomPpsRef.current = state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1;
+  const handleTimelineScroll = useCallback(
+    (e: { nativeEvent: { offsetMs: number; visibleMs: number } }) => {
+      if (zoomPpsRef.current < DETALLE_DESDE_PPS) return;
+      const { offsetMs, visibleMs } = e.nativeEvent;
+      if (!(visibleMs > 0)) return;
+      setVisibleRange((previo) => {
+        // Un cuarto de pantalla de holgura: la ventana que se pide cubre tres,
+        // así que moverse menos que eso no cambia nada de lo que se dibuja.
+        const holgura = visibleMs / 4;
+        if (
+          previo &&
+          Math.abs(previo.startMs - offsetMs) < holgura &&
+          Math.abs(previo.endMs - (offsetMs + visibleMs)) < holgura
+        ) {
+          return previo;
+        }
+        return { startMs: offsetMs, endMs: offsetMs + visibleMs };
+      });
+    },
+    []
+  );
 
   // ── Editor scale telemetry ──
   // The mounted timeline's native-view count is the freeze risk: Fabric commits
@@ -1840,6 +1876,14 @@ export function TimelineEditor({
 
   // ── Native timeline data ──
   const clipPeaks = useClipPeaks(state.clips, segmentDurationMap);
+  // La onda de detalle: solo a zoom profundo, solo de lo que se ve, y solo
+  // para los clips cuya envolvente ya no tiene puntos que dar.
+  const detailPeaks = useDetailPeaks(
+    state.clips,
+    segmentDurationMap,
+    state.zoomLevel * PIXELS_PER_SECOND_AT_ZOOM_1,
+    visibleRange
+  );
   const nativeTracks = useMemo(
     () =>
       Array.from({ length: state.laneCount }, (_, i) => ({
@@ -1849,16 +1893,23 @@ export function TimelineEditor({
     [state.laneCount]
   );
   const nativeClips = useMemo(() => {
-    const list = state.clips.map((c) => ({
-      id: c.id,
-      trackIndex: c.laneIndex,
-      startMs: c.positionInTimeline,
-      durationMs: c.endInSegment - c.startInSegment,
-      peaks: clipPeaks.get(c.id) ?? [],
-      selected: c.id === state.selectedClipId,
-      muted: state.laneMeta[c.laneIndex]?.muted === true,
-      color: state.laneMeta[c.laneIndex]?.color || undefined,
-    }));
+    const list = state.clips.map((c) => {
+      // Si hay ventana de detalle para este clip, va esa y se le dice qué
+      // tramo cubre; si no, la envolvente del segmento entera, como siempre.
+      const detalle = detailPeaks.get(c.id);
+      return {
+        id: c.id,
+        trackIndex: c.laneIndex,
+        startMs: c.positionInTimeline,
+        durationMs: c.endInSegment - c.startInSegment,
+        peaks: detalle ? detalle.peaks : (clipPeaks.get(c.id) ?? []),
+        peaksStartMs: detalle ? detalle.startMs : undefined,
+        peaksEndMs: detalle ? detalle.endMs : undefined,
+        selected: c.id === state.selectedClipId,
+        muted: state.laneMeta[c.laneIndex]?.muted === true,
+        color: state.laneMeta[c.laneIndex]?.color || undefined,
+      };
+    });
     // The take being recorded grows in place until its clip lands.
     if (isRecording || isUploadingRecording) {
       list.push({
@@ -1867,6 +1918,8 @@ export function TimelineEditor({
         startMs: recordingStartMsRef.current,
         durationMs: Math.max(50, recordingElapsedMs),
         peaks: [],
+        peaksStartMs: undefined,
+        peaksEndMs: undefined,
         selected: true,
         muted: false,
         color: state.laneMeta[recordingLaneRef.current]?.color || undefined,
@@ -1878,6 +1931,7 @@ export function TimelineEditor({
     state.selectedClipId,
     state.laneMeta,
     clipPeaks,
+    detailPeaks,
     isRecording,
     isUploadingRecording,
     recordingElapsedMs,
@@ -1892,7 +1946,10 @@ export function TimelineEditor({
   const fitZoom = fitZoomFor(totalDuration, laneWidth);
   const zoomFloor = zoomFloorFor(totalDuration, laneWidth);
   zoomFloorRef.current = zoomFloor;
-  const atFitZoom = state.zoomLevel <= fitZoom * 1.02;
+  // Apagado solo cuando YA se está en el zoom que encaja, no cuando se está
+  // más allá: en un proyecto corto, alejado del todo, encajar significa
+  // acercar hasta que ocupe el ancho, que es lo que hace cualquier editor.
+  const atFitZoom = Math.abs(state.zoomLevel - fitZoom) <= fitZoom * 0.02;
 
   // The floor can rise: delete half the project and the zoom that used to show
   // all of it is now further out than anything can reach. Bring the state back
@@ -2027,6 +2084,7 @@ export function TimelineEditor({
               onClipMove={handleClipMove}
               onTrackDrag={handleTrackDrag}
               onZoom={handleZoomEvent}
+              onScroll={handleTimelineScroll}
               onPlayheadScrub={handlePlayheadScrub}
             />
             <View

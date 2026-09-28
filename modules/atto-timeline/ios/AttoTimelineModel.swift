@@ -14,6 +14,12 @@ struct AttoTimelineClipRecord: Record {
   @Field var startMs: Double = 0
   @Field var durationMs: Double = 0
   @Field var peaks: [Double] = []
+  /// The slice of the clip that `peaks` covers, in ms from the clip's start.
+  /// Left at the default, they cover the whole clip. JS narrows them when the
+  /// zoom is so deep that the segment's own envelope has fewer values than the
+  /// screen has points, and sends a detailed envelope of just what is visible.
+  @Field var peaksStartMs: Double = 0
+  @Field var peaksEndMs: Double = -1
   @Field var selected: Bool? = nil
   @Field var muted: Bool? = nil
   @Field var color: String? = nil
@@ -56,6 +62,10 @@ struct AttoTimelineClip {
   let startMs: Double
   let durationMs: Double
   let peaks: [Float]
+  /// What `peaks` covers, in ms from the clip's start. Always a valid range
+  /// inside the clip: the whole clip unless JS sent a narrower window.
+  let peaksStartMs: Double
+  let peaksEndMs: Double
   let selected: Bool
   let muted: Bool
   /// The lane's colour, when the editor sends one (track colour picker).
@@ -72,11 +82,21 @@ struct AttoTimelineClip {
     startMs = max(0, record.startMs)
     durationMs = max(0, record.durationMs)
     peaks = record.peaks.map { Float(min(1, max(0, $0))) }
+    let ventanaInicio = max(0, min(record.peaksStartMs, durationMs))
+    let ventanaFin = record.peaksEndMs <= ventanaInicio
+      ? durationMs
+      : min(record.peaksEndMs, durationMs)
+    peaksStartMs = ventanaFin > ventanaInicio ? ventanaInicio : 0
+    peaksEndMs = ventanaFin > ventanaInicio ? ventanaFin : durationMs
     selected = record.selected ?? false
     muted = record.muted ?? false
     color = record.color.flatMap { UIColor(hex: $0) }
     var hasher = Hasher()
     hasher.combine(peaks.count)
+    // The window is part of the fingerprint: the same number of values over a
+    // different slice of the clip is a different waveform.
+    hasher.combine(peaksStartMs)
+    hasher.combine(peaksEndMs)
     if !peaks.isEmpty {
       let stride = max(1, peaks.count / 16)
       var i = 0
@@ -168,8 +188,12 @@ struct AttoTimelineGeometry {
   /// The floor when JS has not said otherwise: about 28 seconds across a phone.
   static let minPixelsPerSecond: CGFloat = 2
   /// The floor JS may lower to. One point is 50 seconds, so a three hour
-  /// project still fits in 216 points; below this the ruler labels start
-  /// landing on top of each other and a tap cannot pick anything useful.
+  /// project still fits in 216 points.
+  ///
+  /// It is exactly where the ruler runs out: the largest candidate below is
+  /// one hour, and one hour at 0.02 pt/s is 72 points, which is the minimum
+  /// spacing `intervals` keeps between labels. Any further out and the
+  /// labels would start landing on top of each other.
   static let absoluteMinPixelsPerSecond: CGFloat = 0.02
   static let maxPixelsPerSecond: CGFloat = 4000
 

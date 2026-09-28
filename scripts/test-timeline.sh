@@ -18,6 +18,7 @@ TEST_FILES=(
   "src/features/messages/thread/__tests__/threadModel.test.ts"
   "src/features/timeline/utils/__tests__/gainSlider.test.ts"
   "src/features/timeline/utils/__tests__/zoomRange.test.ts"
+  "src/features/timeline/utils/__tests__/detailWindow.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"
   "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"
   "src/features/messages/thread/__tests__/markdown.test.ts"

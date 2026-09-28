@@ -34,6 +34,14 @@ export interface TimelineClip {
    * May be empty while loading: the clip then shows a thin centre line.
    */
   peaks: number[];
+  /**
+   * The slice of the clip `peaks` covers, in ms from the clip's start. Omitted
+   * they cover the whole clip, which is the usual case. JS narrows them when
+   * the zoom is deeper than the segment's own envelope can draw and fetches a
+   * detailed envelope of just what is on screen.
+   */
+  peaksStartMs?: number;
+  peaksEndMs?: number;
   selected?: boolean;
   muted?: boolean;
   /** The lane's colour (hex); the waveform and border take it. Absent = palette waveform. */

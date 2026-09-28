@@ -84,7 +84,10 @@ final class AttoTimelineRenderer {
     if let cached = peaksCache[key], cached.signature == clip.peaksSignature {
       return cached.peaks
     }
-    let widthAtBucket = CGFloat(clip.durationMs) * representativePixelsPerSecond(bucket: bucket) / 1000
+    // The width of what the peaks COVER, which is the whole clip unless JS
+    // sent a detail window for a deep zoom.
+    let cubiertoMs = max(1, clip.peaksEndMs - clip.peaksStartMs)
+    let widthAtBucket = CGFloat(cubiertoMs) * representativePixelsPerSecond(bucket: bucket) / 1000
     let target = max(2, Int(widthAtBucket.rounded(.up)))
     let source = clip.peaks
     let result: [Float]
@@ -272,9 +275,27 @@ final class AttoTimelineRenderer {
       return
     }
 
+    // The peaks cover the whole clip, or just the window JS sent for this
+    // zoom. Everything outside that window keeps the centre line, which the
+    // user never sees: a window is only ever sent when the clip is wider than
+    // the screen and the window already covers all of it.
     let inset: CGFloat = 1
-    let x0 = box.minX + inset
-    let width = max(1, box.width - inset * 2)
+    let ventana = clip.peaksEndMs - clip.peaksStartMs < clip.durationMs - 0.5
+    let x0: CGFloat
+    let width: CGFloat
+    if ventana {
+      x0 = box.minX + geometry.px(forDurationMs: clip.peaksStartMs)
+      width = max(1, geometry.px(forDurationMs: clip.peaksEndMs - clip.peaksStartMs))
+      ctx.setFillColor(color.withAlphaComponent(0.7).cgColor)
+      let lx0 = max(box.minX, visible.minX - 2)
+      let lx1 = min(box.maxX, visible.maxX + 2)
+      if lx1 > lx0 {
+        ctx.fill(CGRect(x: lx0, y: midY - 0.5, width: lx1 - lx0, height: 1))
+      }
+    } else {
+      x0 = box.minX + inset
+      width = max(1, box.width - inset * 2)
+    }
     let count = data.count
     let step = count > 1 ? width / CGFloat(count - 1) : width
 

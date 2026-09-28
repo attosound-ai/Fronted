@@ -280,10 +280,27 @@ export const projectService = {
     return { id: seg.segmentId ?? '', durationMs: 0 } as unknown as AudioSegment;
   },
 
-  async getWaveform(segmentId: string, samples = 100): Promise<number[]> {
+  /**
+   * La envolvente de un segmento, o la de una VENTANA dentro de él.
+   *
+   * `fromRatio` y `toRatio` van de 0 a 1 sobre la duración del segmento. Sin
+   * ellos se pide el archivo entero, que es lo que dibuja el editor a zoom
+   * normal; con ellos se pide solo lo que se está mirando, que es lo que
+   * permite ampliar más allá de lo que da la envolvente completa.
+   */
+  async getWaveform(
+    segmentId: string,
+    samples = 100,
+    fromRatio?: number,
+    toRatio?: number
+  ): Promise<number[]> {
+    const ventana =
+      fromRatio !== undefined && toRatio !== undefined
+        ? { from: fromRatio, to: toRatio }
+        : {};
     const { data } = await apiClient.get<ApiResponse<number[]>>(
       API_ENDPOINTS.PROJECTS.WAVEFORM(segmentId),
-      { params: { samples } }
+      { params: { samples, ...ventana } }
     );
     return data.data;
   },

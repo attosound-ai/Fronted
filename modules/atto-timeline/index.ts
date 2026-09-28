@@ -39,6 +39,9 @@ export interface TimelineClip {
    * they cover the whole clip, which is the usual case. JS narrows them when
    * the zoom is deeper than the segment's own envelope can draw and fetches a
    * detailed envelope of just what is on screen.
+   *
+   * `peaksEndMs` at -1 (or anything at or below the start) means the whole
+   * clip, which is how a clip without a window says so.
    */
   peaksStartMs?: number;
   peaksEndMs?: number;

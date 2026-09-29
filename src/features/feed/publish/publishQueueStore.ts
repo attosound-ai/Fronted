@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import type { CreatePostParams } from './publishPost';
+import { recoverJobs } from './publishRecovery';
 
 /**
  * Posts on their way out, Instagram style: the composer closes the moment
@@ -98,15 +99,13 @@ export const usePublishQueue = create<PublishQueueState>()(
       name: 'publish-queue-v1',
       storage: createJSONStorage(() => mmkvAdapter),
       // A job that was running when the app died did not finish: say so.
-      // Finished ones are gone for good.
-      onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        const jobs = state.jobs
-          .filter((j) => j.phase !== 'done')
-          .map((j) =>
-            ACTIVE.includes(j.phase) ? { ...j, phase: 'interrupted' as const } : j
-          );
-        usePublishQueue.setState({ jobs });
+      // Finished ones are gone for good. This has to be `merge` and not
+      // onRehydrateStorage: MMKV is synchronous, so hydration runs inside
+      // create() before `usePublishQueue` exists, and the old callback threw
+      // in silence, leaving a killed post frozen at 21% forever (Sep 29 2026).
+      merge: (persisted, current) => {
+        const saved = (persisted as Partial<PublishQueueState> | undefined)?.jobs ?? [];
+        return { ...current, jobs: recoverJobs(saved) };
       },
     }
   )

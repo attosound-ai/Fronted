@@ -21,6 +21,7 @@ TEST_FILES=(
   "src/features/timeline/utils/__tests__/detailWindow.test.ts"
   "src/features/timeline/utils/__tests__/postSize.test.ts"
   "src/lib/media/__tests__/videoPostLimits.test.ts"
+  "src/features/feed/publish/__tests__/publishRecovery.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"
   "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"
   "src/features/messages/thread/__tests__/markdown.test.ts"

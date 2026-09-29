@@ -38,8 +38,10 @@
           "es",
           "pt-BR"
         ],
-        "NSAppleMusicUsageDescription": "ATTO needs access to your music library so you can bring a song into a project"
-      }
+        "NSAppleMusicUsageDescription": "ATTO needs access to your music library so you can bring a song into a project",
+        "NSSupportsLiveActivities": true
+      },
+      "appleTeamId": "CT344J3KHR"
     },
     "android": {
       "adaptiveIcon": {
@@ -168,7 +170,8 @@
             }
           }
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "extra": {
       "router": {},

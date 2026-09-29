@@ -56,6 +56,8 @@
     "failedTooLarge": "Couldn't post: the file is too large.",
     "failedTooLargeSized": "Couldn't post: the file is {{size}} MB and the limit is {{max}} MB.",
     "videoTooLong": "This video is {{length}} long. Videos can be up to {{max}}. Trim it and pick it again.",
+    "activityUploading": "Posting to {{username}}",
+    "activityPaused": "Your post hasn't finished uploading on ATTO. Open ATTO to finish it.",
     "videoTooLongTitle": "Video too long"
   },
   "create": {

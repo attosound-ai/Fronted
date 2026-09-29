@@ -56,6 +56,8 @@
     "failedTooLarge": "Não foi possível publicar: o arquivo é grande demais.",
     "failedTooLargeSized": "Não foi possível publicar: o arquivo tem {{size}} MB e o limite é {{max}} MB.",
     "videoTooLong": "Este vídeo tem {{length}}. Vídeos podem ter até {{max}}. Corte e escolha de novo.",
+    "activityUploading": "Publicando em {{username}}",
+    "activityPaused": "Sua publicação ainda não terminou de enviar no ATTO. Abra o ATTO para terminar.",
     "videoTooLongTitle": "Vídeo longo demais"
   },
   "create": {

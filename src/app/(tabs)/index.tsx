@@ -5,6 +5,7 @@ import { FeedHeader, FEED_HEADER_BAR_HEIGHT } from '@/components/feed/FeedHeader
 import { FeedList } from '@/features/feed/components/FeedList';
 import { VerificationBanner } from '@/features/verification';
 import { SuggestedAccountsCarousel } from '@/features/feed/components/SuggestedAccountsCarousel';
+import { PublishStrip } from '@/features/feed/publish/PublishStrip';
 import { ResponsiveContentWrapper } from '@/components/layout/ResponsiveContentWrapper';
 import { useScreenTopInset } from '@/hooks/useInCallChrome';
 import { COLORS } from '@/constants/theme';
@@ -27,6 +28,7 @@ export default function HomeScreen() {
             <>
               <View style={{ height: headerOffset }} />
               <SuggestedAccountsCarousel />
+              <PublishStrip />
               <VerificationBanner />
             </>
           }

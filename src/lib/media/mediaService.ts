@@ -11,18 +11,15 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Video as VideoCompressor } from 'react-native-compressor';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { AUDIO_UPLOAD_MAX_BYTES } from './uploadLimits';
-import { shrinkVideo } from '../../../modules/atto-audio-transcode';
+import {
+  addProcessProgressListener,
+  shrinkVideo,
+} from '../../../modules/atto-audio-transcode';
 
-/**
- * Cloudinary rejects a single upload request over ~100MB with HTTP 413. A raw
- * phone video of a minute or two easily exceeds that, which is why Anthony's
- * original 1:02 clip failed while David's WhatsApp-shrunk copy of the same clip
- * uploaded fine (Aug 27). Compress any video above this size first; the cap is
- * set well under 100MB so the compressed result has margin.
- */
-const VIDEO_COMPRESS_THRESHOLD_BYTES = 40 * 1024 * 1024; // 40 MB
-/** Hard ceiling after compression: above this we stop and tell the user clearly. */
-const VIDEO_MAX_UPLOAD_BYTES = 95 * 1024 * 1024; // 95 MB, just under Cloudinary's 413
+import {
+  VIDEO_COMPRESS_THRESHOLD_BYTES,
+  VIDEO_MAX_UPLOAD_BYTES,
+} from './videoPostLimits';
 
 async function fileSizeBytes(uri: string): Promise<number | null> {
   try {
@@ -72,41 +69,16 @@ async function prepareVideoForUpload(
   const smaller = (bytes: number | null) =>
     bytes !== null && bytes > 0 && (originalBytes === null || bytes < originalBytes);
 
-  // 1. The JS compressor: small files (about 1.7 Mbps), but it silently hands
-  //    back the original whenever its export fails, which iPhone HDR video does.
-  try {
-    // Report the compression phase as the first 40% of the upload progress bar
-    // so it never looks frozen.
-    const outUri = await VideoCompressor.compress(
-      fileUri,
-      { compressionMethod: 'auto' },
-      (p) => onProgress?.(p * 0.4)
-    );
-    const finalBytes = await fileSizeBytes(outUri);
-    if (smaller(finalBytes)) {
-      return { uri: outUri, originalBytes, finalBytes, compressed: true };
-    }
-    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
-      context: 'video',
-      outcome: 'compress_not_smaller',
-      original_bytes: originalBytes,
-      final_bytes: finalBytes,
-    });
-  } catch (error: unknown) {
-    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
-      context: 'video',
-      outcome: 'compress_failed',
-      original_bytes: originalBytes,
-      source_uri_scheme: fileUri.split(':')[0] ?? null,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  // 2. Apple's own conversion to HEVC 1080p, which handles HDR. A 146 MB
-  //    iPhone video came back untouched from step 1 in two seconds (Sep 29).
+  // 1. ATTO's compressor (AttoVideoShrink): fixed 2 Mbps HEVC 1080p, HDR
+  //    tone mapped, so the size is what videoPostLimits promised when the
+  //    video was picked. Its progress fills the first 40% of the bar.
+  const jobId = `shrink-${Date.now()}`;
+  const sub = addProcessProgressListener((e) => {
+    if (e.jobId === jobId) onProgress?.(e.progress * 0.4);
+  });
   try {
     const out = `${FileSystem.cacheDirectory}video-1080-${Date.now()}.mp4`;
-    const shrunk = await shrinkVideo(fileUri, out);
+    const shrunk = await shrinkVideo(fileUri, out, jobId);
     if (shrunk && smaller(shrunk.outputBytes)) {
       analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
         context: 'video',
@@ -130,6 +102,36 @@ async function prepareVideoForUpload(
       context: 'video',
       outcome: 'shrink_native_failed',
       original_bytes: originalBytes,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    sub?.remove();
+  }
+
+  // 2. The JS compressor, only as a fallback: it hands back the original
+  //    untouched whenever its export fails (iPhone HDR does that).
+  try {
+    const outUri = await VideoCompressor.compress(
+      fileUri,
+      { compressionMethod: 'auto' },
+      (p) => onProgress?.(p * 0.4)
+    );
+    const finalBytes = await fileSizeBytes(outUri);
+    if (smaller(finalBytes)) {
+      return { uri: outUri, originalBytes, finalBytes, compressed: true };
+    }
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context: 'video',
+      outcome: 'compress_not_smaller',
+      original_bytes: originalBytes,
+      final_bytes: finalBytes,
+    });
+  } catch (error: unknown) {
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context: 'video',
+      outcome: 'compress_failed',
+      original_bytes: originalBytes,
+      source_uri_scheme: fileUri.split(':')[0] ?? null,
       error: error instanceof Error ? error.message : String(error),
     });
   }

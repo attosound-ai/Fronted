@@ -10,7 +10,6 @@ import {
   DeviceEventEmitter,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { MediaTooLargeError } from '@/lib/media/mediaService';
 import { useCreatePostStore } from '@/stores/createPostStore';
 import { CoverArtPicker } from '@/features/feed/components/create/CoverArtPicker';
 import * as ImagePicker from 'expo-image-picker';
@@ -35,7 +34,15 @@ import {
   type TaggedPerson,
 } from '@/features/feed/utils/mentions';
 import { ProjectPickerSheet } from '@/features/projects/components/ProjectPickerSheet';
-import { useCreatePost } from '@/features/feed/hooks/useCreatePost';
+import { usePublishQueue } from '@/features/feed/publish/publishQueueStore';
+import {
+  checkVideoPost,
+  clock,
+  VIDEO_MAX_POST_SECONDS,
+} from '@/lib/media/videoPostLimits';
+import { mediaDurationSec } from '../../modules/atto-audio-transcode';
+import * as VideoThumbnails from 'expo-video-thumbnails';
+import * as FileSystem from 'expo-file-system/legacy';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { markAction } from '@/lib/telemetry/actionMarks';
 import { useMediaPickers } from '@/features/feed/hooks/useMediaPickers';
@@ -101,11 +108,9 @@ export default function CreatePostScreen() {
   const [forcedCaret, setForcedCaret] = useState<{ start: number; end: number }>();
   const [media, setMedia] = useState<PickedMedia[]>([]);
   const [attachmentType, setAttachmentType] = useState<PostType | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
   const [sourceSheet, setSourceSheet] = useState<PostType | null>(null);
 
-  const { createPost, isCreating } = useCreatePost();
   const {
     pickImages,
     pickMoreImages,
@@ -200,6 +205,41 @@ export default function CreatePostScreen() {
     confirmReplaceAttachment(() => setSourceSheet('audio'));
   };
 
+  // ── A video is checked the moment it is picked ──
+  // Its length says whether it can fit, so the person hears it now and not
+  // after eight minutes of compressing (a 12:11 iPhone video, Sep 29 2026).
+  const acceptVideo = async (picked: PickedMedia, type: 'video' | 'reel') => {
+    let bytes: number | null = null;
+    try {
+      const info = await FileSystem.getInfoAsync(picked.uri);
+      bytes = info.exists && typeof info.size === 'number' ? info.size : null;
+    } catch {
+      bytes = null;
+    }
+    const durationSec = picked.duration ?? (await mediaDurationSec(picked.uri));
+    const check = checkVideoPost(bytes, durationSec);
+    analytics.capture(ANALYTICS_EVENTS.FEED.PUBLISH_QUEUE, {
+      outcome: check.fits ? 'video_accepted' : 'video_too_long',
+      post_type: type,
+      bytes,
+      duration_sec: durationSec,
+      estimated_bytes: check.estimatedBytes,
+    });
+    if (!check.fits) {
+      void haptic('warning');
+      Alert.alert(
+        t('publish.videoTooLongTitle'),
+        t('publish.videoTooLong', {
+          length: clock(durationSec ?? 0),
+          max: clock(VIDEO_MAX_POST_SECONDS),
+        })
+      );
+      return;
+    }
+    setAttachmentType(type);
+    setMedia([{ ...picked, duration: durationSec ?? picked.duration }]);
+  };
+
   // ── Source choice handlers ──
 
   const handleSourceGallery = () => {
@@ -219,16 +259,10 @@ export default function CreatePostScreen() {
         }
       } else if (type === 'video') {
         const picked = await pickVideo();
-        if (picked) {
-          setAttachmentType('video');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'video');
       } else if (type === 'reel') {
         const picked = await pickReel(false);
-        if (picked) {
-          setAttachmentType('reel');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'reel');
       }
     }, 400);
   };
@@ -249,16 +283,10 @@ export default function CreatePostScreen() {
         }
       } else if (type === 'video') {
         const picked = await recordVideo();
-        if (picked) {
-          setAttachmentType('video');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'video');
       } else if (type === 'reel') {
         const picked = await pickReel(true);
-        if (picked) {
-          setAttachmentType('reel');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'reel');
       }
     }, 400);
   };
@@ -280,16 +308,10 @@ export default function CreatePostScreen() {
         }
       } else if (type === 'video') {
         const picked = await pickDocumentVideo();
-        if (picked) {
-          setAttachmentType('video');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'video');
       } else if (type === 'reel') {
         const picked = await pickDocumentVideo();
-        if (picked) {
-          setAttachmentType('reel');
-          setMedia([picked]);
-        }
+        if (picked) await acceptVideo(picked, 'reel');
       } else if (type === 'audio') {
         const picked = await pickDocumentAudio();
         if (picked) {
@@ -380,91 +402,62 @@ export default function CreatePostScreen() {
 
   const canPost = textContent.trim().length > 0 || media.length > 0;
 
+  const [isQueuing, setIsQueuing] = useState(false);
   const handlePost = async () => {
-    if (!canPost) return;
+    if (!canPost || isQueuing) return;
     haptic('light');
+    setIsQueuing(true);
 
     const postType: PostType = attachmentType ?? 'text';
     const isTextOnly = postType === 'text';
+    const first = media[0];
 
-    try {
-      await createPost({
+    // What the strip and the Live Activity show while it goes out.
+    let thumbnailUri: string | null = null;
+    if (postType === 'image' && first) thumbnailUri = first.uri;
+    else if (postType === 'audio') thumbnailUri = coverUri ?? null;
+    else if ((postType === 'video' || postType === 'reel') && first) {
+      try {
+        thumbnailUri = (await VideoThumbnails.getThumbnailAsync(first.uri, { time: 0 }))
+          .uri;
+      } catch {
+        thumbnailUri = first.thumbnailUri ?? null;
+      }
+    }
+
+    // Instagram style: the post goes to the background queue and the person
+    // is back on the feed at once, with the progress strip at the top.
+    usePublishQueue.getState().enqueue(
+      {
         postType,
         media,
         caption: isTextOnly ? '' : textContent,
         poemText: isTextOnly ? textContent : '',
         tagged,
         coverUri: postType === 'audio' && coverUri ? coverUri : undefined,
-        onProgress: setUploadProgress,
-      });
-      // This screen is a native modal, often stacked on the project editor.
-      // A replace() from inside a modal leaves the modal presented and mounts
-      // a second copy of the tabs in it (the same fault that drew the app
-      // inside the call modal, Sep 20 2026). dismissTo pops everything above
-      // the tabs and lands on the feed in ONE action.
-      const canDismiss = router.canDismiss();
-      markAction('post_published');
-      analytics.capture(ANALYTICS_EVENTS.FEED.POST_PUBLISH_NAV, {
-        method: canDismiss ? 'dismiss_to' : 'replace',
-        post_type: postType,
-        has_cover: postType === 'audio' && !!coverUri,
-      });
-      if (canDismiss) {
-        router.dismissTo('/');
-      } else {
-        router.replace('/');
-      }
-      // Scroll feed to top and show published banner after navigation settles
-      setTimeout(() => {
-        DeviceEventEmitter.emit('feedScrollToTop');
-        const { showPostPublished } = require('@/components/ui/PostPublishedBanner');
-        showPostPublished();
-      }, 400);
-    } catch (err: unknown) {
-      // A video too large for Cloudinary used to surface as the cryptic
-      // "Cloudinary upload failed (413)". Show a plain, actionable message
-      // instead (Anthony's Aug 27 upload). MediaTooLargeError is thrown by
-      // mediaService after compression still leaves it over the limit.
-      const isTooLarge =
-        err instanceof MediaTooLargeError ||
-        (err instanceof Error && err.message.includes('413'));
-      let message: string;
-      if (isTooLarge) {
-        // Exact size + limit when we have them, so the user knows how much to cut.
-        let detail = '';
-        if (err instanceof MediaTooLargeError && err.bytes > 0) {
-          // Decimal MB, the same unit the editor's exporter shows.
-          const size = (err.bytes / 1_000_000).toFixed(1);
-          detail =
-            err.maxBytes && err.maxBytes > 0
-              ? ' ' +
-                t('create.uploadSizeWithMax', {
-                  size,
-                  max: (err.maxBytes / 1_000_000).toFixed(0),
-                })
-              : ' ' + t('create.uploadSize', { size });
-        }
-        const kindKey =
-          attachmentType === 'audio'
-            ? 'create.tooLargeAudio'
-            : attachmentType === 'video' || attachmentType === 'reel'
-              ? 'create.tooLargeVideo'
-              : 'create.tooLargeFile';
-        message = (t(kindKey) + detail).trim();
-      } else {
-        // Keep raw Cloudinary/HTTP noise out of the user's face; the exact
-        // status + body are captured in telemetry (MEDIA_UPLOAD event).
-        message = t('common:errors.generic');
-      }
-      // Outcome telemetry: a failed publish must be visible in PostHog, not just
-      // a local Alert the user dismisses and we never hear about.
-      analytics.capture(ANALYTICS_EVENTS.FEED.POST_CREATE_FAILED, {
-        post_type: postType,
-        error: err instanceof Error ? err.message : String(err),
-        too_large: isTooLarge,
-      });
-      Alert.alert(t('create.errorTitle'), message);
+      },
+      thumbnailUri
+    );
+
+    // This screen is a native modal, often stacked on the project editor.
+    // A replace() from inside a modal leaves the modal presented and mounts
+    // a second copy of the tabs in it (the same fault that drew the app
+    // inside the call modal, Sep 20 2026). dismissTo pops everything above
+    // the tabs and lands on the feed in ONE action.
+    const canDismiss = router.canDismiss();
+    markAction('post_queued');
+    analytics.capture(ANALYTICS_EVENTS.FEED.POST_PUBLISH_NAV, {
+      method: canDismiss ? 'dismiss_to' : 'replace',
+      post_type: postType,
+      has_cover: postType === 'audio' && !!coverUri,
+      queued: true,
+    });
+    if (canDismiss) {
+      router.dismissTo('/');
+    } else {
+      router.replace('/');
     }
+    setTimeout(() => DeviceEventEmitter.emit('feedScrollToTop'), 400);
   };
 
   const charCount = textContent.length;
@@ -489,10 +482,10 @@ export default function CreatePostScreen() {
         <TouchableOpacity
           style={[styles.postButton, !canPost && styles.postButtonDisabled]}
           onPress={handlePost}
-          disabled={!canPost || isCreating}
+          disabled={!canPost || isQueuing}
           activeOpacity={0.7}
         >
-          {isCreating ? (
+          {isQueuing ? (
             <ActivityIndicator size="small" color="#000000" />
           ) : (
             <Text
@@ -505,18 +498,6 @@ export default function CreatePostScreen() {
           )}
         </TouchableOpacity>
       </View>
-
-      {/* Upload progress */}
-      {isCreating && uploadProgress > 0 && (
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${Math.round(uploadProgress * 100)}%` },
-            ]}
-          />
-        </View>
-      )}
 
       {/* Compose body */}
       <ScrollView

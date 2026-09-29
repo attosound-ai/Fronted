@@ -320,7 +320,12 @@ export function isRangeProcessCancelled(error: unknown): boolean {
 
 interface AttoAudioTranscodeNative {
   toTelephonyWav(inputPath: string, outputPath: string): Promise<TranscodeResult>;
-  shrinkVideo?(inputPath: string, outputPath: string): Promise<VideoShrinkResult>;
+  mediaDurationMs?(path: string): Promise<number>;
+  shrinkVideo?(
+    inputPath: string,
+    outputPath: string,
+    jobId: string | null
+  ): Promise<VideoShrinkResult>;
   renderEffects?(
     inputPath: string,
     outputPath: string,
@@ -381,19 +386,36 @@ export interface VideoShrinkResult {
   outputBytes: number;
   durationMs: number;
   encodeMs: number;
+  width: number;
+  height: number;
   preset: string;
 }
 
 /**
- * Apple's HEVC 1080p conversion of a video (handles HDR). Throws on failure,
- * with the reason, so the caller can report it; null when the build lacks it.
+ * ATTO's post video compressor (AttoVideoShrink): HEVC 1080p at a fixed
+ * 2 Mbps plus AAC 128 kbps, HDR tone mapped to SDR. The fixed rate is what
+ * makes the size known before posting (videoPostLimits). Progress arrives
+ * through addProcessProgressListener with the given jobId. Throws with the
+ * reason on failure; null when the build lacks it.
  */
 export async function shrinkVideo(
   inputPath: string,
-  outputPath: string
+  outputPath: string,
+  jobId: string | null = null
 ): Promise<VideoShrinkResult | null> {
   if (Platform.OS !== 'ios' || !native?.shrinkVideo) return null;
-  return native.shrinkVideo(inputPath, outputPath);
+  return native.shrinkVideo(inputPath, outputPath, jobId);
+}
+
+/** Length of an audio or video file in seconds, or null when unknown. */
+export async function mediaDurationSec(path: string): Promise<number | null> {
+  if (Platform.OS !== 'ios' || !native?.mediaDurationMs) return null;
+  try {
+    const ms = await native.mediaDurationMs(path);
+    return ms > 0 ? ms / 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isTranscodeAvailable(): boolean {

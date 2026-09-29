@@ -48,16 +48,33 @@ public class AttoAudioTranscodeModule: Module {
 
     Events(AttoAudioTranscodeModule.processProgressEvent)
 
-    // Apple's conversion to HEVC 1080p, the fallback when the JS video
-    // compressor hands a file back untouched (AttoVideoShrink).
+    // ATTO's video compressor for posts (AttoVideoShrink): HEVC 1080p at a
+    // fixed bit rate so the size is known before posting. Progress goes out
+    // as AttoAudioProcessProgress with the given jobId.
     AsyncFunction("shrinkVideo") {
-      (inputPath: String, outputPath: String, promise: Promise) in
-      AttoVideoShrink.shrink(inputPath: inputPath, outputPath: outputPath) { result in
+      (inputPath: String, outputPath: String, jobId: String?, promise: Promise) in
+      AttoVideoShrink.shrink(
+        inputPath: inputPath, outputPath: outputPath,
+        progress: { [weak self] value in
+          guard let jobId else { return }
+          self?.sendEvent(
+            AttoAudioTranscodeModule.processProgressEvent,
+            ["jobId": jobId, "progress": value])
+        }
+      ) { result in
         switch result {
         case .success(let info): promise.resolve(info)
         case .failure(let error): promise.reject("ERR_VIDEO_SHRINK", error.localizedDescription)
         }
       }
+    }
+
+    // Length of any audio or video file, for checks made the moment a file
+    // is picked (a video from Files arrives without its duration).
+    AsyncFunction("mediaDurationMs") { (path: String) -> Double in
+      let asset = AVURLAsset(url: AttoVideoShrink.fileURL(path))
+      let seconds = CMTimeGetSeconds(asset.duration)
+      return seconds.isFinite && seconds > 0 ? seconds * 1000 : -1
     }
 
     AsyncFunction("toTelephonyWav") {

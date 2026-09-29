@@ -145,6 +145,8 @@ export const ANALYTICS_EVENTS = {
     // again (the edit-post bug was silent for weeks): every post mutation
     // reports its outcome.
     POST_CREATE_FAILED: 'feed_post_create_failed',
+    /** Background publish queue outcome: posted / failed / discarded / retried. */
+    PUBLISH_QUEUE: 'feed_publish_queue',
     POST_EDIT_FAILED: 'feed_post_edit_failed',
     // Edit succeeded — the DISCRIMINATOR for "Done doesn't update the post until I
     // re-edit" (David, Jul 26, ATTO acct). Compares what we SUBMITTED vs what the

@@ -43,6 +43,21 @@
     "menuEdit": "Edit post",
     "menuDelete": "Delete post"
   },
+  "publish": {
+    "keepOpen": "Keep ATTO open to finish posting • {{percent}}%",
+    "posting": "Posting to {{username}}...",
+    "posted": "Posted to {{username}}.",
+    "view": "View",
+    "retry": "Retry",
+    "discard": "Discard",
+    "interrupted": "Posting stopped when ATTO closed. Tap Retry to finish it.",
+    "failedNetwork": "Couldn't post: the connection dropped. Tap Retry.",
+    "failedOther": "Couldn't post. Tap Retry to try again.",
+    "failedTooLarge": "Couldn't post: the file is too large.",
+    "failedTooLargeSized": "Couldn't post: the file is {{size}} MB and the limit is {{max}} MB.",
+    "videoTooLong": "This video is {{length}} long. Videos can be up to {{max}}. Trim it and pick it again.",
+    "videoTooLongTitle": "Video too long"
+  },
   "create": {
     "placeholder": "What's on your mind?",
     "postButton": "Post",

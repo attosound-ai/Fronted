@@ -1,4 +1,5 @@
 import '@/lib/i18n';
+import { PublishRunner } from '@/features/feed/publish/PublishRunner';
 import '@/lib/pushNotifications'; // registers foreground notification handler
 import '@/lib/textScaling'; // caps Dynamic Type globally to protect layouts
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -369,6 +370,8 @@ function RootLayout() {
                   {!fontsLoaded ? null : (
                     <UpdateRequiredGate key={deepResumeKey}>
                       <InCallTopBar />
+                      {/* Posts on their way out: runs for the whole app life. */}
+                      <PublishRunner />
                       <DtmfKeypadHost />
                       <AudioRoutePickerHost />
                       <CallAudioInjectionHost />

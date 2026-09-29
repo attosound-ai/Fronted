@@ -11,6 +11,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Video as VideoCompressor } from 'react-native-compressor';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { AUDIO_UPLOAD_MAX_BYTES } from './uploadLimits';
+import { shrinkVideo } from '../../../modules/atto-audio-transcode';
 
 /**
  * Cloudinary rejects a single upload request over ~100MB with HTTP 413. A raw
@@ -68,30 +69,74 @@ async function prepareVideoForUpload(
   if (originalBytes !== null && originalBytes <= VIDEO_COMPRESS_THRESHOLD_BYTES) {
     return { uri: fileUri, originalBytes, finalBytes: originalBytes, compressed: false };
   }
+  const smaller = (bytes: number | null) =>
+    bytes !== null && bytes > 0 && (originalBytes === null || bytes < originalBytes);
+
+  // 1. The JS compressor: small files (about 1.7 Mbps), but it silently hands
+  //    back the original whenever its export fails, which iPhone HDR video does.
   try {
-    // 'auto' picks a sensible bitrate/resolution; report the compression phase
-    // as the first 40% of the upload progress bar so it never looks frozen.
+    // Report the compression phase as the first 40% of the upload progress bar
+    // so it never looks frozen.
     const outUri = await VideoCompressor.compress(
       fileUri,
       { compressionMethod: 'auto' },
       (p) => onProgress?.(p * 0.4)
     );
     const finalBytes = await fileSizeBytes(outUri);
-    // If compression somehow made it bigger (or unknown), keep whichever is smaller.
-    if (finalBytes !== null && originalBytes !== null && finalBytes >= originalBytes) {
+    if (smaller(finalBytes)) {
+      return { uri: outUri, originalBytes, finalBytes, compressed: true };
+    }
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context: 'video',
+      outcome: 'compress_not_smaller',
+      original_bytes: originalBytes,
+      final_bytes: finalBytes,
+    });
+  } catch (error: unknown) {
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context: 'video',
+      outcome: 'compress_failed',
+      original_bytes: originalBytes,
+      source_uri_scheme: fileUri.split(':')[0] ?? null,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // 2. Apple's own conversion to HEVC 1080p, which handles HDR. A 146 MB
+  //    iPhone video came back untouched from step 1 in two seconds (Sep 29).
+  try {
+    const out = `${FileSystem.cacheDirectory}video-1080-${Date.now()}.mp4`;
+    const shrunk = await shrinkVideo(fileUri, out);
+    if (shrunk && smaller(shrunk.outputBytes)) {
+      analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+        context: 'video',
+        outcome: 'shrunk_native',
+        original_bytes: originalBytes,
+        final_bytes: shrunk.outputBytes,
+        encode_ms: shrunk.encodeMs,
+        duration_ms: shrunk.durationMs,
+        preset: shrunk.preset,
+      });
+      onProgress?.(0.4);
       return {
-        uri: fileUri,
+        uri: shrunk.outputPath,
         originalBytes,
-        finalBytes: originalBytes,
-        compressed: false,
+        finalBytes: shrunk.outputBytes,
+        compressed: true,
       };
     }
-    return { uri: outUri, originalBytes, finalBytes, compressed: true };
-  } catch {
-    // Compressor unavailable/failed → upload the original and let the size guard
-    // + 413 handling below give a clear outcome.
-    return { uri: fileUri, originalBytes, finalBytes: originalBytes, compressed: false };
+  } catch (error: unknown) {
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context: 'video',
+      outcome: 'shrink_native_failed',
+      original_bytes: originalBytes,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
+
+  // Nothing helped: upload the original and let the size guard give a clear
+  // outcome, with the size and the limit.
+  return { uri: fileUri, originalBytes, finalBytes: originalBytes, compressed: false };
 }
 
 /** Signed upload params returned by our backend. */

@@ -82,11 +82,18 @@ export function ExporterSheet({
   const [onlyRange, setOnlyRange] = useState(false);
 
   useEffect(() => {
-    if (visible) {
-      setOptions(initial);
-      setOnlyRange(false);
-    }
+    if (visible) setOptions(initial);
   }, [visible, initial]);
+
+  // The whole project / selected range pick belongs to the selection, not to
+  // one opening of the sheet: when a mix comes back too large the sheet
+  // reopens, and it must still show what the person chose. A new selection
+  // starts again from the whole project.
+  const rangeStart = range?.startMs;
+  const rangeEnd = range?.endMs;
+  useEffect(() => {
+    setOnlyRange(false);
+  }, [rangeStart, rangeEnd]);
 
   const format = options.format ?? 'wav';
   const quality = options.quality ?? 'medium';

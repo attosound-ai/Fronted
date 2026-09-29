@@ -320,6 +320,7 @@ export function isRangeProcessCancelled(error: unknown): boolean {
 
 interface AttoAudioTranscodeNative {
   toTelephonyWav(inputPath: string, outputPath: string): Promise<TranscodeResult>;
+  shrinkVideo?(inputPath: string, outputPath: string): Promise<VideoShrinkResult>;
   renderEffects?(
     inputPath: string,
     outputPath: string,
@@ -373,6 +374,27 @@ interface AttoAudioTranscodeNative {
 // time. Transcoding is an optimisation — never a hard dependency of importing.
 const native =
   requireOptionalNativeModule<AttoAudioTranscodeNative>('AttoAudioTranscode');
+
+export interface VideoShrinkResult {
+  outputPath: string;
+  inputBytes: number;
+  outputBytes: number;
+  durationMs: number;
+  encodeMs: number;
+  preset: string;
+}
+
+/**
+ * Apple's HEVC 1080p conversion of a video (handles HDR). Throws on failure,
+ * with the reason, so the caller can report it; null when the build lacks it.
+ */
+export async function shrinkVideo(
+  inputPath: string,
+  outputPath: string
+): Promise<VideoShrinkResult | null> {
+  if (Platform.OS !== 'ios' || !native?.shrinkVideo) return null;
+  return native.shrinkVideo(inputPath, outputPath);
+}
 
 export function isTranscodeAvailable(): boolean {
   return Platform.OS === 'ios' && native != null;

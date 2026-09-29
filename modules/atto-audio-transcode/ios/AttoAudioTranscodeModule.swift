@@ -48,6 +48,18 @@ public class AttoAudioTranscodeModule: Module {
 
     Events(AttoAudioTranscodeModule.processProgressEvent)
 
+    // Apple's conversion to HEVC 1080p, the fallback when the JS video
+    // compressor hands a file back untouched (AttoVideoShrink).
+    AsyncFunction("shrinkVideo") {
+      (inputPath: String, outputPath: String, promise: Promise) in
+      AttoVideoShrink.shrink(inputPath: inputPath, outputPath: outputPath) { result in
+        switch result {
+        case .success(let info): promise.resolve(info)
+        case .failure(let error): promise.reject("ERR_VIDEO_SHRINK", error.localizedDescription)
+        }
+      }
+    }
+
     AsyncFunction("toTelephonyWav") {
       (inputPath: String, outputPath: String, promise: Promise) in
       DispatchQueue.global(qos: .userInitiated).async {

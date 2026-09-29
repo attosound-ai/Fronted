@@ -79,13 +79,14 @@ export function videoLoadCompleted(ctx: VideoTelemetryContext, loadMs: number): 
  */
 export function videoError(
   ctx: VideoTelemetryContext,
-  opts: { source?: string | null; willFallback: boolean }
+  opts: { source?: string | null; willFallback: boolean; reason?: 'error' | 'stalled' }
 ): void {
   analytics.capture(ANALYTICS_EVENTS.VIDEO.LOAD_ERROR, {
     surface: ctx.surface,
     post_id: ctx.postId,
     source: shortSource(opts.source),
     will_fallback: opts.willFallback,
+    reason: opts.reason ?? 'error',
   });
   if (opts.willFallback) {
     Sentry.addBreadcrumb({

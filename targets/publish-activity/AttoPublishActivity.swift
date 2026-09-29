@@ -49,9 +49,11 @@ struct AttoPublishLiveActivity: Widget {
       } compactLeading: {
         Thumb(data: context.attributes.thumbnail, width: 22, height: 22, radius: 5)
       } compactTrailing: {
-        StatusBadge(state: context.state, size: 22)
+        // Instagram keeps the ring in the compact island even while paused;
+        // the red "!" only shows once the island is expanded.
+        StatusBadge(state: context.state, size: 22, ringWhilePaused: true)
       } minimal: {
-        StatusBadge(state: context.state, size: 22)
+        StatusBadge(state: context.state, size: 22, ringWhilePaused: true)
       }
       .widgetURL(URL(string: "atto://"))
       .keylineTint(Color.white)
@@ -104,6 +106,7 @@ struct Thumb: View {
 struct StatusBadge: View {
   let state: AttoPublishAttributes.ContentState
   let size: CGFloat
+  var ringWhilePaused = false
 
   var body: some View {
     switch state.phase {
@@ -112,6 +115,8 @@ struct StatusBadge: View {
         .resizable()
         .foregroundColor(.white)
         .frame(width: size, height: size)
+    case "paused" where ringWhilePaused:
+      Ring(progress: state.progress, size: size)
     case "paused", "failed":
       Image(systemName: "exclamationmark.circle")
         .resizable()

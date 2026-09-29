@@ -133,5 +133,39 @@ export function useVideoStream(
     return () => sub.remove();
   }, [player, active]);
 
+  // A stream that is "ready" but never moves. Right after a video is posted
+  // the HLS playlist already answers while Cloudinary is still cutting the
+  // segments; AVPlayer takes the playlist, the first segment fetch fails, and
+  // it sits on a black frame forever without reporting an error (Sep 29 2026,
+  // a freshly posted video). If a visible video has not advanced six seconds
+  // after becoming ready, switch once to the MP4, which exists the moment the
+  // upload finishes.
+  useEffect(() => {
+    if (!player || !isReady || !active || !source) return;
+    const fallback = !triedFallback.current ? hlsToMp4Fallback(source) : null;
+    if (!fallback) return;
+    const startedAt = player.currentTime;
+    const id = setTimeout(() => {
+      try {
+        if (player.currentTime - startedAt > 0.25 || triedFallback.current) return;
+        triedFallback.current = true;
+        if (telemetryRef.current) {
+          videoError(telemetryRef.current, {
+            source,
+            willFallback: true,
+            reason: 'stalled',
+          });
+        }
+        void player.replaceAsync(fallback).then(() => {
+          player.play();
+        });
+        if (telemetryRef.current) videoFallbackUsed(telemetryRef.current);
+      } catch {
+        // player was disposed (cell recycled) — ignore
+      }
+    }, 6000);
+    return () => clearTimeout(id);
+  }, [player, isReady, active, source]);
+
   return isReady;
 }

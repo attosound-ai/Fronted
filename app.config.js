@@ -79,11 +79,24 @@ function assertArranqueSeguro(config) {
   }
 }
 
+/**
+ * La extensión del Live Activity (targets/publish-activity) necesita su
+ * propio perfil de firma. Con ATTO_LIVE_ACTIVITY=0 el build sale sin ella:
+ * la app funciona igual (la franja del feed) y el Live Activity no aparece.
+ */
+function sinLiveActivity(plugins) {
+  if (process.env.ATTO_LIVE_ACTIVITY !== '0') return plugins;
+  return (plugins || []).filter(
+    (p) => (Array.isArray(p) ? p[0] : p) !== '@bacons/apple-targets',
+  );
+}
+
 module.exports = ({ config }) => {
   const APP_BACKGROUND = readAppBackground();
   assertArranqueSeguro(config);
   return {
     ...config,
+    plugins: sinLiveActivity(config.plugins),
     splash: {
       ...(config.splash || {}),
       backgroundColor: APP_BACKGROUND,

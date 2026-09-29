@@ -4,6 +4,7 @@ import { projectService } from '@/lib/api/projectService';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import type { TimelineClip } from '@/types/project';
 import { peaksParaDuracion } from './useWaveformData';
+import { WAVEFORM_KEY } from '../utils/waveformKeys';
 
 /**
  * El número de picos ya no es fijo: depende de la duración del segmento, para
@@ -56,12 +57,12 @@ export function usePreloadEditor(clips: TimelineClip[]) {
       }
 
       // Populate React Query cache for each segment
-      // Key matches exactly what useWaveformData uses: ['waveform', segmentId, WAVEFORM_PEAKS]
+      // Key matches exactly what useWaveformData uses: [WAVEFORM_KEY, segmentId, WAVEFORM_PEAKS]
       let loaded = 0;
       for (const segmentId of uniqueSegmentIds) {
         if (waveforms[segmentId]) {
           queryClient.setQueryData(
-            ['waveform', segmentId, picosPorSegmento.get(segmentId)],
+            [WAVEFORM_KEY, segmentId, picosPorSegmento.get(segmentId)],
             waveforms[segmentId]
           );
         }
@@ -83,7 +84,7 @@ export function usePreloadEditor(clips: TimelineClip[]) {
         uniqueSegmentIds.map(async (id) => {
           const n = picosDeClips(clips, id);
           await queryClient.prefetchQuery({
-            queryKey: ['waveform', id, n],
+            queryKey: [WAVEFORM_KEY, id, n],
             queryFn: () => projectService.getWaveform(id, n),
             staleTime: Infinity,
           });

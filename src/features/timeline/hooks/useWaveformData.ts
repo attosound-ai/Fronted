@@ -5,6 +5,7 @@ import {
   WAVEFORM_PEAKS_MAX,
   WAVEFORM_PEAKS_MIN,
 } from './waveformResolution';
+import { WAVEFORM_KEY } from '../utils/waveformKeys';
 
 export { peaksParaDuracion, WAVEFORM_PEAKS_MAX, WAVEFORM_PEAKS_MIN };
 
@@ -23,7 +24,7 @@ export const WAVEFORM_PEAKS = 2000;
 
 export function useWaveformData(segmentId: string, samples = WAVEFORM_PEAKS) {
   return useQuery({
-    queryKey: ['waveform', segmentId, samples],
+    queryKey: [WAVEFORM_KEY, segmentId, samples],
     queryFn: () => projectService.getWaveform(segmentId, samples),
     enabled: !!segmentId,
     staleTime: Infinity, // Waveform data doesn't change

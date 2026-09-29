@@ -5,6 +5,7 @@ import { projectService } from '@/lib/api/projectService';
 import type { LocalClip } from '../types';
 import { peaksParaDuracion } from './useWaveformData';
 import { DETALLE_PICOS, necesitaDetalle, ventanaDeDetalle } from '../utils/detailWindow';
+import { WAVEFORM_DETAIL_KEY } from '../utils/waveformKeys';
 
 export interface DetallePicos {
   peaks: number[];
@@ -88,7 +89,7 @@ export function useDetailPeaks(
 
   const results = useQueries({
     queries: peticiones.map((p) => ({
-      queryKey: ['waveform-detail', p.segmentId, DETALLE_PICOS, p.fromRatio, p.toRatio],
+      queryKey: [WAVEFORM_DETAIL_KEY, p.segmentId, DETALLE_PICOS, p.fromRatio, p.toRatio],
       queryFn: () =>
         projectService.getWaveform(p.segmentId, DETALLE_PICOS, p.fromRatio, p.toRatio),
       staleTime: Infinity,

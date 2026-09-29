@@ -4,6 +4,7 @@ import { useQueries } from '@tanstack/react-query';
 import { projectService } from '@/lib/api/projectService';
 import type { LocalClip } from '../types';
 import { peaksParaDuracion } from './useWaveformData';
+import { WAVEFORM_KEY } from '../utils/waveformKeys';
 
 /**
  * One dense envelope per segment (same query key as useWaveformData, so
@@ -27,7 +28,7 @@ export function useClipPeaks(
     queries: segmentIds.map((segmentId) => {
       const picos = peaksParaDuracion(segmentDurationMs.get(segmentId));
       return {
-        queryKey: ['waveform', segmentId, picos],
+        queryKey: [WAVEFORM_KEY, segmentId, picos],
         queryFn: () => projectService.getWaveform(segmentId, picos),
         staleTime: Infinity,
       };

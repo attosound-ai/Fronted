@@ -591,9 +591,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,59,48,0.45)',
-    backgroundColor: 'rgba(255,59,48,0.08)',
+    backgroundColor: 'rgba(255,59,48,0.12)',
   },
   warningText: {
     color: STUDIO_COLORS.text,

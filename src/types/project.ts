@@ -39,6 +39,9 @@ export interface ExportOptions {
   fileName?: string;
   /** Storage key returned by the cover upload. */
   coverKey?: string;
+  /** Mix down only this span (the selected range). Never remembered. */
+  rangeStartMs?: number;
+  rangeEndMs?: number;
 }
 
 export interface ProjectSettings {

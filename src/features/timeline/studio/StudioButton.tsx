@@ -10,18 +10,41 @@ import {
 import { Text } from '@/components/ui/Text';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
 import { haptic } from '@/lib/haptics/hapticService';
+import { showToast } from '@/components/ui/Toast';
 import { STUDIO, STUDIO_COLORS } from './studioTheme';
 
 /**
  * The two button shapes of the studio editor, in ATTO's language: a labeled
  * pill (white when active, outlined otherwise, dimmed when it cannot act)
  * and a glass circle for icons. Every SoundLab control maps to one of them.
+ *
+ * A dimmed button in SoundLab ignores the tap and never says why. Here a
+ * dimmed button that knows its reason says it: a toast with what is missing
+ * ("Select a range first") and a warning tap, so nothing fails in silence.
  */
+
+function press(
+  disabled: boolean,
+  disabledReason: string | undefined,
+  onPress: () => void
+) {
+  if (disabled) {
+    if (disabledReason) {
+      void haptic('warning');
+      showToast(disabledReason);
+    }
+    return;
+  }
+  void haptic('light');
+  onPress();
+}
 
 interface PillProps {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** Shown when the dimmed pill is tapped: what the user has to do first. */
+  disabledReason?: string;
   active?: boolean;
   destructive?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -32,6 +55,7 @@ export function StudioPill({
   label,
   onPress,
   disabled = false,
+  disabledReason,
   active = false,
   destructive = false,
   style,
@@ -39,14 +63,11 @@ export function StudioPill({
 }: PillProps) {
   return (
     <Pressable
-      onPress={() => {
-        if (disabled) return;
-        void haptic('light');
-        onPress();
-      }}
+      onPress={() => press(disabled, disabledReason, onPress)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled, selected: active }}
+      accessibilityHint={disabled ? disabledReason : undefined}
       style={({ pressed }) => [
         styles.pill,
         active && styles.pillActive,
@@ -79,6 +100,8 @@ interface IconProps {
   icon: ReactNode;
   onPress: () => void;
   disabled?: boolean;
+  /** Shown when the dimmed button is tapped: what the user has to do first. */
+  disabledReason?: string;
   active?: boolean;
   size?: number;
   accessibilityLabel: string;
@@ -91,6 +114,7 @@ export function StudioIconButton({
   icon,
   onPress,
   disabled = false,
+  disabledReason,
   active = false,
   size = STUDIO.iconButton,
   accessibilityLabel,
@@ -100,14 +124,11 @@ export function StudioIconButton({
   const circle = { width: size, height: size, borderRadius: size / 2 };
   const inner = (
     <Pressable
-      onPress={() => {
-        if (disabled) return;
-        void haptic('light');
-        onPress();
-      }}
+      onPress={() => press(disabled, disabledReason, onPress)}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled, selected: active }}
+      accessibilityHint={disabled ? disabledReason : undefined}
       hitSlop={6}
       style={({ pressed }) => [
         styles.iconInner,

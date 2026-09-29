@@ -41,7 +41,10 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   // (Sep 20 2026); half a fingertip on each side makes them grabbable.
   private static let selectionLineHitSlop: CGFloat = 24
   private static let rangeEdgeHitSlop: CGFloat = 24
-  private static let clipLongPressSeconds: TimeInterval = 0.35
+  /// Moving anything needs a long press first, the way SoundLab does it: a
+  /// plain pan always scrolls. Before Sep 28 2026 a horizontal pan on empty
+  /// lane space shifted the whole lane, so trying to scroll moved the tracks.
+  private static let clipLongPressSeconds: TimeInterval = 0.5
   private static let scrollEventInterval: TimeInterval = 1.0 / 30.0
   private static let liveStateGraceSeconds: TimeInterval = 0.45
   private static let playheadHeadWidth: CGFloat = 12
@@ -92,7 +95,6 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     case scrub
     case createRange(trackIndex: Int, anchorMs: Double)
     case resizeRange(movingStart: Bool)
-    case trackDrag(trackIndex: Int, minDeltaPx: CGFloat)
   }
 
   private var panMode: PanMode?
@@ -103,6 +105,8 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   private var pinchAnchorMs: Double = 0
   private var clipDragStartX: CGFloat = 0
   private var clipDragClip: AttoTimelineClip?
+  /// Lane being shifted by a long press on its empty space.
+  private var laneDrag: (trackIndex: Int, startX: CGFloat, minDeltaPx: CGFloat)?
   private var liveStateTimer: Timer?
   private var haptics: UIImpactFeedbackGenerator?
 
@@ -662,6 +666,18 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     max(0, ms.isFinite ? ms : 0)
   }
 
+  /// Where the audio ends. Taps, scrubs and ranges stop there, as in
+  /// SoundLab: a line or a range past the last clip selects nothing.
+  private var projectEndMs: Double {
+    renderer.clips.reduce(0) { max($0, $1.endMs) }
+  }
+
+  private func clampToProject(_ ms: Double) -> Double {
+    let end = projectEndMs
+    let at = clampMs(ms)
+    return end > 0 ? min(at, end) : at
+  }
+
   /// JS receives null (not undefined) when no clip sits under the point.
   private func clipIdPayload(at point: CGPoint) -> Any {
     if let clip = hitClip(at: point) { return clip.id }
@@ -673,13 +689,16 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     if gestureRecognizer === longPressRecognizer {
       let point = longPressRecognizer.location(in: contentView)
-      return hitClip(at: point) != nil
+      let g = renderer.geometry
+      guard point.x >= g.leftInset, !isOnRuler(point), let lane = g.laneIndex(forY: point.y)
+      else { return false }
+      return !renderer.clipsOnLane(lane).isEmpty
     }
     if gestureRecognizer === panRecognizer {
       let translation = panRecognizer.translation(in: contentView)
       let location = panRecognizer.location(in: contentView)
       let start = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
-      panMode = classifyPan(start: start, translation: translation)
+      panMode = classifyPan(start: start)
       return panMode != nil
     }
     return true
@@ -700,7 +719,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     return false
   }
 
-  private func classifyPan(start: CGPoint, translation: CGPoint) -> PanMode? {
+  private func classifyPan(start: CGPoint) -> PanMode? {
     let g = renderer.geometry
     guard start.x >= g.leftInset else { return nil }
     if isOnRuler(start) { return .scrub }
@@ -712,14 +731,9 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     if isOnSelectionLine(start), let lineMs = selectionLineMs {
       return .createRange(trackIndex: lane, anchorMs: lineMs)
     }
-    // On a clip a plain pan scrolls; on empty lane space it shifts the lane's
-    // clips, but only for a mostly horizontal drag so the outer vertical
-    // scroll view keeps working, and only when there is something to move.
-    if hitClip(at: start) != nil { return nil }
-    let laneClips = renderer.clipsOnLane(lane)
-    guard !laneClips.isEmpty, abs(translation.x) > abs(translation.y) else { return nil }
-    let minStartPx = laneClips.map { g.px(forDurationMs: $0.startMs) }.min() ?? 0
-    return .trackDrag(trackIndex: lane, minDeltaPx: -minStartPx)
+    // Anywhere else a plain pan scrolls, on a clip or on empty space.
+    // Moving a clip or a lane starts with a long press (handleLongPress).
+    return nil
   }
 
   // MARK: Tap gestures
@@ -730,7 +744,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     let g = renderer.geometry
     guard point.x >= g.leftInset else { return }
     if isOnRuler(point) {
-      let ms = clampMs(g.ms(forX: point.x))
+      let ms = clampToProject(g.ms(forX: point.x))
       livePlayheadMs = ms
       layoutPlayhead(ms: ms)
       scheduleLiveStateExpiry()
@@ -742,7 +756,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     let local = recognizer.location(in: self)
     onTap([
       "trackIndex": lane,
-      "ms": clampMs(g.ms(forX: point.x)),
+      "ms": clampToProject(g.ms(forX: point.x)),
       "clipId": clipIdPayload(at: point),
       "x": Double(local.x),
       "y": Double(local.y),
@@ -761,40 +775,61 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     ])
   }
 
-  // MARK: Long press: move a clip
+  // MARK: Long press: move a clip, or shift a lane from its empty space
 
   @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
     let point = recognizer.location(in: contentView)
     let g = renderer.geometry
     switch recognizer.state {
     case .began:
-      guard let clip = hitClip(at: point) else {
+      liveStateTimer?.invalidate()
+      if let clip = hitClip(at: point) {
+        clipDragClip = clip
+        clipDragStartX = point.x
+        renderer.draggingClipId = clip.id
+        renderer.draggingClipOffsetPx = 0
+        redrawLane(clip.trackIndex)
+        onClipMove(["clipId": clip.id, "startMs": clip.startMs, "phase": "begin"])
+      } else if let lane = g.laneIndex(forY: point.y), !renderer.clipsOnLane(lane).isEmpty {
+        // The lane may slide left only until its first clip reaches zero.
+        let firstStart = renderer.clipsOnLane(lane).map(\.startMs).min() ?? 0
+        laneDrag = (lane, point.x, -g.px(forDurationMs: firstStart))
+        renderer.laneDragOffsetPx[lane] = 0
+        redrawLane(lane)
+        onTrackDrag(["trackIndex": lane, "deltaMs": 0, "phase": "begin"])
+      } else {
         recognizer.isEnabled = false
         recognizer.isEnabled = true
         return
       }
-      clipDragClip = clip
-      clipDragStartX = point.x
-      renderer.draggingClipId = clip.id
-      renderer.draggingClipOffsetPx = 0
-      liveStateTimer?.invalidate()
       haptics = UIImpactFeedbackGenerator(style: .medium)
       haptics?.impactOccurred()
-      redrawLane(clip.trackIndex)
-      onClipMove(["clipId": clip.id, "startMs": clip.startMs, "phase": "begin"])
     case .changed:
-      guard let clip = clipDragClip else { return }
-      let minDx = -(g.x(forMs: clip.startMs) - g.leftInset)
-      let dx = max(minDx, point.x - clipDragStartX)
-      renderer.draggingClipOffsetPx = dx
-      redrawLane(clip.trackIndex)
-      onClipMove(["clipId": clip.id, "startMs": clampMs(clip.startMs + g.ms(forPx: dx)), "phase": "update"])
+      if let clip = clipDragClip {
+        let minDx = -(g.x(forMs: clip.startMs) - g.leftInset)
+        let dx = max(minDx, point.x - clipDragStartX)
+        renderer.draggingClipOffsetPx = dx
+        redrawLane(clip.trackIndex)
+        onClipMove(["clipId": clip.id, "startMs": clampMs(clip.startMs + g.ms(forPx: dx)), "phase": "update"])
+      } else if let drag = laneDrag {
+        let dx = max(drag.minDeltaPx, point.x - drag.startX)
+        renderer.laneDragOffsetPx[drag.trackIndex] = dx
+        redrawLane(drag.trackIndex)
+        onTrackDrag(["trackIndex": drag.trackIndex, "deltaMs": g.ms(forPx: dx), "phase": "update"])
+      }
     case .ended, .cancelled, .failed:
-      guard let clip = clipDragClip else { return }
-      let dx = renderer.draggingClipOffsetPx
-      clipDragClip = nil
+      if let clip = clipDragClip {
+        let dx = renderer.draggingClipOffsetPx
+        clipDragClip = nil
+        onClipMove(["clipId": clip.id, "startMs": clampMs(clip.startMs + g.ms(forPx: dx)), "phase": "end"])
+      } else if let drag = laneDrag {
+        let dx = renderer.laneDragOffsetPx[drag.trackIndex] ?? 0
+        laneDrag = nil
+        onTrackDrag(["trackIndex": drag.trackIndex, "deltaMs": g.ms(forPx: dx), "phase": "end"])
+      } else {
+        return
+      }
       haptics = nil
-      onClipMove(["clipId": clip.id, "startMs": clampMs(clip.startMs + g.ms(forPx: dx)), "phase": "end"])
       // The ghost stays until the clips prop commits, or the grace period ends.
       scheduleLiveStateExpiry()
     default:
@@ -802,12 +837,11 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     }
   }
 
-  // MARK: Pan: scrub, select, shift a lane
+  // MARK: Pan: scrub the ruler, draw or resize a range
 
   @objc private func handlePan(_ recognizer: UIPanGestureRecognizer) {
     guard let mode = panMode else { return }
     let point = recognizer.location(in: contentView)
-    let translation = recognizer.translation(in: contentView)
     let g = renderer.geometry
     let phase: String
     switch recognizer.state {
@@ -821,13 +855,13 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
 
     switch mode {
     case .scrub:
-      let ms = clampMs(g.ms(forX: point.x))
+      let ms = clampToProject(g.ms(forX: point.x))
       livePlayheadMs = ms
       layoutPlayhead(ms: ms)
       onPlayheadScrub(["ms": ms, "phase": phase])
 
     case .createRange(let trackIndex, let anchorMs):
-      let ms = clampMs(g.ms(forX: point.x))
+      let ms = clampToProject(g.ms(forX: point.x))
       let sel = AttoTimelineSelection(trackIndex: trackIndex, startMs: anchorMs, endMs: ms)
       liveSelection = sel
       layoutSelectionOverlays()
@@ -837,7 +871,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
 
     case .resizeRange(let movingStart):
       guard let base = effectiveSelection else { return }
-      let ms = clampMs(g.ms(forX: point.x))
+      let ms = clampToProject(g.ms(forX: point.x))
       let sel = movingStart
         ? AttoTimelineSelection(trackIndex: base.trackIndex, startMs: ms, endMs: base.endMs)
         : AttoTimelineSelection(trackIndex: base.trackIndex, startMs: base.startMs, endMs: ms)
@@ -846,12 +880,6 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
       onSelectionChange([
         "trackIndex": sel.trackIndex, "startMs": sel.startMs, "endMs": sel.endMs, "phase": phase,
       ])
-
-    case .trackDrag(let trackIndex, let minDeltaPx):
-      let dx = max(minDeltaPx, translation.x)
-      renderer.laneDragOffsetPx[trackIndex] = dx
-      redrawLane(trackIndex)
-      onTrackDrag(["trackIndex": trackIndex, "deltaMs": g.ms(forPx: dx), "phase": phase])
     }
 
     if isEnd {
@@ -895,7 +923,7 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
     liveStateTimer?.invalidate()
     liveStateTimer = Timer.scheduledTimer(withTimeInterval: Self.liveStateGraceSeconds, repeats: false) {
       [weak self] _ in
-      guard let self, self.panMode == nil, self.clipDragClip == nil else { return }
+      guard let self, self.panMode == nil, self.clipDragClip == nil, self.laneDrag == nil else { return }
       var lanesToRedraw = Set(self.renderer.laneDragOffsetPx.keys)
       if let id = self.renderer.draggingClipId, let clip = self.renderer.clip(withId: id) {
         lanesToRedraw.insert(clip.trackIndex)

@@ -10,6 +10,7 @@ import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Video as VideoCompressor } from 'react-native-compressor';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { AUDIO_UPLOAD_MAX_BYTES } from './uploadLimits';
 
 /**
  * Cloudinary rejects a single upload request over ~100MB with HTTP 413. A raw
@@ -270,7 +271,7 @@ async function upload(
         final_bytes: finalBytes,
         compressed,
       });
-      throw new MediaTooLargeError(finalBytes);
+      throw new MediaTooLargeError(finalBytes, VIDEO_MAX_UPLOAD_BYTES);
     }
   }
 
@@ -279,6 +280,23 @@ async function upload(
   // the key field for diagnosing size-driven failures — e.g. long WAV audio
   // uploaded as Cloudinary `raw`, whose per-file limit is far below video's.
   const uploadBytes = finalBytes ?? (await fileSizeBytes(uploadUri));
+
+  // Audio over the raw ceiling is refused by Cloudinary only after the whole
+  // file went up. Stop here with both numbers so the screen can say them.
+  if (
+    context === 'audio' &&
+    uploadBytes !== null &&
+    uploadBytes > AUDIO_UPLOAD_MAX_BYTES
+  ) {
+    analytics.capture(ANALYTICS_EVENTS.FEED.MEDIA_UPLOAD, {
+      context,
+      resource_type: resourceType,
+      outcome: 'too_large_precheck',
+      file_bytes: uploadBytes,
+      max_bytes: AUDIO_UPLOAD_MAX_BYTES,
+    });
+    throw new MediaTooLargeError(uploadBytes, AUDIO_UPLOAD_MAX_BYTES);
+  }
 
   try {
     const params = await getSignedParams(context, resourceType);

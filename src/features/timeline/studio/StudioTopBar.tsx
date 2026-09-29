@@ -13,6 +13,8 @@ interface Props {
   onConfig: () => void;
   onShare: () => void;
   canShare: boolean;
+  /** Why Share is dimmed right now (empty project, or already publishing). */
+  shareDisabledReason?: string;
 }
 
 /** SoundLab's top bar: close on the left, track add and remove in the middle,
@@ -25,6 +27,7 @@ export function StudioTopBar({
   onConfig,
   onShare,
   canShare,
+  shareDisabledReason,
 }: Props) {
   const { t } = useTranslation('projects');
   const icon = (Icon: typeof X, color: string = STUDIO_COLORS.text) => (
@@ -47,6 +50,7 @@ export function StudioTopBar({
           icon={icon(Trash2)}
           onPress={onRemoveTrack}
           disabled={!canRemoveTrack}
+          disabledReason={t('studio.why.lastTrack')}
           accessibilityLabel={t('studio.removeTrack')}
         />
       </View>
@@ -60,6 +64,7 @@ export function StudioTopBar({
           icon={icon(Share, STUDIO_COLORS.onPrimary)}
           onPress={onShare}
           disabled={!canShare}
+          disabledReason={shareDisabledReason}
           primary
           accessibilityLabel={t('studio.share')}
         />

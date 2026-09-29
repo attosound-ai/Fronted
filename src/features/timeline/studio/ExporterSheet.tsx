@@ -14,7 +14,15 @@ import { useTranslation } from 'react-i18next';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { haptic } from '@/lib/haptics/hapticService';
+import { showToast } from '@/components/ui/Toast';
 import type { ExportFormat, ExportOptions, ExportQuality } from '@/types/project';
+import { formatTimelineMs } from '../utils/timelineCalculations';
+import {
+  estimateExportBytes,
+  longestThatFitsMs,
+  megabytes,
+  smallerSettingThatFits,
+} from '../utils/postSize';
 import { STUDIO_COLORS } from './studioTheme';
 
 interface Props {
@@ -32,6 +40,12 @@ interface Props {
   onMixdown: (options: ExportOptions, coverUri: string | null) => void;
   /** Label of the main action: post to the feed, or just mix down. */
   actionLabel: string;
+  /** Length of the whole project, for the size estimate. */
+  durationMs: number;
+  /** The selected range, when there is one: it can go out on its own. */
+  range: { startMs: number; endMs: number } | null;
+  /** Set when the mix is going to a post: the most a post can carry. */
+  postLimitBytes?: number;
 }
 
 const FORMATS: ExportFormat[] = ['aac', 'alac', 'mp3', 'flac', 'wav'];
@@ -56,19 +70,63 @@ export function ExporterSheet({
   onPickCover,
   onMixdown,
   actionLabel,
+  durationMs,
+  range,
+  postLimitBytes,
 }: Props) {
   const { t } = useTranslation('projects');
   const [options, setOptions] = useState<ExportOptions>(initial);
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
 
+  const [onlyRange, setOnlyRange] = useState(false);
+
   useEffect(() => {
-    if (visible) setOptions(initial);
+    if (visible) {
+      setOptions(initial);
+      setOnlyRange(false);
+    }
   }, [visible, initial]);
 
   const format = options.format ?? 'wav';
   const quality = options.quality ?? 'medium';
   const lossless = LOSSLESS.includes(format);
+
+  // What goes out and how big it will be, said before anything runs. A post
+  // over the limit used to fail only after the whole mixdown.
+  const rangeMs = range ? Math.max(0, range.endMs - range.startMs) : 0;
+  const useRange = onlyRange && range !== null && rangeMs > 0;
+  const outMs = useRange ? rangeMs : durationMs;
+  const estimate = estimateExportBytes(outMs, options);
+  const tooBig = postLimitBytes !== undefined && estimate > postLimitBytes;
+  const fix = tooBig ? smallerSettingThatFits(outMs, options, postLimitBytes) : null;
+  const rangeFits =
+    tooBig &&
+    !useRange &&
+    range !== null &&
+    rangeMs > 0 &&
+    estimate > 0 &&
+    estimateExportBytes(rangeMs, options) <= (postLimitBytes ?? Infinity);
+  const tooBigMessage = tooBig
+    ? t('studio.export.tooBig', {
+        size: megabytes(estimate),
+        max: megabytes(postLimitBytes ?? 0),
+        longest: formatTimelineMs(longestThatFitsMs(options, postLimitBytes)),
+      })
+    : '';
+
+  const mixdown = () => {
+    if (tooBig) {
+      void haptic('warning');
+      showToast(tooBigMessage);
+      return;
+    }
+    void haptic('medium');
+    const out: ExportOptions = useRange
+      ? { ...options, rangeStartMs: range!.startMs, rangeEndMs: range!.endMs }
+      : options;
+    onMixdown(out, coverUri);
+  };
 
   const set = (patch: Partial<ExportOptions>) => {
     void haptic('selection');
@@ -245,17 +303,102 @@ export function ExporterSheet({
           placeholder=""
         />
 
+        {range !== null && rangeMs > 0 && (
+          <View style={styles.row}>
+            <Text variant="small" style={styles.label}>
+              {t('studio.export.what')}
+            </Text>
+            <View style={styles.chips}>
+              {[false, true].map((r) => (
+                <Pressable
+                  key={String(r)}
+                  onPress={() => {
+                    void haptic('selection');
+                    setOnlyRange(r);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: onlyRange === r }}
+                  style={[styles.chip, onlyRange === r && styles.chipActive]}
+                >
+                  <Text
+                    variant="caption"
+                    style={[styles.chipText, onlyRange === r && styles.chipTextActive]}
+                  >
+                    {r
+                      ? t('studio.export.onlyRange', {
+                          length: formatTimelineMs(rangeMs),
+                        })
+                      : t('studio.export.wholeProject', {
+                          length: formatTimelineMs(durationMs),
+                        })}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <Text variant="caption" style={[styles.size, tooBig && styles.sizeOver]}>
+          {postLimitBytes !== undefined
+            ? t('studio.export.sizeForPost', {
+                size: megabytes(estimate),
+                max: megabytes(postLimitBytes),
+              })
+            : t('studio.export.size', { size: megabytes(estimate) })}
+        </Text>
+
+        {tooBig && (
+          <View style={styles.warning}>
+            <Text variant="small" style={styles.warningText}>
+              {tooBigMessage}
+            </Text>
+            {fix && (
+              <Pressable
+                onPress={() => set({ format: fix.format, quality: fix.quality })}
+                accessibilityRole="button"
+                style={styles.fix}
+              >
+                <Text variant="small" style={styles.fixText}>
+                  {t('studio.export.useSmaller', {
+                    size: megabytes(estimateExportBytes(outMs, fix)),
+                  })}
+                </Text>
+              </Pressable>
+            )}
+            {rangeFits && (
+              <Pressable
+                onPress={() => {
+                  void haptic('selection');
+                  setOnlyRange(true);
+                }}
+                accessibilityRole="button"
+                style={styles.fix}
+              >
+                <Text variant="small" style={styles.fixText}>
+                  {t('studio.export.useRange', {
+                    length: formatTimelineMs(rangeMs),
+                    size: megabytes(estimateExportBytes(rangeMs, options)),
+                  })}
+                </Text>
+              </Pressable>
+            )}
+            {!fix && !rangeFits && (
+              <Text variant="small" style={styles.warningText}>
+                {t('studio.export.selectToFit')}
+              </Text>
+            )}
+          </View>
+        )}
+
         <Pressable
-          onPress={() => {
-            void haptic('medium');
-            onMixdown(options, coverUri);
-          }}
+          onPress={mixdown}
           disabled={busy}
           accessibilityRole="button"
+          accessibilityHint={tooBig ? tooBigMessage : undefined}
           style={({ pressed }) => [
             styles.action,
-            busy && styles.disabled,
-            pressed && styles.pressed,
+            (busy || tooBig) && styles.disabled,
+            pressed && !tooBig && styles.pressed,
           ]}
         >
           {busy ? (
@@ -434,6 +577,39 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.6,
+  },
+  size: {
+    color: STUDIO_COLORS.textMuted,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  sizeOver: {
+    color: STUDIO_COLORS.record,
+  },
+  warning: {
+    marginTop: 10,
+    padding: 12,
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,59,48,0.45)',
+    backgroundColor: 'rgba(255,59,48,0.08)',
+  },
+  warningText: {
+    color: STUDIO_COLORS.text,
+  },
+  fix: {
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: STUDIO_COLORS.surfaceRaised,
+    borderWidth: 1,
+    borderColor: STUDIO_COLORS.borderStrong,
+  },
+  fixText: {
+    color: STUDIO_COLORS.text,
+    fontFamily: 'Archivo_600SemiBold',
   },
   pressed: {
     opacity: 0.85,

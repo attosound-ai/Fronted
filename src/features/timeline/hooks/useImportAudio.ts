@@ -7,6 +7,7 @@ import {
   toTelephonyWav,
   isTranscodeAvailable,
 } from '../../../../modules/atto-audio-transcode';
+import { IMPORT_MAX_BYTES, IMPORT_MAX_MINUTES } from '@/lib/media/uploadLimits';
 import { showToast } from '@/components/ui/Toast';
 import { projectService } from '@/lib/api/projectService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -183,13 +184,16 @@ export function useImportAudio({
           /\.(wav|aif|aiff|caf)$/.test(lower) ||
           /wav|aiff|x-caf/i.test(file.mimeType ?? '');
         const bigEnoughToBother = (sizeBytes ?? 0) > 2 * 1024 * 1024;
+        // Over the import ceiling even a compressed file goes through the
+        // converter: a high bitrate MP3 or M4A shrinks to 8 kHz and may fit.
+        const overTheLimit = (sizeBytes ?? 0) > IMPORT_MAX_BYTES;
 
         // A movie always goes through the converter: only its audio track is
         // decoded, so what lands on the lane is the sound of the video and the
         // upload is a fraction of the movie's size.
         if (
           isTranscodeAvailable() &&
-          (source === 'video' || (isUncompressed && bigEnoughToBother))
+          (source === 'video' || (isUncompressed && bigEnoughToBother) || overTheLimit)
         ) {
           const outPath = `${FileSystem.cacheDirectory}import-8k-${Date.now()}.wav`;
           const tr = await toTelephonyWav(file.uri, outPath);
@@ -219,6 +223,26 @@ export function useImportAudio({
               source_mime: file.mimeType ?? null,
             });
           }
+        }
+
+        // The server refuses anything over the ceiling only after the whole
+        // upload. Say it now, with the numbers and what fits, instead.
+        if ((sizeBytes ?? 0) > IMPORT_MAX_BYTES) {
+          analytics.capture(ANALYTICS_EVENTS.PROJECT.AUDIO_IMPORT, {
+            outcome: 'too_large_precheck',
+            size_bytes: sizeBytes,
+            max_bytes: IMPORT_MAX_BYTES,
+            transcoded,
+            source_mime: file.mimeType ?? null,
+          });
+          showToast(
+            t('toasts.importTooLarge', {
+              size: Math.round((sizeBytes ?? 0) / 1_000_000),
+              max: Math.round(IMPORT_MAX_BYTES / 1_000_000),
+              minutes: IMPORT_MAX_MINUTES,
+            })
+          );
+          return;
         }
 
         const controller = new AbortController();
@@ -359,7 +383,18 @@ export function useImportAudio({
           });
         }
         if (!aborted) {
-          showToast(t('toasts.importFailed', { message: msg }));
+          // The raw message ("Request failed with status code 413") goes to
+          // telemetry above; the person gets what happened and what to do.
+          const tooLarge = /413|too large|file size/i.test(msg);
+          showToast(
+            tooLarge
+              ? t('toasts.importTooLarge', {
+                  size: Math.round((sizeBytes ?? 0) / 1_000_000),
+                  max: Math.round(IMPORT_MAX_BYTES / 1_000_000),
+                  minutes: IMPORT_MAX_MINUTES,
+                })
+              : t('toasts.importFailedPlain')
+          );
         }
       } finally {
         abortRef.current = null;

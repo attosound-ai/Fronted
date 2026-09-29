@@ -34,24 +34,28 @@ export function RangeActionsBar({
   effectRef,
 }: Props) {
   const { t } = useTranslation('projects');
+  const needsRange = t('studio.why.needsRange');
   return (
     <View style={styles.bar}>
       <StudioPill
         label={t('studio.copy')}
         onPress={onCopy}
         disabled={!hasRange}
+        disabledReason={needsRange}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.cut')}
         onPress={onCut}
         disabled={!hasRange}
+        disabledReason={needsRange}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.paste')}
         onPress={onPaste}
         disabled={!canPaste}
+        disabledReason={t('studio.why.nothingToPaste')}
         style={styles.pill}
       />
       <View ref={effectRef} collapsable={false} style={[styles.pill, styles.effect]}>
@@ -59,6 +63,7 @@ export function RangeActionsBar({
           label={t('studio.effect')}
           onPress={onEffect}
           disabled={!hasRange}
+          disabledReason={needsRange}
           active={hasRange}
           style={styles.fill}
         />
@@ -67,18 +72,21 @@ export function RangeActionsBar({
         label={t('studio.remove')}
         onPress={onRemove}
         disabled={!hasRange}
+        disabledReason={needsRange}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.silence')}
         onPress={onSilence}
         disabled={!hasRange}
+        disabledReason={needsRange}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.trim')}
         onPress={onTrim}
         disabled={!hasRange}
+        disabledReason={needsRange}
         style={styles.pill}
       />
     </View>

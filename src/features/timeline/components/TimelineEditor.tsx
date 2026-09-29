@@ -15,6 +15,7 @@ import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { showNetFailureToast } from '@/components/ui/netToast';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
+import { AUDIO_POST_MAX_BYTES, megabytes } from '../utils/postSize';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { LaneEditSheet } from './LaneEditSheet';
 import {
@@ -937,7 +938,14 @@ export function TimelineEditor({
         return;
       }
 
-      const timelineDurationMs = getTimelineDuration(state.clips);
+      const projectDurationMs = getTimelineDuration(state.clips);
+      const ranged =
+        typeof exportOptions?.rangeStartMs === 'number' &&
+        typeof exportOptions?.rangeEndMs === 'number';
+      // A range export is as long as the range: the post shows that length.
+      const timelineDurationMs = ranged
+        ? Math.abs(exportOptions!.rangeEndMs! - exportOptions!.rangeStartMs!)
+        : projectDurationMs;
       const t0 = Date.now();
       // Drive the loading state across the WHOLE flow (save → backend mix →
       // onPublish), not just onPublish. Before this the button showed no spinner
@@ -954,6 +962,10 @@ export function TimelineEditor({
         outcome: 'started',
         clip_count: state.clips.length,
         timeline_duration_ms: timelineDurationMs,
+        project_duration_ms: projectDurationMs,
+        ranged,
+        format: exportOptions?.format ?? 'wav',
+        quality: exportOptions?.quality ?? 'medium',
       });
       try {
         const tSave = Date.now();
@@ -986,6 +998,32 @@ export function TimelineEditor({
         const result = await projectService.exportProject(projectId, exportOptions);
         exportMs = Date.now() - tExport;
         fileSizeBytes = result.fileSizeBytes ?? null;
+
+        // The estimate in the exporter is on the high side, but it is still an
+        // estimate: check the real file before a doomed upload, and say both
+        // numbers and what to do, instead of a bare "too large" at the end.
+        if (onPublish && fileSizeBytes !== null && fileSizeBytes > AUDIO_POST_MAX_BYTES) {
+          analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
+            outcome: 'too_large_for_post',
+            clip_count: state.clips.length,
+            timeline_duration_ms: timelineDurationMs,
+            ranged,
+            format: exportOptions?.format ?? 'wav',
+            file_size_bytes: fileSizeBytes,
+            max_bytes: AUDIO_POST_MAX_BYTES,
+            export_ms: exportMs,
+          });
+          Alert.alert(
+            t('studio.export.tooBigTitle'),
+            t('studio.export.tooBigAfter', {
+              size: megabytes(fileSizeBytes),
+              max: megabytes(AUDIO_POST_MAX_BYTES),
+            }),
+            [{ text: t('studio.export.tooBigOk') }]
+          );
+          setExporterVisible(true);
+          return;
+        }
 
         if (onPublish) {
           const tPublish = Date.now();
@@ -1088,7 +1126,11 @@ export function TimelineEditor({
   );
   const handleMixdown = useCallback(
     (options: ExportOptions, coverUri: string | null) => {
-      setSettings((prev) => ({ ...prev, exportPrefs: options }));
+      // The range is for this mixdown only; the format picks are remembered.
+      const prefs = { ...options };
+      delete prefs.rangeStartMs;
+      delete prefs.rangeEndMs;
+      setSettings((prev) => ({ ...prev, exportPrefs: prefs }));
       pendingCoverRef.current = coverUri;
       setExporterVisible(false);
       void handleExport(options);
@@ -2182,6 +2224,9 @@ export function TimelineEditor({
         onConfig={() => setConfigVisible(true)}
         onShare={() => setExporterVisible(true)}
         canShare={state.clips.length > 0 && !isPublishing}
+        shareDisabledReason={
+          isPublishing ? t('studio.why.publishing') : t('studio.why.emptyProject')
+        }
       />
 
       <ClipActionsBar
@@ -2462,6 +2507,13 @@ export function TimelineEditor({
         onPickCover={handlePickCover}
         onMixdown={handleMixdown}
         actionLabel={onPublish ? t('studio.export.post') : t('studio.export.mixdown')}
+        durationMs={totalDuration}
+        range={
+          state.selection
+            ? { startMs: state.selection.startMs, endMs: state.selection.endMs }
+            : null
+        }
+        postLimitBytes={onPublish ? AUDIO_POST_MAX_BYTES : undefined}
       />
 
       <TextToSpeechSheet

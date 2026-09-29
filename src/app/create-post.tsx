@@ -433,13 +433,14 @@ export default function CreatePostScreen() {
         // Exact size + limit when we have them, so the user knows how much to cut.
         let detail = '';
         if (err instanceof MediaTooLargeError && err.bytes > 0) {
-          const size = (err.bytes / 1048576).toFixed(1);
+          // Decimal MB, the same unit the editor's exporter shows.
+          const size = (err.bytes / 1_000_000).toFixed(1);
           detail =
             err.maxBytes && err.maxBytes > 0
               ? ' ' +
                 t('create.uploadSizeWithMax', {
                   size,
-                  max: (err.maxBytes / 1048576).toFixed(0),
+                  max: (err.maxBytes / 1_000_000).toFixed(0),
                 })
               : ' ' + t('create.uploadSize', { size });
         }

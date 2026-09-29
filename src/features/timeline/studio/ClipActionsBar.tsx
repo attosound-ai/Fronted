@@ -47,30 +47,35 @@ export function ClipActionsBar({
         label={hasRange ? t('studio.replace') : t('studio.import')}
         onPress={onInsertOrReplace}
         disabled={!canInsertOrReplace}
+        disabledReason={t('studio.why.busyImporting')}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.splitNew')}
         onPress={onSplitNew}
         disabled={!canSplitNew}
+        disabledReason={t('studio.why.needsRange')}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.split')}
         onPress={onSplit}
         disabled={!canSplit}
+        disabledReason={t('studio.why.split')}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.join')}
         onPress={onJoin}
         disabled={!canJoin}
+        disabledReason={t('studio.why.join')}
         style={styles.pill}
       />
       <StudioPill
         label={t('studio.duplicate')}
         onPress={onDuplicate}
         disabled={!canDuplicate}
+        disabledReason={t('studio.why.duplicate')}
         style={styles.pill}
       />
     </View>

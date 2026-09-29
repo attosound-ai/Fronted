@@ -29,6 +29,8 @@
     "profileUpdated": "Perfil actualizado",
     "creatorContactUpdated": "Contacto del creador actualizado",
     "audioImported": "Audio importado",
+    "importTooLarge": "Este archivo pesa {{size}} MB y una importación admite hasta {{max}} MB, unos {{minutes}} minutos de audio. Córtalo en partes más cortas e impórtalas una por una.",
+    "importFailedPlain": "La importación no terminó. Revisa tu conexión y vuelve a intentar.",
     "importFailed": "Error al importar: {{message}}",
     "failedToUpdate": "Error al actualizar",
     "failedToUploadAvatar": "Error al subir el avatar",

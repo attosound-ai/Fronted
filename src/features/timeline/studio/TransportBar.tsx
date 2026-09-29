@@ -87,6 +87,7 @@ export function TransportBar({
         }
         onPress={onTogglePlay}
         disabled={!canPlay}
+        disabledReason={t('studio.why.emptyProject')}
         accessibilityLabel={isPlaying ? t('studio.pause') : t('studio.play')}
       />
       <View style={styles.meter}>
@@ -98,12 +99,14 @@ export function TransportBar({
           icon={<Undo2 size={18} color={STUDIO_COLORS.text} strokeWidth={2.25} />}
           onPress={onUndo}
           disabled={!canUndo}
+          disabledReason={t('studio.why.nothingToUndo')}
           accessibilityLabel={t('studio.undo')}
         />
         <StudioIconButton
           icon={<Redo2 size={18} color={STUDIO_COLORS.text} strokeWidth={2.25} />}
           onPress={onRedo}
           disabled={!canRedo}
+          disabledReason={t('studio.why.nothingToRedo')}
           accessibilityLabel={t('studio.redo')}
           style={styles.gap}
         />

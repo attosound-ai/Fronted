@@ -56,6 +56,7 @@ export function ZoomRow({
             }
             onPress={onFit}
             disabled={!canFit}
+            disabledReason={t('studio.why.alreadyFit')}
             size={32}
             accessibilityLabel={t('studio.zoomFit')}
             style={styles.zoomFit}
@@ -64,6 +65,7 @@ export function ZoomRow({
             icon={<Minus size={18} color={STUDIO_COLORS.text} strokeWidth={2.5} />}
             onPress={onZoomOut}
             disabled={!canZoomOut}
+            disabledReason={t('studio.why.zoomOutLimit')}
             size={32}
             accessibilityLabel={t('studio.zoomOut')}
           />
@@ -71,6 +73,7 @@ export function ZoomRow({
             icon={<Plus size={18} color={STUDIO_COLORS.text} strokeWidth={2.5} />}
             onPress={onZoomIn}
             disabled={!canZoomIn}
+            disabledReason={t('studio.why.zoomInLimit')}
             size={32}
             accessibilityLabel={t('studio.zoomIn')}
             style={styles.zoomIn}

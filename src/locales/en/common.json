@@ -29,6 +29,8 @@
     "profileUpdated": "Profile updated",
     "creatorContactUpdated": "Creator contact updated",
     "audioImported": "Audio imported",
+    "importTooLarge": "This file is {{size}} MB and an import can be up to {{max}} MB, about {{minutes}} minutes of audio. Trim it into shorter parts and import them one by one.",
+    "importFailedPlain": "The import did not finish. Check your connection and try again.",
     "importFailed": "Import failed: {{message}}",
     "failedToUpdate": "Failed to update",
     "failedToUploadAvatar": "Failed to upload avatar",

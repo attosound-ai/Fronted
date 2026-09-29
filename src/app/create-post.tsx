@@ -132,7 +132,7 @@ export default function CreatePostScreen() {
           {
             uri: pendingAudio.uri,
             fileName: pendingAudio.fileName,
-            mimeType: 'audio/wav',
+            mimeType: pendingAudio.mimeType ?? 'audio/wav',
             duration: pendingAudio.durationMs / 1000,
           },
         ]);

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   AUDIO_POST_MAX_BYTES,
   estimateExportBytes,
+  exportFileType,
   longestThatFitsMs,
   megabytes,
   smallerSettingThatFits,
@@ -64,4 +65,20 @@ test('longest post: about 20 minutes as 8 kHz WAV', () => {
 test('sizes read in MB with one decimal', () => {
   assert.equal(megabytes(29_556_198), '29.6');
   assert.equal(megabytes(AUDIO_POST_MAX_BYTES), '20.0');
+});
+
+test('the post keeps the format the server exported', () => {
+  const base = 'https://bucket.s3.amazonaws.com/exports/2026-09-29/p1/abc';
+  assert.deepEqual(exportFileType(`${base}.m4a?X-Amz-Signature=1.wav`), {
+    extension: 'm4a',
+    mimeType: 'audio/mp4',
+  });
+  assert.equal(exportFileType(`${base}.mp3`).mimeType, 'audio/mpeg');
+  assert.equal(exportFileType(`${base}.flac`).mimeType, 'audio/flac');
+  assert.equal(exportFileType(`${base}.wav?x=1`).extension, 'wav');
+  // Anything unknown falls back to what the pipeline always produced.
+  assert.deepEqual(exportFileType(`${base}`), {
+    extension: 'wav',
+    mimeType: 'audio/wav',
+  });
 });

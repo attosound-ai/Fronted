@@ -240,7 +240,8 @@ export function useImportAudio({
               size: Math.round((sizeBytes ?? 0) / 1_000_000),
               max: Math.round(IMPORT_MAX_BYTES / 1_000_000),
               minutes: IMPORT_MAX_MINUTES,
-            })
+            }),
+            'warning'
           );
           return;
         }
@@ -393,7 +394,8 @@ export function useImportAudio({
                   max: Math.round(IMPORT_MAX_BYTES / 1_000_000),
                   minutes: IMPORT_MAX_MINUTES,
                 })
-              : t('toasts.importFailedPlain')
+              : t('toasts.importFailedPlain'),
+            'warning'
           );
         }
       } finally {

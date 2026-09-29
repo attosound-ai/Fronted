@@ -31,7 +31,7 @@ function press(
   if (disabled) {
     if (disabledReason) {
       void haptic('warning');
-      showToast(disabledReason);
+      showToast(disabledReason, 'warning');
     }
     return;
   }

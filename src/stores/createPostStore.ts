@@ -3,6 +3,8 @@ import { create } from 'zustand';
 interface PendingAudio {
   uri: string;
   fileName: string;
+  /** Type of the exported file (audio/wav, audio/mp4, audio/mpeg, audio/flac). */
+  mimeType?: string;
   durationMs: number;
   /**
    * Local image the editor's exporter picked as the cover. The composer

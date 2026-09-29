@@ -93,3 +93,29 @@ export function longestThatFitsMs(
   if (perMinute <= 0) return Infinity;
   return Math.floor((maxBytes / perMinute) * 60_000);
 }
+
+const EXPORT_TYPES: Record<string, string> = {
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  flac: 'audio/flac',
+};
+
+/**
+ * The real format of an exported mix, read from its download URL (the
+ * server names the file after the format: exports/<date>/<project>/<id>.m4a).
+ * The post keeps this extension, and the CDN serves the audio with the type
+ * the extension says; before, every export was saved as .wav, so an AAC or
+ * MP3 mix went out as a .wav holding something else.
+ */
+export function exportFileType(downloadUrl: string): {
+  extension: string;
+  mimeType: string;
+} {
+  const path = downloadUrl.split('?')[0] ?? '';
+  const ext = (path.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
+  const mimeType = EXPORT_TYPES[ext];
+  return mimeType
+    ? { extension: ext, mimeType }
+    : { extension: 'wav', mimeType: 'audio/wav' };
+}

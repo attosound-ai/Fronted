@@ -118,7 +118,7 @@ export function ExporterSheet({
   const mixdown = () => {
     if (tooBig) {
       void haptic('warning');
-      showToast(tooBigMessage);
+      showToast(tooBigMessage, 'warning');
       return;
     }
     void haptic('medium');

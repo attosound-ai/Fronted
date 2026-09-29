@@ -16,14 +16,22 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { CheckCircle } from 'lucide-react-native';
+import { AlertCircle, CheckCircle } from 'lucide-react-native';
 import { Text } from './Text';
 
 // ---------------------------------------------------------------------------
 // Module-level state bridge
 // ---------------------------------------------------------------------------
 
-type ShowFn = (message: string) => void;
+/**
+ * `done` confirms something happened (the check). `warning` says why
+ * something cannot happen yet, or what limit was hit: it must never wear a
+ * success check, and it usually needs more words, so it gets more lines and
+ * more time on screen.
+ */
+export type ToastKind = 'done' | 'warning';
+
+type ShowFn = (message: string, kind: ToastKind) => void;
 
 /**
  * STACK of mounted hosts, most recent last. Several screens mount their own
@@ -49,11 +57,16 @@ function registerToastHost(show: ShowFn): () => void {
  * Returns whether a mounted host actually displayed it, so callers can report
  * the truth (an emitted event is not a shown toast).
  */
-export function showToast(message: string): boolean {
+export function showToast(message: string, kind: ToastKind = 'done'): boolean {
   const host = _hosts[_hosts.length - 1];
   if (!host) return false;
-  host(message);
+  host(message, kind);
   return true;
+}
+
+/** Time to read it: about 60 ms a character, between 2 and 7 seconds. */
+export function toastDurationMs(message: string): number {
+  return Math.min(7000, Math.max(VISIBLE_DURATION, message.length * 60));
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +79,7 @@ const ANIMATION_DURATION = 280; // ms for slide in / out
 
 export function Toast(): React.ReactElement | null {
   const [message, setMessage] = useState<string>('');
+  const [kind, setKind] = useState<ToastKind>('done');
   const [visible, setVisible] = useState<boolean>(false);
 
   const translateY = useRef(new Animated.Value(SLIDE_DISTANCE)).current;
@@ -97,7 +111,7 @@ export function Toast(): React.ReactElement | null {
 
   // Slide-in, then schedule dismiss
   const show = useCallback(
-    (msg: string) => {
+    (msg: string, nextKind: ToastKind) => {
       // Cancel any in-flight dismiss timer so back-to-back calls work cleanly
       if (dismissTimer.current) {
         clearTimeout(dismissTimer.current);
@@ -110,6 +124,7 @@ export function Toast(): React.ReactElement | null {
       isAnimatingOut.current = false;
 
       setMessage(msg);
+      setKind(nextKind);
       setVisible(true);
 
       Animated.parallel([
@@ -124,7 +139,7 @@ export function Toast(): React.ReactElement | null {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        dismissTimer.current = setTimeout(dismiss, VISIBLE_DURATION);
+        dismissTimer.current = setTimeout(dismiss, toastDurationMs(msg));
       });
     },
     [translateY, opacity, dismiss]
@@ -148,8 +163,12 @@ export function Toast(): React.ReactElement | null {
       accessibilityLiveRegion="polite"
       accessibilityLabel={message}
     >
-      <CheckCircle size={20} color="#3B82F6" strokeWidth={2.25} style={styles.icon} />
-      <Text style={styles.message} numberOfLines={2}>
+      {kind === 'warning' ? (
+        <AlertCircle size={20} color="#FFB020" strokeWidth={2.25} style={styles.icon} />
+      ) : (
+        <CheckCircle size={20} color="#3B82F6" strokeWidth={2.25} style={styles.icon} />
+      )}
+      <Text style={styles.message} numberOfLines={kind === 'warning' ? 4 : 2}>
         {message}
       </Text>
     </Animated.View>

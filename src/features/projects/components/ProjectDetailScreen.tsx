@@ -1,3 +1,4 @@
+import { exportFileType } from '@/features/timeline/utils/postSize';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -132,11 +133,15 @@ export function ProjectDetailScreen({
       durationMs: number,
       coverUri?: string
     ) => {
-      const localUri = `${FileSystem.cacheDirectory}export_${projectId}_${Date.now()}.wav`;
+      // Keep the format the exporter produced (AAC is .m4a, MP3 is .mp3):
+      // the stored post takes its type from this extension.
+      const { extension, mimeType } = exportFileType(result.downloadUrl);
+      const localUri = `${FileSystem.cacheDirectory}export_${projectId}_${Date.now()}.${extension}`;
       await FileSystem.downloadAsync(result.downloadUrl, localUri);
       setPendingAudio({
         uri: localUri,
-        fileName: `${project.name}.wav`,
+        fileName: `${project.name}.${extension}`,
+        mimeType,
         durationMs,
         coverUri,
       });

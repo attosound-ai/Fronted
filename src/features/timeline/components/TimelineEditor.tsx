@@ -934,7 +934,7 @@ export function TimelineEditor({
   const handleExport = useCallback(
     async (exportOptions?: ExportOptions) => {
       if (state.clips.length === 0) {
-        showToast(t('timeline.errorNoClipsToExport'));
+        showToast(t('timeline.errorNoClipsToExport'), 'warning');
         return;
       }
 
@@ -1065,7 +1065,7 @@ export function TimelineEditor({
           file_size_bytes: fileSizeBytes,
           error: error instanceof Error ? error.message : String(error),
         });
-        showToast(t('timeline.errorExportFailed'));
+        showToast(t('timeline.errorExportFailed'), 'warning');
       } finally {
         setIsPublishing(false);
       }
@@ -1118,7 +1118,7 @@ export function TimelineEditor({
         const { coverKey } = await projectService.uploadCover(projectId, uri, mimeType);
         return coverKey;
       } catch {
-        showToast(t('timeline.errorExportFailed'));
+        showToast(t('timeline.errorExportFailed'), 'warning');
         return null;
       }
     },
@@ -1174,7 +1174,7 @@ export function TimelineEditor({
           ) as Record<string, LaneMetadata>,
         });
       } catch {
-        showToast(t('timeline.errorExportFailed'));
+        showToast(t('timeline.errorExportFailed'), 'warning');
       }
     }
     await onClose();
@@ -1421,11 +1421,15 @@ export function TimelineEditor({
   const handleClipMove = useCallback(
     (e: { nativeEvent: TimelineClipMoveEvent }) => {
       const { clipId, startMs, phase } = e.nativeEvent;
-      if (phase === 'begin') void haptic('medium');
+      // The native view already gave the pick up tap when the press began.
       if (phase !== 'end') return;
-      moveClipToPosition(clipId, Math.max(0, Math.round(startMs)));
+      const to = Math.max(0, Math.round(startMs));
+      const clip = state.clips.find((c) => c.id === clipId);
+      // A press that did not move leaves no undo step behind.
+      if (clip && Math.abs(clip.positionInTimeline - to) < 1) return;
+      moveClipToPosition(clipId, to);
     },
-    [moveClipToPosition]
+    [moveClipToPosition, state.clips]
   );
 
   const handleTrackDrag = useCallback(
@@ -1499,7 +1503,7 @@ export function TimelineEditor({
   );
   const toggleLoop = useCallback(() => {
     setLoopActive((v) => !v);
-    if (!loopActive && !state.selection) showToast(t('studio.loopHint'));
+    if (!loopActive && !state.selection) showToast(t('studio.loopHint'), 'warning');
   }, [loopActive, state.selection, t]);
 
   // ── Clip actions (second row) ──

@@ -45,6 +45,10 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
   /// plain pan always scrolls. Before Sep 28 2026 a horizontal pan on empty
   /// lane space shifted the whole lane, so trying to scroll moved the tracks.
   private static let clipLongPressSeconds: TimeInterval = 0.5
+  /// A long press that ends within this distance moved nothing: a finger
+  /// always wobbles a point or two, and that used to commit a shift of a few
+  /// milliseconds (an undo step that changed nothing you could see).
+  private static let moveDeadZone: CGFloat = 4
   private static let scrollEventInterval: TimeInterval = 1.0 / 30.0
   private static let liveStateGraceSeconds: TimeInterval = 0.45
   private static let playheadHeadWidth: CGFloat = 12
@@ -819,11 +823,15 @@ final class AttoTimelineView: ExpoView, UIScrollViewDelegate, UIGestureRecognize
       }
     case .ended, .cancelled, .failed:
       if let clip = clipDragClip {
-        let dx = renderer.draggingClipOffsetPx
+        let raw = renderer.draggingClipOffsetPx
+        let dx = abs(raw) < Self.moveDeadZone ? 0 : raw
+        renderer.draggingClipOffsetPx = dx
         clipDragClip = nil
         onClipMove(["clipId": clip.id, "startMs": clampMs(clip.startMs + g.ms(forPx: dx)), "phase": "end"])
       } else if let drag = laneDrag {
-        let dx = renderer.laneDragOffsetPx[drag.trackIndex] ?? 0
+        let raw = renderer.laneDragOffsetPx[drag.trackIndex] ?? 0
+        let dx = abs(raw) < Self.moveDeadZone ? 0 : raw
+        renderer.laneDragOffsetPx[drag.trackIndex] = dx
         laneDrag = nil
         onTrackDrag(["trackIndex": drag.trackIndex, "deltaMs": g.ms(forPx: dx), "phase": "end"])
       } else {

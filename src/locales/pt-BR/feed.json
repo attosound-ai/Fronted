@@ -53,6 +53,7 @@
     "interrupted": "A publicação parou quando o ATTO fechou. Toque em Tentar de novo para terminar.",
     "failedNetwork": "Não foi possível publicar: a conexão caiu. Toque em Tentar de novo.",
     "failedOther": "Não foi possível publicar. Toque em Tentar de novo.",
+    "failedMissing": "Não foi possível publicar: o arquivo não está mais neste telefone. Escolha de novo.",
     "failedTooLarge": "Não foi possível publicar: o arquivo é grande demais.",
     "failedTooLargeSized": "Não foi possível publicar: o arquivo tem {{size}} MB e o limite é {{max}} MB.",
     "videoTooLong": "Este vídeo tem {{length}}. Vídeos podem ter até {{max}}. Corte e escolha de novo.",

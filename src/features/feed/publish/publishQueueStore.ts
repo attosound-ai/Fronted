@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import type { CreatePostParams } from './publishPost';
 import { recoverJobs } from './publishRecovery';
+import { storeParams, storeUri } from './publishPaths';
 
 /**
  * Posts on their way out, Instagram style: the composer closes the moment
@@ -22,7 +23,7 @@ export type PublishPhase =
   | 'failed'
   | 'interrupted';
 
-export type PublishFailure = 'too_large' | 'network' | 'other';
+export type PublishFailure = 'too_large' | 'missing' | 'network' | 'other';
 
 export type PublishParams = Omit<CreatePostParams, 'onProgress'>;
 
@@ -68,8 +69,9 @@ export const usePublishQueue = create<PublishQueueState>()(
             {
               id,
               createdAt: Date.now(),
-              params,
-              thumbnailUri,
+              // Stored relative to the app's folders: iOS moves them on update.
+              params: storeParams(params),
+              thumbnailUri: thumbnailUri ? storeUri(thumbnailUri) : null,
               phase: 'queued',
               progress: 0,
             },

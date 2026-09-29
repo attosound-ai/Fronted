@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { recoverJobs } from '../publishRecovery';
+import { fromStoredUri, recoverJobs, toStoredUri } from '../publishRecovery';
 
 // Lo que pasó el 29 de septiembre de 2026: se cerró la app al 21% de un
 // video y al volver la franja quedó congelada para siempre. Al reabrir,
@@ -25,4 +25,24 @@ test('a posted job is gone, the rest stay as they were', () => {
     recoverJobs(jobs).map((j) => `${j.id}:${j.phase}`),
     ['queued:queued', 'failed:failed', 'interrupted:interrupted']
   );
+});
+
+test('paths survive the container moving after an update', () => {
+  const before = {
+    'atto-cache://': 'file:///var/mobile/Containers/Data/Application/AAA/Library/Caches/',
+  };
+  const after = {
+    'atto-cache://': 'file:///var/mobile/Containers/Data/Application/BBB/Library/Caches/',
+  };
+  const stored = toStoredUri(
+    'file:///var/mobile/Containers/Data/Application/AAA/Library/Caches/ImagePicker/v.mp4',
+    before
+  );
+  assert.equal(stored, 'atto-cache://ImagePicker/v.mp4');
+  assert.equal(
+    fromStoredUri(stored, after),
+    'file:///var/mobile/Containers/Data/Application/BBB/Library/Caches/ImagePicker/v.mp4'
+  );
+  // Anything outside the app's folders is kept as it is.
+  assert.equal(toStoredUri('https://x/y.jpg', before), 'https://x/y.jpg');
 });

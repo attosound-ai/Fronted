@@ -6,6 +6,7 @@ import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { MediaTooLargeError } from '@/lib/media/mediaService';
 import { applyPublishedPost, publishPost } from './publishPost';
+import { mediaStillThere, resolveParams, resolveUri } from './publishPaths';
 import { useAuthStore } from '@/stores/authStore';
 import {
   endAllPublishActivities,
@@ -108,12 +109,11 @@ function activityFor(job: PublishJob) {
     lastSent = now;
     void updatePublishActivity(id, progress, phase, line());
   };
-  const ready = startPublishActivity(job.thumbnailUri, job.params.postType, line()).then(
-    (value) => {
-      id = value;
-      send(true);
-    }
-  );
+  const thumb = job.thumbnailUri ? resolveUri(job.thumbnailUri) : null;
+  const ready = startPublishActivity(thumb, job.params.postType, line()).then((value) => {
+    id = value;
+    send(true);
+  });
   const sub = AppState.addEventListener('change', (next) => {
     phase = next === 'active' ? 'uploading' : 'paused';
     send(true);
@@ -159,10 +159,24 @@ async function runJob(job: PublishJob): Promise<void> {
     activity.progress(shown);
   };
 
+  const params = resolveParams(job.params);
+  if (!(await mediaStillThere(params))) {
+    const message = i18n.t('feed:publish.failedMissing');
+    update(job.id, { phase: 'failed', failure: 'missing', message });
+    void haptic('error');
+    void activity.finish('failed', message);
+    analytics.capture(ANALYTICS_EVENTS.FEED.PUBLISH_QUEUE, {
+      outcome: 'failed',
+      failure: 'missing',
+      post_type: job.params.postType,
+    });
+    return;
+  }
+
   try {
-    const { post, authorId } = await publishPost({ ...job.params, onProgress });
+    const { post, authorId } = await publishPost({ ...params, onProgress });
     update(job.id, { phase: 'posting', progress: 0.99 });
-    applyPublishedPost(post, authorId, job.params);
+    applyPublishedPost(post, authorId, params);
     const postId = (post as { id?: string | number } | undefined)?.id;
     update(job.id, {
       phase: 'done',

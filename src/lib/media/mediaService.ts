@@ -226,7 +226,21 @@ async function uploadToCloudinary(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', uploadUrl);
 
+    // A stalled upload used to hang forever with no progress and no error
+    // (a file that no longer existed, Sep 29 2026). Sixty seconds without a
+    // single byte moving is a dead connection: abort with a network error.
+    let lastMove = Date.now();
+    const stall = setInterval(() => {
+      if (Date.now() - lastMove > 60_000) {
+        clearInterval(stall);
+        xhr.abort();
+        reject(new Error('Network stalled: no upload progress for 60 s'));
+      }
+    }, 5_000);
+    xhr.addEventListener('loadend', () => clearInterval(stall));
+
     xhr.upload.onprogress = (event) => {
+      lastMove = Date.now();
       if (event.lengthComputable && onProgress) {
         onProgress(event.loaded / event.total);
       }

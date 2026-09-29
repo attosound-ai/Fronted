@@ -9,6 +9,7 @@ import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { usePublishQueue, type PublishJob } from './publishQueueStore';
+import { resolveUri } from './publishPaths';
 
 /**
  * Instagram's upload strip, at the top of the feed under the accounts row:
@@ -109,7 +110,7 @@ function StripRow({ job }: { job: PublishJob }) {
       )}
       {failed && (
         <>
-          {job.failure !== 'too_large' && (
+          {job.failure !== 'too_large' && job.failure !== 'missing' && (
             <Pressable onPress={onRetry} accessibilityRole="button" style={styles.button}>
               <Text variant="small" style={styles.buttonText}>
                 {t('publish.retry')}
@@ -134,7 +135,11 @@ function StripRow({ job }: { job: PublishJob }) {
 function Thumbnail({ job }: { job: PublishJob }) {
   if (job.thumbnailUri) {
     return (
-      <Image source={{ uri: job.thumbnailUri }} style={styles.thumb} resizeMode="cover" />
+      <Image
+        source={{ uri: resolveUri(job.thumbnailUri) }}
+        style={styles.thumb}
+        resizeMode="cover"
+      />
     );
   }
   const Icon = job.params.postType === 'audio' ? AudioLines : Type;

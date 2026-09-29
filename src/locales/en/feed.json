@@ -53,6 +53,7 @@
     "interrupted": "Posting stopped when ATTO closed. Tap Retry to finish it.",
     "failedNetwork": "Couldn't post: the connection dropped. Tap Retry.",
     "failedOther": "Couldn't post. Tap Retry to try again.",
+    "failedMissing": "Couldn't post: the file is no longer on this phone. Pick it again.",
     "failedTooLarge": "Couldn't post: the file is too large.",
     "failedTooLargeSized": "Couldn't post: the file is {{size}} MB and the limit is {{max}} MB.",
     "videoTooLong": "This video is {{length}} long. Videos can be up to {{max}}. Trim it and pick it again.",

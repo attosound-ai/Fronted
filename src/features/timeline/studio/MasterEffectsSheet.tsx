@@ -59,6 +59,14 @@ function tempoLabel(rate: number, normal: string): string {
 export function MasterEffectsSheet({ visible, onClose, value, onChange }: Props) {
   const { t } = useTranslation('projects');
   const [tab, setTab] = useState<Tab>('tune');
+  // While locked, a touch on the controls lights up the notice instead of
+  // vanishing: the person learns why nothing moves.
+  const [nudged, setNudged] = useState(false);
+  useEffect(() => {
+    if (!nudged) return;
+    const id = setTimeout(() => setNudged(false), 1600);
+    return () => clearTimeout(id);
+  }, [nudged]);
   const [draft, setDraft] = useState<MasterEffects>(value);
 
   useEffect(() => {
@@ -104,7 +112,10 @@ export function MasterEffectsSheet({ visible, onClose, value, onChange }: Props)
       title={t('studio.master.title')}
       detents={[0.66]}
     >
-      <View style={styles.notice}>
+      <View
+        style={[styles.notice, nudged && styles.noticeActive]}
+        accessibilityLiveRegion="polite"
+      >
         <Text variant="caption" style={styles.noticeText}>
           {t('studio.master.inDevelopment')}
         </Text>
@@ -131,205 +142,232 @@ export function MasterEffectsSheet({ visible, onClose, value, onChange }: Props)
         ))}
       </View>
 
-      {/* Locked while the master effects are being built: visible, inert. */}
-      <ScrollView
-        contentContainerStyle={styles.body}
-        showsVerticalScrollIndicator={false}
-        pointerEvents={MASTER_EFFECTS_LOCKED ? 'none' : 'auto'}
-        style={MASTER_EFFECTS_LOCKED && styles.locked}
+      {/* Locked while the master effects are being built: visible, inert, and
+          a touch explains itself through the notice above. */}
+      <Pressable
+        style={styles.lockedArea}
+        disabled={!MASTER_EFFECTS_LOCKED}
+        onPress={() => {
+          void haptic('warning');
+          setNudged(true);
+        }}
       >
-        {tab === 'tune' && (
-          <>
-            <View style={styles.stepperRow}>
-              <Pressable
-                onPress={() => step('pitch', -1)}
-                hitSlop={10}
-                accessibilityRole="button"
-              >
-                <ChevronLeft size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
-              </Pressable>
-              <Text variant="body" style={styles.paramTitle}>
-                {t('studio.master.pitch', {
-                  value: pitchLabel(pitch, t('studio.master.normal')),
-                })}
-              </Text>
-              <Pressable
-                onPress={() => step('pitch', 1)}
-                hitSlop={10}
-                accessibilityRole="button"
-              >
-                <ChevronRight size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
-              </Pressable>
-            </View>
-            <View style={styles.sliderRow}>
-              <NativeSlider
-                style={styles.slider}
-                minimumValue={-12}
-                maximumValue={12}
-                step={0.1}
-                value={pitch}
-                onValueChange={(v) => push({ ...draft, pitchSemitones: v }, false)}
-                onSlidingComplete={(v) => push({ ...draft, pitchSemitones: v }, true)}
-                minimumTrackTintColor={STUDIO_COLORS.text}
-                maximumTrackTintColor={STUDIO_COLORS.borderStrong}
-                thumbTintColor={STUDIO_COLORS.text}
-              />
-              <Pressable
-                onPress={() => push({ ...draft, pitchSemitones: 0 }, true)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('studio.master.reset')}
-              >
-                <RotateCcw size={18} color={STUDIO_COLORS.textMuted} strokeWidth={2.25} />
-              </Pressable>
-            </View>
-
-            <View style={[styles.stepperRow, styles.spaced]}>
-              <Pressable
-                onPress={() => step('tempo', -0.05)}
-                hitSlop={10}
-                accessibilityRole="button"
-              >
-                <ChevronLeft size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
-              </Pressable>
-              <Text variant="body" style={styles.paramTitle}>
-                {t('studio.master.tempo', {
-                  value: tempoLabel(tempo, t('studio.master.normal')),
-                })}
-              </Text>
-              <Pressable
-                onPress={() => step('tempo', 0.05)}
-                hitSlop={10}
-                accessibilityRole="button"
-              >
-                <ChevronRight size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
-              </Pressable>
-            </View>
-            <View style={styles.sliderRow}>
-              <NativeSlider
-                style={styles.slider}
-                minimumValue={0.5}
-                maximumValue={2}
-                step={0.01}
-                value={tempo}
-                onValueChange={(v) => push({ ...draft, tempoRate: v }, false)}
-                onSlidingComplete={(v) => push({ ...draft, tempoRate: v }, true)}
-                minimumTrackTintColor={STUDIO_COLORS.text}
-                maximumTrackTintColor={STUDIO_COLORS.borderStrong}
-                thumbTintColor={STUDIO_COLORS.text}
-              />
-              <Pressable
-                onPress={() => push({ ...draft, tempoRate: 1 }, true)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('studio.master.reset')}
-              >
-                <RotateCcw size={18} color={STUDIO_COLORS.textMuted} strokeWidth={2.25} />
-              </Pressable>
-            </View>
-          </>
-        )}
-
-        {tab === 'reverb' && (
-          <>
-            <View style={styles.chips}>
-              {REVERB_PRESETS.map((p) => (
+        <ScrollView
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
+          pointerEvents={MASTER_EFFECTS_LOCKED ? 'none' : 'auto'}
+          style={MASTER_EFFECTS_LOCKED && styles.locked}
+        >
+          {tab === 'tune' && (
+            <>
+              <View style={styles.stepperRow}>
                 <Pressable
-                  key={p}
-                  onPress={() => {
-                    void haptic('selection');
-                    push({ ...draft, reverb: { preset: p, wetDryMix: wet || 25 } }, true);
-                  }}
+                  onPress={() => step('pitch', -1)}
+                  hitSlop={10}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: preset === p }}
-                  style={[styles.chip, preset === p && styles.chipActive]}
                 >
-                  <Text
-                    variant="caption"
-                    style={[styles.chipText, preset === p && styles.chipTextActive]}
-                  >
-                    {t(`studio.master.presets.${p}` as 'studio.master.presets.plate')}
-                  </Text>
+                  <ChevronLeft size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
                 </Pressable>
-              ))}
-            </View>
-            <Text variant="body" style={styles.paramTitle}>
-              {t('studio.master.wet', { value: Math.round(wet) })}
-            </Text>
-            <View style={styles.sliderRow}>
-              <NativeSlider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={100}
-                step={1}
-                value={wet}
-                onValueChange={(v) =>
-                  push({ ...draft, reverb: { preset, wetDryMix: v } }, false)
-                }
-                onSlidingComplete={(v) =>
-                  push({ ...draft, reverb: { preset, wetDryMix: v } }, true)
-                }
-                minimumTrackTintColor={STUDIO_COLORS.text}
-                maximumTrackTintColor={STUDIO_COLORS.borderStrong}
-                thumbTintColor={STUDIO_COLORS.text}
-              />
-              <Pressable
-                onPress={() => push({ ...draft, reverb: { preset, wetDryMix: 0 } }, true)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('studio.master.reset')}
-              >
-                <RotateCcw size={18} color={STUDIO_COLORS.textMuted} strokeWidth={2.25} />
-              </Pressable>
-            </View>
-          </>
-        )}
-
-        {tab === 'eq' && (
-          <>
-            {EQ_BANDS.map((hz, i) => (
-              <View key={hz} style={styles.eqRow}>
-                <Text variant="caption" style={styles.eqLabel}>
-                  {hz >= 1000 ? `${hz / 1000}k` : hz}
+                <Text variant="body" style={styles.paramTitle}>
+                  {t('studio.master.pitch', {
+                    value: pitchLabel(pitch, t('studio.master.normal')),
+                  })}
                 </Text>
+                <Pressable
+                  onPress={() => step('pitch', 1)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                >
+                  <ChevronRight size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
+                </Pressable>
+              </View>
+              <View style={styles.sliderRow}>
                 <NativeSlider
                   style={styles.slider}
                   minimumValue={-12}
                   maximumValue={12}
-                  step={0.5}
-                  value={gains[i] ?? 0}
-                  onValueChange={(v) => {
-                    const next = [...gains];
-                    next[i] = v;
-                    push({ ...draft, eqGainsDb: next }, false);
-                  }}
-                  onSlidingComplete={(v) => {
-                    const next = [...gains];
-                    next[i] = v;
-                    push({ ...draft, eqGainsDb: next }, true);
-                  }}
+                  step={0.1}
+                  value={pitch}
+                  onValueChange={(v) => push({ ...draft, pitchSemitones: v }, false)}
+                  onSlidingComplete={(v) => push({ ...draft, pitchSemitones: v }, true)}
                   minimumTrackTintColor={STUDIO_COLORS.text}
                   maximumTrackTintColor={STUDIO_COLORS.borderStrong}
                   thumbTintColor={STUDIO_COLORS.text}
                 />
-                <Text variant="caption" style={styles.eqValue}>
-                  {(gains[i] ?? 0) > 0 ? '+' : ''}
-                  {(gains[i] ?? 0).toFixed(1)}
-                </Text>
+                <Pressable
+                  onPress={() => push({ ...draft, pitchSemitones: 0 }, true)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('studio.master.reset')}
+                >
+                  <RotateCcw
+                    size={18}
+                    color={STUDIO_COLORS.textMuted}
+                    strokeWidth={2.25}
+                  />
+                </Pressable>
               </View>
-            ))}
-            <Pressable
-              onPress={() => push({ ...draft, eqGainsDb: new Array(10).fill(0) }, true)}
-              accessibilityRole="button"
-              style={styles.resetAll}
-            >
-              <Text variant="small" style={styles.resetAllText}>
-                {t('studio.master.flat')}
+
+              <View style={[styles.stepperRow, styles.spaced]}>
+                <Pressable
+                  onPress={() => step('tempo', -0.05)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                >
+                  <ChevronLeft size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
+                </Pressable>
+                <Text variant="body" style={styles.paramTitle}>
+                  {t('studio.master.tempo', {
+                    value: tempoLabel(tempo, t('studio.master.normal')),
+                  })}
+                </Text>
+                <Pressable
+                  onPress={() => step('tempo', 0.05)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                >
+                  <ChevronRight size={22} color={STUDIO_COLORS.text} strokeWidth={2.5} />
+                </Pressable>
+              </View>
+              <View style={styles.sliderRow}>
+                <NativeSlider
+                  style={styles.slider}
+                  minimumValue={0.5}
+                  maximumValue={2}
+                  step={0.01}
+                  value={tempo}
+                  onValueChange={(v) => push({ ...draft, tempoRate: v }, false)}
+                  onSlidingComplete={(v) => push({ ...draft, tempoRate: v }, true)}
+                  minimumTrackTintColor={STUDIO_COLORS.text}
+                  maximumTrackTintColor={STUDIO_COLORS.borderStrong}
+                  thumbTintColor={STUDIO_COLORS.text}
+                />
+                <Pressable
+                  onPress={() => push({ ...draft, tempoRate: 1 }, true)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('studio.master.reset')}
+                >
+                  <RotateCcw
+                    size={18}
+                    color={STUDIO_COLORS.textMuted}
+                    strokeWidth={2.25}
+                  />
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          {tab === 'reverb' && (
+            <>
+              <View style={styles.chips}>
+                {REVERB_PRESETS.map((p) => (
+                  <Pressable
+                    key={p}
+                    onPress={() => {
+                      void haptic('selection');
+                      push(
+                        { ...draft, reverb: { preset: p, wetDryMix: wet || 25 } },
+                        true
+                      );
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: preset === p }}
+                    style={[styles.chip, preset === p && styles.chipActive]}
+                  >
+                    <Text
+                      variant="caption"
+                      style={[styles.chipText, preset === p && styles.chipTextActive]}
+                    >
+                      {t(`studio.master.presets.${p}` as 'studio.master.presets.plate')}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text variant="body" style={styles.paramTitle}>
+                {t('studio.master.wet', { value: Math.round(wet) })}
               </Text>
-            </Pressable>
-          </>
-        )}
-      </ScrollView>
+              <View style={styles.sliderRow}>
+                <NativeSlider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={100}
+                  step={1}
+                  value={wet}
+                  onValueChange={(v) =>
+                    push({ ...draft, reverb: { preset, wetDryMix: v } }, false)
+                  }
+                  onSlidingComplete={(v) =>
+                    push({ ...draft, reverb: { preset, wetDryMix: v } }, true)
+                  }
+                  minimumTrackTintColor={STUDIO_COLORS.text}
+                  maximumTrackTintColor={STUDIO_COLORS.borderStrong}
+                  thumbTintColor={STUDIO_COLORS.text}
+                />
+                <Pressable
+                  onPress={() =>
+                    push({ ...draft, reverb: { preset, wetDryMix: 0 } }, true)
+                  }
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('studio.master.reset')}
+                >
+                  <RotateCcw
+                    size={18}
+                    color={STUDIO_COLORS.textMuted}
+                    strokeWidth={2.25}
+                  />
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          {tab === 'eq' && (
+            <>
+              {EQ_BANDS.map((hz, i) => (
+                <View key={hz} style={styles.eqRow}>
+                  <Text variant="caption" style={styles.eqLabel}>
+                    {hz >= 1000 ? `${hz / 1000}k` : hz}
+                  </Text>
+                  <NativeSlider
+                    style={styles.slider}
+                    minimumValue={-12}
+                    maximumValue={12}
+                    step={0.5}
+                    value={gains[i] ?? 0}
+                    onValueChange={(v) => {
+                      const next = [...gains];
+                      next[i] = v;
+                      push({ ...draft, eqGainsDb: next }, false);
+                    }}
+                    onSlidingComplete={(v) => {
+                      const next = [...gains];
+                      next[i] = v;
+                      push({ ...draft, eqGainsDb: next }, true);
+                    }}
+                    minimumTrackTintColor={STUDIO_COLORS.text}
+                    maximumTrackTintColor={STUDIO_COLORS.borderStrong}
+                    thumbTintColor={STUDIO_COLORS.text}
+                  />
+                  <Text variant="caption" style={styles.eqValue}>
+                    {(gains[i] ?? 0) > 0 ? '+' : ''}
+                    {(gains[i] ?? 0).toFixed(1)}
+                  </Text>
+                </View>
+              ))}
+              <Pressable
+                onPress={() => push({ ...draft, eqGainsDb: new Array(10).fill(0) }, true)}
+                accessibilityRole="button"
+                style={styles.resetAll}
+              >
+                <Text variant="small" style={styles.resetAllText}>
+                  {t('studio.master.flat')}
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
+      </Pressable>
     </BottomSheet>
   );
 }
@@ -337,6 +375,13 @@ export function MasterEffectsSheet({ visible, onClose, value, onChange }: Props)
 const styles = StyleSheet.create({
   locked: {
     opacity: 0.32,
+  },
+  lockedArea: {
+    flexShrink: 1,
+  },
+  noticeActive: {
+    borderColor: 'rgba(255,176,32,0.6)',
+    backgroundColor: 'rgba(255,176,32,0.12)',
   },
   notice: {
     borderRadius: 8,

@@ -324,7 +324,8 @@
       "unavailable": "Esta versão não traz o processador de áudio",
       "noAudio": "Não há áudio no trecho selecionado",
       "noop": "Não há nada para mudar aqui",
-      "inDevelopment": "Mais efeitos estão em desenvolvimento. Por enquanto, Amplify está disponível."
+      "inDevelopment": "Mais efeitos estão em desenvolvimento. Por enquanto, Amplify está disponível.",
+      "lockedTapped": "{{name}} ainda está em desenvolvimento. Por enquanto, Amplify está disponível."
     },
     "master": {
       "title": "Efeitos master",

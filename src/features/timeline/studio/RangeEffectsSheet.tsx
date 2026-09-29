@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Activity,
@@ -85,6 +85,13 @@ const ICONS: Record<string, LucideIcon> = {
  */
 export function RangeEffectsSheet({ visible, onClose, onPick, rangeLabel }: Props) {
   const { t } = useTranslation('projects');
+  // A locked effect used to ignore the tap. Now the notice names it, so the
+  // person knows it is on its way and which one works today. The notice lives
+  // inside the sheet because the native sheet covers the editor's toast.
+  const [lockedTapped, setLockedTapped] = useState<string | null>(null);
+  useEffect(() => {
+    if (!visible) setLockedTapped(null);
+  }, [visible]);
   const rows = useMemo(() => {
     const out: EffectDef[][] = [];
     for (let i = 0; i < EFFECTS.length; i += 2) out.push(EFFECTS.slice(i, i + 2));
@@ -106,9 +113,14 @@ export function RangeEffectsSheet({ visible, onClose, onPick, rangeLabel }: Prop
         <Text variant="caption" style={styles.subtitle}>
           {t('studio.effects.subtitle', { range: rangeLabel })}
         </Text>
-        <View style={styles.notice}>
+        <View
+          style={[styles.notice, lockedTapped !== null && styles.noticeActive]}
+          accessibilityLiveRegion="polite"
+        >
           <Text variant="caption" style={styles.noticeText}>
-            {t('studio.effects.inDevelopment')}
+            {lockedTapped !== null
+              ? t('studio.effects.lockedTapped', { name: lockedTapped })
+              : t('studio.effects.inDevelopment')}
           </Text>
         </View>
         {rows.map((row, r) => (
@@ -119,18 +131,27 @@ export function RangeEffectsSheet({ visible, onClose, onPick, rangeLabel }: Prop
               return (
                 <Pressable
                   key={def.id}
-                  disabled={locked}
                   onPress={() => {
+                    if (locked) {
+                      void haptic('warning');
+                      setLockedTapped(def.name);
+                      return;
+                    }
                     void haptic('light');
                     onPick(def);
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={def.name}
                   accessibilityState={{ disabled: locked }}
+                  accessibilityHint={
+                    locked
+                      ? t('studio.effects.lockedTapped', { name: def.name })
+                      : undefined
+                  }
                   style={({ pressed }) => [
                     styles.cell,
                     locked && styles.cellLocked,
-                    pressed && styles.pressed,
+                    pressed && !locked && styles.pressed,
                   ]}
                 >
                   <Icon size={18} color={STUDIO_COLORS.text} strokeWidth={2} />
@@ -189,6 +210,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 10,
+  },
+  noticeActive: {
+    borderColor: 'rgba(255,176,32,0.6)',
+    backgroundColor: 'rgba(255,176,32,0.12)',
   },
   noticeText: {
     color: STUDIO_COLORS.text,

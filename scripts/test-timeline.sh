@@ -24,6 +24,7 @@ TEST_FILES=(
   "src/lib/media/__tests__/videoPostLimits.test.ts"
   "src/features/feed/publish/__tests__/publishRecovery.test.ts"
   "src/hooks/__tests__/callAcceptance.test.ts"
+  "src/components/call/__tests__/callBarTransport.test.ts"
   "src/hooks/__tests__/callLandingModel.test.ts"
   "src/features/feed/__tests__/mentions.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"

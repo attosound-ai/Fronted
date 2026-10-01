@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   DeviceEventEmitter,
 } from 'react-native';
+import { showCallBarTransport } from './callBarTransport';
 import { CALL_ROUTE_CHANGED_EVENT } from '@/lib/telemetry/callTelemetry';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -111,12 +112,12 @@ export function InCallTopBar() {
    * user is not the one that owns it, so this bar is the only place left to
    * stop it. The editor draws its own transport, so there this stays away.
    */
-  const ownerScreenIsUp =
-    playback.surface === 'timeline' && pathname.startsWith('/project/');
-  const showTransport =
-    engineMode &&
-    !ownerScreenIsUp &&
-    (playback.status === 'playing' || playback.status === 'paused');
+  const showTransport = showCallBarTransport({
+    engineMode,
+    surface: playback.surface,
+    status: playback.status,
+    pathname,
+  });
 
   const onTransport = () => {
     void haptic('selection');

@@ -30,12 +30,12 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 | ID | Escenario | Esperado | Capa | Estado |
 |---|---|---|---|---|
 | L01 | Contestar con la app abierta, dígito en el teclado de ATTO | Teclado sobre el feed, al marcar se abre la grabadora | A + M | OK automática (callLandingModel), manual sep 23 |
-| L02 | Contestar con el teléfono bloqueado, dígito en la pantalla de iOS, luego abrir ATTO | No aparece el teclado, se abre la grabadora | A + M | NUEVO. Fallo del cliente del 30 de sep: esperó el dígito 15 minutos |
+| L02 | Contestar con el teléfono bloqueado, dígito en la pantalla de iOS, luego abrir ATTO | No aparece el teclado, se abre la grabadora | A + M | OK oct 1 (David con su mamá, app cerrada). Fallo del cliente del 30 de sep |
 | L03 | Contestar bloqueado, no marcar nada, abrir ATTO antes de 2 minutos | Aparece el teclado de ATTO | M | SIN PROBAR |
 | L04 | App cerrada del todo, entra la llamada | Suena, se contesta, hay audio en ambos sentidos | M | OK sep 23 (build 10) |
 | L05 | Dígito en ATTO, la app muere y se relanza en plena llamada | La app recuerda el dígito, no vuelve a pedirlo | A + M | NUEVO (el dígito se guarda en nativo) |
 | L06 | Llamada de más de 2 minutos sin dígito registrado | Se asume aceptada, abre la grabadora | A | OK automática (callAcceptance) |
-| L07 | Bluetooth conectado ANTES de contestar | Voz clara en ambos sentidos | M | OK sep 25 (24 kHz) |
+| L07 | Bluetooth conectado ANTES de contestar | Voz clara en ambos sentidos | M | OK oct 1 con AirPods Max (David con su mamá) |
 | L08 | Conectar Bluetooth A MITAD de llamada | Voz clara en ambos sentidos tras el cambio | M | FALLA o sin causa probada. Sep 30: "sueno como robot". Red limpia. Ahora queda diagnóstico del motor tras cada cambio |
 | L09 | Quitar Bluetooth a mitad de llamada | El audio pasa al teléfono sin cortes largos | M | SIN PROBAR |
 | L10 | Cambiar a altavoz desde el selector de iOS | Se queda en altavoz | M | OK b154 |
@@ -57,7 +57,7 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 | G02 | Toma con las dos voces | La toma tiene las dos | M | SIN PROBAR |
 | G03 | Toma con solo mi voz | La toma solo tiene mi voz | M | SIN PROBAR |
 | G04 | Ninguna voz encendida | No deja grabar y explica por qué | D | NUEVO |
-| G05 | Nadie habla durante la toma | Onda plana y, a los 4 s, aviso de que no entra sonido | M | NUEVO |
+| G05 | Nadie habla durante la toma | Onda plana y, a los 4 s, aviso de que no entra sonido | M | Onda OK oct 1; aviso sin confirmar |
 | G06 | Grabar, colocar, publicar | La publicación sale y el clip SIGUE en el proyecto | A + M | NUEVO. Fallo del 30 de sep |
 | G07 | Grabar, publicar, cerrar el editor y tocar Descartar | No se borra lo publicado. Si hay audio nuevo sin publicar, avisa cuántas grabaciones y cuánto duran, y pide confirmar aparte | A + M | NUEVO (closePlan) |
 | G08 | Cerrar el editor sin haber cambiado nada | Cierra sin preguntar | A + D | NUEVO |
@@ -71,7 +71,8 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 
 | ID | Escenario | Esperado | Capa | Estado |
 |---|---|---|---|---|
-| R01 | Reproducir un proyecto de menos de 30 min con transmisión encendida | La otra persona lo oye | M | OK sep 23 (llamada grabada en el puente) |
+| R01 | Reproducir un proyecto de menos de 30 min con transmisión encendida | La otra persona lo oye | M | OK oct 1 (la mamá oyó su grabación) |
+| R06 | En la grabadora de la llamada | La barra de la llamada NO muestra un segundo play (el editor tiene el suyo) | A | NUEVO oct 1, la barra usaba solo /project/ |
 | R02 | Proyecto de 30 a 90 min | Reproduce | M | OK build 226 (límite subido a 90 min) |
 | R03 | Proyecto de más de 90 min | Mensaje claro con el límite | D | SIN PROBAR |
 | R04 | Transmisión apagada | Yo lo oigo, la otra persona no | M | OK |

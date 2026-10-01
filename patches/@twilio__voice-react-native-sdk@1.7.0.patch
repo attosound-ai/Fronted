@@ -5550,7 +5550,7 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +
 +@end
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
-index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b8636ec256d 100644
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb079479df 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m
 +++ b/ios/TwilioVoiceReactNative+CallKit.m
 @@ -27,7 +27,19 @@ - (void)initializeCallKit {
@@ -5586,7 +5586,21 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
  
      [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
          if (!error) {
-@@ -169,7 +184,7 @@ - (void)makeCallWithAccessToken:(NSString *)accessToken
+@@ -134,6 +149,13 @@ - (void)endCallWithUuid:(NSUUID *)uuid {
+     [self.callKitCallController requestTransaction:transaction completion:^(NSError *error) {
+         if (error) {
+             NSLog(@"Failed to submit end-call transaction request: %@", error);
++            // ATTO (Oct 1 2026): a refused end request used to leave the call
++            // live with only a log line. End the media now; the fallback in
++            // call_disconnect would also catch it, this is just sooner.
++            TVOCall *call = self.callMap[uuid.UUIDString];
++            if (call && call.state != TVOCallStateDisconnected) {
++                [call disconnect];
++            }
+         } else {
+             NSLog(@"End-call transaction successfully done");
+         }
+@@ -169,7 +191,7 @@ - (void)makeCallWithAccessToken:(NSString *)accessToken
              callUpdate.supportsHolding = YES;
              callUpdate.supportsGrouping = NO;
              callUpdate.supportsUngrouping = NO;
@@ -5595,7 +5609,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
  
              [self.callKitProvider reportCallWithUUID:uuid updated:callUpdate];
          }
-@@ -226,7 +241,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -226,7 +248,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
      callUpdate.supportsHolding = YES;
      callUpdate.supportsGrouping = NO;
      callUpdate.supportsUngrouping = NO;
@@ -5604,7 +5618,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
  
      dispatch_async(dispatch_get_main_queue(), ^{
          [self.callKitProvider reportCallWithUUID:[[NSUUID alloc] initWithUUIDString:uuid] updated:callUpdate];
-@@ -235,6 +250,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -235,6 +257,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
  
  #pragma mark - CXProviderDelegate
  
@@ -5638,7 +5652,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
  - (void)providerDidReset:(CXProvider *)provider {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
  }
-@@ -245,10 +287,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
+@@ -245,10 +294,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
  
  - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
@@ -5651,7 +5665,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
  }
  
  - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
-@@ -290,6 +334,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
+@@ -290,6 +341,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
  }
  
  - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
@@ -5659,7 +5673,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
      [TwilioVoiceReactNative twilioAudioDevice].block();
      
-@@ -328,6 +373,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
+@@ -328,6 +380,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
      if (self.callMap[action.callUUID.UUIDString]) {
          TVOCall *call = self.callMap[action.callUUID.UUIDString];
          [call sendDigits:action.digits];
@@ -5671,7 +5685,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
          [action fulfill];
      } else {
          [action fail];
-@@ -349,6 +399,19 @@ - (void)callDidConnect:(TVOCall *)call {
+@@ -349,6 +406,19 @@ - (void)callDidConnect:(TVOCall *)call {
  
      [self stopRingback];
  
@@ -5713,7 +5727,7 @@ index 93105f992e97bb0b6bb478c281923a10ff710e90..87cf42e786f9968d8ec43e3ec963b824
 +    [defaults setDouble:[[NSDate date] timeIntervalSince1970] forKey:@"atto_dtmf_at"];
 +}
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..a86e880ded9ec4163787da138855fe2f83c8d0f7 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c63b3d0a25 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
 @@ -11,6 +11,7 @@
@@ -5949,7 +5963,40 @@ index 9832b501acdabd9720631b6af5969760802dbb55..a86e880ded9ec4163787da138855fe2f
  - (void)handleRouteChange:(NSNotification *)notification {
      [self availableAudioDevices];
  
-@@ -776,6 +971,9 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
+@@ -665,8 +860,31 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
+                   resolver:(RCTPromiseResolveBlock)resolve
+                   rejecter:(RCTPromiseRejectBlock)reject)
+ {
+-    if (self.callMap[uuid]) {
++    TVOCall *call = self.callMap[uuid];
++    if (call) {
+         [self endCallWithUuid:[[NSUUID alloc] initWithUUIDString:uuid]];
++        /*
++         * ATTO (Oct 1 2026): hanging up only ASKED CallKit to end the call and
++         * resolved at once. On a call that woke the app (cold adopted), the
++         * CallKit call belongs to AttoVoipBootstrap's provider; the request did
++         * not end it, JS got no Disconnected event, the UI cleared after its
++         * 4 s watchdog and the call stayed live in Twilio 41 more seconds: the
++         * person hung up and kept hearing the other side. If the call is not
++         * gone 1.5 s after the request, disconnect the media directly. The
++         * delegate's callDidDisconnect then reports the end to whichever
++         * CallKit provider owns it, so the system call screen closes too.
++         */
++        __weak TVOCall *weakCall = call;
++        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
++                       dispatch_get_main_queue(), ^{
++            TVOCall *pending = weakCall;
++            if (pending && pending.state != TVOCallStateDisconnected) {
++                NSLog(@"[ATTO] call still live 1.5 s after hangup, disconnecting directly");
++                [[NSUserDefaults standardUserDefaults] setDouble:[[NSDate date] timeIntervalSince1970]
++                                                          forKey:@"atto_hangup_direct_disconnect_at"];
++                [pending disconnect];
++            }
++        });
+         resolve(nil);
+     } else {
+         reject(kTwilioVoiceReactNativeVoiceError, [NSString stringWithFormat:@"Call with %@ not found", uuid], nil);
+@@ -776,6 +994,9 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
      TVOCall *call = self.callMap[uuid];
      if (call) {
          [call sendDigits:digits];

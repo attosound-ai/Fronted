@@ -39,7 +39,7 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 | L08 | Conectar Bluetooth A MITAD de llamada | Voz clara en ambos sentidos tras el cambio | M | FALLA o sin causa probada. Sep 30: "sueno como robot". Red limpia. Ahora queda diagnóstico del motor tras cada cambio |
 | L09 | Quitar Bluetooth a mitad de llamada | El audio pasa al teléfono sin cortes largos | M | SIN PROBAR |
 | L10 | Cambiar a altavoz desde el selector de iOS | Se queda en altavoz | M | OK b154 |
-| L11 | Colgar desde ATTO y desde la pantalla de iOS | La llamada termina, la barra verde desaparece | M | SIN PROBAR recientemente |
+| L11 | Colgar desde ATTO y desde la pantalla de iOS | La llamada termina EN TWILIO al instante, no solo en pantalla | M | FALLA oct 1 en llamada en frío: la app dijo colgado y Twilio siguió 41 s con audio. Arreglado (corte directo a 1,5 s), falta probar |
 | L12 | Segunda llamada apenas termina la primera | Contesta y abre la grabadora de nuevo | M | OK sep 30 (llamada 2 del cliente) |
 | L13 | Bloquear el teléfono con la llamada activa 3 minutos | La llamada sigue viva | M | OK tras el arreglo del 22 de sep |
 | L14 | Wifi a datos móviles en plena llamada | La llamada se recupera | M | SIN PROBAR |

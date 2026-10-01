@@ -398,6 +398,11 @@
     "keepPlayingOnZoom": "Keep playing on zoom",
     "support": "Support",
     "close": {
+      "loseTitle": "Delete what you recorded?",
+      "loseBody_one": "Discarding deletes 1 recording or import made in this session ({{length}}). This cannot be undone.",
+      "loseBody_other": "Discarding deletes {{count}} recordings or imports made in this session ({{length}} in total). This cannot be undone.",
+      "keep": "Keep it",
+      "loseConfirm": "Delete it",
       "title": "Close the editor",
       "body": "Save what you did, or put the project back the way it was when you opened it.",
       "save": "Save",

@@ -398,6 +398,11 @@
     "keepPlayingOnZoom": "Seguir reproduciendo al hacer zoom",
     "support": "Soporte",
     "close": {
+      "loseTitle": "¿Borrar lo que grabaste?",
+      "loseBody_one": "Descartar borra 1 grabación o importación hecha en esta sesión ({{length}}). No se puede deshacer.",
+      "loseBody_other": "Descartar borra {{count}} grabaciones o importaciones hechas en esta sesión ({{length}} en total). No se puede deshacer.",
+      "keep": "Conservar",
+      "loseConfirm": "Borrar",
       "title": "Cerrar el editor",
       "body": "Guarda lo que hiciste, o deja el proyecto como estaba cuando lo abriste.",
       "save": "Guardar",

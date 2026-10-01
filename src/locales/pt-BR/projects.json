@@ -398,6 +398,11 @@
     "keepPlayingOnZoom": "Continuar tocando ao dar zoom",
     "support": "Suporte",
     "close": {
+      "loseTitle": "Apagar o que você gravou?",
+      "loseBody_one": "Descartar apaga 1 gravação ou importação feita nesta sessão ({{length}}). Não dá para desfazer.",
+      "loseBody_other": "Descartar apaga {{count}} gravações ou importações feitas nesta sessão ({{length}} no total). Não dá para desfazer.",
+      "keep": "Manter",
+      "loseConfirm": "Apagar",
       "title": "Fechar o editor",
       "body": "Salve o que você fez, ou deixe o projeto como estava quando você abriu.",
       "save": "Salvar",

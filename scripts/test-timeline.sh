@@ -20,6 +20,7 @@ TEST_FILES=(
   "src/features/timeline/utils/__tests__/zoomRange.test.ts"
   "src/features/timeline/utils/__tests__/detailWindow.test.ts"
   "src/features/timeline/utils/__tests__/postSize.test.ts"
+  "src/features/timeline/utils/__tests__/closePlan.test.ts"
   "src/lib/media/__tests__/videoPostLimits.test.ts"
   "src/features/feed/publish/__tests__/publishRecovery.test.ts"
   "src/hooks/__tests__/callAcceptance.test.ts"

@@ -16,6 +16,7 @@ import { showNetFailureToast } from '@/components/ui/netToast';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { AUDIO_POST_MAX_BYTES, megabytes } from '../utils/postSize';
+import { planClose } from '../utils/closePlan';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { LaneEditSheet } from './LaneEditSheet';
 import {
@@ -1033,6 +1034,8 @@ export function TimelineEditor({
             pendingCoverRef.current ?? undefined
           );
           publishMs = Date.now() - tPublish;
+          // What was just published is now part of the project for good.
+          checkpointRef.current();
         } else {
           Alert.alert(
             t('timeline.exportCompleteTitle'),
@@ -1148,6 +1151,21 @@ export function TimelineEditor({
   if (openingSnapshotRef.current === null && initialClips.length >= 0) {
     openingSnapshotRef.current = { clips: initialClips, laneMeta: initialLaneMeta ?? {} };
   }
+  // The opening state follows the server data. useTimeline replaces the whole
+  // timeline whenever fresher server clips arrive, so "the way it was when
+  // you opened it" must be those clips, not the stale ones this instance
+  // happened to mount with: a recorder that mounted on a cached empty
+  // project kept an EMPTY opening state while showing the take, and Discard
+  // wiped it (Sep 30 2026).
+  useEffect(() => {
+    openingSnapshotRef.current = { clips: initialClips, laneMeta: initialLaneMeta ?? {} };
+  }, [initialClips, initialLaneMeta]);
+  // Publishing is a checkpoint: what went out can no longer be discarded.
+  const checkpointOpeningState = useCallback(() => {
+    openingSnapshotRef.current = { clips: state.clips, laneMeta: state.laneMeta };
+  }, [state.clips, state.laneMeta]);
+  const checkpointRef = useRef(checkpointOpeningState);
+  checkpointRef.current = checkpointOpeningState;
   const closeNow = useCallback(async () => {
     if (state.isDirty) {
       try {
@@ -1180,16 +1198,59 @@ export function TimelineEditor({
     await onClose();
   }, [projectId, state.clips.length, onClose, t]);
   const handleClose = useCallback(() => {
-    if (!state.isDirty && !openingSnapshotRef.current) {
+    const opening = openingSnapshotRef.current;
+    const laneMixChanged =
+      opening !== null &&
+      JSON.stringify(opening.laneMeta ?? {}) !== JSON.stringify(state.laneMeta ?? {});
+    const plan = planClose(opening?.clips ?? [], state.clips, laneMixChanged);
+    // Nothing changed: there is nothing to save or discard, so nothing to ask.
+    if (plan.kind === 'close') {
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.EDITOR_CLOSED, {
+        project_id: projectId,
+        action: 'unchanged',
+        clip_count: state.clips.length,
+      });
       void closeNow();
       return;
     }
+    // Discarding audio that did not exist when the editor opened (a take, an
+    // import) is said in full and confirmed on its own, never implied.
+    const confirmDiscard = () => {
+      if (plan.newAudioClips === 0) {
+        void discardAndClose();
+        return;
+      }
+      Alert.alert(
+        t('studio.close.loseTitle'),
+        t('studio.close.loseBody', {
+          count: plan.newAudioClips,
+          length: formatTimelineMs(plan.newAudioMs),
+        }),
+        [
+          { text: t('studio.close.keep'), style: 'cancel' },
+          {
+            text: t('studio.close.loseConfirm'),
+            style: 'destructive',
+            onPress: () => {
+              analytics.capture(ANALYTICS_EVENTS.PROJECT.EDITOR_CLOSED, {
+                project_id: projectId,
+                action: 'discard_new_audio',
+                clip_count: state.clips.length,
+                new_audio_clips: plan.newAudioClips,
+                new_audio_ms: plan.newAudioMs,
+              });
+              void discardAndClose();
+            },
+          },
+        ]
+      );
+    };
     Alert.alert(t('studio.close.title'), t('studio.close.body'), [
       { text: t('studio.close.cancel'), style: 'cancel' },
       {
         text: t('studio.close.discard'),
         style: 'destructive',
-        onPress: () => void discardAndClose(),
+        onPress: confirmDiscard,
       },
       {
         text: t('studio.close.save'),
@@ -1203,7 +1264,7 @@ export function TimelineEditor({
         },
       },
     ]);
-  }, [state.isDirty, state.clips.length, closeNow, discardAndClose, projectId, t]);
+  }, [state.clips, state.laneMeta, closeNow, discardAndClose, projectId, t]);
 
   const handleRemoveLane = useCallback(
     (laneIndex: number) => {

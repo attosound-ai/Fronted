@@ -45,6 +45,8 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 | L14 | Wifi a datos móviles en plena llamada | La llamada se recupera | M | SIN PROBAR |
 | L15 | Cambio de cuenta (representante a creador) con llamada entrando | Contesta la cuenta correcta | M | OK tras el incidente de cambio de cuenta |
 
+**Dos caminos de código, siempre los dos.** Una llamada puede atenderla el módulo de Twilio (app ya abierta) o `AttoVoipBootstrap` en `plugins/withTwilioVoipPushRegistry.js` (la llamada despierta la app: "cold adopted"). Cada uno tiene su propio manejador de CallKit. Cualquier cambio en contestar, colgar, silenciar o marcar dígitos se hace y se prueba en los dos: L01 cubre el primero, L02 y L04 el segundo.
+
 **Cómo romperla:** contestar desde el reloj o los audífonos; marcar el dígito dos veces; abrir y cerrar el teclado antes de marcar; conectar y quitar los audífonos tres veces seguidas; recibir una notificación o una alarma durante la llamada; poner la app en segundo plano y volver diez veces.
 
 ## 2. Grabar durante la llamada

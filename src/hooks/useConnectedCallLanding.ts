@@ -9,6 +9,7 @@ import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
 import { isCallConnected } from '@/hooks/useInCallChrome';
 import { useCallKeypadRouteMounted } from '@/lib/callKeypadRoute';
 import { decideLanding } from './callLandingModel';
+import { syncCallAcceptance } from './useCallAcceptance';
 
 /**
  * Gates auto-opening the Record Pro editor on a connected call. DEFAULT OFF
@@ -149,6 +150,11 @@ export function useConnectedCallLanding(): void {
       autoLandFlagReactive ||
       analytics.isFeatureEnabled(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
 
+    // A digit pressed on the system call screen, or before a relaunch, or a
+    // call that has simply lasted: the store learns it here, and this effect
+    // runs again with dtmfSentSid set (it is a dependency).
+    syncCallAcceptance();
+
     // The decision itself is pure and lives in callLandingModel, where every
     // case an incoming call can arrive in is written down as a test. This
     // hook owns only the consequences.
@@ -156,7 +162,7 @@ export function useConnectedCallLanding(): void {
       connected: isCallConnected(callState),
       callSid,
       direction: direction === 'inbound' || direction === 'outbound' ? direction : null,
-      dtmfSentSid,
+      dtmfSentSid: useCallStore.getState().dtmfSentSid,
       autoLandEnabled: autoLand,
       appActive,
       navReady,

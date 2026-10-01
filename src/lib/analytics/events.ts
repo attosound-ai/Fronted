@@ -318,6 +318,12 @@ export const ANALYTICS_EVENTS = {
     DTMF_KEYPRESS: 'call_dtmf_keypress',
     DTMF_ATTEMPT: 'call_dtmf_attempt',
     KEYPAD_AUTO_OPENED: 'call_keypad_auto_opened',
+    /** The app learned an inbound call was accepted without its own keypad: via native_digit | elapsed. */
+    ACCEPT_DETECTED: 'call_accept_detected',
+    /** Which voices a call take will hold, changed from the take sheet. */
+    TAKE_SOURCES_SET: 'call_take_sources_set',
+    /** The auto opened keypad was put away because the call was already accepted. */
+    KEYPAD_AUTO_SKIPPED: 'call_keypad_auto_skipped',
     // The keypad route was torn down by something other than the user (a
     // navigation underneath it). Sep 22 2026: the recorder landing replaced it
     // seconds after it auto opened and the pad never came back, so the Securus

@@ -7,6 +7,7 @@ import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { probeResume } from '@/lib/telemetry/resumeProbe';
 import { useCallKeypadRouteMounted } from '@/lib/callKeypadRoute';
 import { isOnCallScreen } from '@/hooks/useInCallChrome';
+import { syncCallAcceptance } from '@/hooks/useCallAcceptance';
 
 /**
  * Global host for the in call DTMF keypad. Mounted once at the root so a
@@ -74,6 +75,17 @@ export function DtmfKeypadHost() {
       autoOpenedSidRef.current !== callSid
     ) {
       autoOpenedSidRef.current = callSid;
+      // Already accepted (digit pressed on the system call screen while the
+      // phone was locked, or before a relaunch, or the call has lasted): the
+      // pad would only cover a call that needs nothing (Sep 30 2026).
+      const via = syncCallAcceptance();
+      if (via !== null) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_AUTO_SKIPPED, {
+          call_sid: callSid,
+          via,
+        });
+        return;
+      }
       showKeypad();
       analytics.capture(ANALYTICS_EVENTS.CALL.KEYPAD_AUTO_OPENED, {
         call_sid: callSid,

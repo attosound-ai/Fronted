@@ -231,6 +231,12 @@
       "headphonesHint": "Use headphones when playing other tracks, or the speaker bleeds into the take.",
       "noPermission": "Microphone access is needed to record",
       "blockedInCall": "The call owns the microphone. Use the record the call button instead.",
+      "sourceRemote": "Record the other person",
+      "sourceMic": "Record my voice",
+      "takeBoth": "This take will hold both voices.",
+      "takeRemoteOnly": "This take will hold only the other person. Your voice is not recorded.",
+      "takeMicOnly": "This take will hold only your voice. The other person is not recorded.",
+      "takeNothing": "Nothing is selected, so the take would be empty. Turn on at least one.",
       "callMix": "Recording your mic and the call. Listen, keep it or record again before it lands on the track.",
       "unavailable": "The recorder is not in this build",
       "reverbPresets": {

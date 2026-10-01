@@ -5550,7 +5550,7 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +
 +@end
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
-index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc50244a15020 100644
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b8636ec256d 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m
 +++ b/ios/TwilioVoiceReactNative+CallKit.m
 @@ -27,7 +27,19 @@ - (void)initializeCallKit {
@@ -5659,7 +5659,19 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc502
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
      [TwilioVoiceReactNative twilioAudioDevice].block();
      
-@@ -349,6 +394,19 @@ - (void)callDidConnect:(TVOCall *)call {
+@@ -328,6 +373,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
+     if (self.callMap[action.callUUID.UUIDString]) {
+         TVOCall *call = self.callMap[action.callUUID.UUIDString];
+         [call sendDigits:action.digits];
++        // ATTO (Sep 30 2026): a digit pressed on the SYSTEM call screen (phone
++        // locked, CallKit keypad) never reached JS, so the app kept waiting for
++        // "press 1" on a call that was already accepted and never opened the
++        // recorder. Leave a mark JS can read (see callAcceptance.ts).
++        AttoRememberDtmf(call.sid, @"callkit");
+         [action fulfill];
+     } else {
+         [action fail];
+@@ -349,6 +399,19 @@ - (void)callDidConnect:(TVOCall *)call {
  
      [self stopRingback];
  
@@ -5679,8 +5691,29 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..b8f915e52efbe28e57c806a2554dc502
      [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
+diff --git a/ios/TwilioVoiceReactNative.h b/ios/TwilioVoiceReactNative.h
+index 93105f992e97bb0b6bb478c281923a10ff710e90..117aaa75f9a029104873f76ef85d7fccd753f0f6 100644
+--- a/ios/TwilioVoiceReactNative.h
++++ b/ios/TwilioVoiceReactNative.h
+@@ -80,3 +80,16 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
+ - (NSDictionary *)cancelledCallInviteInfo:(TVOCancelledCallInvite *)cancelledCallInvite;
+ 
+ @end
++
++/**
++ * ATTO: remembers that DTMF went out on a call, in NSUserDefaults, so JS can
++ * tell an inbound call was already accepted however the digit was pressed.
++ * Keys: atto_dtmf_call_sid, atto_dtmf_source ("callkit" | "app"), atto_dtmf_at.
++ */
++static inline void AttoRememberDtmf(NSString * _Nullable callSid, NSString * _Nonnull source) {
++    if (callSid.length == 0) return;
++    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
++    [defaults setObject:callSid forKey:@"atto_dtmf_call_sid"];
++    [defaults setObject:source forKey:@"atto_dtmf_source"];
++    [defaults setDouble:[[NSDate date] timeIntervalSince1970] forKey:@"atto_dtmf_at"];
++}
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..75a876c4e959421c2e9f26b21fe671b24fbd0ae3 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..a86e880ded9ec4163787da138855fe2f83c8d0f7 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
 @@ -11,6 +11,7 @@
@@ -5916,3 +5949,13 @@ index 9832b501acdabd9720631b6af5969760802dbb55..75a876c4e959421c2e9f26b21fe671b2
  - (void)handleRouteChange:(NSNotification *)notification {
      [self availableAudioDevices];
  
+@@ -776,6 +971,9 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
+     TVOCall *call = self.callMap[uuid];
+     if (call) {
+         [call sendDigits:digits];
++        // ATTO (Sep 30 2026): remembered natively too, so a digit sent from
++        // the app survives the JS process being killed and relaunched mid call.
++        AttoRememberDtmf(call.sid, @"app");
+         resolve(nil);
+     } else {
+         reject(kTwilioVoiceReactNativeVoiceError, [NSString stringWithFormat:@"Call with %@ not found", uuid], nil);

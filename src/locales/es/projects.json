@@ -231,6 +231,12 @@
       "headphonesHint": "Usa audífonos al reproducir otras pistas, o el parlante se cuela en la toma.",
       "noPermission": "Se necesita acceso al micrófono para grabar",
       "blockedInCall": "La llamada tiene el micrófono. Usa el botón de grabar la llamada.",
+      "sourceRemote": "Grabar a la otra persona",
+      "sourceMic": "Grabar mi voz",
+      "takeBoth": "Esta toma tendrá las dos voces.",
+      "takeRemoteOnly": "Esta toma tendrá solo a la otra persona. Tu voz no se graba.",
+      "takeMicOnly": "Esta toma tendrá solo tu voz. La otra persona no se graba.",
+      "takeNothing": "No hay nada seleccionado, la toma quedaría vacía. Enciende al menos una.",
       "callMix": "Grabando tu micrófono y la llamada. Escucha, quédatela o vuelve a grabar antes de que caiga en la pista.",
       "unavailable": "La grabadora no está en esta versión",
       "reverbPresets": {

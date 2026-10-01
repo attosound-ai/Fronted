@@ -22,6 +22,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
+import { useMixerStore } from '@/stores/mixerStore';
 import {
   addMetersListener,
   addPreviewEndedListener,
@@ -322,9 +323,18 @@ export function RecordSheet({
   }, [visible, inCall, phase, monitoring, inputGainDb, limiter, reverb, reverbPreset]);
 
   const handleRecord = useCallback(async () => {
-    void haptic('heavy');
     try {
       setError(null);
+      if (callRecorder) {
+        // A take with neither voice armed is an empty file: say so instead.
+        const { mic, remote } = useMixerStore.getState().channels;
+        if (!mic.record && !remote.record) {
+          void haptic('warning');
+          setError(t('studio.record.takeNothing'));
+          return;
+        }
+      }
+      void haptic('heavy');
       if (callRecorder) {
         setElapsedMs(0);
         await callRecorder.start();
@@ -340,7 +350,7 @@ export function RecordSheet({
       });
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [fromMs, callRecorder, track]);
+  }, [fromMs, callRecorder, track, t]);
 
   const handleStop = useCallback(async () => {
     void haptic('medium');
@@ -477,9 +487,7 @@ export function RecordSheet({
         </Text>
 
         {inCall ? (
-          <Text variant="caption" style={styles.hint}>
-            {t('studio.record.callMix')}
-          </Text>
+          <CallSources locked={phase !== 'ready'} />
         ) : (
           <>
             <Meter label={t('studio.record.input')} level={inputLevel} />
@@ -810,6 +818,68 @@ export function RecordSheet({
   );
 }
 
+/**
+ * What a take made during a call will hold, said in words and switchable in
+ * place. The old line read "Recording your mic and the call" while the mic
+ * was off by default: the client talked, got an empty take and reported that
+ * it did not record (Sep 30 2026). The two switches ARE the mixer's record
+ * arms, so this and the mixer can never disagree.
+ */
+function CallSources({ locked }: { locked: boolean }) {
+  const { t } = useTranslation('projects');
+  const mic = useMixerStore((s) => s.channels.mic.record);
+  const remote = useMixerStore((s) => s.channels.remote.record);
+  const setChannelRecord = useMixerStore((s) => s.setChannelRecord);
+  const summary =
+    mic && remote
+      ? t('studio.record.takeBoth')
+      : remote
+        ? t('studio.record.takeRemoteOnly')
+        : mic
+          ? t('studio.record.takeMicOnly')
+          : t('studio.record.takeNothing');
+  const toggle = (channel: 'mic' | 'remote', value: boolean) => {
+    void haptic('selection');
+    setChannelRecord(channel, value);
+    analytics.capture(ANALYTICS_EVENTS.CALL.TAKE_SOURCES_SET, {
+      rec_mic: channel === 'mic' ? value : mic,
+      rec_remote: channel === 'remote' ? value : remote,
+    });
+  };
+  return (
+    <View style={styles.sources} accessibilityLiveRegion="polite">
+      <View style={styles.sourceRow}>
+        <Text variant="small" style={styles.sourceLabel}>
+          {t('studio.record.sourceRemote')}
+        </Text>
+        <Switch
+          value={remote}
+          disabled={locked}
+          onValueChange={(v) => toggle('remote', v)}
+          accessibilityLabel={t('studio.record.sourceRemote')}
+        />
+      </View>
+      <View style={styles.sourceRow}>
+        <Text variant="small" style={styles.sourceLabel}>
+          {t('studio.record.sourceMic')}
+        </Text>
+        <Switch
+          value={mic}
+          disabled={locked}
+          onValueChange={(v) => toggle('mic', v)}
+          accessibilityLabel={t('studio.record.sourceMic')}
+        />
+      </View>
+      <Text
+        variant="caption"
+        style={[styles.hint, !mic && !remote && styles.sourcesWarning]}
+      >
+        {summary}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   settingLocked: {
     opacity: 0.32,
@@ -1011,6 +1081,21 @@ const styles = StyleSheet.create({
   hint: {
     color: STUDIO_COLORS.textMuted,
     marginTop: 8,
+  },
+  sources: {
+    marginTop: 10,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 40,
+  },
+  sourceLabel: {
+    color: STUDIO_COLORS.text,
+  },
+  sourcesWarning: {
+    color: '#FFB020',
   },
   disabled: {
     opacity: 0.5,

@@ -111,7 +111,18 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 | P08 | Dos publicaciones seguidas | Salen en orden, dos franjas | D | SIN PROBAR |
 | P09 | Publicar audio desde una llamada activa | Sale y el proyecto queda intacto | M | NUEVO (ver G06) |
 
-## 6. Lo que este inventario todavía no cubre
+## 6. Cuentas: borrar y crear
+
+| ID | Escenario | Esperado | Capa | Estado |
+|---|---|---|---|---|
+| C01 | Borrar un creador con número real | El número se devuelve a Twilio, y no queda nada del creador en la base compartida ni en publicaciones | A + M | OK oct 1: número devuelto, publicaciones 0. Quedaron una suscripción y una asignación por una carrera, ya corregido |
+| C02 | Borrar mientras la app pide el número (carrera del 1 de oct) | No se crea suscripción ni número para la cuenta borrada | A | NUEVO, 7 pruebas en pagos |
+| C03 | Si algo queda huérfano | El auditor lo detecta a los 60 s, repite la limpieza una vez y reporta `account_delete_orphans_repaired` | A | NUEVO, falta verlo en producción con un borrado real |
+| C04 | Crear representante + creador | El creador recibe un número de prueba; uno real se asigna a mano o con el plan | M | OK oct 1 (280, 281) |
+
+**Revisión de huérfanos (consulta de solo lectura):** filas de `subscriptions`, `transactions`, `phone_number_assignments`, `provisioned_numbers` (assigned), `calls`, `projects`, `push_tokens` y de la red social cuyo usuario no existe en `users`, y en Mongo `atto_content.contents` por `author_id`. El 1 de octubre: limpio todo lo reciente. Quedan restos de marzo, antes de que existiera la limpieza: 30 transacciones, 3 proyectos y 10 tokens de notificación.
+
+## 7. Lo que este inventario todavía no cubre
 
 Mensajes, registro, pagos, perfil y notificaciones no tienen escenarios escritos. Se agregan la primera vez que se toque cada área, antes de tocarla.
 

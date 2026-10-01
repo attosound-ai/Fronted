@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { planClose, type PlanClip } from '../closePlan';
+import { laneMixFingerprint, planClose, type PlanClip } from '../closePlan';
 
 const clip = (over: Partial<PlanClip> = {}): PlanClip => ({
   segmentId: 'seg-a',
@@ -76,4 +76,27 @@ test('deleting everything asks, and loses nothing new', () => {
 
 test('a change outside the clips (lane mix, names) still asks', () => {
   assert.equal(planClose([clip()], [clip()], true).kind, 'ask');
+});
+
+// Lo que la app rellena sola al abrir no es un cambio de la persona.
+test('lane defaults filled on open are not a change', () => {
+  assert.equal(
+    laneMixFingerprint({}),
+    laneMixFingerprint({ 0: { name: '', color: '' } })
+  );
+  assert.equal(laneMixFingerprint(undefined), '');
+  assert.equal(
+    laneMixFingerprint({
+      0: { name: '', color: '', muted: false, solo: false, gainDb: 0, pan: 0 },
+    }),
+    ''
+  );
+});
+
+test('a real lane change is a change', () => {
+  const base = laneMixFingerprint({ 0: { name: '', color: '' } });
+  assert.notEqual(laneMixFingerprint({ 0: { name: 'Vocals', color: '' } }), base);
+  assert.notEqual(laneMixFingerprint({ 0: { name: '', color: '', gainDb: -6 } }), base);
+  assert.notEqual(laneMixFingerprint({ 0: { name: '', color: '', muted: true } }), base);
+  assert.notEqual(laneMixFingerprint({ 1: { name: '', color: '#FF0000' } }), base);
 });

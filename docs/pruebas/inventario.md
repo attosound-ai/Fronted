@@ -17,7 +17,7 @@ Este documento existe por una razón: arreglábamos una cosa y se rompía otra, 
 
 | Capa | Qué cubre | Cómo se corre |
 |---|---|---|
-| A. Automática | Decisiones puras: límites, reglas, modelos de estado | `npm run test:timeline` (233 pruebas, 22 archivos; falla si existe un archivo de pruebas sin registrar) |
+| A. Automática | Decisiones puras: límites, reglas, modelos de estado | `npm run test:timeline` (235 pruebas, 22 archivos; falla si existe un archivo de pruebas sin registrar) |
 | D. Dispositivo con guion | Pantallas y gestos en el iPhone real, con capturas | WebDriverAgent y los guiones `at.sh`, `hold.sh` del scratchpad |
 | M. Manual con llamada real | Audio de llamadas, Bluetooth, pantalla bloqueada | Dos teléfonos; guion al final de este documento |
 
@@ -31,7 +31,7 @@ Origen de casi todos los incidentes. Variables que se combinan: estado de la app
 |---|---|---|---|---|
 | L01 | Contestar con la app abierta, dígito en el teclado de ATTO | Teclado sobre el feed, al marcar se abre la grabadora | A + M | OK automática (callLandingModel), manual sep 23 |
 | L02 | Contestar con el teléfono bloqueado, dígito en la pantalla de iOS, luego abrir ATTO | No aparece el teclado, se abre la grabadora | A + M | NUEVO. Fallo del cliente del 30 de sep: esperó el dígito 15 minutos |
-| L03 | Contestar bloqueado, no marcar nada, abrir ATTO | Aparece el teclado de ATTO | M | SIN PROBAR |
+| L03 | Contestar bloqueado, no marcar nada, abrir ATTO antes de 2 minutos | Aparece el teclado de ATTO | M | SIN PROBAR |
 | L04 | App cerrada del todo, entra la llamada | Suena, se contesta, hay audio en ambos sentidos | M | OK sep 23 (build 10) |
 | L05 | Dígito en ATTO, la app muere y se relanza en plena llamada | La app recuerda el dígito, no vuelve a pedirlo | A + M | NUEVO (el dígito se guarda en nativo) |
 | L06 | Llamada de más de 2 minutos sin dígito registrado | Se asume aceptada, abre la grabadora | A | OK automática (callAcceptance) |
@@ -123,5 +123,5 @@ Dos teléfonos: el que llama (A) y el iPhone con ATTO (B). Anotar la hora de cad
 4. **G06 y G07.** Colocar la toma, publicar. Volver al editor, cerrarlo. Si pregunta, tocar Descartar. Esperado: el clip sigue en el proyecto.
 5. **L08.** Sin colgar, conectar unos audífonos Bluetooth. Preguntar a A cómo se oye durante 30 segundos. Luego quitarlos y preguntar de nuevo.
 6. **L01.** Colgar. A llama otra vez con ATTO abierta. Marcar el dígito en el teclado de ATTO. Esperado: se abre la grabadora.
-7. **L03.** Colgar. A llama, contestar bloqueado y NO marcar. Abrir ATTO. Esperado: aparece el teclado.
+7. **L03.** Colgar. A llama, contestar bloqueado y NO marcar. Abrir ATTO antes de 2 minutos (pasado ese tiempo la app da la llamada por aceptada). Esperado: aparece el teclado.
 8. **L13.** Con la llamada activa, bloquear el teléfono 3 minutos. Esperado: la llamada sigue.

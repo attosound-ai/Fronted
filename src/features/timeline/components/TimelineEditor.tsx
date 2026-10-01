@@ -16,7 +16,7 @@ import { showNetFailureToast } from '@/components/ui/netToast';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
 import { AUDIO_POST_MAX_BYTES, megabytes } from '../utils/postSize';
-import { planClose } from '../utils/closePlan';
+import { laneMixFingerprint, planClose } from '../utils/closePlan';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { LaneEditSheet } from './LaneEditSheet';
 import {
@@ -1201,7 +1201,7 @@ export function TimelineEditor({
     const opening = openingSnapshotRef.current;
     const laneMixChanged =
       opening !== null &&
-      JSON.stringify(opening.laneMeta ?? {}) !== JSON.stringify(state.laneMeta ?? {});
+      laneMixFingerprint(opening.laneMeta) !== laneMixFingerprint(state.laneMeta);
     const plan = planClose(opening?.clips ?? [], state.clips, laneMixChanged);
     // Nothing changed: there is nothing to save or discard, so nothing to ask.
     if (plan.kind === 'close') {

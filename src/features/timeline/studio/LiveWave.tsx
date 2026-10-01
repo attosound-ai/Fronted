@@ -83,9 +83,12 @@ export function LiveWave({ level, width, active, running, still = false }: Props
     const out: string[] = [];
     if (tick < 0 || width <= 0) return out;
     const mid = HEIGHT / 2;
-    // A floor keeps a hint of the ribbon alive at silence without faking sound.
-    const amp = HEIGHT * 0.36 * (0.035 + eased.value);
     const lvl = eased.value;
+    // Silence must LOOK like silence: at level 0 the sixteen lines collapse
+    // into one straight line. The first version kept the fan open at rest,
+    // which read as "something is coming in" on an empty take.
+    const amp = HEIGHT * 0.38 * (0.012 + lvl);
+    const spread = Math.min(1, lvl * 2.4);
     const ph = phase.value;
     let band = '';
     for (let line = 0; line < LINES; line++) {
@@ -100,9 +103,9 @@ export function LiveWave({ level, width, active, running, still = false }: Props
         // Each line trails the one in front and sits a little higher and
         // smaller, which is what reads as depth.
         const wave =
-          Math.sin(x * 5.2 - ph - depth * 1.15) * (1 - depth * 0.3) +
-          Math.sin(x * 9.1 - ph * 1.7 - depth * 0.6) * 0.22 * lvl;
-        const y = mid + amp * open * wave - depth * open * HEIGHT * 0.16;
+          Math.sin(x * 6.2 - ph - depth * 1.15) * (1 - depth * 0.3) +
+          Math.sin(x * 10.4 - ph * 1.7 - depth * 0.6) * 0.22 * lvl;
+        const y = mid + amp * open * wave - depth * open * HEIGHT * 0.15 * spread;
         // Tenths of a point, without toFixed (it dominates the cost).
         d +=
           (p === 0 ? 'M' : 'L') +

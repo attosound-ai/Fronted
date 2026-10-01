@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
+  COMPOSE_INSET_LEFT,
+  COMPOSE_INSET_RIGHT,
+  composeCard,
+  composeCardTile,
+} from './composeLayout';
+import {
   View,
   Image,
   ScrollView,
@@ -8,7 +14,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { XCircle, Plus, Music, PlayCircle } from 'lucide-react-native';
+import { XCircle, Plus, Music, PlayCircle, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
@@ -75,7 +81,9 @@ export function ComposeMediaPreview({
     const m = media[0];
     return (
       <View style={styles.audioCard}>
-        <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
+        <View style={styles.audioTile}>
+          <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
+        </View>
         <View style={styles.audioInfo}>
           <Text variant="body" style={styles.audioName} numberOfLines={1}>
             {m.fileName}
@@ -86,8 +94,13 @@ export function ComposeMediaPreview({
             </Text>
           )}
         </View>
-        <TouchableOpacity onPress={() => onRemoveMedia(0)}>
-          <XCircle size={22} color="#888888" strokeWidth={2.25} />
+        <TouchableOpacity
+          onPress={() => onRemoveMedia(0)}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={styles.audioRemove}
+        >
+          <X size={16} color="#FFFFFF" strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
     );
@@ -187,7 +200,8 @@ const THUMB_SIZE = 100;
 
 const styles = StyleSheet.create({
   imageRow: {
-    paddingHorizontal: 56,
+    paddingLeft: COMPOSE_INSET_LEFT,
+    paddingRight: COMPOSE_INSET_RIGHT,
     gap: 8,
     paddingVertical: 12,
   },
@@ -216,15 +230,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   videoContainer: {
-    marginHorizontal: 56,
+    marginLeft: COMPOSE_INSET_LEFT,
+    marginRight: COMPOSE_INSET_RIGHT,
     marginVertical: 12,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
   },
   reelContainer: {
-    alignSelf: 'center',
-    marginHorizontal: 0,
+    alignSelf: 'flex-start',
+    marginLeft: COMPOSE_INSET_LEFT,
+    marginRight: 0,
     width: 200,
     backgroundColor: COLORS.background.primary,
   },
@@ -248,17 +264,22 @@ const styles = StyleSheet.create({
     right: 8,
   },
   audioCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    marginHorizontal: 56,
-    marginVertical: 12,
-    padding: 14,
-    gap: 12,
+    ...composeCard,
+    marginTop: 12,
   },
+  audioTile: composeCardTile,
   audioInfo: {
     flex: 1,
+    marginLeft: 12,
+  },
+  audioRemove: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2A2A2A',
+    marginLeft: 8,
   },
   audioName: {
     color: '#FFFFFF',

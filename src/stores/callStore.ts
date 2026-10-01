@@ -15,6 +15,13 @@ interface CallStoreState {
   // flow: the call lands on the feed with the glass keypad over it, and only
   // "press 1" opens the editor). useConnectedCallLanding waits for this.
   dtmfSentSid: string | null;
+  // The call the recorder already opened for, and the call a stray screen
+  // was already sent home for. They live here and not in the landing hook:
+  // posting from the recorder dismisses back to the tabs, the tabs layout
+  // remounts, a ref there starts empty, and the hook dragged the person back
+  // into the editor a second after they posted (client, Sep 30 2026).
+  landedSid: string | null;
+  homedSid: string | null;
   routePickerVisible: boolean;
   // Live audio-injection snapshot (a phone-side track played INTO the call).
   // Store-level for the same reason as keypadVisible — a single global host
@@ -62,6 +69,8 @@ interface CallStoreActions {
   showKeypad: () => void;
   hideKeypad: () => void;
   markDtmfSent: (callSid: string) => void;
+  markLanded: (callSid: string) => void;
+  markHomed: (callSid: string) => void;
   /**
    * Audio route picker sheet (b155). Our OWN 3-option sheet (Bluetooth / oído /
    * altavoz): the system AVRoutePickerView lists DEVICES, not ports, so with a
@@ -83,6 +92,8 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   registrationError: null,
   keypadVisible: false,
   dtmfSentSid: null,
+  landedSid: null,
+  homedSid: null,
   routePickerVisible: false,
   injection: null,
   playback: IDLE_PLAYBACK,
@@ -209,6 +220,8 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
   showKeypad: () => set({ keypadVisible: true }),
   hideKeypad: () => set({ keypadVisible: false }),
   markDtmfSent: (callSid) => set({ dtmfSentSid: callSid }),
+  markLanded: (callSid) => set({ landedSid: callSid }),
+  markHomed: (callSid) => set({ homedSid: callSid }),
 
   showRoutePicker: () => set({ routePickerVisible: true }),
   hideRoutePicker: () => set({ routePickerVisible: false }),
@@ -227,6 +240,8 @@ export const useCallStore = create<CallStoreState & CallStoreActions>((set) => (
       activeProjectId: null,
       keypadVisible: false,
       dtmfSentSid: null,
+      landedSid: null,
+      homedSid: null,
       routePickerVisible: false,
       injection: null,
       networkWeak: false,

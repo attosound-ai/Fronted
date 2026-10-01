@@ -1,4 +1,5 @@
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
+import { composeCard, composeCardTile } from './composeLayout';
 import { ImagePlus, X } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -74,23 +75,10 @@ export function CoverArtPicker({ uri, onPick, onRemove, busy = false }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#141414',
+    ...composeCard,
+    marginTop: 8,
   },
-  square: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#1F1F1F',
-  },
+  square: composeCardTile,
   squareEmpty: {
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -118,6 +106,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2A2A2A',
+    marginLeft: 8,
   },
   pressed: {
     opacity: 0.8,

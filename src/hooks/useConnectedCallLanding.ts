@@ -85,8 +85,9 @@ export function useConnectedCallLanding(): void {
   // its re-render is not guaranteed to arrive — the ticker + imperative read are.
   const autoLandFlagReactive = useFeatureFlag(INCALL_EDITOR_AUTOLOAD_FLAG) === true;
 
-  const landedForSid = useRef<string | null>(null);
-  const homedForSid = useRef<string | null>(null);
+  // Kept in the call store, not in refs: see callStore.landedSid.
+  const landedSid = useCallStore((s) => s.landedSid);
+  const homedSid = useCallStore((s) => s.homedSid);
   const fetchedForSid = useRef<string | null>(null);
   // One landing-skip row per (call, reason) — a Set, not a last-wins slot, so two
   // alternating reasons can't re-emit each other forever.
@@ -117,7 +118,7 @@ export function useConnectedCallLanding(): void {
   const ticksForSid = useRef<{ sid: string; n: number } | null>(null);
   useEffect(() => {
     if (!isCallConnected(callState) || !callSid) return;
-    if (landedForSid.current === callSid) return;
+    if (useCallStore.getState().landedSid === callSid) return;
     const interval = setInterval(() => {
       const t = ticksForSid.current;
       ticksForSid.current =
@@ -133,7 +134,7 @@ export function useConnectedCallLanding(): void {
 
   useEffect(() => {
     if (!isCallConnected(callState) || !callSid) return;
-    if (landedForSid.current === callSid) return;
+    if (useCallStore.getState().landedSid === callSid) return;
     const tickN = ticksForSid.current?.sid === callSid ? ticksForSid.current.n : 0;
     // Report the blocking gate WITHOUT spamming: after ~4.5s of blockage emit ONE
     // blocked_<reason> row (so even a short call tells us its first real blocker),
@@ -172,15 +173,16 @@ export function useConnectedCallLanding(): void {
       recordUpload,
       subscriptionFetchFailed: lastFetchFailed,
       alreadyFetchedSubscription: fetchedForSid.current === callSid,
-      alreadySentHome: homedForSid.current === callSid,
-      alreadyLanded: landedForSid.current === callSid,
+      alreadySentHome: homedSid === callSid,
+      alreadyLanded: landedSid === callSid,
     });
 
     switch (decision.kind) {
       case 'idle':
         // A definitive answer: record it once, and stop asking.
         if (decision.reason !== 'no_call' && decision.reason !== 'already_landed') {
-          if (decision.reason === 'already_on_target') landedForSid.current = callSid;
+          if (decision.reason === 'already_on_target')
+            useCallStore.getState().markLanded(callSid);
           logSkip(callSid, decision.reason, { pathname, role: role ?? null });
         }
         return;
@@ -193,7 +195,7 @@ export function useConnectedCallLanding(): void {
         return;
 
       case 'home':
-        homedForSid.current = callSid;
+        useCallStore.getState().markHomed(callSid);
         analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_HOME, {
           call_sid: callSid,
           from_pathname: pathname,
@@ -207,7 +209,7 @@ export function useConnectedCallLanding(): void {
         return;
 
       case 'land':
-        landedForSid.current = callSid;
+        useCallStore.getState().markLanded(callSid);
         analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_RECORD, {
           outcome: 'reached_record',
           trigger: 'global_landing',
@@ -234,5 +236,7 @@ export function useConnectedCallLanding(): void {
     keypadRouteMounted,
     keypadVisible,
     tick,
+    landedSid,
+    homedSid,
   ]);
 }

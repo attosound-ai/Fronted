@@ -32,6 +32,21 @@ TEST_FILES=(
   "src/features/messages/thread/__tests__/markdown.test.ts"
   "src/features/messages/effects/__tests__/effectCatalog.test.ts"
 )
+# A test file that is not in the list above never runs, and nobody notices:
+# three suites sat like that for weeks (found Sep 30 2026). Fail loudly.
+MISSING=""
+while IFS= read -r f; do
+  case " ${TEST_FILES[*]} " in
+    *" $f "*) ;;
+    *) MISSING+="  $f"$'\n' ;;
+  esac
+done < <(find src modules -name "*.test.ts" -not -path "*/node_modules/*" | sort)
+if [ -n "$MISSING" ]; then
+  echo "Test files that exist but are not registered in scripts/test-timeline.sh:" >&2
+  printf "%s" "$MISSING" >&2
+  exit 1
+fi
+
 FILES_JSON=""
 for f in "${TEST_FILES[@]}"; do
   FILES_JSON+="\"$PWD/$f\","

@@ -237,6 +237,7 @@
       "takeRemoteOnly": "Esta tomada terá só a outra pessoa. Sua voz não é gravada.",
       "takeMicOnly": "Esta tomada terá só a sua voz. A outra pessoa não é gravada.",
       "takeNothing": "Nada está selecionado, a tomada ficaria vazia. Ligue pelo menos uma.",
+      "noSignal": "Nenhum som está entrando nesta tomada. Confira se a voz certa está ligada abaixo.",
       "callMix": "Gravando seu microfone e a chamada. Ouça, fique com ele ou grave de novo antes de cair na faixa.",
       "unavailable": "O gravador não está nesta versão",
       "reverbPresets": {

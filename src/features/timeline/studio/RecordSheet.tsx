@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Switch,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import NativeSlider from '@react-native-community/slider';
 import {
   ChevronDown,
@@ -23,6 +30,9 @@ import { Text } from '@/components/ui/Text';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
 import { useMixerStore } from '@/stores/mixerStore';
+import { mixerService } from '@/lib/callAudio/mixerService';
+import { LiveWave } from './LiveWave';
+import { studioPrefs } from './studioPrefs';
 import {
   addMetersListener,
   addPreviewEndedListener,
@@ -179,6 +189,11 @@ export function RecordSheet({
   const [retryToken, setRetryToken] = useState(0);
   const inputLevel = useSharedValue(0);
   const outputLevel = useSharedValue(0);
+  // What is going into the take right now, 0..1: drives the live wave.
+  const waveLevel = useSharedValue(0);
+  const { width: windowWidth } = useWindowDimensions();
+  // True once a call take has run a few seconds with nothing audible in it.
+  const [noSignal, setNoSignal] = useState(false);
   const phaseRef = useRef<Phase>('arming');
   phaseRef.current = phase;
   const callRecorderRef = useRef(callRecorder);
@@ -186,6 +201,34 @@ export function RecordSheet({
   const takeRef = useRef<StopResult | null>(null);
   takeRef.current = take;
   const inCall = !!callRecorder;
+
+  // During a call take the level comes from the engine, per voice, and only
+  // the voices armed for the take count: the wave shows what the take will
+  // hold, so a flat ribbon means an empty take, while it can still be fixed.
+  useEffect(() => {
+    if (!inCall || phase !== 'recording') {
+      if (inCall) waveLevel.value = 0;
+      setNoSignal(false);
+      return;
+    }
+    let quietSince = Date.now();
+    const id = setInterval(() => {
+      void mixerService.getMixLevels().then((levels) => {
+        if (!levels) return;
+        const { mic, remote } = useMixerStore.getState().channels;
+        const rms = Math.max(
+          mic.record ? levels.mic : 0,
+          remote.record ? levels.remote : 0
+        );
+        // Speech sits around 0.05 to 0.3 RMS: lift it so it fills the ribbon.
+        const shown = Math.min(1, Math.pow(Math.max(0, rms) * 3.2, 0.6));
+        waveLevel.value = shown;
+        if (shown > 0.12) quietSince = Date.now();
+        setNoSignal(Date.now() - quietSince > 4000);
+      });
+    }, 90);
+    return () => clearInterval(id);
+  }, [inCall, phase, waveLevel]);
 
   const track = useCallback(
     (action: string, extra: Record<string, unknown> = {}) => {
@@ -276,6 +319,7 @@ export function RecordSheet({
     })();
     const meters = addMetersListener((m) => {
       inputLevel.value = withTiming(dbToLevel(m.inputPeakDb), { duration: 50 });
+      waveLevel.value = dbToLevel(m.inputPeakDb);
       outputLevel.value = withTiming(dbToLevel(m.outputPeakDb), { duration: 50 });
       if (m.state === 'recording') setElapsedMs(m.elapsedMs);
     });
@@ -485,6 +529,20 @@ export function RecordSheet({
         <Text style={styles.clock} maxFontSizeMultiplier={1.0}>
           {formatClock(elapsedMs)}
         </Text>
+
+        <LiveWave
+          level={waveLevel}
+          width={Math.max(120, windowWidth - 32)}
+          active={
+            inCall ? phase === 'recording' : phase === 'ready' || phase === 'recording'
+          }
+          still={studioPrefs.reduceAnimation()}
+        />
+        {noSignal && (
+          <Text variant="caption" style={styles.noSignal}>
+            {t('studio.record.noSignal')}
+          </Text>
+        )}
 
         {inCall ? (
           <CallSources locked={phase !== 'ready'} />
@@ -1096,6 +1154,11 @@ const styles = StyleSheet.create({
   },
   sourcesWarning: {
     color: '#FFB020',
+  },
+  noSignal: {
+    color: '#FFB020',
+    textAlign: 'center',
+    marginTop: 2,
   },
   disabled: {
     opacity: 0.5,

@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  DeviceEventEmitter,
+} from 'react-native';
+import { CALL_ROUTE_CHANGED_EVENT } from '@/lib/telemetry/callTelemetry';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -374,6 +381,20 @@ export function InCallTopBar() {
     const id = setTimeout(() => void captureDiag('auto_connect'), 6000);
     return () => clearTimeout(id);
   }, [activeCall?.state, captureDiag]);
+
+  // One more snapshot a moment after every route change (a headset joining or
+  // leaving), debounced, so the engine rates AFTER the switch are on record.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const sub = DeviceEventEmitter.addListener(CALL_ROUTE_CHANGED_EVENT, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void captureDiag('route_change'), 2500);
+    });
+    return () => {
+      sub.remove();
+      if (timer) clearTimeout(timer);
+    };
+  }, [captureDiag]);
 
   // CHIPMUNKS HUNTER (Aug 11). The pitched-audio bug is a TRANSIENT in the first
   // few seconds — the engine builds at a stale rate before the realign corrects it

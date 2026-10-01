@@ -16,7 +16,7 @@
  * Sentry with the last ~30 snapshots attached.
  */
 
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, DeviceEventEmitter, type AppStateStatus } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import * as Sentry from '@sentry/react-native';
 
@@ -39,6 +39,9 @@ import {
   formatRouteChangeRing,
   type DeviceSnapshot,
 } from './deviceSnapshot';
+
+/** Fired on every audio session change during a call (not the first observation). */
+export const CALL_ROUTE_CHANGED_EVENT = 'attoCallRouteChanged';
 
 const TICK_MS = 10_000;
 // Fast memory heartbeat cadence. The 10 s full tick misses a memory ramp that
@@ -259,24 +262,35 @@ function applyCallCadence(state: AppStateStatus): void {
   cadence = next;
   const bg = next === 'background';
   if (tickInterval) clearInterval(tickInterval);
-  tickInterval = setInterval(() => {
-    void snapshotAndEmit('tick');
-  }, bg ? BG_TICK_MS : TICK_MS);
+  tickInterval = setInterval(
+    () => {
+      void snapshotAndEmit('tick');
+    },
+    bg ? BG_TICK_MS : TICK_MS
+  );
   if (memHeartbeatInterval) clearInterval(memHeartbeatInterval);
-  memHeartbeatInterval = setInterval(() => {
-    void emitMemHeartbeat();
-  }, bg ? BG_MEM_HEARTBEAT_MS : MEM_HEARTBEAT_MS);
+  memHeartbeatInterval = setInterval(
+    () => {
+      void emitMemHeartbeat();
+    },
+    bg ? BG_MEM_HEARTBEAT_MS : MEM_HEARTBEAT_MS
+  );
   if (sessionWatchInterval) clearInterval(sessionWatchInterval);
-  sessionWatchInterval = setInterval(() => {
-    void watchAudioSession();
-  }, bg ? BG_SESSION_WATCH_MS : SESSION_WATCH_MS);
+  sessionWatchInterval = setInterval(
+    () => {
+      void watchAudioSession();
+    },
+    bg ? BG_SESSION_WATCH_MS : SESSION_WATCH_MS
+  );
   cadenceListener?.(bg);
   analytics.capture(ANALYTICS_EVENTS.CALL.CADENCE_CHANGED, { cadence: next });
 }
 
 let cadenceListener: ((background: boolean) => void) | null = null;
 /** useTwilioVoice registers its stats sampler cadence here. */
-export function registerCallCadenceListener(l: ((background: boolean) => void) | null): void {
+export function registerCallCadenceListener(
+  l: ((background: boolean) => void) | null
+): void {
   cadenceListener = l;
 }
 
@@ -389,7 +403,8 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
     const aliveAt = ts(native?.prevNativeAliveAt);
     const bgAt = ts(native?.prevNativeBgAt);
     const now = Date.now() / 1000;
-    const gap = (v: number | undefined) => (ts(v) ? Math.round(now - (v as number)) : null);
+    const gap = (v: number | undefined) =>
+      ts(v) ? Math.round(now - (v as number)) : null;
     analytics.capture(ANALYTICS_EVENTS.CALL.DIED_UNREPORTED, {
       call_sid: m.callSid ?? null,
       // How far the call got before the process died.
@@ -497,6 +512,12 @@ async function watchAudioSession(): Promise<void> {
       micLost,
     });
     if (routeHistory.length > ROUTE_HISTORY_MAX) routeHistory.shift();
+
+    // Tell the in call bar, so it snapshots the engine AFTER the change. On
+    // Sep 30 2026 a headset joined mid call, the far party heard a robot, and
+    // the only engine snapshot was from before the switch: nothing could say
+    // whether the engines had followed the new rate.
+    if (!isBaseline) DeviceEventEmitter.emit(CALL_ROUTE_CHANGED_EVENT, routeReason);
 
     analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_SESSION_CHANGED, {
       // true = first observation of this call, i.e. the state the audio device

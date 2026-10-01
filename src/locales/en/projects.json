@@ -237,6 +237,7 @@
       "takeRemoteOnly": "This take will hold only the other person. Your voice is not recorded.",
       "takeMicOnly": "This take will hold only your voice. The other person is not recorded.",
       "takeNothing": "Nothing is selected, so the take would be empty. Turn on at least one.",
+      "noSignal": "No sound is reaching this take. Check that the right voice is switched on below.",
       "callMix": "Recording your mic and the call. Listen, keep it or record again before it lands on the track.",
       "unavailable": "The recorder is not in this build",
       "reverbPresets": {

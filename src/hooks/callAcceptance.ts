@@ -15,6 +15,12 @@
  *  - the call has simply lasted: a facility drops an unaccepted call well
  *    before two minutes, so one still connected after that was accepted.
  *
+ * The elapsed rule is only consulted when something else re-evaluates the
+ * landing (the app coming to the foreground, the keypad closing). No timer
+ * fires at the two minute mark on purpose: moving someone to the recorder
+ * while they are doing something else on a call that needs no digit would
+ * be the app acting on its own.
+ *
  * Pure on purpose: every case is a test, none is found on a live call.
  */
 

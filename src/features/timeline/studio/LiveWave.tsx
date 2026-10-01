@@ -16,17 +16,22 @@ import Svg, { Path } from 'react-native-svg';
  * little fainter than the one before). The ribbon's height IS the level of
  * what is being recorded, so a flat line means nothing is going into the
  * take. That is the point of it: on Sep 30 2026 the client recorded fifteen
- * seconds of near silence and only found out afterwards.
+ * seconds and could not tell what, if anything, was going in.
  *
- * All the drawing runs on the UI thread (Reanimated worklets), so it keeps
- * moving at display rate without touching the JS thread during a call.
+ * Cost matters here because it runs during a call. Everything is computed on
+ * the UI thread in ONE worklet, at most 40 times a second, only while the
+ * sheet is on screen, and the sixteen lines are drawn as six paths (the front
+ * line plus five bands of three) so each update commits six nodes, not sixteen.
  */
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-const LINES = 16;
-const POINTS = 44;
+const BANDS = 5;
+const LINES_PER_BAND = 3;
+const LINES = 1 + BANDS * LINES_PER_BAND;
+const POINTS = 36;
 const HEIGHT = 120;
+const MIN_STEP_S = 1 / 40;
 
 interface Props {
   /** 0..1, what is going into the take right now. */
@@ -34,80 +39,111 @@ interface Props {
   width: number;
   /** While false the ribbon rests as a flat line. */
   active: boolean;
-  /** Respect the editor's reduce animation preference. */
+  /** Draws only while true (the sheet is on screen). */
+  running: boolean;
+  /** Respect the editor's reduce animation preference: reacts, does not travel. */
   still?: boolean;
 }
 
-export function LiveWave({ level, width, active, still = false }: Props) {
+export function LiveWave({ level, width, active, running, still = false }: Props) {
   const phase = useSharedValue(0);
   // Eased level, so the ribbon breathes instead of flickering with each sample.
   const eased = useSharedValue(0);
   const on = useSharedValue(active ? 1 : 0);
+  // Bumped at most MIN_STEP_S apart: the only thing the paths depend on.
+  const step = useSharedValue(0);
+  const sinceStep = useSharedValue(0);
   useEffect(() => {
     on.value = withTiming(active ? 1 : 0, { duration: 260 });
   }, [active, on]);
 
-  useFrameCallback((frame) => {
-    const dt = Math.min(64, frame.timeSincePreviousFrame ?? 16) / 1000;
+  const frame = useFrameCallback((info) => {
+    const dt = Math.min(64, info.timeSincePreviousFrame ?? 16) / 1000;
     // Rise fast, fall slowly: speech reads as a living shape, not a strobe.
     const target = level.value * on.value;
     const k = target > eased.value ? 14 : 4.5;
     eased.value += (target - eased.value) * Math.min(1, k * dt);
     if (!still) phase.value += dt * (1.1 + eased.value * 2.4);
+    sinceStep.value += dt;
+    if (sinceStep.value >= MIN_STEP_S) {
+      sinceStep.value = 0;
+      step.value += 1;
+    }
+  }, false);
+  useEffect(() => {
+    frame.setActive(running);
+    return () => frame.setActive(false);
+  }, [running, frame]);
+
+  // Index 0 is the front line; 1..BANDS are the bands, nearest first.
+  const paths = useDerivedValue(() => {
+    'worklet';
+    // Read so the worklet reruns on every step.
+    const tick = step.value;
+    const out: string[] = [];
+    if (tick < 0 || width <= 0) return out;
+    const mid = HEIGHT / 2;
+    // A floor keeps a hint of the ribbon alive at silence without faking sound.
+    const amp = HEIGHT * 0.36 * (0.035 + eased.value);
+    const lvl = eased.value;
+    const ph = phase.value;
+    let band = '';
+    for (let line = 0; line < LINES; line++) {
+      // Depth: 0 is the front line, 1 the farthest.
+      const depth = line / (LINES - 1);
+      let d = '';
+      for (let p = 0; p <= POINTS; p++) {
+        const x = p / POINTS;
+        // The fan: flat on the left, fully open from the middle on.
+        const t = Math.min(1, Math.max(0, (x - 0.12) / 0.5));
+        const open = t * t * (3 - 2 * t);
+        // Each line trails the one in front and sits a little higher and
+        // smaller, which is what reads as depth.
+        const wave =
+          Math.sin(x * 5.2 - ph - depth * 1.15) * (1 - depth * 0.3) +
+          Math.sin(x * 9.1 - ph * 1.7 - depth * 0.6) * 0.22 * lvl;
+        const y = mid + amp * open * wave - depth * open * HEIGHT * 0.16;
+        // Tenths of a point, without toFixed (it dominates the cost).
+        d +=
+          (p === 0 ? 'M' : 'L') +
+          Math.round(x * width * 10) / 10 +
+          ' ' +
+          Math.round(y * 10) / 10;
+      }
+      if (line === 0) {
+        out.push(d);
+      } else {
+        band += d;
+        if (line % LINES_PER_BAND === 0) {
+          out.push(band);
+          band = '';
+        }
+      }
+    }
+    return out;
   });
 
   return (
     <View style={[styles.box, { width }]} pointerEvents="none">
       <Svg width={width} height={HEIGHT}>
-        {Array.from({ length: LINES }, (_, i) => (
-          <Line key={i} index={i} width={width} phase={phase} level={eased} />
+        {Array.from({ length: BANDS }, (_, i) => BANDS - i).map((band) => (
+          <Band key={band} index={band} paths={paths} />
         ))}
+        <Band index={0} paths={paths} />
       </Svg>
     </View>
   );
 }
 
-function Line({
-  index,
-  width,
-  phase,
-  level,
-}: {
-  index: number;
-  width: number;
-  phase: SharedValue<number>;
-  level: SharedValue<number>;
-}) {
-  // Depth: 0 is the front line, 1 the farthest.
-  const depth = index / (LINES - 1);
-  const d = useDerivedValue(() => {
-    'worklet';
-    const mid = HEIGHT / 2;
-    // A floor keeps a hint of the ribbon alive at silence without faking sound.
-    const amp = HEIGHT * 0.36 * (0.035 + level.value);
-    let path = '';
-    for (let p = 0; p <= POINTS; p++) {
-      const x = p / POINTS;
-      // The fan: flat on the left, fully open from the middle on.
-      const t = Math.min(1, Math.max(0, (x - 0.12) / 0.5));
-      const open = t * t * (3 - 2 * t);
-      // Each line trails the one in front and sits a little higher and smaller,
-      // which is what reads as depth.
-      const wave =
-        Math.sin(x * 5.2 - phase.value - depth * 1.15) * (1 - depth * 0.3) +
-        Math.sin(x * 9.1 - phase.value * 1.7 - depth * 0.6) * 0.22 * level.value;
-      const y = mid + amp * open * wave - depth * open * HEIGHT * 0.16;
-      path += (p === 0 ? 'M' : 'L') + (x * width).toFixed(1) + ' ' + y.toFixed(1);
-    }
-    return path;
-  });
-  const animatedProps = useAnimatedProps(() => ({ d: d.value }));
+function Band({ index, paths }: { index: number; paths: SharedValue<string[]> }) {
+  const animatedProps = useAnimatedProps(() => ({ d: paths.value[index] ?? '' }));
+  const front = index === 0;
   return (
     <AnimatedPath
       animatedProps={animatedProps}
       stroke="#FFFFFF"
-      strokeOpacity={index === 0 ? 1 : 0.62 * (1 - depth) + 0.06}
-      strokeWidth={index === 0 ? 2.4 : 1}
+      strokeOpacity={front ? 1 : 0.6 - (index - 1) * 0.115}
+      strokeWidth={front ? 2.4 : 1}
       strokeLinecap="round"
       strokeLinejoin="round"
       fill="none"

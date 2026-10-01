@@ -5692,7 +5692,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..44331dba796af93c8af9fce5c03c1b86
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
 diff --git a/ios/TwilioVoiceReactNative.h b/ios/TwilioVoiceReactNative.h
-index 93105f992e97bb0b6bb478c281923a10ff710e90..117aaa75f9a029104873f76ef85d7fccd753f0f6 100644
+index 93105f992e97bb0b6bb478c281923a10ff710e90..87cf42e786f9968d8ec43e3ec963b8242da1ae44 100644
 --- a/ios/TwilioVoiceReactNative.h
 +++ b/ios/TwilioVoiceReactNative.h
 @@ -80,3 +80,16 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
@@ -5705,7 +5705,7 @@ index 93105f992e97bb0b6bb478c281923a10ff710e90..117aaa75f9a029104873f76ef85d7fcc
 + * tell an inbound call was already accepted however the digit was pressed.
 + * Keys: atto_dtmf_call_sid, atto_dtmf_source ("callkit" | "app"), atto_dtmf_at.
 + */
-+static inline void AttoRememberDtmf(NSString * _Nullable callSid, NSString * _Nonnull source) {
++static inline void AttoRememberDtmf(NSString *callSid, NSString *source) {
 +    if (callSid.length == 0) return;
 +    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 +    [defaults setObject:callSid forKey:@"atto_dtmf_call_sid"];

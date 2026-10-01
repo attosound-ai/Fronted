@@ -223,6 +223,8 @@ export function RecordSheet({
         // Speech sits around 0.05 to 0.3 RMS: lift it so it fills the ribbon.
         const shown = Math.min(1, Math.pow(Math.max(0, rms) * 3.2, 0.6));
         waveLevel.value = shown;
+        // 0.12 on this curve is an RMS near 0.009 (about 41 dB under full
+        // scale): line hiss stays under it, a voice does not.
         if (shown > 0.12) quietSince = Date.now();
         setNoSignal(Date.now() - quietSince > 4000);
       });
@@ -536,6 +538,7 @@ export function RecordSheet({
           active={
             inCall ? phase === 'recording' : phase === 'ready' || phase === 'recording'
           }
+          running={visible}
           still={studioPrefs.reduceAnimation()}
         />
         {noSignal && (

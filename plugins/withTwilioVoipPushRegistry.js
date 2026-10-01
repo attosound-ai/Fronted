@@ -764,6 +764,21 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   func provider(_ provider: CXProvider, perform action: CXPlayDTMFCallAction) {
     if let call = heldCalls[action.callUUID.uuidString] {
       call.sendDigits(action.digits)
+      // ATTO (Sep 30 2026): the digit pressed on the SYSTEM call screen of a
+      // cold answered call. JS never saw it, kept waiting for "press 1" and
+      // never opened the recorder (the client's 15 minute call). Same keys
+      // the Twilio module writes (AttoRememberDtmf); JS reads them in
+      // useCallAcceptance.
+      // Typed as optional so this compiles whether the SDK declares sid
+      // as String or String?.
+      let maybeSid: String? = call.sid
+      if let sid = maybeSid, !sid.isEmpty {
+        let defaults = UserDefaults.standard
+        defaults.set(sid, forKey: "atto_dtmf_call_sid")
+        defaults.set("callkit_cold", forKey: "atto_dtmf_source")
+        defaults.set(Date().timeIntervalSince1970, forKey: "atto_dtmf_at")
+      }
+      mark("cold_dtmf_forwarded")
       action.fulfill()
     } else { action.fail() }
   }

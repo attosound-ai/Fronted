@@ -421,7 +421,9 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // the SAME persisted flag the module's -init reads; done via the module's
     // @try/@catch'd ObjC class method so a throw can never reach Swift (the b141
     // crash class); success judged by reading the installed device's class back.
-    if UserDefaults.standard.bool(forKey: "atto_audio_injection_enabled") {
+    // Oct 3 2026: the injection engine is the device for every user (no
+    // cohort flag), so the cold path installs it always, like the module.
+    if true {
       // Swift.type: the handler parameter named type (PKPushType) shadows type(of:).
       let beforeCls = String(describing: Swift.type(of: TwilioVoiceSDK.audioDevice))
       if beforeCls == "AttoAudioEngineDevice" {

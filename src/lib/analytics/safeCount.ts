@@ -22,7 +22,7 @@ export function safeCount(
     source: string;
     /** Extra debugging context — userId, profileId, prevValue, action, etc. */
     extra?: Record<string, unknown>;
-  },
+  }
 ): number {
   if (Number.isFinite(next) && next >= 0) return next;
 

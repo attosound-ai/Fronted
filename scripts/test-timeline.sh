@@ -25,6 +25,7 @@ TEST_FILES=(
   "src/features/feed/publish/__tests__/publishRecovery.test.ts"
   "src/hooks/__tests__/callAcceptance.test.ts"
   "src/components/call/__tests__/callBarTransport.test.ts"
+  "src/lib/analytics/__tests__/fixedFeatures.test.ts"
   "src/hooks/__tests__/callLandingModel.test.ts"
   "src/features/feed/__tests__/mentions.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"

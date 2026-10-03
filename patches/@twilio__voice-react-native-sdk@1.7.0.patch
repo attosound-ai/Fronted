@@ -145,10 +145,10 @@ index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..621ad53196db6a7aaa8789a52179c3573857accd
+index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d19444088f7e
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3806 @@
+@@ -0,0 +1,3811 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -1045,7 +1045,12 @@ index 0000000000000000000000000000000000000000..621ad53196db6a7aaa8789a52179c357
 + * never be touched from a render or record callback.
 + */
 +- (BOOL)renderFormatRecheckEnabled {
-+    return [[NSUserDefaults standardUserDefaults] boolForKey:kAttoRenderFormatRecheckKey];
++    // ATTO (Oct 3 2026): always on, for every user, no remote flag. Proven on
++    // David's iPhone with AirPods Max: without it a call on Bluetooth ran the
++    // engines at 48 kHz against a 24 kHz session and the far voice sounded like
++    // a monster; with it the engines follow the session and both directions
++    // sounded normal (David listened to the uplink recordings).
++    return YES;
 +}
 +
 +/*
@@ -5808,7 +5813,7 @@ index 93105f992e97bb0b6bb478c281923a10ff710e90..87cf42e786f9968d8ec43e3ec963b824
 +    [defaults setDouble:[[NSDate date] timeIntervalSince1970] forKey:@"atto_dtmf_at"];
 +}
 diff --git a/ios/TwilioVoiceReactNative.m b/ios/TwilioVoiceReactNative.m
-index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c63b3d0a25 100644
+index 9832b501acdabd9720631b6af5969760802dbb55..8d36d242ef56ca1cb6fa40307f46282a2ace1f38 100644
 --- a/ios/TwilioVoiceReactNative.m
 +++ b/ios/TwilioVoiceReactNative.m
 @@ -11,6 +11,7 @@
@@ -5829,7 +5834,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c6
  
  @import TwilioVoice;
  
-@@ -90,14 +94,74 @@ - (instancetype)init {
+@@ -90,14 +94,75 @@ - (instancetype)init {
          NSString *reactNativeSdkVersion = kTwilioVoiceReactNativeReactNativeVoiceSDKVer;
          setenv("com.twilio.voice.env.sdk.version", [reactNativeSdkVersion UTF8String], 1);
  
@@ -5858,8 +5863,9 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c6
 +            // this init time and mismatched the live CallKit call rate. That is fixed in
 +            // AttoAudioEngineDevice by rebuilding the engines against the live format at
 +            // startCapturing/startRendering. See project_injection_device_not_pumped.
-+            BOOL attoInjectionEnabled = [[NSUserDefaults standardUserDefaults]
-+                                         boolForKey:@"atto_audio_injection_enabled"];
++            // ATTO (Oct 3 2026): the injection engine is the audio device for
++            // EVERY user now (no cohort flag): one behaviour for everyone.
++            BOOL attoInjectionEnabled = YES;
 +            if (attoInjectionEnabled) {
 +                sTwilioAudioDevice = (TVODefaultAudioDevice *)[AttoAudioEngineDevice sharedDevice];
 +                TwilioVoiceSDK.audioDevice = sTwilioAudioDevice;
@@ -5906,7 +5912,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c6
      }
  
      return self;
-@@ -142,6 +206,137 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
+@@ -142,6 +207,137 @@ + (TVODefaultAudioDevice *)twilioAudioDevice {
      return sTwilioAudioDevice;
  }
  
@@ -6044,7 +6050,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c6
  - (void)handleRouteChange:(NSNotification *)notification {
      [self availableAudioDevices];
  
-@@ -665,8 +860,31 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
+@@ -665,8 +861,31 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
                    resolver:(RCTPromiseResolveBlock)resolve
                    rejecter:(RCTPromiseRejectBlock)reject)
  {
@@ -6077,7 +6083,7 @@ index 9832b501acdabd9720631b6af5969760802dbb55..c947e70b3c80f8bbde7c1afb3aae24c6
          resolve(nil);
      } else {
          reject(kTwilioVoiceReactNativeVoiceError, [NSString stringWithFormat:@"Call with %@ not found", uuid], nil);
-@@ -776,6 +994,9 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
+@@ -776,6 +995,9 @@ - (void)asyncPushRegistryInitialization:(dispatch_time_t)timeout
      TVOCall *call = self.callMap[uuid];
      if (call) {
          [call sendDigits:digits];

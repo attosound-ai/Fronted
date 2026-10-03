@@ -1,5 +1,12 @@
+import { useFeatureFlag as usePostHogFeatureFlag } from 'posthog-react-native';
+import { fixedFeature } from './fixedFeatures';
+
 /**
- * Re-export PostHog's useFeatureFlag hook so consumers import from
- * `@/lib/analytics` instead of coupling directly to the SDK.
+ * PostHog's useFeatureFlag, except for the keys fixed for everyone in
+ * fixedFeatures.ts, which always return their fixed value.
  */
-export { useFeatureFlag } from 'posthog-react-native';
+export function useFeatureFlag(key: string): ReturnType<typeof usePostHogFeatureFlag> {
+  const remote = usePostHogFeatureFlag(key);
+  const fixed = fixedFeature(key);
+  return fixed === undefined ? remote : fixed;
+}

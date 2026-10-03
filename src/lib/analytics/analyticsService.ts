@@ -5,6 +5,7 @@
  * touches PostHog directly, keeping the coupling in one place.
  */
 
+import { fixedFeature } from './fixedFeatures';
 import type PostHog from 'posthog-react-native';
 import * as Application from 'expo-application';
 import { mmkvStorage } from '@/lib/storage/mmkv';
@@ -104,10 +105,14 @@ class AnalyticsService {
   // ── Feature flags ───────────────────────────────
 
   isFeatureEnabled(key: string): boolean | undefined {
+    const fixed = fixedFeature(key);
+    if (fixed !== undefined) return fixed;
     return this.posthog?.isFeatureEnabled(key);
   }
 
   getFeatureFlag(key: string) {
+    const fixed = fixedFeature(key);
+    if (fixed !== undefined) return fixed;
     return this.posthog?.getFeatureFlag(key);
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DeviceEventEmitter, StyleSheet } from 'react-native';
+import { AppState, DeviceEventEmitter, StyleSheet } from 'react-native';
 import { Tabs, router } from 'expo-router';
 import { House, CirclePlay, MessageCircle, Search } from 'lucide-react-native';
 import { analytics } from '@/lib/analytics';
@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useTwilioVoice';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
+import { phoenixSocket } from '@/lib/api/phoenixSocket';
 import { useUnreadCount } from '@/features/notifications/hooks/useUnreadCount';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { useConnectedCallLanding } from '@/hooks/useConnectedCallLanding';
@@ -107,6 +108,17 @@ export default function TabsLayout() {
     }
     return () => disconnectSocket();
   }, [isAuthenticated, connectSocket, disconnectSocket]);
+
+  // Realtime must survive the background: on resume refresh the socket's
+  // token and reconnect if it dropped (client, Oct 3 2026: messages only
+  // showed up after closing the app).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void phoenixSocket.resume();
+    });
+    return () => sub.remove();
+  }, [isAuthenticated]);
 
   // Join user-level channel for real-time conversation list updates
   useUserChannel();

@@ -114,6 +114,15 @@ class PhoenixSocketManager {
   private userChannelSpec: { userId: string; handlers: UserChannelHandlers } | null =
     null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  // The token phoenix sends on EVERY (re)connect. phoenix reconnects on its
+  // own after a drop and used to resend the token captured when the socket
+  // was built: once it expired (15 min) every retry was refused with
+  // :invalid_token and realtime stayed dead until the app was closed. The
+  // client saw exactly that on Oct 3 2026 (five refusals in the chat-service
+  // log at 17:05, the same seconds as his disconnects). Now params read this
+  // field, and a drop refreshes it before phoenix retries.
+  private latestToken: string | null = null;
+  private refreshingToken: Promise<void> | null = null;
   private hasConnectedOnce = false;
   onConnectionChange?: (connected: boolean) => void;
 
@@ -146,9 +155,12 @@ class PhoenixSocketManager {
     const token = await ensureFreshToken();
     if (!token) return;
 
+    this.latestToken = token;
+
     return new Promise<void>((resolve) => {
       const socket = new Socket(this.getSocketUrl(), {
-        params: { token },
+        // A function: phoenix calls it on every connect attempt.
+        params: () => ({ token: this.latestToken ?? token }),
         reconnectAfterMs: (tries: number) => Math.min(1000 * 2 ** tries, 30_000),
         heartbeatIntervalMs: 30_000,
       });
@@ -165,9 +177,18 @@ class PhoenixSocketManager {
         this.onConnectionChange?.(true);
       });
 
-      socket.onClose(() => {
-        track('messages_websocket_disconnected', { replaced: this.socket !== socket });
+      socket.onClose((event: { code?: number } | undefined) => {
+        const replaced = this.socket !== socket;
+        const exp = this.latestToken ? decodeJwtExp(this.latestToken) : null;
+        const tokenExpired = exp !== null && exp * 1000 - Date.now() < 60_000;
+        track('messages_websocket_disconnected', {
+          replaced,
+          close_code: event?.code ?? null,
+          token_expired: tokenExpired,
+        });
         this.onConnectionChange?.(false);
+        // Make sure phoenix's next retry carries a valid token.
+        if (!replaced && tokenExpired) void this.refreshLatestToken('close');
       });
 
       // Auth-style errors (`:invalid_token` from chat-service) come through
@@ -180,7 +201,11 @@ class PhoenixSocketManager {
           typeof err === 'string' ? err : (err as { message?: string })?.message;
         if (msg && /invalid_token|unauthor/i.test(msg)) {
           void this.refreshAndReconnect();
+          return;
         }
+        // A refused handshake reaches here as a bare error event, without
+        // the reason. If our token is expired that is the reason.
+        void this.refreshLatestToken('error');
       });
 
       socket.connect();
@@ -189,6 +214,43 @@ class PhoenixSocketManager {
       // Fallback: resolve after 3s so the app isn't blocked if the server is slow
       setTimeout(resolve, 3_000);
     });
+  }
+
+  /**
+   * Refresh the token phoenix will send on its next retry, if it is expired
+   * or about to. One refresh at a time; never tears the socket down.
+   */
+  private refreshLatestToken(source: 'close' | 'error' | 'resume'): Promise<void> {
+    if (this.refreshingToken) return this.refreshingToken;
+    const exp = this.latestToken ? decodeJwtExp(this.latestToken) : null;
+    if (exp !== null && exp * 1000 - Date.now() > 60_000) return Promise.resolve();
+    this.refreshingToken = ensureFreshToken()
+      .then((fresh) => {
+        if (fresh && fresh !== this.latestToken) {
+          this.latestToken = fresh;
+          this.scheduleProactiveRefresh(fresh);
+          track('messages_websocket_token_refreshed', { source });
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.refreshingToken = null;
+      });
+    return this.refreshingToken;
+  }
+
+  /**
+   * Coming back to the foreground: timers did not run in the background, so
+   * the token may have expired while phoenix sat disconnected. Refresh it and,
+   * if the socket is not up, reconnect now instead of waiting out the backoff.
+   */
+  async resume(): Promise<void> {
+    if (!this.socket) return;
+    await this.refreshLatestToken('resume');
+    if (!this.socket.isConnected()) {
+      track('messages_websocket_resume_reconnect', {});
+      await this.refreshAndReconnect();
+    }
   }
 
   /**

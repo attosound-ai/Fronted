@@ -214,7 +214,6 @@ function MessageRowInner({
   avatarFor,
   onOpenThread,
   threadActions = null,
-  onReplayEffect,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
   // Bubble size, only tracked for creator bubbles: the tail continues the
@@ -310,7 +309,33 @@ function MessageRowInner({
     [buzz, fireDoubleTap]
   );
 
-  const gesture = useMemo(() => Gesture.Simultaneous(pan, doubleTap), [pan, doubleTap]);
+  // One tap opens the message's thread, the way Slack does it; there is no
+  // Reply or Replay button under the bubble any more (David, Oct 3 2026).
+  // Exclusive: the single tap waits for the double tap (tapback) to fail.
+  // Photos, videos and audio keep their own tap (viewer, play).
+  const openThread = useCallback(() => {
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.BUBBLE_GESTURE, {
+      gesture: 'tap_open_thread',
+      message_id: message._id,
+    });
+    onOpenThread?.(String(message._id));
+  }, [onOpenThread, message._id]);
+  const tapToThread =
+    !!onOpenThread && !message.isDeleted && !isMediaContentType(message.contentType);
+  const singleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .enabled(tapToThread)
+        .maxDuration(350)
+        .onEnd((_e, success) => {
+          if (success) runOnJS(openThread)();
+        }),
+    [tapToThread, openThread]
+  );
+  const gesture = useMemo(
+    () => Gesture.Simultaneous(pan, Gesture.Exclusive(doubleTap, singleTap)),
+    [pan, doubleTap, singleTap]
+  );
 
   const slide = useAnimatedStyle(() => ({
     transform: [{ translateX: drag.value - timesReveal.value * TIMES_REVEAL_PX }],
@@ -346,7 +371,6 @@ function MessageRowInner({
   // the client key so the optimistic row and its server copy count as one.
   const effect = effectFromMetadata(message.metadata);
   const effectId = String(message.clientKey ?? message._id);
-  const [replayKey, setReplayKey] = useState(0);
   const [playEffectOnMount] = useState(() => {
     if (!effect || effect.kind !== 'bubble') return false;
     if (hasEffectPlayed(effectId)) return false;
@@ -361,10 +385,6 @@ function MessageRowInner({
     markEffectPlayed(effectId);
     return true;
   });
-  const replay = useCallback(() => {
-    if (effect?.kind === 'bubble') setReplayKey((k) => k + 1);
-    else onReplayEffect?.(message);
-  }, [effect, message, onReplayEffect]);
 
   const isMedia = isMediaContentType(message.contentType);
   const isVisual = isVisualContentType(message.contentType);
@@ -577,8 +597,6 @@ function MessageRowInner({
     </View>
   );
 
-  const showReplay = !!effect && threadReplies === 0 && hideQuoteFor === null;
-
   const content = (
     <View style={[styles.stack, isOwn ? styles.stackOwn : styles.stackOther]}>
       <View
@@ -588,12 +606,7 @@ function MessageRowInner({
         onLayout={onBubbleLayout}
       >
         {effect?.kind === 'bubble' ? (
-          <BubbleEffect
-            key={replayKey}
-            name={effect.name}
-            messageId={effectId}
-            play={playEffectOnMount || replayKey > 0}
-          >
+          <BubbleEffect name={effect.name} messageId={effectId} play={playEffectOnMount}>
             {bubble}
           </BubbleEffect>
         ) : (
@@ -717,33 +730,7 @@ function MessageRowInner({
           ) : null}
         </View>
       ) : null}
-      {/* Replay on the left in white (it is a button), Read on the right,
-          as far apart as the bubble allows, on ONE line (David, Oct 3 2026:
-          Replay used to sit on top of Read). */}
-      {showReplay ? (
-        <View style={[styles.footerLine, hasReactions && styles.readLabelAfterReactions]}>
-          <Pressable
-            onPress={replay}
-            hitSlop={8}
-            style={styles.replayButton}
-            accessibilityRole="button"
-            accessibilityLabel={labels.replay}
-          >
-            <RNText style={styles.replayText} maxFontSizeMultiplier={1.1}>
-              {labels.replay}
-            </RNText>
-          </Pressable>
-          {readLabel ? (
-            <Animated.Text
-              entering={FadeIn.duration(220)}
-              style={styles.readLabelInline}
-              maxFontSizeMultiplier={1.0}
-            >
-              {readLabel}
-            </Animated.Text>
-          ) : null}
-        </View>
-      ) : readLabel && threadReplies === 0 ? (
+      {readLabel && threadReplies === 0 ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
           style={[styles.readLabel, hasReactions && styles.readLabelAfterReactions]}

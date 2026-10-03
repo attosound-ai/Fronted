@@ -66,6 +66,8 @@ export function AccountSwitcherBottomSheet({
         });
         return;
       }
+      // Already explained with a toast and removed from the list.
+      if ((err as { code?: string })?.code === 'TARGET_ACCOUNT_GONE') return;
       throw err;
     } finally {
       setSwitching(null);

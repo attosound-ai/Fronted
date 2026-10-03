@@ -226,7 +226,8 @@
     "stayOnCall": "Continuar na chamada",
     "title": "Trocar de conta",
     "activeNow": "Ativa agora",
-    "addAccount": "Adicionar conta"
+    "addAccount": "Adicionar conta",
+    "accountGone": "@{{username}} não existe mais. Foi removida deste telefone."
   },
   "preview": {
     "nameFallback": "Seu nome"

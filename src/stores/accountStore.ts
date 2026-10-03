@@ -18,7 +18,13 @@ import {
   getActiveAccountId,
 } from '@/lib/auth/storage';
 import { queryClient } from '@/lib/queryClient';
-import { pauseRequests, resumeRequests, clearRefreshQueue } from '@/lib/api/client';
+import {
+  apiClient,
+  pauseRequests,
+  resumeRequests,
+  clearRefreshQueue,
+} from '@/lib/api/client';
+import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import type { TokenPair, User } from '@/types';
 
 export interface AccountEntry {
@@ -32,6 +38,30 @@ export interface AccountEntry {
  * incident — our own identity drifted (UI says account A, token is account
  * B, so the switch became a self-switch the server rightly refuses).
  */
+/** True only when the server answers 404 for that user's public profile. */
+async function accountIsGone(userId: number): Promise<boolean> {
+  try {
+    await apiClient.get(API_ENDPOINTS.USERS.PROFILE(userId));
+    return false;
+  } catch (err) {
+    return err instanceof AxiosError && err.response?.status === 404;
+  }
+}
+
+/**
+ * The server says the account we tried to switch to no longer exists. It is
+ * the only definitive signal that a stored account is gone for good: Stephanie
+ * (Oct 3 2026) kept the deleted representative arami in the switcher for two
+ * weeks and every tap failed in silence, because the ghost purge never runs
+ * when the linked-accounts list comes back empty (an orphaned creator).
+ */
+export function isTargetGoneError(error: unknown): boolean {
+  if (!(error instanceof AxiosError)) return false;
+  if (error.response?.status !== 404) return false;
+  const body = error.response?.data as { error?: string } | undefined;
+  return typeof body?.error === 'string' && body.error.includes('target user not found');
+}
+
 function isNotLinkedError(error: unknown): boolean {
   if (!(error instanceof AxiosError)) return false;
   if (error.response?.status !== 403) return false;
@@ -362,6 +392,7 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
 
         // Rollback: restore the previous identity wholesale.
         console.warn('[AccountSwitch] Failed, rolling back:', error);
+        const targetGone = isTargetGoneError(error);
         bumpSessionEpoch();
         if (prevToken) await authStorage.setToken(prevToken);
         if (prevRefreshToken) await authStorage.setRefreshToken(prevRefreshToken);
@@ -376,6 +407,30 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         }
         resumeRequests(); // Unblock requests even on failure
         useAccountSwitchAnimationStore.getState().endFlip();
+        if (targetGone) {
+          // Drop it from this phone and say so, instead of failing silently
+          // on every tap.
+          const gone = get().accounts.find((a) => Number(a.user.id) === Number(userId));
+          await get().removeAccount(userId);
+          analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
+            anchor_user_id: prevActiveId,
+            outcome: 'purged_target_gone',
+            purged_user_ids: [userId],
+          });
+          const { showToast } = await import('@/components/ui/Toast');
+          const i18n = (await import('@/lib/i18n')).default;
+          showToast(
+            i18n.t('profile:accountSwitcher.accountGone', {
+              username: gone?.user.username ?? '',
+              defaultValue:
+                'That account no longer exists. It was removed from this phone.',
+            }),
+            'warning'
+          );
+          const err = new Error('TARGET_ACCOUNT_GONE');
+          (err as Error & { code?: string }).code = 'TARGET_ACCOUNT_GONE';
+          throw err;
+        }
       }
     },
 
@@ -564,12 +619,32 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
               // logged into — one weak signal must not erase it. Keep everything
               // and let the next successful load reconcile.
               if (linkedUsers.length === 0) {
+                // An empty list is a weak signal, so nothing is purged on it.
+                // But an orphaned creator (its representative was deleted)
+                // ALWAYS gets an empty list, and its deleted representative
+                // stayed in the switcher forever (aramis, Oct 3 2026). Ask the
+                // server about each other stored account: a 404 on its public
+                // profile is definitive, anything else keeps it.
+                const gone: number[] = [];
+                for (const e of uniqueEntries) {
+                  if (Number(e.user.id) === tokenUserId) continue;
+                  if (await accountIsGone(Number(e.user.id)))
+                    gone.push(Number(e.user.id));
+                }
+                if (getSessionEpoch() !== epochAtStart) continue; // stale — redo
+                for (const id of gone) await clearAccount(id);
+                validEntries = uniqueEntries.filter(
+                  (e) => !gone.includes(Number(e.user.id))
+                );
                 analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
                   anchor_user_id: tokenUserId,
-                  outcome: 'skipped_empty_linked_list',
+                  outcome:
+                    gone.length > 0
+                      ? 'purged_gone_on_empty_list'
+                      : 'skipped_empty_linked_list',
                   local_account_count: uniqueEntries.length,
+                  purged_user_ids: gone,
                 });
-                validEntries = uniqueEntries;
               } else {
                 const validIds = new Set<number>([
                   tokenUserId,

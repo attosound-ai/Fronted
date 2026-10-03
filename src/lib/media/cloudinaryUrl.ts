@@ -12,13 +12,16 @@ const BASE = `https://res.cloudinary.com/${CLOUD_NAME}`;
 /** Named transformation presets (must match backend eager transforms). */
 const PRESETS: Record<string, string> = {
   // Avatars — face-detection crop
-  avatar_sm: 'c_thumb,g_face,w_40,h_40,f_auto,q_auto',
-  avatar_md: 'c_thumb,g_face,w_80,h_80,f_auto,q_auto',
-  avatar_lg: 'c_thumb,g_face,w_200,h_200,f_auto,q_auto',
+  // Sized for 3x screens (Oct 3 2026, David: the chat header avatar looked
+  // pixelated). A 32 pt avatar is 96 real pixels on an iPhone; this preset
+  // used to ask Cloudinary for 40 and stretch it. f_auto keeps the files small.
+  avatar_sm: 'c_thumb,g_face,w_120,h_120,f_auto,q_auto',
+  avatar_md: 'c_thumb,g_face,w_160,h_160,f_auto,q_auto',
+  avatar_lg: 'c_thumb,g_face,w_240,h_240,f_auto,q_auto',
   // 300 px para los círculos grandes: a 75 y 100 puntos en una pantalla 3x
   // hacen falta 225 y 300, y con el de 200 se veían blandos. El cliente lo
   // describió como que se ven menos "vivid" (27 de septiembre de 2026).
-  avatar_xl: 'c_thumb,g_face,w_300,h_300,f_auto,q_auto',
+  avatar_xl: 'c_thumb,g_face,w_360,h_360,f_auto,q_auto',
 
   // Brand logos — fit inside square, no crop, black background
   brand_avatar: 'c_pad,w_100,h_100,b_rgb:000000,f_png',

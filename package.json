@@ -12,8 +12,10 @@
     "test": "./scripts/test-timeline.sh",
     "test:timeline": "./scripts/test-timeline.sh",
     "verify:ios-libs": "./scripts/verify-audio-api-binaries.sh",
-    "build:ios": "./scripts/verify-audio-api-binaries.sh && eas build --platform ios --profile production --local --non-interactive --output ./build-final.ipa",
-    "submit:ios": "eas submit -p ios --path ./build-final.ipa --non-interactive"
+    "build:ios": "./scripts/release-gate.sh production && ./scripts/verify-audio-api-binaries.sh && eas build --platform ios --profile production --local --non-interactive --output ./build-final.ipa",
+    "submit:ios": "eas submit -p ios --path ./build-final.ipa --non-interactive",
+    "release:gate": "./scripts/release-gate.sh production",
+    "eas-build-pre-install": "./scripts/release-gate.sh"
   },
   "dependencies": {
     "@expo-google-fonts/archivo": "^0.4.2",

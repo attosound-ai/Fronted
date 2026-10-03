@@ -1,0 +1,19 @@
+# One case ID per line. A production build is refused unless the release
+# record for the tested commit marks every one of these OK with evidence
+# (Twilio call SID, PostHog event, screenshot path). Add a line whenever a
+# bug reaches users: it becomes a permanent case (David, Oct 3 2026).
+L-FRIA-UNA        Call with ATTO closed, one account on the phone: answer from iOS, it connects
+L-FRIA-DOS        Call with ATTO closed, rep + creator both on the phone (two invites): answer, it connects, no crash
+L-FRIA-RAPIDA     Same, answering within the first 3 seconds (while the app is still booting)
+L-ABIERTA         Call with ATTO open in the foreground: answer, it connects
+L-BLOQUEADA       Call with the phone locked: answer from the lock screen, it connects
+L-DIGITO-IOS      Digit pressed on the iOS call screen opens the recorder
+L-COLGAR-ATTO     Hang up from ATTO: Twilio shows the call completed within 2 s
+L-COLGAR-OTRO     The other side hangs up: ATTO clears the call
+L-RECHAZAR        Decline from iOS: the caller stops ringing
+M-LISTA-VIVO      New message with the conversation list open appears live (REST and socket)
+M-CHAT-VIVO       New message with the chat open arrives once, live
+M-RECONEXION      After 16+ min in background, a new message arrives live without relaunching
+M-EFECTOS         Bubble and screen effects play on the sending AND the receiving phone
+P-PUBLICAR        Post from the recorder during a call: lands on the feed with the post
+C-BORRAR          Deleting rep + creator leaves nothing in the orphan scan (qa_delete.py scan)

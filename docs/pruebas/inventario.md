@@ -139,3 +139,12 @@ Dos teléfonos: el que llama (A) y el iPhone con ATTO (B). Anotar la hora de cad
 6. **L01.** Colgar. A llama otra vez con ATTO abierta. Marcar el dígito en el teclado de ATTO. Esperado: se abre la grabadora.
 7. **L03.** Colgar. A llama, contestar bloqueado y NO marcar. Abrir ATTO antes de 2 minutos (pasado ese tiempo la app da la llamada por aceptada). Esperado: aparece el teclado.
 8. **L13.** Con la llamada activa, bloquear el teléfono 3 minutos. Esperado: la llamada sigue.
+
+## 8. Puerta de subida (desde el 3 de octubre de 2026)
+
+La 228 salió sin la prueba de llamada real y ese mismo día contestar una llamada con la app cerrada la cerraba (Sentry 7771272209, Stephanie en aramis, dos cuentas vinculadas en un teléfono). Desde entonces:
+
+- `npm run build:ios` (el único camino a producción) corre `scripts/release-gate.sh`, que se niega a compilar si no existe `docs/pruebas/release/<sha>.md` con cada caso de `CASOS_CRITICOS.txt` marcado `| ID | OK | evidencia |` y si cambió algo fuera de `docs/` desde ese commit.
+- Primero solo al grupo interno; a Public Beta solo con llamadas reales sin cierres y sin cierres nuevos en Sentry para ese build.
+- Cada falla que llega a usuarios se agrega como caso fijo en `CASOS_CRITICOS.txt`.
+- Emergencia: `ATTO_RELEASE_GATE_OVERRIDE=emergency` deja pasar, y queda escrito en el log del build.

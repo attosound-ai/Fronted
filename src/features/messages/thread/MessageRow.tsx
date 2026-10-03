@@ -577,6 +577,8 @@ function MessageRowInner({
     </View>
   );
 
+  const showReplay = !!effect && threadReplies === 0 && hideQuoteFor === null;
+
   const content = (
     <View style={[styles.stack, isOwn ? styles.stackOwn : styles.stackOther]}>
       <View
@@ -618,19 +620,6 @@ function MessageRowInner({
           thread shows its thread row and nothing else, the way Slack and
           Telegram do (David, Sep 24 2026). The double tick inside the bubble
           already carries the read state. */}
-      {effect && threadReplies === 0 && hideQuoteFor === null ? (
-        <Pressable
-          onPress={replay}
-          hitSlop={6}
-          style={styles.replayButton}
-          accessibilityRole="button"
-          accessibilityLabel={labels.replay}
-        >
-          <RNText style={styles.replayText} maxFontSizeMultiplier={1.1}>
-            {labels.replay}
-          </RNText>
-        </Pressable>
-      ) : null}
       {threadReplies > 0 ? (
         // Slack's thread footer, in ATTO's black and white: the faces of the
         // people who replied, the count, when the last reply landed, and at
@@ -728,7 +717,33 @@ function MessageRowInner({
           ) : null}
         </View>
       ) : null}
-      {readLabel && threadReplies === 0 ? (
+      {/* Replay on the left in white (it is a button), Read on the right,
+          as far apart as the bubble allows, on ONE line (David, Oct 3 2026:
+          Replay used to sit on top of Read). */}
+      {showReplay ? (
+        <View style={[styles.footerLine, hasReactions && styles.readLabelAfterReactions]}>
+          <Pressable
+            onPress={replay}
+            hitSlop={8}
+            style={styles.replayButton}
+            accessibilityRole="button"
+            accessibilityLabel={labels.replay}
+          >
+            <RNText style={styles.replayText} maxFontSizeMultiplier={1.1}>
+              {labels.replay}
+            </RNText>
+          </Pressable>
+          {readLabel ? (
+            <Animated.Text
+              entering={FadeIn.duration(220)}
+              style={styles.readLabelInline}
+              maxFontSizeMultiplier={1.0}
+            >
+              {readLabel}
+            </Animated.Text>
+          ) : null}
+        </View>
+      ) : readLabel && threadReplies === 0 ? (
         <Animated.Text
           entering={FadeIn.duration(220)}
           style={[styles.readLabel, hasReactions && styles.readLabelAfterReactions]}
@@ -1161,11 +1176,26 @@ const styles = StyleSheet.create({
     marginTop: TAIL_DROP + 2,
     marginRight: 4,
   },
-  replayButton: { marginTop: 3, paddingHorizontal: 6 },
+  footerLine: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: TAIL_DROP + 2,
+    paddingHorizontal: 4,
+    gap: 16,
+  },
+  replayButton: { paddingVertical: 2 },
   replayText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Archivo_700Bold',
+  },
+  readLabelInline: {
     color: 'rgba(255,255,255,0.55)',
     fontSize: 11,
     fontFamily: 'Archivo_600SemiBold',
+    marginLeft: 'auto',
   },
   threadFooter: {
     flexDirection: 'row',

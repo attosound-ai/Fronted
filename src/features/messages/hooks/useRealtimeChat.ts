@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
-import { phoenixSocket } from '@/lib/api/phoenixSocket';
+import { phoenixSocket, SOCKET_RECONNECTED_EVENT } from '@/lib/api/phoenixSocket';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '../stores/chatStore';
@@ -127,6 +128,24 @@ export function useRealtimeChat(conversationId: string) {
     },
     [conversationId, queryClient]
   );
+
+  // Messages sent while our socket was down never arrive through it: refetch
+  // the open chat and the list as soon as the socket is back.
+  useEffect(() => {
+    if (!conversationId) return;
+    const sub = DeviceEventEmitter.addListener(SOCKET_RECONNECTED_EVENT, () => {
+      void queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
+      });
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.CHAT_REFETCH_ON_RECONNECT, {
+        conversation_id: conversationId,
+      });
+    });
+    return () => sub.remove();
+  }, [conversationId, queryClient]);
 
   useEffect(() => {
     if (!conversationId || joinedRef.current) return;

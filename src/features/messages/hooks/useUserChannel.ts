@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
-import { phoenixSocket } from '@/lib/api/phoenixSocket';
+import { phoenixSocket, SOCKET_RECONNECTED_EVENT } from '@/lib/api/phoenixSocket';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { showMessageNotification } from '@/components/ui/MessageNotificationBanner';
@@ -25,6 +26,19 @@ export function useUserChannel() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.id;
   const isSocketConnected = useChatStore((s) => s.isSocketConnected);
+
+  // The list and the badges refetch when the socket comes back: anything
+  // sent while it was down never arrived through it.
+  useEffect(() => {
+    if (!userId) return;
+    const sub = DeviceEventEmitter.addListener(SOCKET_RECONNECTED_EVENT, () => {
+      void queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
+      });
+      void queryClient.refetchQueries({ queryKey: QUERY_KEYS.NOTIFICATIONS.UNREAD });
+    });
+    return () => sub.remove();
+  }, [userId, queryClient]);
 
   useEffect(() => {
     if (!userId || !isSocketConnected) return;

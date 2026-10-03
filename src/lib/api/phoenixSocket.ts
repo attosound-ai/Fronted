@@ -1,7 +1,11 @@
 // @ts-expect-error phoenix has no type declarations
 import { Socket, Channel } from 'phoenix';
 import { API_CONFIG } from '@/constants/config';
+import { DeviceEventEmitter } from 'react-native';
 import { authStorage } from '@/lib/auth/storage';
+
+/** Emitted after the socket comes back; listeners refetch what they show. */
+export const SOCKET_RECONNECTED_EVENT = 'attoSocketReconnected';
 
 type MessageHandler = (payload: Record<string, unknown>) => void;
 
@@ -173,6 +177,9 @@ class PhoenixSocketManager {
           reconnect: this.hasConnectedOnce,
           channels_rejoined: rejoined,
         });
+        // Whatever arrived while the socket was down never came through it:
+        // screens refetch on this (useRealtimeChat, useUserChannel).
+        if (this.hasConnectedOnce) DeviceEventEmitter.emit(SOCKET_RECONNECTED_EVENT);
         this.hasConnectedOnce = true;
         this.onConnectionChange?.(true);
       });
@@ -264,7 +271,17 @@ class PhoenixSocketManager {
 
     this.chatChannelSpecs.forEach((handlers, conversationId) => {
       const existing = this.channels.get(conversationId);
-      if (existing && existing.socket === socket) return;
+      // A channel on this same socket is normally rejoined by phoenix, but
+      // not one that ended closed or errored: after the chat-service restart
+      // of Oct 3 2026 (17:17 UTC) the client's socket came back and the open
+      // chat never rejoined, so two messages never showed until he relaunched.
+      if (
+        existing &&
+        existing.socket === socket &&
+        (existing.state === 'joined' || existing.state === 'joining')
+      ) {
+        return;
+      }
       this.createChatChannel(socket, conversationId, handlers);
       rejoined += 1;
     });
@@ -272,14 +289,24 @@ class PhoenixSocketManager {
     this.postChannelSpecs.forEach((handlers, postId) => {
       const topic = `post:${postId}`;
       const existing = this.channels.get(topic);
-      if (existing && existing.socket === socket) return;
+      if (
+        existing &&
+        existing.socket === socket &&
+        (existing.state === 'joined' || existing.state === 'joining')
+      ) {
+        return;
+      }
       this.createPostChannel(socket, postId, handlers);
       rejoined += 1;
     });
 
     if (this.userChannelSpec) {
       const existing = this.userChannel;
-      if (!existing || existing.socket !== socket) {
+      const alive =
+        existing &&
+        existing.socket === socket &&
+        (existing.state === 'joined' || existing.state === 'joining');
+      if (!alive) {
         this.createUserChannel(
           socket,
           this.userChannelSpec.userId,

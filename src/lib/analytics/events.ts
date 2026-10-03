@@ -636,6 +636,7 @@ export const ANALYTICS_EVENTS = {
     // Real-time
     WEBSOCKET_CONNECTED: 'messages_websocket_connected',
     WEBSOCKET_DISCONNECTED: 'messages_websocket_disconnected',
+    CHAT_REFETCH_ON_RECONNECT: 'messages_chat_refetch_on_reconnect',
     CHANNEL_JOINED: 'messages_channel_joined',
     CHANNEL_JOIN_FAILED: 'messages_channel_join_failed',
     MESSAGE_RECEIVED_REALTIME: 'messages_received_realtime',

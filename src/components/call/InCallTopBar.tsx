@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   TouchableOpacity,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { showCallBarTransport } from './callBarTransport';
 import { CALL_ROUTE_CHANGED_EVENT } from '@/lib/telemetry/callTelemetry';
-import { usePathname } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Mic,
@@ -78,7 +78,18 @@ function formatElapsed(seconds: number): string {
   return `${mm}:${ss}`;
 }
 
-export function InCallTopBar() {
+/**
+ * `mirror`: a second copy drawn INSIDE the keypad route. The keypad is a
+ * native transparent modal above the whole app, so the real bar under it
+ * showed but never received a touch: with the pad open, hang up, mute and
+ * speaker did nothing (found on David's iPhone, Oct 3 2026, the pad opens on
+ * its own after a cold answer). The mirror draws the same bar on top of the
+ * pad and acts through the same global functions; everything stateful or
+ * telemetry related stays in the one real bar.
+ */
+export const CALL_BAR_MIRROR_TRANSMIT_EVENT = 'attoCallBarMirrorTransmit';
+
+export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
   const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
   const networkWeak = useCallStore((s) => s.networkWeak);
@@ -137,6 +148,11 @@ export function InCallTopBar() {
 
   const onTransmit = () => {
     void haptic('selection');
+    if (mirror && !engineMode) {
+      // The legacy transmit state lives in the real bar.
+      DeviceEventEmitter.emit(CALL_BAR_MIRROR_TRANSMIT_EVENT);
+      return;
+    }
     if (engineMode) {
       void getCallPlaybackController().setTransmit(!playback.transmit, {
         surface: 'call_bar',
@@ -158,17 +174,30 @@ export function InCallTopBar() {
     });
   };
 
+  // The mirror on the keypad forwards the legacy transmit toggle here.
+  const onTransmitRef = useRef(onTransmit);
+  onTransmitRef.current = onTransmit;
+  useEffect(() => {
+    if (mirror) return;
+    const sub = DeviceEventEmitter.addListener(CALL_BAR_MIRROR_TRANSMIT_EVENT, () =>
+      onTransmitRef.current()
+    );
+    return () => sub.remove();
+  }, [mirror]);
+
   // If transmit was turned ON before anything was playing (lockedSource null),
   // lock the FIRST source that starts (one-shot) — then never change it. Without
   // this the button shows ON but transmits nothing until toggled again. Still
   // immune to hijack: once locked, background autoplay is ignored.
   useEffect(() => {
+    if (mirror) return;
     if (transmitMode && !lockedSource && nowPlaying) setLockedSource(nowPlaying);
-  }, [transmitMode, lockedSource, nowPlaying?.uri]);
+  }, [transmitMode, lockedSource, nowPlaying?.uri, mirror]);
 
   // Inject the LOCKED source (captured at turn-on). Depends on the locked source,
   // NOT nowPlaying, so background autoplay can never swap what's transmitted.
   useEffect(() => {
+    if (mirror) return;
     if (!transmitMode || !lockedSource) return;
     let cancelled = false;
     void inject(lockedSource).then((result) => {
@@ -186,12 +215,13 @@ export function InCallTopBar() {
     return () => {
       cancelled = true;
     };
-  }, [transmitMode, lockedSource?.uri, inject]);
+  }, [transmitMode, lockedSource?.uri, inject, mirror]);
 
   // Stop the moment the user turns the mode off.
   useEffect(() => {
+    if (mirror) return;
     if (!transmitMode && isInjecting) void stop('user_stopped');
-  }, [transmitMode, isInjecting, stop]);
+  }, [transmitMode, isInjecting, stop, mirror]);
 
   // Reset transmit state when the call ENDS. InCallTopBar is mounted once for the
   // app's whole life and only renders null when disconnected — it never unmounts,
@@ -199,11 +229,12 @@ export function InCallTopBar() {
   // set into the NEXT call: the button shows ON but the inject effect's deps are
   // unchanged so it never re-fires → transmit silently does nothing until toggled.
   useEffect(() => {
+    if (mirror) return;
     if (!isCallConnected(activeCall?.state)) {
       setTransmitMode(false);
       setLockedSource(null);
     }
-  }, [activeCall?.state]);
+  }, [activeCall?.state, mirror]);
 
   // Snapshot the native engine mix diagnostics → PostHog. `trigger` distinguishes
   // the auto (every connected call, ~6s in) snapshot from the inject-triggered one.
@@ -360,32 +391,36 @@ export function InCallTopBar() {
   // something (gate open + playing), the analogue of the legacy inject trigger.
   const sessionLive = engineMode && playback.transmit && playback.status === 'playing';
   useEffect(() => {
+    if (mirror) return;
     if (!sessionLive) return;
     const id = setTimeout(() => void captureDiag('session_transmit'), 3500);
     return () => clearTimeout(id);
-  }, [sessionLive, playback.ownerId, captureDiag]);
+  }, [sessionLive, playback.ownerId, captureDiag, mirror]);
 
   // Inject-triggered snapshot (~3.5s after transmit) — WHY an injected reel may not
   // reach the far party.
   useEffect(() => {
+    if (mirror) return;
     if (!isInjecting) return;
     const id = setTimeout(() => void captureDiag('inject'), 3500);
     return () => clearTimeout(id);
-  }, [isInjecting, nowPlaying?.uri, captureDiag]);
+  }, [isInjecting, nowPlaying?.uri, captureDiag, mirror]);
 
   // build 89: AUTO snapshot ~6s into EVERY connected call — no reel/transmit needed.
   // This is the reliable path to the AudioUnit lifecycle counters (the transmit flow
   // needs a reel playing, which is easy to miss), so any normal call now reports
   // whether the unit starved vs was stopped.
   useEffect(() => {
+    if (mirror) return;
     if (!isCallConnected(activeCall?.state)) return;
     const id = setTimeout(() => void captureDiag('auto_connect'), 6000);
     return () => clearTimeout(id);
-  }, [activeCall?.state, captureDiag]);
+  }, [activeCall?.state, captureDiag, mirror]);
 
   // One more snapshot a moment after every route change (a headset joining or
   // leaving), debounced, so the engine rates AFTER the switch are on record.
   useEffect(() => {
+    if (mirror) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const sub = DeviceEventEmitter.addListener(CALL_ROUTE_CHANGED_EVENT, () => {
       if (timer) clearTimeout(timer);
@@ -395,7 +430,7 @@ export function InCallTopBar() {
       sub.remove();
       if (timer) clearTimeout(timer);
     };
-  }, [captureDiag]);
+  }, [captureDiag, mirror]);
 
   // CHIPMUNKS HUNTER (Aug 11). The pitched-audio bug is a TRANSIENT in the first
   // few seconds — the engine builds at a stale rate before the realign corrects it
@@ -405,6 +440,7 @@ export function InCallTopBar() {
   // signature; fire the instant it appears. The end-summary fires only when the
   // custom engine was actually pumping, so plain (no-injection) calls stay quiet.
   useEffect(() => {
+    if (mirror) return;
     if (!isCallConnected(activeCall?.state)) return;
     const sid = activeCall?.callSid ?? null;
     const startedAt = Date.now();
@@ -611,7 +647,7 @@ export function InCallTopBar() {
     };
     // t is stable (i18n instance); the watchdog reads the store imperatively.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCall?.state, activeCall?.callSid]);
+  }, [activeCall?.state, activeCall?.callSid, mirror]);
 
   const isConnected = isCallConnected(activeCall?.state);
 
@@ -800,7 +836,18 @@ export function InCallTopBar() {
         {/* Mixer — opens the multitrack recording mixer (flag-gated). */}
         {mixerEnabled ? (
           <GlassSurface radius={21} style={styles.glassBtn}>
-            <TouchableOpacity style={styles.glassBtnInner} onPress={openMixer}>
+            <TouchableOpacity
+              style={styles.glassBtnInner}
+              onPress={
+                mirror
+                  ? () => {
+                      // The mixer sheet lives under the pad: close the pad first.
+                      router.back();
+                      setTimeout(openMixer, 280);
+                    }
+                  : openMixer
+              }
+            >
               <SlidersHorizontal size={20} color="#FFF" strokeWidth={2.25} />
             </TouchableOpacity>
           </GlassSurface>

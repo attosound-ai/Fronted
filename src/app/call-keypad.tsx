@@ -15,6 +15,7 @@
  * itself when it turns false, or when the user hides, swipes down or taps
  * outside.
  */
+import { InCallTopBar } from '@/components/call/InCallTopBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { router } from 'expo-router';
@@ -171,6 +172,9 @@ export default function CallKeypadScreen() {
 
   return (
     <View style={styles.root} pointerEvents="box-none">
+      {/* The call bar again, ON the pad: this route is a native modal above the
+          app, so the real bar under it never gets a touch (Oct 3 2026). */}
+      <InCallTopBar mirror />
       {/* One sheet of glass under the call bar (David, Sep 23 and 24 2026): the
           pad's blur meets the bar's blur instead of stopping at the panel's
           edge, so the feed reads through a single frost, while the bar's

@@ -5,6 +5,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import { phoenixSocket, SOCKET_RECONNECTED_EVENT } from '@/lib/api/phoenixSocket';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/authStore';
+import { messageService } from '../services/messageService';
 import { useChatStore } from '../stores/chatStore';
 import type {
   BackendMessage,
@@ -14,25 +15,13 @@ import type {
   ChatMessagesPage,
 } from '../types';
 
-function mapBackendMessage(m: BackendMessage): ChatMessage {
-  return {
-    conversationId: m.conversation_id,
-    messageId: m.message_id,
-    senderId: m.sender_id,
-    content: m.content,
-    contentType: m.content_type,
-    isRead: m.is_read,
-    isEdited: m.is_edited || false,
-    editedAt: m.edited_at || null,
-    isDeleted: m.is_deleted || false,
-    deletedAt: m.deleted_at ?? null,
-    deletedBy: m.deleted_by ?? null,
-    replyToId: m.reply_to_id || null,
-    replyToContent: m.reply_to_content || null,
-    replyToSender: m.reply_to_sender || null,
-    createdAt: m.created_at || null,
-  };
-}
+// One mapping for the socket and for REST. This file used to keep its own copy
+// that dropped `metadata` and `thread_id` (Oct 3 2026, found on David's
+// iPhone): a message arriving live lost its effect (no confetti, no Replay
+// on the receiving phone), audio and video lost their media data, and a
+// thread reply landed in the main chat until the next reload.
+const mapBackendMessage = (m: BackendMessage): ChatMessage =>
+  messageService.mapBackendMessage(m);
 
 /**
  * Where a typing indicator is kept: the conversation on its own, or the

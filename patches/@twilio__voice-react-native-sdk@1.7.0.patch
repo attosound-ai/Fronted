@@ -5550,7 +5550,7 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +
 +@end
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
-index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb079479df 100644
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f67f2db1f 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m
 +++ b/ios/TwilioVoiceReactNative+CallKit.m
 @@ -27,7 +27,19 @@ - (void)initializeCallKit {
@@ -5609,7 +5609,47 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
  
              [self.callKitProvider reportCallWithUUID:uuid updated:callUpdate];
          }
-@@ -226,7 +248,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -194,9 +216,29 @@ - (void)performVoiceCallWithUUID:(NSUUID *)uuid
+ 
+ - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
+                             completion:(void(^)(BOOL success))completionHandler {
+-    NSAssert(self.callInviteMap[uuid.UUIDString], @"No call invite");
+-    
+     TVOCallInvite *callInvite = self.callInviteMap[uuid.UUIDString];
++    if (!callInvite) {
++        /*
++         * ATTO (Oct 3 2026, Sentry 7771272209, build 228): with two CXProviders
++         * in the process (this one and AttoVoipBootstrap's cold provider) iOS
++         * delivered the answer of a cold reported call HERE. With no invite the
++         * stock code called TVOAcceptOptions with nil and the SDK threw: the app
++         * died on every answer. Forward it to the bootstrap, which holds the
++         * invite; if nobody has it, fail cleanly instead of crashing.
++         */
++        [[NSUserDefaults standardUserDefaults] setDouble:[[NSDate date] timeIntervalSince1970]
++                                                  forKey:@"atto_coldcallkit_module_answer_no_invite_at"];
++        // The result rides in its own mutable object: Swift receives userInfo as
++        // a value copy, but a reference inside it is shared with this side.
++        NSMutableDictionary *result = [NSMutableDictionary new];
++        [[NSNotificationCenter defaultCenter] postNotificationName:@"AttoForwardCallAction"
++                                                            object:nil
++                                                          userInfo:@{@"action": @"answer",
++                                                                     @"uuid": uuid.UUIDString,
++                                                                     @"result": result}];
++        completionHandler([result[@"handled"] boolValue]);
++        return;
++    }
+     TVOAcceptOptions *acceptOptions = [TVOAcceptOptions optionsWithCallInvite:callInvite block:^(TVOAcceptOptionsBuilder *builder) {
+         builder.uuid = uuid;
+         builder.callMessageDelegate = self;
+@@ -208,6 +250,7 @@ - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
+         completionHandler(NO);
+     } else {
+         self.callMap[call.uuid.UUIDString] = call;
++        completionHandler(YES);
+     }
+ 
+     [self sendEventWithName:kTwilioVoiceReactNativeScopeCallInvite
+@@ -226,7 +269,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
      callUpdate.supportsHolding = YES;
      callUpdate.supportsGrouping = NO;
      callUpdate.supportsUngrouping = NO;
@@ -5618,7 +5658,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
  
      dispatch_async(dispatch_get_main_queue(), ^{
          [self.callKitProvider reportCallWithUUID:[[NSUUID alloc] initWithUUIDString:uuid] updated:callUpdate];
-@@ -235,6 +257,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -235,6 +278,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
  
  #pragma mark - CXProviderDelegate
  
@@ -5652,7 +5692,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
  - (void)providerDidReset:(CXProvider *)provider {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
  }
-@@ -245,10 +294,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
+@@ -245,10 +315,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
  
  - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
@@ -5665,7 +5705,26 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
  }
  
  - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
-@@ -290,6 +341,7 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
+@@ -264,8 +336,17 @@ - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)
+                              kTwilioVoiceReactNativeCallInviteEventKeyCallSid: callInvite.callSid,
+                              kTwilioVoiceReactNativeEventKeyCallInvite: [self callInviteInfo:callInvite]}];
+         [self.callInviteMap removeObjectForKey:action.callUUID.UUIDString];
++    } else {
++        // ATTO (Oct 3 2026): an end/decline of a call only the cold bootstrap
++        // knows (same wrong-provider delivery as the answer). Forward it so the
++        // invite is rejected and the caller stops hearing it ring.
++        [[NSNotificationCenter defaultCenter] postNotificationName:@"AttoForwardCallAction"
++                                                            object:nil
++                                                          userInfo:@{@"action": @"end",
++                                                                     @"uuid": action.callUUID.UUIDString,
++                                                                     @"result": [NSMutableDictionary new]}];
+     }
+-    
++
+     [action fulfill];
+ }
+ 
+@@ -290,18 +371,27 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
  }
  
  - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
@@ -5673,7 +5732,29 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
      [TwilioVoiceReactNative twilioAudioDevice].block();
      
-@@ -328,6 +380,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
++    __block BOOL answered = NO;
+     [self performAnswerVoiceCallWithUUID:action.callUUID completion:^(BOOL success) {
++        answered = success;
+         if (success) {
+             NSLog(@"performAnswerVoiceCallWithUUID successful");
+         } else {
+             NSLog(@"performAnswerVoiceCallWithUUID failed");
+         }
+     }];
+-        
+-    [action fulfill];
++
++    // ATTO: a failed answer must not be reported as done (CallKit would show a
++    // connected call that does not exist).
++    if (answered) {
++        [action fulfill];
++    } else {
++        [action fail];
++    }
+ }
+ 
+ - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action {
+@@ -328,6 +418,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
      if (self.callMap[action.callUUID.UUIDString]) {
          TVOCall *call = self.callMap[action.callUUID.UUIDString];
          [call sendDigits:action.digits];
@@ -5685,7 +5766,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..dde3b0c3fe528ce2a35a736893fcb6fb
          [action fulfill];
      } else {
          [action fail];
-@@ -349,6 +406,19 @@ - (void)callDidConnect:(TVOCall *)call {
+@@ -349,6 +444,19 @@ - (void)callDidConnect:(TVOCall *)call {
  
      [self stopRingback];
  

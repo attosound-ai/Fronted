@@ -230,6 +230,9 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     NotificationCenter.default.addObserver(
       self, selector: #selector(moduleDidInit),
       name: Notification.Name("AttoTwilioModuleDidInit"), object: nil)
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(onForwardedCallAction(_:)),
+      name: Notification.Name("AttoForwardCallAction"), object: nil)
     reemitTimer = Timer.scheduledTimer(
       timeInterval: 1.0, target: self, selector: #selector(reemitTick),
       userInfo: nil, repeats: true)
@@ -686,13 +689,49 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
     mark("cold_answerAction")
-    guard let invite = heldInvites[action.callUUID.uuidString] else {
+    if acceptHeldCall(action.callUUID) { action.fulfill() } else { action.fail() }
+  }
+
+  // ANSWER FORWARDED BY THE MODULE (Oct 3 2026, Sentry 7771272209, build 228,
+  // Stephanie on aramis): with two CXProviders in the process, iOS delivered
+  // the answer of a call WE reported to the Twilio module's provider, created
+  // later while RN booted. The module had no invite for that UUID, called
+  // TVOAcceptOptions with nil and the SDK threw: the app died on every answer.
+  // The patched module now posts AttoForwardCallAction for any UUID it does not
+  // know; this answers (or ends) it here, where the invite lives.
+  @objc private func onForwardedCallAction(_ note: Notification) {
+    guard let info = note.userInfo,
+          let uuidString = info["uuid"] as? String,
+          let uuid = UUID(uuidString: uuidString),
+          let kind = info["action"] as? String,
+          let result = info["result"] as? NSMutableDictionary else { return }
+    switch kind {
+    case "answer":
+      mark("cold_answer_forwarded")
+      result["handled"] = acceptHeldCall(uuid)
+    case "end":
+      mark("cold_end_forwarded")
+      if let call = heldCalls[uuidString] {
+        call.disconnect(); result["handled"] = true
+      } else if let invite = heldInvites[uuidString] {
+        invite.reject(); heldInvites.removeValue(forKey: uuidString); result["handled"] = true
+      }
+      UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
+    default:
+      break
+    }
+  }
+
+  /// Accept a held cold invite under its CallKit UUID. Shared by our own
+  /// CXAnswerCallAction and by an answer the module forwards to us.
+  private func acceptHeldCall(_ callUUID: UUID) -> Bool {
+    guard let invite = heldInvites[callUUID.uuidString] else {
       // Per-step markers (b147): the b146 field data showed cold_answerAction and
       // cold_connected stamped but cold_accept NOT — the handler diverged
       // somewhere in between and heldCalls stayed empty, killing the handoff.
       // These markers turn the next occurrence into an exact line number.
       mark("cold_answer_guard_failed")
-      action.fail(); return
+      return false
     }
     mark("cold_answer_guard_ok")
     // Give the call an RTP audio device WITHOUT ever re-assigning it. The SDK's
@@ -711,11 +750,11 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // Adopt CallKit's UUID (== coldReportUUID, the one on screen) as the Twilio
     // Call identity so end/disconnect/report all reference the same call.
     let options = TwilioVoice.AcceptOptions(callInvite: invite) { builder in
-      builder.uuid = action.callUUID
+      builder.uuid = callUUID
     }
     mark("cold_accept_begin")
     let call = invite.accept(options: options, delegate: self)
-    heldCalls[action.callUUID.uuidString] = call
+    heldCalls[callUUID.uuidString] = call
     mark("cold_accept")
     // ORDER-2 HANDOFF (b148, the ACTUAL b145/146/147 no-UI bug). RN boots FAST
     // (1.26s on David's phone) while a human answers at 5-8s — so the module was
@@ -723,7 +762,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // long passed (with nothing to hand off then: the call was still ringing),
     // and nobody ever handed the accepted call over. Post it RIGHT HERE.
     if moduleAlive { moduleDidInitHandoff() }
-    action.fulfill()
+    return true
   }
 
   // Observability for the CallKit action machinery itself: if a handler dies

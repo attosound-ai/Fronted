@@ -106,6 +106,9 @@ export interface NativeCallAudioState {
    */
   coldAnswerGuardOkAt?: number;
   coldAnswerGuardFailedAt?: number;
+  coldAnswerForwardedAt?: number;
+  coldEndForwardedAt?: number;
+  moduleAnswerNoInviteAt?: number;
   coldAcceptBeginAt?: number;
   coldActionTimeoutAt?: number;
   coldRecoveredAtConnectAt?: number;

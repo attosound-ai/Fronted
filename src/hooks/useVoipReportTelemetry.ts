@@ -174,6 +174,11 @@ export function useVoipReportTelemetry(): void {
           // of the b146 answer-handler death, and report the self-heal/orphan.
           cold_answer_guard_ok_ms: since(s.coldAnswerGuardOkAt ?? null),
           cold_answer_guard_failed_ms: since(s.coldAnswerGuardFailedAt ?? null),
+          // Oct 3 2026: answers/ends that reached the module's CXProvider for a
+          // call only the bootstrap knew, and were forwarded instead of crashing.
+          cold_answer_forwarded_ms: since(s.coldAnswerForwardedAt ?? null),
+          cold_end_forwarded_ms: since(s.coldEndForwardedAt ?? null),
+          module_answer_no_invite_ms: since(s.moduleAnswerNoInviteAt ?? null),
           cold_accept_begin_ms: since(s.coldAcceptBeginAt ?? null),
           cold_action_timeout_ms: since(s.coldActionTimeoutAt ?? null),
           cold_recovered_at_connect_ms: since(s.coldRecoveredAtConnectAt ?? null),

@@ -156,10 +156,10 @@ index 0000000000000000000000000000000000000000..d42c16ea10f137e223c6df7fdf6af906
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..bd386365a74c6feeb04c07901f52159845b883a4
+index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb4ad89a6e
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3967 @@
+@@ -0,0 +1,3969 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -3514,7 +3514,26 @@ index 0000000000000000000000000000000000000000..bd386365a74c6feeb04c07901f521598
 +     * to the `AVAudioSession.preferredIOBufferDuration` that we've requested.
 +     */
 +    const size_t sessionFramesPerBuffer = kMaximumFramesPerBuffer;
-+    double sessionSampleRate = [AVAudioSession sharedInstance].sampleRate;
++    /*
++     * ATTO (Oct 4 2026): ONE FIXED RATE FOR THE WHOLE CALL.
++     *
++     * This used to follow AVAudioSession.sampleRate, so every Bluetooth profile
++     * change (A2DP 48000, HFP 24000 or 16000, built in 48000) became a format
++     * change that Twilio's media engine had to follow mid call. It does not always
++     * follow: answering with the AirPods on, the session went 48000 to 24000 in
++     * the first second, every rate on our side (configured AND measured frames
++     * per second) was 24000, and Twilio still delivered 48000 content, so the far
++     * party played at half speed (David on his AirPods: "deeper, pixelated", the
++     * take at exactly half frequency). The same family produced the build 93
++     * monster voice, the Sep 30 robot voice and the August chipmunks.
++     *
++     * The VoiceProcessingIO unit converts between its client format and whatever
++     * the hardware runs at, so the client side never has to move: Twilio, the
++     * engines, the unit's client formats and the take files all stay at 48000 and
++     * a route change is just a route change. The hardware rate is still reported
++     * in the diagnostics (hwSampleRateNow) for the record.
++     */
++    double sessionSampleRate = (double)kPreferredSampleRate;
 +
 +    // CRASH GUARD (Sentry REACT-NATIVE-4C): when the engine is initialized while
 +    // the AVAudioSession is INACTIVE (e.g. sharedDevice is first touched outside a
@@ -3995,26 +4014,9 @@ index 0000000000000000000000000000000000000000..bd386365a74c6feeb04c07901f521598
 +        cachedCapturing = _capturingFormat;
 +    }
 +
-+    /*
-+     * Oct 4 2026: the formats can agree while the hardware moved. Answering with
-+     * the AirPods already on, the session went A2DP 48000 then HFP 24000 within a
-+     * second; Twilio and the engines ended at 24000 and nothing restarted, yet the
-+     * far party played at half speed (deeper, "pixelated") and the take was
-+     * written at half frequency. If the hardware rate now differs from the one the
-+     * unit was configured under, take the same, standard format change path.
-+     */
-+    const double hwNow = [AVAudioSession sharedInstance].sampleRate;
-+    const BOOL hwMovedUnderUnit = hwNow > 0 && _unitConfiguredHwRate > 0 &&
-+                                  fabs(hwNow - _unitConfiguredHwRate) > 1.0;
-+    if (hwMovedUnderUnit && [activeFormat isEqual:cachedRendering] &&
-+        [activeFormat isEqual:cachedCapturing]) {
-+        @synchronized(self) { _dbgUnitHwRateRestartCount++; }
-+        NSLog(@"[AttoAudioEngine] hardware rate moved under the unit (%.0f -> %.0f); restarting", _unitConfiguredHwRate, hwNow);
-+    }
-+
 +    // Notify Voice SDK about the format change
 +    if (![activeFormat isEqual:cachedRendering] ||
-+        ![activeFormat isEqual:cachedCapturing] || hwMovedUnderUnit) {
++        ![activeFormat isEqual:cachedCapturing]) {
 +
 +        _restartAudioUnit = YES;
 +

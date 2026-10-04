@@ -12,6 +12,8 @@ L-DIGITO-IOS      Digit pressed on the iOS call screen opens the recorder
 L-COLGAR-ATTO     Hang up from ATTO: Twilio shows the call completed within 2 s
 L-COLGAR-OTRO     The other side hangs up: ATTO clears the call
 L-RECHAZAR        Decline from iOS: the caller stops ringing
+L-RECHAZAR-DOS    Decline with rep + creator both on the phone (two invites): the caller hears busy within 2 s, never 30 s of ringing
+L-SILENCIO        Mute while sharing music into the call: the other person stops hearing your voice and keeps hearing the music; next call starts unmuted
 M-LISTA-VIVO      New message with the conversation list open appears live (REST and socket)
 M-CHAT-VIVO       New message with the chat open arrives once, live
 M-RECONEXION      After 16+ min in background, a new message arrives live without relaunching

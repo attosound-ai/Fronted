@@ -839,9 +839,26 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
 
   func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
     if let call = heldCalls[action.callUUID.uuidString] {
-      call.isMuted = action.isMuted
+      // Mute only the mic in the engine so audio shared into the call keeps
+      // flowing (Oct 3 2026); Twilio's track mute is the fallback.
+      if setEngineMicMuted(action.isMuted) {
+        if call.isMuted { call.isMuted = false }
+      } else {
+        call.isMuted = action.isMuted
+      }
       action.fulfill()
     } else { action.fail() }
+  }
+
+  /// Sets the engine's mic gate when the engine is the call's audio device.
+  /// KVC on the micMuted property unboxes the Bool for the ObjC setter.
+  @discardableResult
+  private func setEngineMicMuted(_ muted: Bool) -> Bool {
+    guard let dev = TwilioVoiceSDK.audioDevice as? NSObject,
+          String(describing: Swift.type(of: dev)) == "AttoAudioEngineDevice",
+          dev.responds(to: NSSelectorFromString("setMicMuted:")) else { return false }
+    dev.setValue(muted, forKey: "micMuted")
+    return true
   }
 
   func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
@@ -902,6 +919,8 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   }
 
   func callDidDisconnect(call: TwilioVoice.Call, error: Error?) {
+    // A mute never carries over to the next call.
+    setEngineMicMuted(false)
     postColdCallEvent("disconnected", call: call, error: error)
     finishColdCall(call)
   }

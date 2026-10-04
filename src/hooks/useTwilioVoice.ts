@@ -2229,9 +2229,30 @@ export async function endCallAndWait(timeoutMs = 4000): Promise<void> {
 export async function toggleMuteCall() {
   if (!activeCallObj) return;
   const isMuted = useCallStore.getState().activeCall?.isMuted ?? false;
-  await activeCallObj.mute(!isMuted);
-  useCallStore.getState().setMuted(!isMuted);
-  analytics.capture(ANALYTICS_EVENTS.CALL.MUTE_TOGGLED, { is_muted: !isMuted });
+  const next = !isMuted;
+  // Mute only this phone's microphone inside the engine, so music shared into
+  // the call keeps reaching the other person. Twilio's mute disables the whole
+  // outgoing track and silenced the share too (Oct 3 tests). Twilio's mute is
+  // the fallback when the engine is not the call's audio device.
+  let via: 'engine' | 'twilio' = 'twilio';
+  try {
+    const gated = await NativeModules.AttoAudioInjection?.setEngineMicMuted?.(next);
+    if (gated === true) via = 'engine';
+  } catch {
+    /* fall back below */
+  }
+  if (via === 'engine') {
+    // Never leave the track muted by an older path: that would silence the share.
+    try {
+      if (await activeCallObj.isMuted?.()) await activeCallObj.mute(false);
+    } catch {
+      /* best effort */
+    }
+  } else {
+    await activeCallObj.mute(next);
+  }
+  useCallStore.getState().setMuted(next);
+  analytics.capture(ANALYTICS_EVENTS.CALL.MUTE_TOGGLED, { is_muted: next, via });
 }
 
 export async function toggleHoldCall() {

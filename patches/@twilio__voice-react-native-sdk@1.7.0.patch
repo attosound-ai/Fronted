@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa6a5a9069
+index 0000000000000000000000000000000000000000..d42c16ea10f137e223c6df7fdf6af906dcf08163
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,150 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -108,6 +108,17 @@ index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa
 +- (void)setMixerChannel:(NSString *)channel gain:(float)gain record:(BOOL)record;
 +
 +/*
++ * ATTO (Oct 3 2026): mute only this phone's microphone in what is sent to the
++ * call. Twilio's own mute disables the whole outgoing track, which also
++ * silenced the music being shared into the call (found in the Oct 3 tests:
++ * muting while sharing made the far party hear nothing). The gate zeroes the
++ * mic right after VoiceProcessingIO, before the injected audio is summed in.
++ * Lock free; may be called from any thread.
++ */
++- (void)setMicMuted:(BOOL)muted;
++- (BOOL)isMicMuted;
++
++/*
 + * Enable/disable the metronome click and set its tempo (BPM is clamped to
 + * 40..240). When enabled the click is audible in the LOCAL monitor (so the rep
 + * can keep time) and, if its channel is record-enabled, baked into the mix.
@@ -145,10 +156,10 @@ index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..fe9276c80f475b2b5547e31ac4bada2f888afbe3
+index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f02768434a2a3
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3873 @@
+@@ -0,0 +1,3894 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -414,6 +425,13 @@ index 0000000000000000000000000000000000000000..fe9276c80f475b2b5547e31ac4bada2f
 +     * counter, and far cheaper than a lock on the RT path.
 +     */
 +    int32_t injectActive;
++    /*
++     * Mic gate (Oct 3 2026). Written on the main thread, read on the render
++     * thread; aligned 32-bit access is atomic on ARM. When set, the raw mic is
++     * zeroed before the record engine mixes the injected audio in, so the far
++     * party still hears what is shared but not this phone's microphone.
++     */
++    int32_t micMuted;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -1795,6 +1813,14 @@ index 0000000000000000000000000000000000000000..fe9276c80f475b2b5547e31ac4bada2f
 +    if ([channel isEqualToString:@"app"]) return AttoMixChannelApp;
 +    if ([channel isEqualToString:@"metronome"]) return AttoMixChannelMetronome;
 +    return -1;
++}
++
++- (void)setMicMuted:(BOOL)muted {
++    if (self.capturingContext) { self.capturingContext->micMuted = muted ? 1 : 0; }
++}
++
++- (BOOL)isMicMuted {
++    return self.capturingContext ? self.capturingContext->micMuted != 0 : NO;
 +}
 +
 +- (void)setMixerChannel:(NSString *)channel gain:(float)gain record:(BOOL)record {
@@ -3312,6 +3338,12 @@ index 0000000000000000000000000000000000000000..fe9276c80f475b2b5547e31ac4bada2f
 +                             1,
 +                             numFrames,
 +                             audioBufferList);
++    // Mic gate: silence this phone's microphone, keep whatever is injected.
++    // memset only, real time safe. Covers the mixed path and the raw mic
++    // fallback below, since both read this buffer.
++    if (context->micMuted && status == noErr && audioBufferList->mBuffers[0].mData) {
++        memset(audioBufferList->mBuffers[0].mData, 0, audioBufferList->mBuffers[0].mDataByteSize);
++    }
 +
 +    AudioBufferList *mixedAudioBufferList = context->mixedAudioBufferList;
 +    assert(mixedAudioBufferList != NULL);
@@ -4046,10 +4078,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..c84ace4cca76a6d6c7e7936ab04b2b7998f71707
+index 0000000000000000000000000000000000000000..3b8cfeb540206d21509a73bdcfc3a9758ea1fafd
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,444 @@
+@@ -0,0 +1,465 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -4345,6 +4377,27 @@ index 0000000000000000000000000000000000000000..c84ace4cca76a6d6c7e7936ab04b2b79
 +        resolve(@(YES));
 +    } @catch (NSException *exception) {
 +        reject(@"stop_failed", exception.reason ?: @"Failed to stop injected audio", nil);
++    }
++}
++
++/*
++ * Mute this phone's mic in the call while keeping shared audio flowing.
++ * Resolves YES when the engine is the call's audio device and the gate was set;
++ * NO when another device is installed (JS then falls back to Twilio's mute).
++ */
++RCT_EXPORT_METHOD(setEngineMicMuted:(BOOL)muted
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        if (![TwilioVoiceReactNative attoIsInjectionDeviceInstalled]) {
++            resolve(@NO);
++            return;
++        }
++        [[AttoAudioEngineDevice sharedDevice] setMicMuted:muted];
++        resolve(@YES);
++    } @catch (NSException *e) {
++        NSLog(@"[AttoAudioInjection] setEngineMicMuted failed: %@ (%@)", e.name, e.reason);
++        resolve(@NO);
 +    }
 +}
 +
@@ -5617,10 +5670,24 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +
 +@end
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
-index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f67f2db1f 100644
+index adcd79044d5acb80ced4be4421e1774c9f2b4053..06eed1812a14090ffbac47519d65fe0d542ed190 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m
 +++ b/ios/TwilioVoiceReactNative+CallKit.m
-@@ -27,7 +27,19 @@ - (void)initializeCallKit {
+@@ -10,6 +10,13 @@
+ 
+ #import "TwilioVoiceReactNative.h"
+ #import "TwilioVoiceReactNativeConstants.h"
++#import "AttoAudioEngineDevice.h"
++
++// Defined in TwilioVoiceReactNative.m (ATTO device swap); declared here so the
++// CallKit mute can route through the engine's mic gate.
++@interface TwilioVoiceReactNative (AttoMicGate)
+++ (BOOL)attoIsInjectionDeviceInstalled;
++@end
+ 
+ NSString * const kDefaultCallKitConfigurationName = @"Twilio Voice React Native";
+ 
+@@ -27,7 +34,19 @@ - (void)initializeCallKit {
  
  - (void)initializeCallKitWithConfiguration:(NSDictionary *)configuration {
      CXProviderConfiguration *callKitConfiguration = [CXProviderConfiguration new];
@@ -5641,7 +5708,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
      if (configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups]) {
          callKitConfiguration.maximumCallGroups = [configuration[kTwilioVoiceReactNativeCallKitMaximumCallGroups] intValue];
      } else {
-@@ -101,7 +113,10 @@ - (void)reportNewIncomingCall:(TVOCallInvite *)callInvite {
+@@ -101,7 +120,10 @@ - (void)reportNewIncomingCall:(TVOCallInvite *)callInvite {
      callUpdate.supportsHolding = YES;
      callUpdate.supportsGrouping = NO;
      callUpdate.supportsUngrouping = NO;
@@ -5653,7 +5720,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  
      [self.callKitProvider reportNewIncomingCallWithUUID:callInvite.uuid update:callUpdate completion:^(NSError *error) {
          if (!error) {
-@@ -134,6 +149,13 @@ - (void)endCallWithUuid:(NSUUID *)uuid {
+@@ -134,6 +156,13 @@ - (void)endCallWithUuid:(NSUUID *)uuid {
      [self.callKitCallController requestTransaction:transaction completion:^(NSError *error) {
          if (error) {
              NSLog(@"Failed to submit end-call transaction request: %@", error);
@@ -5667,7 +5734,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
          } else {
              NSLog(@"End-call transaction successfully done");
          }
-@@ -169,7 +191,7 @@ - (void)makeCallWithAccessToken:(NSString *)accessToken
+@@ -169,7 +198,7 @@ - (void)makeCallWithAccessToken:(NSString *)accessToken
              callUpdate.supportsHolding = YES;
              callUpdate.supportsGrouping = NO;
              callUpdate.supportsUngrouping = NO;
@@ -5676,7 +5743,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  
              [self.callKitProvider reportCallWithUUID:uuid updated:callUpdate];
          }
-@@ -194,9 +216,29 @@ - (void)performVoiceCallWithUUID:(NSUUID *)uuid
+@@ -194,9 +223,29 @@ - (void)performVoiceCallWithUUID:(NSUUID *)uuid
  
  - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
                              completion:(void(^)(BOOL success))completionHandler {
@@ -5708,7 +5775,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
      TVOAcceptOptions *acceptOptions = [TVOAcceptOptions optionsWithCallInvite:callInvite block:^(TVOAcceptOptionsBuilder *builder) {
          builder.uuid = uuid;
          builder.callMessageDelegate = self;
-@@ -208,6 +250,7 @@ - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
+@@ -208,6 +257,7 @@ - (void)performAnswerVoiceCallWithUUID:(NSUUID *)uuid
          completionHandler(NO);
      } else {
          self.callMap[call.uuid.UUIDString] = call;
@@ -5716,7 +5783,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
      }
  
      [self sendEventWithName:kTwilioVoiceReactNativeScopeCallInvite
-@@ -226,7 +269,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -226,7 +276,7 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
      callUpdate.supportsHolding = YES;
      callUpdate.supportsGrouping = NO;
      callUpdate.supportsUngrouping = NO;
@@ -5725,7 +5792,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  
      dispatch_async(dispatch_get_main_queue(), ^{
          [self.callKitProvider reportCallWithUUID:[[NSUUID alloc] initWithUUIDString:uuid] updated:callUpdate];
-@@ -235,6 +278,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
+@@ -235,6 +285,33 @@ - (void)updateCall:(NSString *)uuid callerHandle:(NSString *)handle {
  
  #pragma mark - CXProviderDelegate
  
@@ -5759,7 +5826,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  - (void)providerDidReset:(CXProvider *)provider {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = NO;
  }
-@@ -245,10 +315,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
+@@ -245,10 +322,12 @@ - (void)providerDidBegin:(CXProvider *)provider {
  
  - (void)provider:(CXProvider *)provider didActivateAudioSession:(AVAudioSession *)audioSession {
      [TwilioVoiceReactNative twilioAudioDevice].enabled = YES;
@@ -5772,7 +5839,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  }
  
  - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)action {
-@@ -264,8 +336,17 @@ - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)
+@@ -264,8 +343,17 @@ - (void)provider:(CXProvider *)provider performEndCallAction:(CXEndCallAction *)
                               kTwilioVoiceReactNativeCallInviteEventKeyCallSid: callInvite.callSid,
                               kTwilioVoiceReactNativeEventKeyCallInvite: [self callInviteInfo:callInvite]}];
          [self.callInviteMap removeObjectForKey:action.callUUID.UUIDString];
@@ -5791,7 +5858,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
      [action fulfill];
  }
  
-@@ -290,18 +371,27 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
+@@ -290,18 +378,27 @@ - (void)provider:(CXProvider *)provider performStartCallAction:(CXStartCallActio
  }
  
  - (void)provider:(CXProvider *)provider performAnswerCallAction:(CXAnswerCallAction *)action {
@@ -5821,7 +5888,24 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
  }
  
  - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallAction *)action {
-@@ -328,6 +418,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
+@@ -317,7 +414,15 @@ - (void)provider:(CXProvider *)provider performSetHeldCallAction:(CXSetHeldCallA
+ - (void)provider:(CXProvider *)provider performSetMutedCallAction:(CXSetMutedCallAction *)action {
+     if (self.callMap[action.callUUID.UUIDString]) {
+         TVOCall *call = self.callMap[action.callUUID.UUIDString];
+-        [call setMuted:action.isMuted];
++        // Mute from the iOS call screen: gate only the mic in the engine so
++        // audio shared into the call keeps flowing (Oct 3 2026). Twilio's mute
++        // would silence the whole track; it stays the fallback.
++        if ([TwilioVoiceReactNative attoIsInjectionDeviceInstalled]) {
++            [[AttoAudioEngineDevice sharedDevice] setMicMuted:action.isMuted];
++            if (call.isMuted) { [call setMuted:NO]; }
++        } else {
++            [call setMuted:action.isMuted];
++        }
+         [action fulfill];
+     } else {
+         [action fail];
+@@ -328,6 +433,11 @@ - (void)provider:(CXProvider *)provider performPlayDTMFCallAction:(CXPlayDTMFCal
      if (self.callMap[action.callUUID.UUIDString]) {
          TVOCall *call = self.callMap[action.callUUID.UUIDString];
          [call sendDigits:action.digits];
@@ -5833,7 +5917,7 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
          [action fulfill];
      } else {
          [action fail];
-@@ -349,6 +444,19 @@ - (void)callDidConnect:(TVOCall *)call {
+@@ -349,6 +459,19 @@ - (void)callDidConnect:(TVOCall *)call {
  
      [self stopRingback];
  
@@ -5853,6 +5937,15 @@ index adcd79044d5acb80ced4be4421e1774c9f2b4053..0fabe2c8cfb07169093a5c0c1cca0e4f
      [self sendEventWithName:kTwilioVoiceReactNativeScopeCall
                         body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventConnected,
                                kTwilioVoiceReactNativeEventKeyCall: [self callInfo:call]}];
+@@ -360,6 +483,8 @@ - (void)callDidConnect:(TVOCall *)call {
+ }
+ 
+ - (void)call:(TVOCall *)call didDisconnectWithError:(NSError *)error {
++    // A mute never carries over to the next call.
++    @try { [[AttoAudioEngineDevice sharedDevice] setMicMuted:NO]; } @catch (NSException *e) {}
+     NSDictionary *messageBody = [NSDictionary dictionary];
+     if (error) {
+         messageBody = @{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeCallEventDisconnected,
 diff --git a/ios/TwilioVoiceReactNative.h b/ios/TwilioVoiceReactNative.h
 index 93105f992e97bb0b6bb478c281923a10ff710e90..87cf42e786f9968d8ec43e3ec963b8242da1ae44 100644
 --- a/ios/TwilioVoiceReactNative.h

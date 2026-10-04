@@ -623,11 +623,18 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
         const active =
           Number(d.recordCbCount ?? 0) > 0 || Number(d.playoutCbCount ?? 0) > 0;
         if (active) engineWasActive = true;
+        // Oct 4 2026: the client format is fixed at 48 kHz and VoiceProcessingIO
+        // converts to whatever the hardware runs (24 kHz on AirPods HFP), so the
+        // hardware rate differing from the engines is BY DESIGN now and counting
+        // it flagged every Bluetooth second as a mismatch. What can still break
+        // the audio is our own pieces disagreeing: the engines vs the format
+        // Twilio was given (and the measured rate, see checkAudioSentinels).
+        const capturingNow = Number(d.capturingFormatRate ?? 0);
         const mismatch =
           active &&
           built > 0 &&
-          session > 0 &&
-          (built !== session || (rendering > 0 && rendering !== session));
+          rendering > 0 &&
+          (built !== rendering || (capturingNow > 0 && capturingNow !== rendering));
         if (mismatch) {
           mismatchSamples += 1;
           worst = { built, session, rendering };

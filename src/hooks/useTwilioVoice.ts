@@ -1088,6 +1088,13 @@ function restoreNormalAudioModeAfterCall(writer: string): void {
       );
       return;
     }
+    // The engine's mic gate must never carry a mute into the next call. Native
+    // resets it on disconnect too; this covers a call adopted from the cold path.
+    try {
+      await NativeModules.AttoAudioInjection?.setEngineMicMuted?.(false);
+    } catch {
+      /* engine not installed */
+    }
     await runSessionWrite(writer, 'playsInSilentMode=true', () =>
       setAudioModeAsync({ playsInSilentMode: true })
     );

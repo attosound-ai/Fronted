@@ -8,6 +8,15 @@
 # binary that ships is the one that was tested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Every profile: a patch edited without refreshing pnpm-lock.yaml fails the
+# EAS install step (ERR_PNPM_LOCKFILE_CONFIG_MISMATCH) after a full upload
+# (Oct 3, fix5). Catch it here in seconds. Only in the repository, where
+# build:ios runs; the EAS copy installs right after anyway.
+if git rev-parse --git-dir >/dev/null 2>&1 && command -v pnpm >/dev/null 2>&1; then
+  if ! pnpm install --frozen-lockfile --lockfile-only --ignore-scripts >/dev/null 2>&1; then
+    echo "[release-gate] REFUSED: pnpm-lock.yaml is out of date (patch or dependency changed). Run pnpm install and commit the lockfile."; exit 1
+  fi
+fi
 PROFILE="${EAS_BUILD_PROFILE:-${1:-}}"
 if [ "$PROFILE" != "production" ]; then echo "[release-gate] profile '$PROFILE': no gate"; exit 0; fi
 if [ "${ATTO_RELEASE_GATE_OVERRIDE:-}" = "emergency" ]; then

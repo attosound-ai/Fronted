@@ -47,6 +47,7 @@ import { showToast } from '@/components/ui/Toast';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ChatConversation } from '@/features/messages/types';
+import { useCloseOnAccountChange } from '@/features/messages/hooks/useCloseOnAccountChange';
 
 /**
  * What Telegram and WhatsApp show when you tap the name at the top of a chat:
@@ -57,6 +58,7 @@ import type { ChatConversation } from '@/features/messages/types';
  * notifications; the public profile is one row away.
  */
 export default function ChatDetailsScreen() {
+  useCloseOnAccountChange('chat_details');
   const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{

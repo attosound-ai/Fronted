@@ -637,6 +637,12 @@ export const ANALYTICS_EVENTS = {
     WEBSOCKET_CONNECTED: 'messages_websocket_connected',
     WEBSOCKET_DISCONNECTED: 'messages_websocket_disconnected',
     CHAT_REFETCH_ON_RECONNECT: 'messages_chat_refetch_on_reconnect',
+    // A chat/thread/details screen opened under one account was removed when
+    // the active account changed (it would render every bubble as incoming).
+    SCREEN_CLOSED_ON_ACCOUNT_CHANGE: 'messages_screen_closed_on_account_change',
+    // A push notification tap: handled (navigated), skipped as a replay of an
+    // already handled tap, or switched to the recipient account first.
+    PUSH_TAP_HANDLED: 'messages_push_tap_handled',
     CHANNEL_JOINED: 'messages_channel_joined',
     CHANNEL_JOIN_FAILED: 'messages_channel_join_failed',
     MESSAGE_RECEIVED_REALTIME: 'messages_received_realtime',

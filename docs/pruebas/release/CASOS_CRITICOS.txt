@@ -6,6 +6,7 @@ L-FRIA-UNA        Call with ATTO closed, one account on the phone: answer from i
 L-FRIA-DOS        Call with ATTO closed, rep + creator both on the phone (two invites): answer, it connects, no crash
 L-FRIA-RAPIDA     Same, answering within the first 3 seconds (while the app is still booting)
 L-ABIERTA         Call with ATTO open in the foreground: answer, it connects
+L-BLUETOOTH       Call with Bluetooth headphones connected (and connecting mid call): call_engine_rate_summary mismatch_samples=0 and the voice sounds normal on both sides
 L-BLOQUEADA       Call with the phone locked: answer from the lock screen, it connects
 L-DIGITO-IOS      Digit pressed on the iOS call screen opens the recorder
 L-COLGAR-ATTO     Hang up from ATTO: Twilio shows the call completed within 2 s
@@ -14,6 +15,9 @@ L-RECHAZAR        Decline from iOS: the caller stops ringing
 M-LISTA-VIVO      New message with the conversation list open appears live (REST and socket)
 M-CHAT-VIVO       New message with the chat open arrives once, live
 M-RECONEXION      After 16+ min in background, a new message arrives live without relaunching
+M-PUSH-CUENTA     Tap a message push sent to the OTHER linked account: the app switches to it, the chat opens once, own bubbles on the right
+M-PUSH-REPETIDO   After tapping a message push, take a cold call and switch accounts twice: the chat never opens again by itself, never two copies
+M-CAMBIO-CHAT     With a chat open, switch account (manually or by answering a call for the creator): that chat closes
 M-EFECTOS         Bubble and screen effects play on the sending AND the receiving phone
 P-PUBLICAR        Post from the recorder during a call: lands on the feed with the post
 C-BORRAR          Deleting rep + creator leaves nothing in the orphan scan (qa_delete.py scan)

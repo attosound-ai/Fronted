@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
 import { API_CONFIG } from '@/constants/config';
+import { planPushTap } from '@/lib/push/pushTapPlan';
 
 // Must be called at module level — tells the OS how to handle
 // notifications when the app is in the foreground.
@@ -171,13 +172,90 @@ export async function removeTokenFromBackend(token: string): Promise<void> {
   });
 }
 
-/** Navigate to the deep link URL embedded in a push notification. */
+// Taps already handled in this process. getLastNotificationResponseAsync keeps
+// returning the same tap for the life of the process, and the tabs layout
+// re-runs it on every remount (cold call adopt, account switch), so without
+// this one old message tap was replayed into a new copy of the chat each time
+// (client report Oct 3, "triple messages when I opened the app").
+const handledTaps = new Set<string>();
+
+function tapKey(response: Notifications.NotificationResponse): string {
+  const req = response.notification.request;
+  return `${req.identifier}:${response.actionIdentifier}:${response.notification.date}`;
+}
+
+/**
+ * Navigate to the deep link URL embedded in a push notification, as the
+ * account the push was sent to. A push for a linked account that is not the
+ * active one switches to it first; a chat opened under the wrong account
+ * renders every bubble as incoming.
+ */
 export function handleNotificationResponse(
   response: Notifications.NotificationResponse
 ): void {
-  const url = response.notification.request.content.data?.url as string | undefined;
-  if (url) {
-    // Small delay on Android cold start to ensure navigation is mounted
-    setTimeout(() => router.push(url as any), 100);
+  const key = tapKey(response);
+  const data = (response.notification.request.content.data ?? {}) as Record<string, unknown>;
+  const alreadyHandled = handledTaps.has(key);
+  handledTaps.add(key);
+  if (!alreadyHandled) {
+    try {
+      Notifications.clearLastNotificationResponse();
+    } catch {
+      // Older native module: the Set above still blocks the replay.
+    }
+  }
+  void openAsRecipient(alreadyHandled, data);
+}
+
+async function openAsRecipient(
+  alreadyHandled: boolean,
+  data: Record<string, unknown>
+): Promise<void> {
+  const { useAccountStore } = await import('@/stores/accountStore');
+  const store = useAccountStore.getState();
+  const plan = planPushTap({
+    alreadyHandled,
+    url: data.url,
+    accountId: data.account_id,
+    activeAccountId: store.activeAccountId,
+    linkedAccountIds: store.accounts.map((a) => a.user.id),
+  });
+  const url = typeof data.url === 'string' ? data.url : undefined;
+  if (plan.kind === 'no_url') return;
+  if (plan.kind === 'replay_skipped' || plan.kind === 'recipient_not_on_device') {
+    void track(plan.kind, url, data.account_id);
+    return;
+  }
+  if (plan.kind === 'switch_then_open') {
+    try {
+      await store.switchToAccount(plan.accountId);
+    } catch {
+      // Switch refused (a call in progress) or failed: never open the chat
+      // under the other account.
+      void track('switch_failed', url, plan.accountId);
+      return;
+    }
+    if (useAccountStore.getState().activeAccountId !== plan.accountId) {
+      void track('switch_failed', url, plan.accountId);
+      return;
+    }
+    void track('switched_then_opened', url, plan.accountId);
+  } else {
+    void track('opened', url, data.account_id);
+  }
+  // Small delay on cold start to ensure navigation is mounted
+  setTimeout(() => router.push(plan.url as any), 100);
+}
+
+async function track(outcome: string, url: string | undefined, accountId: unknown): Promise<void> {
+  try {
+    const { analytics, ANALYTICS_EVENTS } = await import('@/lib/analytics');
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.PUSH_TAP_HANDLED, {
+      outcome,
+      route: url ? url.split('?')[0] : null,
+      account_id: accountId ?? null,
+    });
+  } catch {
+    // Telemetry never blocks navigation.
   }
 }

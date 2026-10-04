@@ -28,6 +28,7 @@ TEST_FILES=(
   "src/lib/analytics/__tests__/fixedFeatures.test.ts"
   "src/hooks/__tests__/callLandingModel.test.ts"
   "src/features/feed/__tests__/mentions.test.ts"
+  "src/lib/push/__tests__/pushTapPlan.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"
   "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"

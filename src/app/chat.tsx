@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { ChatScreen, useConversationId } from '@/features/messages';
 import { Text } from '@/components/ui/Text';
 import { COLORS, SPACING } from '@/constants/theme';
+import { useCloseOnAccountChange } from '@/features/messages/hooks/useCloseOnAccountChange';
 
 export default function ChatRoute() {
+  useCloseOnAccountChange('chat');
   const { t } = useTranslation('messages');
   const { conversationId, participantName, participantId } = useLocalSearchParams<{
     conversationId: string;

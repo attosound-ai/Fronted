@@ -43,6 +43,7 @@ import {
 } from '@/features/messages/components/ChatComposer';
 import { ReactionPicker } from '@/features/messages/components/ReactionPicker';
 import { MediaMessage } from '@/features/messages/media/MediaMessage';
+import { useCloseOnAccountChange } from '@/features/messages/hooks/useCloseOnAccountChange';
 
 /**
  * Slack's thread, and Slack's shape for it: a screen of its own pushed from
@@ -53,6 +54,7 @@ import { MediaMessage } from '@/features/messages/media/MediaMessage';
  * Slack's, not like a cut down list).
  */
 export default function ChatThreadScreen() {
+  useCloseOnAccountChange('chat_thread');
   const { t } = useTranslation('messages');
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{

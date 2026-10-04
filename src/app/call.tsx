@@ -50,6 +50,24 @@ function handOff(trigger: string = 'effect') {
   //           later resolves to genuinely free. This is what makes "always land
   //           on record, even answered outside the app" hold.
   //   false → definitely free → feed.
+  // The call is gone (missed, caller hung up, declined, declined elsewhere):
+  // nothing to record, go back to the feed. Without this the cleared call fell
+  // through to the recorder branch below and the app opened on an empty,
+  // black recorder (Oct 3 2026, a missed call that auto switched accounts).
+  if (!useCallStore.getState().activeCall) {
+    analytics.capture(ANALYTICS_EVENTS.CALL.NAV_TO_HOME, {
+      trigger,
+      from_pathname: '/call',
+      reason: 'call_cleared',
+      can_dismiss: router.canDismiss(),
+    });
+    if (router.canDismiss()) {
+      router.dismissTo('/(tabs)');
+    } else {
+      router.replace('/(tabs)');
+    }
+    return;
+  }
   const store = useSubscriptionStore.getState();
   const ent = store.entitlementState('record_upload');
   // INBOUND (Sep 23 2026, the client's flow): the call lands on the FEED with

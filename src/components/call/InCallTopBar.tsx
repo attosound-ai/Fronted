@@ -710,6 +710,11 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
           <TouchableOpacity
             style={[styles.glassBtnInner, activeCall?.isMuted && styles.glassBtnActive]}
             onPress={toggleMuteCall}
+            accessibilityRole="button"
+            accessibilityLabel={
+              activeCall?.isMuted ? t('active.unmuteCall') : t('active.muteCall')
+            }
+            accessibilityState={{ selected: !!activeCall?.isMuted }}
           >
             {activeCall?.isMuted ? (
               <MicOff size={20} color="#FFF" strokeWidth={2.25} />
@@ -723,6 +728,9 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
           <TouchableOpacity
             style={[styles.glassBtnInner, activeCall?.isSpeaker && styles.glassBtnActive]}
             onPress={toggleSpeaker}
+            accessibilityRole="button"
+            accessibilityLabel={t('active.speaker')}
+            accessibilityState={{ selected: !!activeCall?.isSpeaker }}
           >
             {activeCall?.isSpeaker ? (
               <Volume2 size={20} color="#FFF" strokeWidth={2.25} />

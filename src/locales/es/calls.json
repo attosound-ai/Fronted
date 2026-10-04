@@ -39,7 +39,9 @@
     "laneNamePrompt": "Ingrese un nombre para la pista {{number}}",
     "recBadge": "REC",
     "micPermissionRequired": "Se requiere permiso del micrófono para grabar.",
-    "hideKeypad": "Ocultar"
+    "hideKeypad": "Ocultar",
+    "muteCall": "Silenciar llamada",
+    "unmuteCall": "Activar micrófono"
   },
   "audioProblem": {
     "title": "Problema de audio",

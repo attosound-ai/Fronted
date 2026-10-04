@@ -39,7 +39,9 @@
     "laneNamePrompt": "Enter a name for lane {{number}}",
     "recBadge": "REC",
     "micPermissionRequired": "Microphone permission is required to record.",
-    "hideKeypad": "Hide"
+    "hideKeypad": "Hide",
+    "muteCall": "Mute call",
+    "unmuteCall": "Unmute call"
   },
   "audioProblem": {
     "title": "Audio problem",

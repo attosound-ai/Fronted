@@ -39,7 +39,9 @@
     "laneNamePrompt": "Digite um nome para a faixa {{number}}",
     "recBadge": "REC",
     "micPermissionRequired": "É necessária permissão do microfone para gravar.",
-    "hideKeypad": "Ocultar"
+    "hideKeypad": "Ocultar",
+    "muteCall": "Silenciar chamada",
+    "unmuteCall": "Ativar microfone"
   },
   "audioProblem": {
     "title": "Problema de áudio",

@@ -144,6 +144,13 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
   // Cold-launch CallKit state (bootstrap-owned).
   private var coldProvider: CXProvider?
   private var heldInvites: [String: TwilioVoice.CallInvite] = [:]
+  // Sibling key -> time the user declined it. The bridge rings every linked
+  // account on this phone with one <Dial>, so one call arrives as N invites
+  // (N pushes, N CallKit calls). Declining one used to leave the others ringing
+  // for the caller until the 30 s dial timeout (Oct 3, westcol busy at 7 s,
+  // david.espejo no-answer at 35 s). A late sibling of a declined call is
+  // rejected on arrival.
+  private var declinedSiblingKeys: [String: Date] = [:]
   private var heldCalls: [String: TwilioVoice.Call] = [:]
   // Per-call connect time, handed to the RN module at adoption so JS shows the
   // real call duration (feeds the module's callConnectMap / initialConnectedTimestamp).
@@ -549,6 +556,18 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // in this window can be joined to the exact Twilio call.
     UserDefaults.standard.set(callInvite.callSid, forKey: "atto_last_cold_call_sid")
     mark("cold_report")
+    if let declinedAt = declinedSiblingKeys[siblingKey(callInvite)],
+       Date().timeIntervalSince(declinedAt) < 60 {
+      // The user already declined this call on another account's invite.
+      callInvite.reject()
+      if let uuid = coldReportUUID {
+        coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .declinedElsewhere)
+      }
+      mark("cold_late_sibling_rejected")
+      reportedThisPush = true
+      completePush()
+      return
+    }
     let update = buildUpdate(for: callInvite)
     if let uuid = coldReportUUID {
       // We ALREADY showed a placeholder call for this push. Fill it in with the
@@ -591,6 +610,34 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
     // A cancel push must still complete the PushKit handler.
     completePush()
+  }
+
+  /// Invites of the same incoming call share the parent CallSid the bridge
+  /// stamps as a custom parameter; older bridges fall back to caller + target.
+  private func siblingKey(_ invite: TwilioVoice.CallInvite) -> String {
+    let params = invite.customParameters ?? [:]
+    if let parent = params["ParentCallSid"], !parent.isEmpty { return "p:" + parent }
+    return "f:" + (invite.from ?? "") + "|" + (params["TargetUserId"] ?? "")
+  }
+
+  /// The user declined declinedUUID: reject every other held invite of the same
+  /// call and end its CallKit entry, so the caller hears busy right away.
+  private func rejectSiblings(of declined: TwilioVoice.CallInvite, declinedUUID: String) {
+    let key = siblingKey(declined)
+    let now = Date()
+    declinedSiblingKeys = declinedSiblingKeys.filter { now.timeIntervalSince($0.value) < 60 }
+    declinedSiblingKeys[key] = now
+    var count = 0
+    for (uuidString, invite) in heldInvites where uuidString != declinedUUID && siblingKey(invite) == key {
+      invite.reject()
+      heldInvites.removeValue(forKey: uuidString)
+      if let uuid = UUID(uuidString: uuidString) {
+        coldProvider?.reportCall(with: uuid, endedAt: nil, reason: .declinedElsewhere)
+      }
+      count += 1
+    }
+    mark(count > 0 ? "cold_siblings_rejected" : "cold_siblings_none")
+    UserDefaults.standard.set(count, forKey: "atto_cold_siblings_rejected_count")
   }
 
   private func buildUpdate(for callInvite: TwilioVoice.CallInvite) -> CXCallUpdate {
@@ -717,6 +764,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
         call.disconnect(); result["handled"] = true
       } else if let invite = heldInvites[uuidString] {
         invite.reject(); heldInvites.removeValue(forKey: uuidString); result["handled"] = true
+        rejectSiblings(of: invite, declinedUUID: uuidString)
       }
       UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
     default:
@@ -783,6 +831,7 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     } else if let invite = heldInvites[action.callUUID.uuidString] {
       invite.reject()
       heldInvites.removeValue(forKey: action.callUUID.uuidString)
+      rejectSiblings(of: invite, declinedUUID: action.callUUID.uuidString)
     }
     UserDefaults.standard.set(false, forKey: AttoVoipBootstrap.coldCallLiveKey)
     action.fulfill()

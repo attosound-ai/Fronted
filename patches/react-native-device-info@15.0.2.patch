@@ -33,7 +33,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..4fc092aa561f24335aa8763012f872e2
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +980,388 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +980,392 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -279,6 +279,10 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..4fc092aa561f24335aa8763012f872e2
 +        // because iOS delivered it to the wrong CXProvider (Sentry 7771272209).
 +        @"coldAnswerForwardedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_answer_forwarded_at"]),
 +        @"coldEndForwardedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_end_forwarded_at"]),
++        // Oct 3 2026: declining one invite of a fan out call rejected its siblings.
++        @"coldSiblingsRejectedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_siblings_rejected_at"]),
++        @"coldLateSiblingRejectedAt": @([ud doubleForKey:@"atto_coldcallkit_cold_late_sibling_rejected_at"]),
++        @"coldSiblingsRejectedCount": @([ud integerForKey:@"atto_cold_siblings_rejected_count"]),
 +        @"moduleAnswerNoInviteAt": @([ud doubleForKey:@"atto_coldcallkit_module_answer_no_invite_at"]),
 +        @"coldAcceptBeginAt": @([ud doubleForKey:@"atto_coldcallkit_cold_accept_begin_at"]),
 +        @"coldActionTimeoutAt": @([ud doubleForKey:@"atto_coldcallkit_cold_action_timeout_at"]),

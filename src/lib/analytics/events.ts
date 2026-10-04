@@ -223,6 +223,9 @@ export const ANALYTICS_EVENTS = {
     // whether the extended ~12s window is enough on cold launch or a native
     // CallKit report (independent of RN boot) is still required.
     VOIP_PUSH_OUTCOME: 'call_voip_push_outcome',
+    // Declining one invite of a fan out call (one per linked account on this
+    // phone) rejected its siblings; source app | callkit | late_sibling.
+    SIBLING_INVITES_REJECTED: 'call_sibling_invites_rejected',
     // A call was in progress and the app DIED without ever reporting a terminal
     // state (no Disconnected event, no clean end) — i.e. a silent jetsam/watchdog
     // kill. Detected on the next launch from an MMKV marker written at call start

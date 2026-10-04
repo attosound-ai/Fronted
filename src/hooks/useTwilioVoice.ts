@@ -15,6 +15,7 @@ import { showToast } from '@/components/ui/Toast';
 import i18n from '@/lib/i18n';
 import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
+import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import {
   startCallTelemetry,
   registerCallCadenceListener,
@@ -149,6 +150,46 @@ let pushKitReady = false;
 let activeCallObj: any = null;
 let activeCallTeardown: (() => void) | null = null;
 let pendingInvite: any = null;
+// Every pending invite of the current ring, grouped by call. One incoming call
+// arrives as one invite per linked account on this phone; declining one must
+// reject the rest (the caller otherwise hears ringback for 30 s).
+const inviteSiblings = new InviteSiblings<any>();
+
+function inviteLike(invite: any): InviteLike {
+  let params: Record<string, string | undefined> = {};
+  try {
+    params =
+      typeof invite.getCustomParameters === 'function' ? invite.getCustomParameters() ?? {} : {};
+  } catch {
+    /* fall back to caller + target */
+  }
+  let callSid = '';
+  let from: string | null = null;
+  try {
+    callSid = String(invite.getCallSid());
+    from = invite.getFrom() ?? null;
+  } catch {
+    /* SDK torn down */
+  }
+  return { callSid, from, params };
+}
+
+/** The user declined `invite`: reject its sibling invites too. */
+function rejectSiblingInvites(invite: any, source: string): void {
+  const siblings = inviteSiblings.declineAndTakeSiblings(inviteLike(invite));
+  for (const sibling of siblings) {
+    try {
+      sibling.reject();
+    } catch {
+      /* already gone */
+    }
+  }
+  if (siblings.length === 0) return;
+  analytics.capture(ANALYTICS_EVENTS.CALL.SIBLING_INVITES_REJECTED, {
+    source,
+    count: siblings.length,
+  });
+}
 let lastToken: string | null = null;
 // Which account ID the currently-registered Twilio identity belongs to.
 // Used by the multi-account switch flow: when activeAccountId changes we
@@ -1927,12 +1968,14 @@ export function rejectIncomingCall() {
   analytics.capture(ANALYTICS_EVENTS.CALL.REJECTED);
   void endCallTelemetry('rejected');
   if (pendingInvite) {
+    const declined = pendingInvite;
     try {
-      pendingInvite.reject();
+      declined.reject();
     } catch {
       /* SDK already torn down */
     }
     pendingInvite = null;
+    rejectSiblingInvites(declined, 'app');
   }
   useCallStore.getState().endCall();
   // Same as every other terminal path: the ring may already have taken the call
@@ -2864,6 +2907,23 @@ export function useTwilioVoice() {
         });
       }
 
+      // The user already declined this call on another account's invite: this
+      // late sibling is rejected on arrival, never shown.
+      const inviteMeta = inviteLike(invite);
+      if (inviteSiblings.wasDeclined(inviteMeta)) {
+        try {
+          invite.reject();
+        } catch {
+          /* already gone */
+        }
+        analytics.capture(ANALYTICS_EVENTS.CALL.SIBLING_INVITES_REJECTED, {
+          source: 'late_sibling',
+          count: 1,
+        });
+        return;
+      }
+      inviteSiblings.add(inviteMeta, invite);
+
       pendingInvite = invite;
 
       const callSid = invite.getCallSid();
@@ -2949,10 +3009,27 @@ export function useTwilioVoice() {
         } catch {
           /* noop */
         }
+        try {
+          invite.off(CallInvite.Event.Rejected, onRejected);
+        } catch {
+          /* noop */
+        }
+        inviteSiblings.remove(inviteMeta.callSid);
         telemetryCounters.dec('twilioListeners', 2);
       };
 
       const onCancelled = () => {
+        // A sibling invite is cancelled by Twilio when another account's invite
+        // of the same call is answered, or the user declined it here. Neither
+        // may end the call in progress or the ring that is still live.
+        const otherStillRinging = inviteSiblings.siblingsOf(inviteMeta).length > 0;
+        if (activeCallObj || otherStillRinging) {
+          if (pendingInvite === invite) {
+            pendingInvite = inviteSiblings.siblingsOf(inviteMeta)[0] ?? null;
+          }
+          detachInviteHandlers();
+          return;
+        }
         pendingInvite = null;
         void endCallTelemetry('invite_cancelled');
         endCall();
@@ -2980,8 +3057,16 @@ export function useTwilioVoice() {
         detachInviteHandlers();
       };
 
+      // Declined from the CallKit screen (or by us): take the siblings down too.
+      const onRejected = () => {
+        if (pendingInvite === invite) pendingInvite = null;
+        rejectSiblingInvites(invite, 'callkit');
+        detachInviteHandlers();
+      };
+
       invite.on(CallInvite.Event.Cancelled, onCancelled);
       invite.on(CallInvite.Event.Accepted, onAccepted);
+      invite.on(CallInvite.Event.Rejected, onRejected);
       inviteHandlersAttached = true;
       telemetryCounters.inc('twilioListeners', 2);
 

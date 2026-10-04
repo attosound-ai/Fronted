@@ -178,6 +178,9 @@ export function useVoipReportTelemetry(): void {
           // call only the bootstrap knew, and were forwarded instead of crashing.
           cold_answer_forwarded_ms: since(s.coldAnswerForwardedAt ?? null),
           cold_end_forwarded_ms: since(s.coldEndForwardedAt ?? null),
+          cold_siblings_rejected_ms: since(s.coldSiblingsRejectedAt ?? null),
+          cold_late_sibling_rejected_ms: since(s.coldLateSiblingRejectedAt ?? null),
+          cold_siblings_rejected_count: s.coldSiblingsRejectedCount ?? null,
           module_answer_no_invite_ms: since(s.moduleAnswerNoInviteAt ?? null),
           cold_accept_begin_ms: since(s.coldAcceptBeginAt ?? null),
           cold_action_timeout_ms: since(s.coldActionTimeoutAt ?? null),

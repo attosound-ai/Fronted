@@ -145,10 +145,10 @@ index 0000000000000000000000000000000000000000..af34eaea1d86ef7f0f19533c907f21aa
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d19444088f7e
+index 0000000000000000000000000000000000000000..fe9276c80f475b2b5547e31ac4bada2f888afbe3
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3811 @@
+@@ -0,0 +1,3873 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -666,6 +666,12 @@ index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d194
 +    BOOL _pendingFormatRecheck;
 +    TVOAudioDeviceContext _formatRealignContext;
 +    uint8_t _formatRealignCountForContext;
++    // Mid-take route change (Oct 3 2026): converter from the CURRENT ring rate
++    // to the take file's rate, rebuilt when the ring rate changes. Touched only
++    // on the serial mixConsumerQueue and in startMixRecording.
++    AVAudioConverter *_mixConverter;
++    double _mixConverterRate;
++    uint64_t _dbgMixResampledFrames;
 +    uint64_t _dbgRouteChangeDroppedCount;
 +    uint64_t _dbgRouteChangeRecheckedCount;
 +    uint64_t _dbgRouteRebuildDisagreeCount;
@@ -2095,6 +2101,9 @@ index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d194
 +     */
 +    double sampleRate = [self engineTargetFormat].sampleRate;
 +    if (sampleRate <= 0) sampleRate = (double)kPreferredSampleRate;
++    _mixConverter = nil;
++    _mixConverterRate = 0;
++    _dbgMixResampledFrames = 0;
 +
 +    AVAudioFormat *fileFormat = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
 +                                                                 sampleRate:sampleRate
@@ -2350,6 +2359,7 @@ index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d194
 +        // signature. Counted for everyone; only acted on for the cohort.
 +        @"sessionRateFlipCount": @(_dbgSessionRateFlipCount),
 +        @"formatRealignScheduledCount": @(_dbgFormatRealignScheduledCount),
++        @"mixResampledFrames": @(_dbgMixResampledFrames),
 +        // Which side of the cohort flag this call ran on, so the counters above can
 +        // be read without guessing.
 +        @"renderFormatRecheckEnabled": @([self renderFormatRecheckEnabled] ? 1 : 0),
@@ -2632,6 +2642,58 @@ index 0000000000000000000000000000000000000000..a54b25e2dd8b0442b1b4816ea1d6d194
 +        if (s > 1.0f) s = 1.0f;
 +        else if (s < -1.0f) s = -1.0f;
 +        dst[i] = s;
++    }
++
++    /*
++     * The rings carry samples at the CURRENT engine rate. When the route changed
++     * mid-take (Bluetooth joining or leaving) the engine was rebuilt at another
++     * rate while the file kept its own, and everything after the change was
++     * written at the wrong speed: proven on David's iPhone on Oct 3 2026 with
++     * reference tones (1000 Hz written as 2000 Hz after AirPods joined, as 500 Hz
++     * and twice as long after they left). Convert to the file rate when they
++     * differ; when they match (every take without a route change) nothing changes.
++     */
++    double ringRate = [self engineTargetFormat].sampleRate;
++    if (ringRate > 0 && fabs(ringRate - fmt.sampleRate) > 1.0) {
++        AVAudioFormat *srcFmt = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
++                                                                 sampleRate:ringRate
++                                                                   channels:1
++                                                                interleaved:NO];
++        if (srcFmt != nil && (_mixConverter == nil || fabs(_mixConverterRate - ringRate) > 1.0)) {
++            _mixConverter = [[AVAudioConverter alloc] initFromFormat:srcFmt toFormat:fmt];
++            _mixConverterRate = ringRate;
++        }
++        AVAudioPCMBuffer *src = srcFmt ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:srcFmt
++                                                                    frameCapacity:(AVAudioFrameCount)frames] : nil;
++        if (_mixConverter != nil && src != nil && src.floatChannelData != NULL) {
++            memcpy(src.floatChannelData[0], dst, frames * sizeof(float));
++            src.frameLength = (AVAudioFrameCount)frames;
++            AVAudioFrameCount cap = (AVAudioFrameCount)ceil((double)frames * fmt.sampleRate / ringRate) + 64;
++            AVAudioPCMBuffer *conv = [[AVAudioPCMBuffer alloc] initWithPCMFormat:fmt frameCapacity:cap];
++            __block BOOL fed = NO;
++            NSError *convError = nil;
++            AVAudioConverterOutputStatus st =
++                [_mixConverter convertToBuffer:conv
++                                         error:&convError
++                            withInputFromBlock:^AVAudioBuffer *(AVAudioPacketCount n, AVAudioConverterInputStatus *outStatus) {
++                                if (fed) {
++                                    *outStatus = AVAudioConverterInputStatus_NoDataNow;
++                                    return nil;
++                                }
++                                fed = YES;
++                                *outStatus = AVAudioConverterInputStatus_HaveData;
++                                return src;
++                            }];
++            if (st != AVAudioConverterOutputStatus_Error && conv.frameLength > 0) {
++                _dbgMixResampledFrames += conv.frameLength;
++                NSError *error = nil;
++                if (![file writeFromBuffer:conv error:&error]) {
++                    NSLog(@"[AttoAudioEngineDevice] mix write (resampled) failed: %@", error);
++                }
++                return;
++            }
++            NSLog(@"[AttoAudioEngineDevice] mix resample failed (%.0f -> %.0f): %@", ringRate, fmt.sampleRate, convError);
++        }
 +    }
 +
 +    NSError *error = nil;

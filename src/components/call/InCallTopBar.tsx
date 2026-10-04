@@ -328,6 +328,8 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
           // often we acted on it, which only ever happens inside the cohort.
           session_rate_flip_count: diag?.sessionRateFlipCount ?? null,
           format_realign_scheduled_count: diag?.formatRealignScheduledCount ?? null,
+          // Frames of the take converted because the route changed mid-take.
+          mix_resampled_frames: diag?.mixResampledFrames ?? null,
           // Which side of `engine_render_format_recheck` this call ran on, so the
           // two cohorts are separable in one query.
           render_format_recheck_enabled: diag?.renderFormatRecheckEnabled ?? null,

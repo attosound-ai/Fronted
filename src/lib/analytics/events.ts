@@ -226,6 +226,11 @@ export const ANALYTICS_EVENTS = {
     // Declining one invite of a fan out call (one per linked account on this
     // phone) rejected its siblings; source app | callkit | late_sibling.
     SIBLING_INVITES_REJECTED: 'call_sibling_invites_rejected',
+    // Oct 4 2026 sentinels: the engine restarted mid call (the only door to the
+    // half speed / robot / chipmunk family now that the format is fixed), and a
+    // measured audio rate more than 5 percent off the configured one.
+    AUDIO_RESTARTED_MID_CALL: 'call_audio_restarted_mid_call',
+    AUDIO_RATE_MEASURED_MISMATCH: 'call_audio_rate_measured_mismatch',
     // A call was in progress and the app DIED without ever reporting a terminal
     // state (no Disconnected event, no clean end) — i.e. a silent jetsam/watchdog
     // kill. Detected on the next launch from an MMKV marker written at call start

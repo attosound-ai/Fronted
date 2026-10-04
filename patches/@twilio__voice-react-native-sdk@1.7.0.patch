@@ -156,10 +156,10 @@ index 0000000000000000000000000000000000000000..d42c16ea10f137e223c6df7fdf6af906
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f02768434a2a3
+index 0000000000000000000000000000000000000000..bd386365a74c6feeb04c07901f52159845b883a4
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3894 @@
+@@ -0,0 +1,3967 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -176,6 +176,7 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +#import "AttoAudioEngineDevice.h"
 +
 +#import <stdatomic.h>
++#import <QuartzCore/QuartzCore.h>
 +
 +// We want to get as close to 10 msec buffers as possible because this is what the media engine prefers.
 +static double const kPreferredIOBufferDuration = 0.01;
@@ -359,6 +360,11 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +    // is using its own default device and our engine is inert (which is exactly
 +    // why westcol's recordings captured nothing).
 +    uint64_t cbCount;
++    // Oct 4 2026: frames the VoiceProcessingIO unit actually asked for. Divided by
++    // wall time in mixDiagnostics this is the REAL playout rate, independent of
++    // every format we believe we configured (the AirPods "deeper, pixelated" case
++    // had every reported rate at 24000 while the audio ran at half speed).
++    uint64_t framesTotal;
 +} AudioRendererContext;
 +
 +// Audio renderer contexts used in core audio's record callback to retrieve the sdk's audio device context.
@@ -432,6 +438,8 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +     * party still hears what is shared but not this phone's microphone.
 +     */
 +    int32_t micMuted;
++    // Oct 4 2026: frames the unit delivered from the mic (real capture rate).
++    uint64_t framesTotal;
 +} AudioCapturerContext;
 +
 +// The VoiceProcessingIO audio unit uses bus 0 for output, and bus 1 for input.
@@ -701,6 +709,10 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +    uint64_t _dbgStopFileCalls;
 +    double   _dbgLastStopFileLagMs;
 +    uint64_t _dbgSessionRateFlipCount;
++    // Oct 4 2026: hardware rate when the VoiceProcessingIO unit was configured,
++    // and how often a route change found it moved underneath an unchanged format.
++    double _unitConfiguredHwRate;
++    uint64_t _dbgUnitHwRateRestartCount;
 +    uint64_t _dbgFormatRealignScheduledCount;
 +    NSInteger _dbgLastRouteReason;
 +    double _dbgLastRouteReasonAt;
@@ -2283,6 +2295,40 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 + * the far party. Use `injectFramesToCapture` for that; it counts frames handed to
 + * Twilio while an injection was active.
 + */
++/*
++ * Oct 4 2026: the real rates. Frames the unit asked for (playout) and delivered
++ * (record) per second of wall time since the previous diagnostics read. If these
++ * disagree with the formats above, the formats are lying.
++ */
++- (NSDictionary *)attoMeasuredRates {
++    static NSMutableDictionary *cache = nil;
++    @synchronized(self) {
++        const double now = CACurrentMediaTime();
++        const uint64_t play = self.renderingContext ? self.renderingContext->framesTotal : 0;
++        const uint64_t rec = self.capturingContext ? self.capturingContext->framesTotal : 0;
++        if (cache && now - [cache[@"t"] doubleValue] < 0.05) return cache[@"out"];
++        NSDictionary *out = @{};
++        if (cache) {
++            const double dt = now - [cache[@"t"] doubleValue];
++            const double dp = (double)(play - [cache[@"play"] unsignedLongLongValue]);
++            const double dr = (double)(rec - [cache[@"rec"] unsignedLongLongValue]);
++            if (dt > 0.5 && dp >= 0 && dr >= 0) {
++                out = @{ @"play": @((long)llround(dp / dt)), @"rec": @((long)llround(dr / dt)) };
++            }
++        }
++        cache = [@{ @"t": @(now), @"play": @(play), @"rec": @(rec), @"out": out } mutableCopy];
++        return out;
++    }
++}
++
++- (double)attoUnitClientRateScope:(AudioUnitScope)scope bus:(AudioUnitElement)bus {
++    if (_audioUnit == NULL) return 0;
++    AudioStreamBasicDescription d;
++    UInt32 size = sizeof(d);
++    if (AudioUnitGetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, scope, bus, &d, &size) != noErr) return -1;
++    return d.mSampleRate;
++}
++
 +- (NSDictionary *)mixDiagnostics {
 +    double sr = _metronomeSampleRate > 0 ? _metronomeSampleRate : (double)kPreferredSampleRate;
 +    uint64_t total = _dbgTotalFrames;
@@ -2384,8 +2430,15 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +        // already latched a render/capture format, i.e. the A2DP-to-HFP answer
 +        // signature. Counted for everyone; only acted on for the cohort.
 +        @"sessionRateFlipCount": @(_dbgSessionRateFlipCount),
++        @"unitConfiguredHwRate": @(_unitConfiguredHwRate),
++        @"unitHwRateRestartCount": @(_dbgUnitHwRateRestartCount),
 +        @"formatRealignScheduledCount": @(_dbgFormatRealignScheduledCount),
 +        @"mixResampledFrames": @(_dbgMixResampledFrames),
++        @"measuredPlayoutFps": [self attoMeasuredRates][@"play"] ?: @0,
++        @"measuredRecordFps": [self attoMeasuredRates][@"rec"] ?: @0,
++        @"unitOutputClientRate": @([self attoUnitClientRateScope:kAudioUnitScope_Input bus:kOutputBus]),
++        @"unitInputClientRate": @([self attoUnitClientRateScope:kAudioUnitScope_Output bus:kInputBus]),
++        @"hwSampleRateNow": @([AVAudioSession sharedInstance].sampleRate),
 +        // Which side of the cohort flag this call ran on, so the counters above can
 +        // be read without guessing.
 +        @"renderFormatRecheckEnabled": @([self renderFormatRecheckEnabled] ? 1 : 0),
@@ -3276,6 +3329,7 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +    assert(bufferList->mBuffers[0].mNumberChannels > 0);
 +
 +    context->bufferList = bufferList;
++    context->framesTotal += numFrames;
 +    context->cbCount++; // telemetry: proves the custom device is the active one
 +
 +    int8_t *audioBuffer = (int8_t *)bufferList->mBuffers[0].mData;
@@ -3320,6 +3374,7 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +    }
 +
 +    AudioCapturerContext *context = (AudioCapturerContext *)refCon;
++    context->framesTotal += numFrames;
 +    context->cbCount++; // telemetry: proves the custom device is the active one
 +
 +    if (context->deviceContext == NULL) {
@@ -3552,6 +3607,7 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +     * to prevent any additional format conversions after the media engine has mixed our playout audio.
 +     */
 +    AudioStreamBasicDescription streamDescription = self.renderingFormat.streamDescription;
++    _unitConfiguredHwRate = [AVAudioSession sharedInstance].sampleRate;
 +
 +    UInt32 enableOutput = 1;
 +    status = AudioUnitSetProperty(_audioUnit, kAudioOutputUnitProperty_EnableIO,
@@ -3939,9 +3995,26 @@ index 0000000000000000000000000000000000000000..249afe12d812584d2c2dc3fde80f0276
 +        cachedCapturing = _capturingFormat;
 +    }
 +
++    /*
++     * Oct 4 2026: the formats can agree while the hardware moved. Answering with
++     * the AirPods already on, the session went A2DP 48000 then HFP 24000 within a
++     * second; Twilio and the engines ended at 24000 and nothing restarted, yet the
++     * far party played at half speed (deeper, "pixelated") and the take was
++     * written at half frequency. If the hardware rate now differs from the one the
++     * unit was configured under, take the same, standard format change path.
++     */
++    const double hwNow = [AVAudioSession sharedInstance].sampleRate;
++    const BOOL hwMovedUnderUnit = hwNow > 0 && _unitConfiguredHwRate > 0 &&
++                                  fabs(hwNow - _unitConfiguredHwRate) > 1.0;
++    if (hwMovedUnderUnit && [activeFormat isEqual:cachedRendering] &&
++        [activeFormat isEqual:cachedCapturing]) {
++        @synchronized(self) { _dbgUnitHwRateRestartCount++; }
++        NSLog(@"[AttoAudioEngine] hardware rate moved under the unit (%.0f -> %.0f); restarting", _unitConfiguredHwRate, hwNow);
++    }
++
 +    // Notify Voice SDK about the format change
 +    if (![activeFormat isEqual:cachedRendering] ||
-+        ![activeFormat isEqual:cachedCapturing]) {
++        ![activeFormat isEqual:cachedCapturing] || hwMovedUnderUnit) {
 +
 +        _restartAudioUnit = YES;
 +

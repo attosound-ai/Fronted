@@ -330,6 +330,14 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
           format_realign_scheduled_count: diag?.formatRealignScheduledCount ?? null,
           // Frames of the take converted because the route changed mid-take.
           mix_resampled_frames: diag?.mixResampledFrames ?? null,
+          // Oct 4 2026: real rates vs the configured ones (AirPods half speed case).
+          measured_playout_fps: diag?.measuredPlayoutFps ?? null,
+          measured_record_fps: diag?.measuredRecordFps ?? null,
+          unit_output_client_rate: diag?.unitOutputClientRate ?? null,
+          unit_input_client_rate: diag?.unitInputClientRate ?? null,
+          hw_sample_rate_now: diag?.hwSampleRateNow ?? null,
+          unit_configured_hw_rate: diag?.unitConfiguredHwRate ?? null,
+          unit_hw_rate_restart_count: diag?.unitHwRateRestartCount ?? null,
           // Which side of `engine_render_format_recheck` this call ran on, so the
           // two cohorts are separable in one query.
           render_format_recheck_enabled: diag?.renderFormatRecheckEnabled ?? null,

@@ -29,6 +29,7 @@ import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
 import type { MenuItem } from '../thread/MessageRow';
 import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
+import { EditInPlaceOverlay } from '../thread/EditInPlaceOverlay';
 import { X, Pencil } from 'lucide-react-native';
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -71,6 +72,7 @@ import { usePinnedMessages } from '../hooks/usePinnedMessages';
 import { useCameraStore, type CameraMode } from '../stores/cameraStore';
 import { countThreadReplies } from '../hooks/useThread';
 import { summarizeThreads } from '../thread/threadModel';
+import { editAvailability, editToSave } from '../thread/editRules';
 import { useThreadSeenStore } from '../stores/threadSeenStore';
 import { useThreadSavedStore } from '../stores/threadSavedStore';
 import { useThreadFollowStore } from '../stores/threadFollowStore';
@@ -176,6 +178,9 @@ export function ChatScreen({
   const [selectedMessage, setSelectedMessage] = useState<AttoMessage | null>(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
+  const [editInPlace, setEditInPlace] = useState<{ message: AttoMessage; rect: Anchor } | null>(
+    null
+  );
   const [forwardMessage, setForwardMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
 
@@ -399,18 +404,13 @@ export function ChatScreen({
 
       // Edit mode — update existing message
       if (editingMessage) {
-        try {
-          await editMessage(editingMessage._id as string, content);
-          analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_COMPLETED, {
-            conversation_id: conversationId,
-            message_id: editingMessage._id,
-          });
-        } catch {
-          analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_FAILED, {
-            conversation_id: conversationId,
-            message_id: editingMessage._id,
-          });
-        }
+        const outcome = await editMessage(editingMessage._id as string, content);
+        analytics.capture(
+          outcome === 'ok'
+            ? ANALYTICS_EVENTS.MESSAGES.EDIT_COMPLETED
+            : ANALYTICS_EVENTS.MESSAGES.EDIT_FAILED,
+          { conversation_id: conversationId, message_id: editingMessage._id, outcome }
+        );
         setEditingMessage(null);
         composerRef.current?.clear();
         return;
@@ -573,7 +573,7 @@ export function ChatScreen({
   );
 
   const handleMenuAction = useCallback(
-    (actionKey: string, msg: AttoMessage) => {
+    (actionKey: string, msg: AttoMessage, rect?: Anchor) => {
       const eventProps = {
         conversation_id: conversationId,
         message_id: msg._id,
@@ -629,6 +629,16 @@ export function ChatScreen({
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_COPIED, eventProps);
           break;
         case 'edit':
+          // iMessage: edit in place over the blurred thread when the bubble
+          // was measured; the composer path stays as the fallback.
+          if (rect) {
+            setEditInPlace({ message: msg, rect });
+            analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_STARTED, {
+              ...eventProps,
+              mode: 'in_place',
+            });
+            break;
+          }
           // Load the message into the composer by remounting the native
           // field with the new draft (never through a controlled value).
           draftRef.current = msg.text;
@@ -1187,12 +1197,16 @@ export function ChatScreen({
           },
         },
       ];
-      if (isOwn) {
+      // iMessage: Edit only while the server will take it (own text message,
+      // 15 minutes, 5 edits); Delete stays for any own message.
+      if (isOwn && editAvailability({ ...(_msg as AttoMessage), isOwn }).ok) {
         items.push({
           actionKey: 'edit',
           actionTitle: t('actions.edit', { defaultValue: 'Edit' }),
           icon: { type: 'IMAGE_SYSTEM', imageValue: { systemName: 'pencil' } },
         });
+      }
+      if (isOwn) {
         items.push({
           actionKey: 'delete',
           actionTitle: t('actions.delete', { defaultValue: 'Delete' }),
@@ -1422,6 +1436,46 @@ export function ChatScreen({
         />
         {inputToolbar}
       </KeyboardAvoidingView>
+
+      <EditInPlaceOverlay
+        anchor={editInPlace?.rect ?? null}
+        initialText={editInPlace?.message.text ?? ''}
+        onCancel={() => {
+          setEditInPlace(null);
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_CANCELLED, {
+            conversation_id: conversationId,
+            mode: 'in_place',
+          });
+        }}
+        onSave={(text) => {
+          const target = editInPlace?.message;
+          setEditInPlace(null);
+          if (!target) return;
+          void editMessage(String(target._id), text).then((outcome) => {
+            const props = {
+              conversation_id: conversationId,
+              message_id: target._id,
+              mode: 'in_place',
+            };
+            if (outcome === 'ok') {
+              analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_COMPLETED, props);
+              return;
+            }
+            analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_FAILED, { ...props, outcome });
+            showToast(
+              outcome === 'edit_window_closed'
+                ? t('edit.windowClosed', {
+                    defaultValue: 'Messages can only be edited for 15 minutes.',
+                  })
+                : outcome === 'edit_limit_reached'
+                  ? t('edit.limitReached', {
+                      defaultValue: 'A message can be edited up to 5 times.',
+                    })
+                  : t('edit.failed', { defaultValue: "Couldn't save the edit. Try again." })
+            );
+          });
+        }}
+      />
 
       <TapbackOverlay
         anchor={tapback?.rect ?? null}

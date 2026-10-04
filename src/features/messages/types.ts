@@ -24,6 +24,7 @@ export interface BackendMessage {
   content_type: string;
   is_read: boolean;
   is_edited: boolean;
+  edit_history?: { content: string; since?: string | null }[] | null;
   edited_at: string | null;
   is_deleted: boolean;
   deleted_at?: string | null;
@@ -77,6 +78,8 @@ export interface ChatMessage {
   isRead: boolean;
   isEdited?: boolean;
   editedAt?: string | null;
+  /** Versions this message replaced, oldest first (iMessage "Edited"). */
+  editHistory?: EditVersion[];
   isDeleted?: boolean;
   deletedAt?: string | null;
   deletedBy?: string | null;
@@ -88,6 +91,12 @@ export interface ChatMessage {
   reactions?: Reaction[];
   metadata?: MessageMetadata | null;
   threadId?: string | null;
+}
+
+/** A version an edit replaced and when it started being the visible one. */
+export interface EditVersion {
+  content: string;
+  since: string | null;
 }
 
 export interface Reaction {

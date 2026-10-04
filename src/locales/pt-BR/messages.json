@@ -307,5 +307,15 @@
     "unfollowed": "Não está seguindo",
     "repliedBy": "Você respondeu",
     "accessibility": "Tópico com {{name}}, {{count}} respostas"
+  },
+  "edit": {
+    "edited": "Editada",
+    "hideEdits": "Ocultar edições",
+    "windowClosed": "As mensagens só podem ser editadas por 15 minutos.",
+    "limitReached": "Uma mensagem pode ser editada até 5 vezes.",
+    "failed": "Não foi possível salvar a edição. Tente de novo.",
+    "cancelA11y": "Cancelar edição",
+    "fieldA11y": "Editar mensagem",
+    "saveA11y": "Salvar edição"
   }
 }

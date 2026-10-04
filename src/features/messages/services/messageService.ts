@@ -41,6 +41,10 @@ function mapMessage(m: BackendMessage): ChatMessage {
     isRead: m.is_read,
     isEdited: m.is_edited || false,
     editedAt: m.edited_at || null,
+    editHistory: (m.edit_history ?? []).map((v) => ({
+      content: v.content,
+      since: v.since ?? null,
+    })),
     isDeleted: m.is_deleted || false,
     deletedAt: m.deleted_at ?? null,
     deletedBy: m.deleted_by ?? null,

@@ -237,16 +237,20 @@ export function useRealtimeChat(conversationId: string) {
         }));
       },
       onMessageEdited: (payload) => {
-        const { message_id, content, edited_at } = payload as {
+        const { message_id, content, edited_at, edit_history } = payload as {
           message_id: string;
           content: string;
           edited_at: string;
+          edit_history?: { content: string; since?: string | null }[];
         };
         updateMessageInCache(message_id, (m) => ({
           ...m,
           content,
           isEdited: true,
           editedAt: edited_at,
+          editHistory: edit_history
+            ? edit_history.map((v) => ({ content: v.content, since: v.since ?? null }))
+            : m.editHistory,
         }));
       },
       onMessagePinned: (payload) => {

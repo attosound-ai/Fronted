@@ -36,6 +36,7 @@ import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { AttoMessage } from '../utils/messageAdapter';
 import { MessageRow, sentFromComposer, type MenuItem } from './MessageRow';
+import type { Anchor } from './TapbackOverlay';
 import {
   dayLabel,
   groupPositions,
@@ -110,7 +111,7 @@ export interface ChatThreadProps {
   isFetchingMore: boolean;
   onLoadMore: () => void;
   menuItemsFor: (message: AttoMessage, isOwn: boolean) => MenuItem[];
-  onMenuAction: (actionKey: string, message: AttoMessage) => void;
+  onMenuAction: (actionKey: string, message: AttoMessage, rect?: Anchor) => void;
   onReply: (message: AttoMessage) => void;
   onDoubleTap: (
     message: AttoMessage,
@@ -243,6 +244,8 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         you: t('chat.you', { defaultValue: 'You' }),
         deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
+        editedTap: t('edit.edited', { defaultValue: 'Edited' }),
+        hideEdits: t('edit.hideEdits', { defaultValue: 'Hide Edits' }),
         replies: (count: number) => t('thread.replies', { count }),
         newReplies: (count: number) => t('thread.newReplies', { count }),
         lastReply: (at: number) =>

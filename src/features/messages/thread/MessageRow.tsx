@@ -54,6 +54,7 @@ import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
 import { BubbleEffect } from '../effects/BubbleEffect';
 import { effectFromMetadata } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
+import type { Anchor } from './TapbackOverlay';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -86,6 +87,9 @@ export interface MessageRowProps {
     you: string;
     deleted: string;
     edited: string;
+    /** iMessage's tappable "Edited" under the bubble, and its "Hide Edits". */
+    editedTap: string;
+    hideEdits: string;
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
     /** "Last reply 2h ago", the grey half of Slack's thread footer. */
@@ -99,7 +103,7 @@ export interface MessageRowProps {
     forward: string;
     more: string;
   };
-  onMenuAction: (actionKey: string, message: AttoMessage) => void;
+  onMenuAction: (actionKey: string, message: AttoMessage, rect?: Anchor) => void;
   onReply: (message: AttoMessage) => void;
   /** Double tap or the React menu item: the bubble's window rect comes along for the Tapback pill. */
   onDoubleTap: (
@@ -216,6 +220,7 @@ function MessageRowInner({
   threadActions = null,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
+  const [showEdits, setShowEdits] = useState(false);
   // Bubble size, only tracked for creator bubbles: the tail continues the
   // gold gradient, and the gradient runs across the whole bubble.
   const [bubbleSize, setBubbleSize] = useState<{ w: number; h: number } | null>(null);
@@ -400,11 +405,15 @@ function MessageRowInner({
   // A shared post keeps its bubble, but the cover has to reach the bubble's
   // own edges: the padding moves inside the card.
   const isPostCard = message.contentType === 'post';
+  // iMessage puts "Edited" under the bubble; when a thread row already owns
+  // that line (one line under a bubble, never two) it stays inside the meta.
+  const editedInBubble = message.isEdited && threadReplies > 0;
+  const editHistory = message.editHistory ?? [];
   // Width the floating time needs on the last text line: the meta text plus
   // room for the ticks (about three figure spaces at 11 pt).
   const metaSpacer =
     '\u2007' +
-    (message.isEdited ? `${labels.edited} ` : '') +
+    (editedInBubble ? `${labels.edited} ` : '') +
     formatTime(message.createdAt) +
     (isOwn ? '\u2007\u2007\u2007' : '');
 
@@ -414,7 +423,7 @@ function MessageRowInner({
   const onDarkMeta = onGlass || isVideoNote;
   const metaContent = (
     <>
-      {message.isEdited ? (
+      {editedInBubble ? (
         <RNText
           style={[
             styles.edited,
@@ -599,6 +608,18 @@ function MessageRowInner({
 
   const content = (
     <View style={[styles.stack, isOwn ? styles.stackOwn : styles.stackOther]}>
+      {showEdits && editHistory.length > 0 ? (
+        <Animated.View entering={FadeIn.duration(160)} style={styles.pastVersions}>
+          {editHistory.map((v, i) => (
+            <View
+              key={`${i}-${v.since ?? ''}`}
+              style={[styles.pastBubble, isOwn ? styles.pastBubbleOwn : styles.pastBubbleOther]}
+            >
+              <RNText style={styles.pastText}>{v.content}</RNText>
+            </View>
+          ))}
+        </Animated.View>
+      ) : null}
       <View
         style={styles.bubbleWrap}
         ref={bubbleRef}
@@ -629,6 +650,20 @@ function MessageRowInner({
         ) : null}
       </View>
       {hasReactions ? <View style={styles.reactionsSpace} /> : null}
+      {message.isEdited && !editedInBubble && !message.isDeleted ? (
+        <Pressable
+          onPress={() => editHistory.length > 0 && setShowEdits((v) => !v)}
+          disabled={editHistory.length === 0}
+          hitSlop={8}
+          style={[styles.editedRow, isOwn ? styles.editedRowOwn : styles.editedRowOther]}
+          accessibilityRole={editHistory.length > 0 ? 'button' : 'text'}
+          accessibilityState={{ expanded: showEdits }}
+        >
+          <RNText style={styles.editedTap} maxFontSizeMultiplier={1.2}>
+            {showEdits ? labels.hideEdits : labels.editedTap}
+          </RNText>
+        </Pressable>
+      ) : null}
       {/* One line under a bubble, never three: a message that started a
           thread shows its thread row and nothing else, the way Slack and
           Telegram do (David, Sep 24 2026). The double tick inside the bubble
@@ -758,6 +793,21 @@ function MessageRowInner({
           if (nativeEvent.actionKey === 'react') {
             // The native menu is still animating out: measure once it is gone.
             setTimeout(() => requestTapback('menu_react'), 260);
+            return;
+          }
+          if (nativeEvent.actionKey === 'edit') {
+            // Edit in place (iMessage): the field opens where the bubble is,
+            // measured once the native menu has finished animating out.
+            setTimeout(() => {
+              const node = bubbleRef.current;
+              if (!node) {
+                onMenuAction('edit', message);
+                return;
+              }
+              node.measureInWindow((x, y, width, height) =>
+                onMenuAction('edit', message, { x, y, width, height })
+              );
+            }, 260);
             return;
           }
           onMenuAction(nativeEvent.actionKey, message);
@@ -1123,6 +1173,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
   },
   metaOwn: { color: 'rgba(0,0,0,0.45)' },
+  // iMessage "Edited": small, under the bubble on its own side, tappable.
+  editedRow: { marginTop: 3, paddingHorizontal: 6 },
+  editedRowOwn: { alignSelf: 'flex-end' },
+  editedRowOther: { alignSelf: 'flex-start' },
+  editedTap: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontFamily: 'Archivo_500Medium',
+  },
+  // Previous versions, oldest first, stacked above the current bubble.
+  pastVersions: { gap: 4, marginBottom: 4 },
+  pastBubble: {
+    maxWidth: '100%',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  pastBubbleOwn: { alignSelf: 'flex-end' },
+  pastBubbleOther: { alignSelf: 'flex-start' },
+  pastText: { color: 'rgba(255,255,255,0.55)', fontSize: 15, lineHeight: 20 },
   emojiOnly: { alignItems: 'flex-end', paddingHorizontal: 4 },
   emojiText: { color: COLORS.white },
   emojiTime: {

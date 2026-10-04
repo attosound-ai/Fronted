@@ -12,6 +12,24 @@ import { phoenixSocket } from '@/lib/api/phoenixSocket';
 import { messageService } from '../services/messageService';
 import type { ChatMessagesPage } from '../types';
 
+export type EditOutcome =
+  | 'ok'
+  | 'edit_window_closed'
+  | 'edit_limit_reached'
+  | 'not_editable'
+  | 'failed';
+
+const RULE_REFUSALS = ['edit_window_closed', 'edit_limit_reached', 'not_editable'] as const;
+
+/** The server's rule refusal from a socket reply or a REST 422, if that is what failed. */
+function ruleRefusal(err: unknown): EditOutcome | null {
+  const e = err as { reason?: unknown; response?: { data?: { error?: unknown } } } | null;
+  const reason = e?.reason ?? e?.response?.data?.error;
+  return typeof reason === 'string' && (RULE_REFUSALS as readonly string[]).includes(reason)
+    ? (reason as EditOutcome)
+    : null;
+}
+
 export function useMessageActions(conversationId: string) {
   const queryClient = useQueryClient();
   const userId = useAuthStore((s) => s.user?.id);
@@ -40,27 +58,53 @@ export function useMessageActions(conversationId: string) {
     [conversationId, queryClient]
   );
 
+  /**
+   * Resolves 'ok' or the server's refusal ('edit_window_closed',
+   * 'edit_limit_reached', 'not_editable', 'failed'). A rule refusal is final:
+   * the REST retry only covers a socket that could not deliver.
+   */
   const editMessage = useCallback(
-    async (messageId: string, newContent: string) => {
-      if (!userId) return;
+    async (messageId: string, newContent: string): Promise<EditOutcome> => {
+      if (!userId) return 'failed';
 
-      updateMessage(messageId, (m) => ({
-        ...m,
-        content: newContent,
-        isEdited: true,
-        editedAt: new Date().toISOString(),
-      }));
+      let previous: ChatMessagesPage['messages'][0] | null = null;
+      updateMessage(messageId, (m) => {
+        previous = m;
+        return {
+          ...m,
+          content: newContent,
+          isEdited: true,
+          editedAt: new Date().toISOString(),
+          editHistory: [
+            ...(m.editHistory ?? []),
+            { content: m.content, since: m.editedAt ?? m.createdAt ?? null },
+          ],
+        };
+      });
+      const restore = () => {
+        const before = previous;
+        if (before) updateMessage(messageId, () => before);
+      };
 
       try {
         await phoenixSocket.editMessage(conversationId, messageId, newContent);
-      } catch {
+        return 'ok';
+      } catch (socketErr) {
+        const reason = ruleRefusal(socketErr);
+        if (reason) {
+          restore();
+          return reason;
+        }
         try {
           await messageService.editMessage(conversationId, messageId, newContent);
-        } catch {
+          return 'ok';
+        } catch (restErr) {
+          restore();
           // Refetch from server — authoritative truth, survives any optimistic drift.
           queryClient.invalidateQueries({
             queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
           });
+          return ruleRefusal(restErr) ?? 'failed';
         }
       }
     },

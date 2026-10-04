@@ -6,13 +6,14 @@
 
 import type { IMessage, User as GiftedUser } from 'react-native-gifted-chat';
 import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
-import type { ChatMessage, Reaction, MessageMetadata } from '../types';
+import type { ChatMessage, Reaction, MessageMetadata, EditVersion } from '../types';
 
 export interface AttoMessage extends IMessage {
   conversationId: string;
   contentType: string;
   isEdited: boolean;
   editedAt: string | null;
+  editHistory: EditVersion[];
   isDeleted: boolean;
   isRead: boolean;
   replyToId?: string | null;
@@ -57,6 +58,7 @@ export function toGiftedMessage(
     contentType: msg.contentType,
     isEdited: msg.isEdited ?? false,
     editedAt: msg.editedAt ?? null,
+    editHistory: msg.editHistory ?? [],
     isDeleted: msg.isDeleted ?? false,
     isRead: msg.isRead,
     reactions: msg.reactions ?? [],

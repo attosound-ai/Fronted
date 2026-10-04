@@ -263,7 +263,8 @@
     "saveContactTitle": "Salvar Contato Bridge",
     "assigningButton": "Atribuindo número...",
     "noteSecure": "Mantenha este número em segurança. O criador precisará dele para verificar e estabelecer a conexão.",
-    "noteOtp": "Um OTP será enviado ao detento para verificar sua representação antes que a chamada bridge possa ser estabelecida."
+    "noteOtp": "Um OTP será enviado ao detento para verificar sua representação antes que a chamada bridge possa ser estabelecida.",
+    "testNumberNotice": "Este número é falso e <b>NÃO pode receber chamadas</b>. Para receber um número real, solicite à conta ATTOSOUND."
   },
   "creatorTypes": {
     "title": "Que tipo de criador?",

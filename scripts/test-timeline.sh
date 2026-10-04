@@ -30,6 +30,7 @@ TEST_FILES=(
   "src/features/feed/__tests__/mentions.test.ts"
   "src/lib/push/__tests__/pushTapPlan.test.ts"
   "src/lib/calls/__tests__/inviteSiblings.test.ts"
+  "src/lib/telephony/__tests__/testNumber.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"
   "src/features/messages/stores/__tests__/conversationPrefsModel.test.ts"

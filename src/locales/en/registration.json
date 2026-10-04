@@ -263,7 +263,8 @@
     "saveContactTitle": "Save Bridge Contact",
     "assigningButton": "Assigning number...",
     "noteSecure": "Keep this number secure. The creator will need it to verify and establish the connection.",
-    "noteOtp": "An OTP will be sent to the inmate to verify your representation before the bridge call can be established."
+    "noteOtp": "An OTP will be sent to the inmate to verify your representation before the bridge call can be established.",
+    "testNumberNotice": "This number is fake and <b>can NOT receive calls</b>. To get a real number, please request it from the ATTOSOUND account."
   },
   "creatorTypes": {
     "title": "What kind of creator?",

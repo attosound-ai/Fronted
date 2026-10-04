@@ -263,7 +263,8 @@
     "saveContactTitle": "Guardar contacto puente",
     "assigningButton": "Asignando número...",
     "noteSecure": "Mantenga este número seguro. El creador lo necesitará para verificar y establecer la conexión.",
-    "noteOtp": "Se enviará un OTP al recluso para verificar su representación antes de que se pueda establecer la llamada puente."
+    "noteOtp": "Se enviará un OTP al recluso para verificar su representación antes de que se pueda establecer la llamada puente.",
+    "testNumberNotice": "Este número es falso y <b>NO puede recibir llamadas</b>. Para recibir un número real, por favor solicítalo a la cuenta ATTOSOUND."
   },
   "creatorTypes": {
     "title": "¿Qué tipo de creador?",

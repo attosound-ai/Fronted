@@ -70,6 +70,8 @@ export const ANALYTICS_EVENTS = {
 
   // ── Registration (funnel) ──────────────────────
   REGISTRATION: {
+    // Oct 4 2026: the bridge number shown is a Twilio test number (cannot ring).
+    TEST_NUMBER_NOTICE_SHOWN: 'registration_test_number_notice_shown',
     STARTED: 'registration_started',
     STEP_COMPLETED: 'registration_step_completed',
     OTP_SENT: 'registration_otp_sent',

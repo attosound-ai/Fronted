@@ -110,7 +110,6 @@ export function EditRow({ initialText, bubbleWidth, labels, onSave, onCancel }: 
 
 const styles = StyleSheet.create({
   row: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: GAP,

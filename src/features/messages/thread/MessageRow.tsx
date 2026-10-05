@@ -55,7 +55,6 @@ import { BubbleEffect } from '../effects/BubbleEffect';
 import { effectFromMetadata } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import type { Anchor } from './TapbackOverlay';
-import { EditRow } from './EditRow';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -91,9 +90,6 @@ export interface MessageRowProps {
     /** iMessage's tappable "Edited" under the bubble, and its "Hide Edits". */
     editedTap: string;
     hideEdits: string;
-    editCancel: string;
-    editSave: string;
-    editField: string;
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
     /** "Last reply 2h ago", the grey half of Slack's thread footer. */
@@ -116,10 +112,8 @@ export interface MessageRowProps {
   ) => void;
   /** Reply mode (iMessage): everything but the message being answered dims. */
   dimmed: boolean;
-  /** This message is being edited in place: its row becomes the edit row. */
+  /** This message is being edited: its row leaves its place to the editor. */
   editing?: boolean;
-  onSaveEdit?: (message: AttoMessage, text: string) => void;
-  onCancelEdit?: () => void;
   /** 0..1 shared with every row: how far the list is dragged to reveal times. */
   timesReveal: SharedValue<number>;
   /** Called on the JS side when a left drag revealed the times (telemetry). */
@@ -218,8 +212,6 @@ function MessageRowInner({
   renderMedia,
   dimmed,
   editing = false,
-  onSaveEdit,
-  onCancelEdit,
   timesReveal,
   onTimesRevealed,
   readLabel,
@@ -843,6 +835,14 @@ function MessageRowInner({
       content
     );
 
+  if (editing) {
+    // The editor for this message is drawn by the chat screen right above the
+    // composer, where the row is scrolled to. It cannot live in here: a
+    // TextInput inside this inverted list does not paint its text on iOS
+    // (found on device, Oct 5 2026). The row just leaves its place.
+    return <View style={styles.editingSlot} />;
+  }
+
   return (
     <Animated.View
       entering={justSent ? undefined : FadeInDown.duration(SETTLE_MS).easing(EASE_OUT)}
@@ -863,23 +863,13 @@ function MessageRowInner({
       <Animated.View style={[styles.replyHint, replyHint]} pointerEvents="none">
         <ArrowUpLeft size={16} color={COLORS.white} strokeWidth={2.5} />
       </Animated.View>
-      {editing ? (
-        <EditRow
-          initialText={message.text}
-          bubbleWidth={bubbleSize?.w ?? null}
-          labels={{ cancel: labels.editCancel, save: labels.editSave, field: labels.editField }}
-          onSave={(text) => onSaveEdit?.(message, text)}
-          onCancel={() => onCancelEdit?.()}
-        />
-      ) : (
-        <GestureDetector gesture={gesture}>
-          <Animated.View
-            style={[styles.slide, isOwn ? styles.slideOwn : styles.slideOther, slide]}
-          >
-            {withMenu}
-          </Animated.View>
-        </GestureDetector>
-      )}
+      <GestureDetector gesture={gesture}>
+        <Animated.View
+          style={[styles.slide, isOwn ? styles.slideOwn : styles.slideOther, slide]}
+        >
+          {withMenu}
+        </Animated.View>
+      </GestureDetector>
     </Animated.View>
   );
 }
@@ -1236,6 +1226,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
   },
   statusLink: { color: '#FFFFFF' },
+  editingSlot: { height: 0 },
   emojiOnly: { alignItems: 'flex-end', paddingHorizontal: 4 },
   emojiText: { color: COLORS.white },
   emojiTime: {

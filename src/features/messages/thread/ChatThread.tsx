@@ -121,7 +121,6 @@ export interface ChatThreadProps {
   focusedId: string | null;
   /** Message being edited in place (iMessage): its row is the editor, the rest dims. */
   editingId?: string | null;
-  onSaveEdit?: (message: AttoMessage, text: string) => void;
   onCancelEdit?: () => void;
   /** When the other side last read our messages, as an ISO time, for the Read label. */
   readAt: string | null;
@@ -174,7 +173,6 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       topInset,
       focusedId,
       editingId = null,
-      onSaveEdit,
       onCancelEdit,
       readAt,
     },
@@ -253,9 +251,6 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         edited: t('chat.edited', { defaultValue: 'edited' }),
         editedTap: t('edit.edited', { defaultValue: 'Edited' }),
         hideEdits: t('edit.hideEdits', { defaultValue: 'Hide Edits' }),
-        editCancel: t('edit.cancelA11y', { defaultValue: 'Cancel edit' }),
-        editSave: t('edit.saveA11y', { defaultValue: 'Save edit' }),
-        editField: t('edit.fieldA11y', { defaultValue: 'Edit message' }),
         replies: (count: number) => t('thread.replies', { count }),
         newReplies: (count: number) => t('thread.newReplies', { count }),
         lastReply: (at: number) =>
@@ -394,8 +389,6 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
               (editingId !== null && editingId !== String(item._id))
             }
             editing={editingId !== null && editingId === String(item._id)}
-            onSaveEdit={onSaveEdit}
-            onCancelEdit={onCancelEdit}
             timesReveal={timesReveal}
             onTimesRevealed={reportTimesRevealed}
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
@@ -486,7 +479,6 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
         renderMedia,
         focusedId,
         editingId,
-        onSaveEdit,
         onCancelEdit,
         timesReveal,
         reportTimesRevealed,

@@ -29,6 +29,7 @@ import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
 import type { MenuItem } from '../thread/MessageRow';
 import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
+import { EditRow } from '../thread/EditRow';
 import { X, Pencil } from 'lucide-react-native';
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -1478,7 +1479,6 @@ export function ChatScreen({
           renderMedia={renderThreadMedia}
           focusedId={replyMessage ? String(replyMessage._id) : null}
           editingId={editInPlace ? String(editInPlace._id) : null}
-          onSaveEdit={saveInPlaceEdit}
           onCancelEdit={cancelInPlaceEdit}
           readAt={readAt}
           bottomInset={0}
@@ -1494,6 +1494,24 @@ export function ChatScreen({
           }
           onCancel={() => setReplyMessage(null)}
         />
+        {/* The edit row (iMessage): [X] [field] [check], right above the
+            composer, where the thread has scrolled the message being edited. */}
+        {editInPlace ? (
+          <View style={styles.editRowWrap}>
+            <EditRow
+              key={String(editInPlace._id)}
+              initialText={editInPlace.text}
+              bubbleWidth={null}
+              labels={{
+                cancel: t('edit.cancelA11y', { defaultValue: 'Cancel edit' }),
+                save: t('edit.saveA11y', { defaultValue: 'Save edit' }),
+                field: t('edit.fieldA11y', { defaultValue: 'Edit message' }),
+              }}
+              onSave={(text) => saveInPlaceEdit(editInPlace, text)}
+              onCancel={cancelInPlaceEdit}
+            />
+          </View>
+        ) : null}
         {/* iMessage leaves the composer where it is while a message is edited,
             dimmed and out of reach, so the row above it is the only target. */}
         <View
@@ -1559,6 +1577,7 @@ export function ChatScreen({
 
 const styles = StyleSheet.create({
   composerWhileEditing: { opacity: 0.35 },
+  editRowWrap: { paddingHorizontal: 10, paddingTop: 2, paddingBottom: 6 },
   threadArea: {
     flex: 1,
   },

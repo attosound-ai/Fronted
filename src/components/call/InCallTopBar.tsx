@@ -96,37 +96,62 @@ export const CALL_BAR_MIRROR_TRANSMIT_EVENT = 'attoCallBarMirrorTransmit';
  * format is fixed at 48 kHz that must never happen, so a restart is an alarm,
  * and so is a measured rate more than 5 percent away from the configured one.
  */
-const sentinelBaseline: { callSid: string | null; startRendering: number | null } = {
-  callSid: null,
-  startRendering: null,
-};
+const sentinelBaseline: {
+  callSid: string | null;
+  firstCb: number | null;
+  startRendering: number | null;
+} = { callSid: null, firstCb: null, startRendering: null };
+
+let sentinelLiveReads = 0;
 
 function checkAudioSentinels(diag: any, trigger: string): void {
   try {
     const call = useCallStore.getState().activeCall;
     const callSid = call?.callSid ?? null;
     const started = typeof diag?.startRenderingCount === 'number' ? diag.startRenderingCount : null;
+    const cb = typeof diag?.playoutCbCount === 'number' ? diag.playoutCbCount : null;
     if (callSid !== sentinelBaseline.callSid) {
       sentinelBaseline.callSid = callSid;
-      sentinelBaseline.startRendering = started;
-    } else if (
-      started != null &&
-      sentinelBaseline.startRendering != null &&
-      started > sentinelBaseline.startRendering
-    ) {
-      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_RESTARTED_MID_CALL, {
-        call_sid: callSid,
-        diag_trigger: trigger,
-        restarts: started - sentinelBaseline.startRendering,
-        hw_sample_rate_now: diag?.hwSampleRateNow ?? null,
-        rendering_format_rate: diag?.renderingFormatRate ?? null,
-        last_route_reason: diag?.lastRouteReason ?? null,
-      });
-      sentinelBaseline.startRendering = started;
+      sentinelBaseline.firstCb = cb;
+      sentinelBaseline.startRendering = null;
+      sentinelLiveReads = 0;
     }
+    // Arm only once THIS call is connected and its audio is flowing. The first
+    // diagnostics of a call can land while it still rings (a route change before
+    // the answer), and the call's own first start then looked like a restart
+    // (false alarm on David's call, Oct 5 2026).
+    const live =
+      call?.state === 'connected' &&
+      cb != null &&
+      sentinelBaseline.firstCb != null &&
+      cb > sentinelBaseline.firstCb;
+    if (live && started != null) {
+      if (sentinelBaseline.startRendering == null) {
+        sentinelBaseline.startRendering = started;
+      } else if (started > sentinelBaseline.startRendering) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_RESTARTED_MID_CALL, {
+          call_sid: callSid,
+          diag_trigger: trigger,
+          restarts: started - sentinelBaseline.startRendering,
+          hw_sample_rate_now: diag?.hwSampleRateNow ?? null,
+          rendering_format_rate: diag?.renderingFormatRate ?? null,
+          last_route_reason: diag?.lastRouteReason ?? null,
+        });
+        sentinelBaseline.startRendering = started;
+      }
+    }
+    // The measured rate is frames since the PREVIOUS read: the first live read
+    // of a call still averages in the silence before it, so only the second
+    // live read onwards is a real rate.
+    sentinelLiveReads = live ? sentinelLiveReads + 1 : 0;
     const measured = Number(diag?.measuredPlayoutFps);
     const configured = Number(diag?.unitOutputClientRate);
-    if (measured > 0 && configured > 0 && Math.abs(measured / configured - 1) > 0.05) {
+    if (
+      sentinelLiveReads >= 2 &&
+      measured > 0 &&
+      configured > 0 &&
+      Math.abs(measured / configured - 1) > 0.05
+    ) {
       analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_RATE_MEASURED_MISMATCH, {
         call_sid: callSid,
         diag_trigger: trigger,

@@ -55,6 +55,7 @@ import { BubbleEffect } from '../effects/BubbleEffect';
 import { effectFromMetadata } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import type { Anchor } from './TapbackOverlay';
+import { markEditTap } from './editTiming';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -226,6 +227,7 @@ function MessageRowInner({
   threadActions = null,
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
+  const menuRect = useRef<Anchor | null>(null);
   const [showEdits, setShowEdits] = useState(false);
   // Bubble size, only tracked for creator bubbles: the tail continues the
   // gold gradient, and the gradient runs across the whole bubble.
@@ -645,12 +647,19 @@ function MessageRowInner({
                 styles.pastBubble,
                 isOwn ? styles.pastBubbleOwn : styles.pastBubbleOther,
                 {
-                  backgroundColor: senderIsCreator ? '#D4AF37' : isOwn ? COLORS.white : '#262626',
+                  backgroundColor: senderIsCreator
+                    ? '#D4AF37'
+                    : isOwn
+                      ? COLORS.white
+                      : '#262626',
                 },
               ]}
             >
               <RNText
-                style={[styles.pastText, (isOwn || senderIsCreator) && styles.pastTextOnLight]}
+                style={[
+                  styles.pastText,
+                  (isOwn || senderIsCreator) && styles.pastTextOnLight,
+                ]}
               >
                 {v.content}
               </RNText>
@@ -817,7 +826,10 @@ function MessageRowInner({
                   accessibilityState={{ expanded: showEdits }}
                   onAccessibilityTap={toggleEdits}
                 >
-                  <RNText style={[styles.statusText, styles.statusLink]} maxFontSizeMultiplier={1.0}>
+                  <RNText
+                    style={[styles.statusText, styles.statusLink]}
+                    maxFontSizeMultiplier={1.0}
+                  >
                     {showEdits ? labels.hideEdits : labels.editedTap}
                   </RNText>
                 </View>
@@ -839,6 +851,11 @@ function MessageRowInner({
         menuConfig={{ menuTitle: '', menuItems }}
         shouldWaitForMenuToHide={false}
         onMenuWillShow={() => {
+          // Where the bubble sits before the menu lifts it: the editor grows
+          // out of this exact place (iMessage stretches the bubble itself).
+          bubbleRef.current?.measureInWindow((x, y, width, height) => {
+            menuRect.current = { x, y, width, height };
+          });
           void haptic('heavy');
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.BUBBLE_GESTURE, {
             gesture: 'long_press_menu',
@@ -853,7 +870,8 @@ function MessageRowInner({
           }
           // Edit starts right away, while the native menu is still closing, the
           // way iMessage does it: the keyboard and the field rise under it.
-          onMenuAction(nativeEvent.actionKey, message);
+          if (nativeEvent.actionKey === 'edit') markEditTap();
+          onMenuAction(nativeEvent.actionKey, message, menuRect.current ?? undefined);
         }}
       >
         {content}
@@ -862,24 +880,23 @@ function MessageRowInner({
       content
     );
 
-  if (editing) {
-    // The editor for this message is drawn by the chat screen right above the
-    // composer, where the row is scrolled to. It cannot live in here: a
-    // TextInput inside this inverted list does not paint its text on iOS
-    // (found on device, Oct 5 2026). The row just leaves its place.
-    return <View style={styles.editingSlot} />;
-  }
-
   return (
     <Animated.View
       entering={justSent ? undefined : FadeInDown.duration(SETTLE_MS).easing(EASE_OUT)}
       exiting={FadeOut.duration(140)}
-      layout={LinearTransition.duration(SETTLE_MS).easing(EASE_OUT)}
+      layout={editing ? undefined : LinearTransition.duration(SETTLE_MS).easing(EASE_OUT)}
+      // While it is edited the row leaves its place at once and the editor,
+      // drawn by the chat screen above the composer, grows out of the bubble.
+      // Same root on purpose: swapping it ran the exit fade and kept the
+      // bubble on screen next to its own editor. The editor cannot live in
+      // here: a TextInput inside this inverted list does not paint on iOS.
+      pointerEvents={editing ? 'none' : 'auto'}
       style={[
         styles.row,
         isOwn ? styles.rowOwn : styles.rowOther,
         position.last ? styles.rowGroupEnd : styles.rowGroupInner,
         dimStyle,
+        editing && styles.editingSlot,
       ]}
     >
       <Animated.View style={[styles.revealTime, timeReveal]} pointerEvents="none">
@@ -1045,6 +1062,19 @@ export const sentFromComposer = FadeInDown.duration(220)
     opacity: 0,
   });
 
+// The chat screen builds a fresh array per row on every render; compared by
+// identity it re-rendered the whole thread on any change, such as starting an
+// edit, right when the keyboard has to come up.
+function sameMenu(a: MenuItem[], b: MenuItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].actionKey !== b[i].actionKey || a[i].actionTitle !== b[i].actionTitle)
+      return false;
+  }
+  return true;
+}
+
 export const MessageRow = memo(MessageRowInner, (a, b) => {
   return (
     a.message === b.message &&
@@ -1057,7 +1087,7 @@ export const MessageRow = memo(MessageRowInner, (a, b) => {
     a.editing === b.editing &&
     a.onTimesRevealed === b.onTimesRevealed &&
     a.readLabel === b.readLabel &&
-    a.menuItems === b.menuItems &&
+    sameMenu(a.menuItems, b.menuItems) &&
     a.labels === b.labels
   );
 });
@@ -1253,7 +1283,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
   },
   statusLink: { color: '#FFFFFF' },
-  editingSlot: { height: 0 },
+  editingSlot: { height: 0, marginBottom: 0, overflow: 'hidden' },
   emojiOnly: { alignItems: 'flex-end', paddingHorizontal: 4 },
   emojiText: { color: COLORS.white },
   emojiTime: {

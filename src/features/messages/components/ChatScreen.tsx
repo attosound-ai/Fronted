@@ -181,6 +181,8 @@ export function ChatScreen({
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
   // iMessage style edit: the message's own row becomes the editor.
   const [editInPlace, setEditInPlace] = useState<AttoMessage | null>(null);
+  // Where that message's bubble was when Edit was tapped: the field grows out of it.
+  const editFrom = useRef<Anchor | null>(null);
   const [forwardMessage, setForwardMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
 
@@ -649,6 +651,7 @@ export function ChatScreen({
           // iMessage: the row itself turns into the editor (nothing blurred,
           // nothing floating); the composer path stays as the fallback.
           if (Platform.OS === 'ios') {
+            editFrom.current = rect ?? null;
             setReplyMessage(null);
             setEditInPlace(msg);
             analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_STARTED, {
@@ -1501,6 +1504,8 @@ export function ChatScreen({
             <EditRow
               key={String(editInPlace._id)}
               initialText={editInPlace.text}
+              from={editFrom.current}
+              tint={creatorIds.has(String(editInPlace.user._id)) ? '#D4AF37' : '#FFFFFF'}
               labels={{
                 cancel: t('edit.cancelA11y', { defaultValue: 'Cancel edit' }),
                 save: t('edit.saveA11y', { defaultValue: 'Save edit' }),

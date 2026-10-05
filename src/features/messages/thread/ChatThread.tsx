@@ -319,6 +319,10 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       if (!target) return;
       const index = messages.findIndex((m) => String(m._id) === target);
       if (index < 0) return;
+      // The newest message already sits right above the composer: entering
+      // needs no scroll at all, and two animated scrolls on top of the keyboard
+      // rising were part of what made editing feel heavy.
+      if (index === 0 && editingId) return;
       const go = () =>
         index === 0 && !editingId
           ? listRef.current?.scrollToOffset({ offset: 0, animated: true })

@@ -634,6 +634,7 @@ export const ANALYTICS_EVENTS = {
     EDIT_COMPLETED: 'messages_edit_completed',
     EDIT_CANCELLED: 'messages_edit_cancelled',
     EDIT_FAILED: 'messages_edit_failed',
+    EDIT_OPEN_TIMING: 'messages_edit_open_timing',
     // Delete
     DELETE_CONFIRMED: 'messages_delete_confirmed',
     DELETE_FAILED: 'messages_delete_failed',

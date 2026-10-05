@@ -531,6 +531,8 @@ class PhoenixSocketManager {
     return this.pushToChannel(conversationId, 'edit_message', {
       message_id: messageId,
       content,
+      // This build knows the iMessage limits and explains a refusal.
+      enforce_rules: true,
     });
   }
 

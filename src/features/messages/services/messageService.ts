@@ -140,7 +140,12 @@ export const messageService = {
   // ── Edit / Delete ──────────────────────────────
 
   async editMessage(chatId: string, messageId: string, content: string): Promise<void> {
-    await apiClient.patch(`/messages/${chatId}/${messageId}`, { content });
+    // enforce_rules: this build knows the iMessage limits and can explain a
+    // refusal, so the server applies them (older builds keep editing freely).
+    await apiClient.patch(`/messages/${chatId}/${messageId}`, {
+      content,
+      enforce_rules: true,
+    });
   },
 
   async deleteMessage(chatId: string, messageId: string): Promise<void> {

@@ -305,16 +305,31 @@ function MessageRowInner({
     [drag, armed, buzzed, isOwn, timesReveal, buzz, fireReply, reportTimes]
   );
 
+  // "Edited" under the bubble has its own tap (show or hide the earlier
+  // versions). The row's taps wait for it to fail, or tapping "Edited" opened
+  // the thread instead (found on device, Oct 5 2026).
+  const toggleEdits = useCallback(() => setShowEdits((v) => !v), []);
+  const editsTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .maxDuration(350)
+        .onEnd((_e, success) => {
+          if (success) runOnJS(toggleEdits)();
+        }),
+    [toggleEdits]
+  );
+
   const doubleTap = useMemo(
     () =>
       Gesture.Tap()
         .numberOfTaps(2)
         .maxDelay(280)
+        .requireExternalGestureToFail(editsTap)
         .onEnd(() => {
           runOnJS(buzz)('light');
           runOnJS(fireDoubleTap)();
         }),
-    [buzz, fireDoubleTap]
+    [buzz, fireDoubleTap, editsTap]
   );
 
   // One tap opens the message's thread, the way Slack does it; there is no
@@ -335,10 +350,11 @@ function MessageRowInner({
       Gesture.Tap()
         .enabled(tapToThread)
         .maxDuration(350)
+        .requireExternalGestureToFail(editsTap)
         .onEnd((_e, success) => {
           if (success) runOnJS(openThread)();
         }),
-    [tapToThread, openThread]
+    [tapToThread, openThread, editsTap]
   );
   const gesture = useMemo(
     () => Gesture.Simultaneous(pan, Gesture.Exclusive(doubleTap, singleTap)),
@@ -782,21 +798,26 @@ function MessageRowInner({
             </RNText>
           ) : null}
           {message.isEdited && !message.isDeleted ? (
-            <Pressable
-              onPress={() => editHistory.length > 0 && setShowEdits((v) => !v)}
-              disabled={editHistory.length === 0}
-              hitSlop={10}
-              accessibilityRole={editHistory.length > 0 ? 'button' : 'text'}
-              accessibilityLabel={showEdits ? labels.hideEdits : labels.editedTap}
-              accessibilityState={{ expanded: showEdits }}
-            >
-              <RNText
-                style={[styles.statusText, editHistory.length > 0 && styles.statusLink]}
-                maxFontSizeMultiplier={1.0}
-              >
-                {showEdits ? labels.hideEdits : labels.editedTap}
+            editHistory.length > 0 ? (
+              <GestureDetector gesture={editsTap}>
+                <View
+                  hitSlop={10}
+                  accessible
+                  accessibilityRole="button"
+                  accessibilityLabel={showEdits ? labels.hideEdits : labels.editedTap}
+                  accessibilityState={{ expanded: showEdits }}
+                  onAccessibilityTap={toggleEdits}
+                >
+                  <RNText style={[styles.statusText, styles.statusLink]} maxFontSizeMultiplier={1.0}>
+                    {showEdits ? labels.hideEdits : labels.editedTap}
+                  </RNText>
+                </View>
+              </GestureDetector>
+            ) : (
+              <RNText style={styles.statusText} maxFontSizeMultiplier={1.0}>
+                {labels.editedTap}
               </RNText>
-            </Pressable>
+            )
           ) : null}
         </Animated.View>
       ) : null}

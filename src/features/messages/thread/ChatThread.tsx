@@ -303,16 +303,26 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
     // iMessage keeps the row being edited right above the composer. In an
     // inverted list viewPosition 0 is the visual bottom. Once on entering and
     // again when the keyboard has finished rising.
+    const lastEditedId = useRef<string | null>(null);
     useEffect(() => {
-      if (!editingId) return;
-      const index = messages.findIndex((m) => String(m._id) === editingId);
+      // Entering: bring the row down to the composer. Leaving (saved or
+      // cancelled): the message takes its place back, so show it again; the
+      // list was left scrolled past it and it sat below the screen.
+      const target = editingId ?? lastEditedId.current;
+      lastEditedId.current = editingId;
+      if (!target) return;
+      const index = messages.findIndex((m) => String(m._id) === target);
       if (index < 0) return;
       const go = () =>
-        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 });
+        index === 0 && !editingId
+          ? listRef.current?.scrollToOffset({ offset: 0, animated: true })
+          : listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 });
       go();
       const late = setTimeout(go, 420);
       return () => clearTimeout(late);
-    }, [editingId, messages]);
+      // messages is read at the moment the edit starts or ends, on purpose.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editingId]);
 
     useImperativeHandle(ref, () => ({ scrollToBottom, scrollToMessage }), [
       scrollToBottom,

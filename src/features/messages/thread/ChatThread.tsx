@@ -412,11 +412,22 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             onReplayEffect={onReplayEffect}
           />
         );
+        // While a message is being edited, a tap on any other row cancels the
+        // edit, like tapping the dimmed thread in iMessage. box-only keeps the
+        // row's own gestures (menus, swipes, links) from firing instead.
+        const otherRowWhileEditing = editingId !== null && editingId !== String(item._id);
+        const guarded = otherRowWhileEditing ? (
+          <Pressable onPress={onCancelEdit} accessible={false}>
+            <View pointerEvents="none">{row}</View>
+          </Pressable>
+        ) : (
+          row
+        );
         const body =
           justSentId === String(item._id) ? (
-            <Animated.View entering={sentFromComposer}>{row}</Animated.View>
+            <Animated.View entering={sentFromComposer}>{guarded}</Animated.View>
           ) : (
-            row
+            guarded
           );
         return (
           <Animated.View layout={rowLayout}>

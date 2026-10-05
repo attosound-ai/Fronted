@@ -29,7 +29,6 @@ import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import { ChatThread, type ChatThreadHandle } from '../thread/ChatThread';
 import type { MenuItem } from '../thread/MessageRow';
 import { TapbackOverlay, type Anchor } from '../thread/TapbackOverlay';
-import { EditInPlaceOverlay } from '../thread/EditInPlaceOverlay';
 import { X, Pencil } from 'lucide-react-native';
 
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -179,9 +178,8 @@ export function ChatScreen({
   const [selectedMessage, setSelectedMessage] = useState<AttoMessage | null>(null);
   const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
   const [editingMessage, setEditingMessage] = useState<AttoMessage | null>(null);
-  const [editInPlace, setEditInPlace] = useState<{ message: AttoMessage; rect: Anchor } | null>(
-    null
-  );
+  // iMessage style edit: the message's own row becomes the editor.
+  const [editInPlace, setEditInPlace] = useState<AttoMessage | null>(null);
   const [forwardMessage, setForwardMessage] = useState<AttoMessage | null>(null);
   const [replyMessage, setReplyMessage] = useState<AttoMessage | null>(null);
 
@@ -647,10 +645,11 @@ export function ChatScreen({
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.MESSAGE_COPIED, eventProps);
           break;
         case 'edit':
-          // iMessage: edit in place over the blurred thread when the bubble
-          // was measured; the composer path stays as the fallback.
-          if (rect) {
-            setEditInPlace({ message: msg, rect });
+          // iMessage: the row itself turns into the editor (nothing blurred,
+          // nothing floating); the composer path stays as the fallback.
+          if (Platform.OS === 'ios') {
+            setReplyMessage(null);
+            setEditInPlace(msg);
             analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_STARTED, {
               ...eventProps,
               mode: 'in_place',
@@ -725,6 +724,44 @@ export function ChatScreen({
       }, 2000);
     },
     [sendTyping, persistDraft]
+  );
+
+  const cancelInPlaceEdit = useCallback(() => {
+    setEditInPlace(null);
+    analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_CANCELLED, {
+      conversation_id: conversationId,
+      mode: 'in_place',
+    });
+  }, [conversationId]);
+
+  const saveInPlaceEdit = useCallback(
+    (target: AttoMessage, text: string) => {
+      setEditInPlace(null);
+      void editMessage(String(target._id), text).then((outcome) => {
+        const props = {
+          conversation_id: conversationId,
+          message_id: target._id,
+          mode: 'in_place',
+        };
+        if (outcome === 'ok') {
+          analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_COMPLETED, props);
+          return;
+        }
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_FAILED, { ...props, outcome });
+        showToast(
+          outcome === 'edit_window_closed'
+            ? t('edit.windowClosed', {
+                defaultValue: 'Messages can only be edited for 15 minutes.',
+              })
+            : outcome === 'edit_limit_reached'
+              ? t('edit.limitReached', {
+                  defaultValue: 'A message can be edited up to 5 times.',
+                })
+              : t('edit.failed', { defaultValue: "Couldn't save the edit. Try again." })
+        );
+      });
+    },
+    [conversationId, editMessage, t]
   );
 
   const cancelEditing = useCallback(() => {
@@ -1440,6 +1477,9 @@ export function ChatScreen({
           onToggleReaction={handleToggleReaction}
           renderMedia={renderThreadMedia}
           focusedId={replyMessage ? String(replyMessage._id) : null}
+          editingId={editInPlace ? String(editInPlace._id) : null}
+          onSaveEdit={saveInPlaceEdit}
+          onCancelEdit={cancelInPlaceEdit}
           readAt={readAt}
           bottomInset={0}
           topInset={0}
@@ -1454,48 +1494,15 @@ export function ChatScreen({
           }
           onCancel={() => setReplyMessage(null)}
         />
-        {inputToolbar}
+        {/* iMessage leaves the composer where it is while a message is edited,
+            dimmed and out of reach, so the row above it is the only target. */}
+        <View
+          style={editInPlace ? styles.composerWhileEditing : null}
+          pointerEvents={editInPlace ? 'none' : 'auto'}
+        >
+          {inputToolbar}
+        </View>
       </KeyboardAvoidingView>
-
-      <EditInPlaceOverlay
-        anchor={editInPlace?.rect ?? null}
-        initialText={editInPlace?.message.text ?? ''}
-        onCancel={() => {
-          setEditInPlace(null);
-          analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_CANCELLED, {
-            conversation_id: conversationId,
-            mode: 'in_place',
-          });
-        }}
-        onSave={(text) => {
-          const target = editInPlace?.message;
-          setEditInPlace(null);
-          if (!target) return;
-          void editMessage(String(target._id), text).then((outcome) => {
-            const props = {
-              conversation_id: conversationId,
-              message_id: target._id,
-              mode: 'in_place',
-            };
-            if (outcome === 'ok') {
-              analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_COMPLETED, props);
-              return;
-            }
-            analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_FAILED, { ...props, outcome });
-            showToast(
-              outcome === 'edit_window_closed'
-                ? t('edit.windowClosed', {
-                    defaultValue: 'Messages can only be edited for 15 minutes.',
-                  })
-                : outcome === 'edit_limit_reached'
-                  ? t('edit.limitReached', {
-                      defaultValue: 'A message can be edited up to 5 times.',
-                    })
-                  : t('edit.failed', { defaultValue: "Couldn't save the edit. Try again." })
-            );
-          });
-        }}
-      />
 
       <TapbackOverlay
         anchor={tapback?.rect ?? null}
@@ -1551,6 +1558,7 @@ export function ChatScreen({
 }
 
 const styles = StyleSheet.create({
+  composerWhileEditing: { opacity: 0.35 },
   threadArea: {
     flex: 1,
   },

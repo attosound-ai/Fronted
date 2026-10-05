@@ -55,6 +55,7 @@ import { BubbleEffect } from '../effects/BubbleEffect';
 import { effectFromMetadata } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import type { Anchor } from './TapbackOverlay';
+import { EditRow } from './EditRow';
 
 // The native iOS context menu (UIContextMenuInteraction): preview, blur and
 // haptic come from the system. Absent on other platforms.
@@ -90,6 +91,9 @@ export interface MessageRowProps {
     /** iMessage's tappable "Edited" under the bubble, and its "Hide Edits". */
     editedTap: string;
     hideEdits: string;
+    editCancel: string;
+    editSave: string;
+    editField: string;
     /** "3 replies", for the thread footer. */
     replies: (count: number) => string;
     /** "Last reply 2h ago", the grey half of Slack's thread footer. */
@@ -112,6 +116,10 @@ export interface MessageRowProps {
   ) => void;
   /** Reply mode (iMessage): everything but the message being answered dims. */
   dimmed: boolean;
+  /** This message is being edited in place: its row becomes the edit row. */
+  editing?: boolean;
+  onSaveEdit?: (message: AttoMessage, text: string) => void;
+  onCancelEdit?: () => void;
   /** 0..1 shared with every row: how far the list is dragged to reveal times. */
   timesReveal: SharedValue<number>;
   /** Called on the JS side when a left drag revealed the times (telemetry). */
@@ -209,6 +217,9 @@ function MessageRowInner({
   onPressQuote,
   renderMedia,
   dimmed,
+  editing = false,
+  onSaveEdit,
+  onCancelEdit,
   timesReveal,
   onTimesRevealed,
   readLabel,
@@ -613,9 +624,19 @@ function MessageRowInner({
           {editHistory.map((v, i) => (
             <View
               key={`${i}-${v.since ?? ''}`}
-              style={[styles.pastBubble, isOwn ? styles.pastBubbleOwn : styles.pastBubbleOther]}
+              style={[
+                styles.pastBubble,
+                isOwn ? styles.pastBubbleOwn : styles.pastBubbleOther,
+                {
+                  backgroundColor: senderIsCreator ? '#D4AF37' : isOwn ? COLORS.white : '#262626',
+                },
+              ]}
             >
-              <RNText style={styles.pastText}>{v.content}</RNText>
+              <RNText
+                style={[styles.pastText, (isOwn || senderIsCreator) && styles.pastTextOnLight]}
+              >
+                {v.content}
+              </RNText>
             </View>
           ))}
         </Animated.View>
@@ -650,20 +671,6 @@ function MessageRowInner({
         ) : null}
       </View>
       {hasReactions ? <View style={styles.reactionsSpace} /> : null}
-      {message.isEdited && !editedInBubble && !message.isDeleted ? (
-        <Pressable
-          onPress={() => editHistory.length > 0 && setShowEdits((v) => !v)}
-          disabled={editHistory.length === 0}
-          hitSlop={8}
-          style={[styles.editedRow, isOwn ? styles.editedRowOwn : styles.editedRowOther]}
-          accessibilityRole={editHistory.length > 0 ? 'button' : 'text'}
-          accessibilityState={{ expanded: showEdits }}
-        >
-          <RNText style={styles.editedTap} maxFontSizeMultiplier={1.2}>
-            {showEdits ? labels.hideEdits : labels.editedTap}
-          </RNText>
-        </Pressable>
-      ) : null}
       {/* One line under a bubble, never three: a message that started a
           thread shows its thread row and nothing else, the way Slack and
           Telegram do (David, Sep 24 2026). The double tick inside the bubble
@@ -765,14 +772,41 @@ function MessageRowInner({
           ) : null}
         </View>
       ) : null}
-      {readLabel && threadReplies === 0 ? (
-        <Animated.Text
+      {/* iMessage puts both on one line under the bubble: "Read 1:50 AM · Edited",
+          and Edited is the part you tap to see the earlier versions. */}
+      {threadReplies === 0 && (readLabel || (message.isEdited && !message.isDeleted)) ? (
+        <Animated.View
           entering={FadeIn.duration(220)}
-          style={[styles.readLabel, hasReactions && styles.readLabelAfterReactions]}
-          maxFontSizeMultiplier={1.0}
+          style={[
+            styles.statusLine,
+            isOwn ? styles.statusLineOwn : styles.statusLineOther,
+            hasReactions && styles.readLabelAfterReactions,
+          ]}
         >
-          {readLabel}
-        </Animated.Text>
+          {readLabel ? (
+            <RNText style={styles.statusText} maxFontSizeMultiplier={1.0}>
+              {readLabel}
+              {message.isEdited && !message.isDeleted ? ' · ' : ''}
+            </RNText>
+          ) : null}
+          {message.isEdited && !message.isDeleted ? (
+            <Pressable
+              onPress={() => editHistory.length > 0 && setShowEdits((v) => !v)}
+              disabled={editHistory.length === 0}
+              hitSlop={10}
+              accessibilityRole={editHistory.length > 0 ? 'button' : 'text'}
+              accessibilityLabel={showEdits ? labels.hideEdits : labels.editedTap}
+              accessibilityState={{ expanded: showEdits }}
+            >
+              <RNText
+                style={[styles.statusText, editHistory.length > 0 && styles.statusLink]}
+                maxFontSizeMultiplier={1.0}
+              >
+                {showEdits ? labels.hideEdits : labels.editedTap}
+              </RNText>
+            </Pressable>
+          ) : null}
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -796,18 +830,8 @@ function MessageRowInner({
             return;
           }
           if (nativeEvent.actionKey === 'edit') {
-            // Edit in place (iMessage): the field opens where the bubble is,
-            // measured once the native menu has finished animating out.
-            setTimeout(() => {
-              const node = bubbleRef.current;
-              if (!node) {
-                onMenuAction('edit', message);
-                return;
-              }
-              node.measureInWindow((x, y, width, height) =>
-                onMenuAction('edit', message, { x, y, width, height })
-              );
-            }, 260);
+            // The native menu is still animating out: swap the row once it is gone.
+            setTimeout(() => onMenuAction('edit', message), 260);
             return;
           }
           onMenuAction(nativeEvent.actionKey, message);
@@ -839,13 +863,23 @@ function MessageRowInner({
       <Animated.View style={[styles.replyHint, replyHint]} pointerEvents="none">
         <ArrowUpLeft size={16} color={COLORS.white} strokeWidth={2.5} />
       </Animated.View>
-      <GestureDetector gesture={gesture}>
-        <Animated.View
-          style={[styles.slide, isOwn ? styles.slideOwn : styles.slideOther, slide]}
-        >
-          {withMenu}
-        </Animated.View>
-      </GestureDetector>
+      {editing ? (
+        <EditRow
+          initialText={message.text}
+          bubbleWidth={bubbleSize?.w ?? null}
+          labels={{ cancel: labels.editCancel, save: labels.editSave, field: labels.editField }}
+          onSave={(text) => onSaveEdit?.(message, text)}
+          onCancel={() => onCancelEdit?.()}
+        />
+      ) : (
+        <GestureDetector gesture={gesture}>
+          <Animated.View
+            style={[styles.slide, isOwn ? styles.slideOwn : styles.slideOther, slide]}
+          >
+            {withMenu}
+          </Animated.View>
+        </GestureDetector>
+      )}
     </Animated.View>
   );
 }
@@ -1003,6 +1037,7 @@ export const MessageRow = memo(MessageRowInner, (a, b) => {
     a.justSent === b.justSent &&
     a.senderIsCreator === b.senderIsCreator &&
     a.dimmed === b.dimmed &&
+    a.editing === b.editing &&
     a.onTimesRevealed === b.onTimesRevealed &&
     a.readLabel === b.readLabel &&
     a.menuItems === b.menuItems &&
@@ -1173,29 +1208,34 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_400Regular',
   },
   metaOwn: { color: 'rgba(0,0,0,0.45)' },
-  // iMessage "Edited": small, under the bubble on its own side, tappable.
-  editedRow: { marginTop: 3, paddingHorizontal: 6 },
-  editedRowOwn: { alignSelf: 'flex-end' },
-  editedRowOther: { alignSelf: 'flex-start' },
-  editedTap: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
-    fontFamily: 'Archivo_500Medium',
-  },
   // Previous versions, oldest first, stacked above the current bubble.
   pastVersions: { gap: 4, marginBottom: 4 },
+  // Earlier versions: the same bubble, dimmed, above the current one (iMessage).
   pastBubble: {
     maxWidth: '100%',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
+    paddingVertical: 8,
+    opacity: 0.45,
   },
   pastBubbleOwn: { alignSelf: 'flex-end' },
   pastBubbleOther: { alignSelf: 'flex-start' },
-  pastText: { color: 'rgba(255,255,255,0.55)', fontSize: 15, lineHeight: 20 },
+  pastText: { color: '#FFFFFF', fontSize: 17, lineHeight: 22 },
+  pastTextOnLight: { color: '#000000' },
+  statusLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: TAIL_DROP + 2,
+    paddingHorizontal: 4,
+  },
+  statusLineOwn: { alignSelf: 'flex-end' },
+  statusLineOther: { alignSelf: 'flex-start' },
+  statusText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontFamily: 'Archivo_600SemiBold',
+  },
+  statusLink: { color: '#FFFFFF' },
   emojiOnly: { alignItems: 'flex-end', paddingHorizontal: 4 },
   emojiText: { color: COLORS.white },
   emojiTime: {

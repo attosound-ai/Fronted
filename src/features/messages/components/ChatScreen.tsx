@@ -1501,7 +1501,6 @@ export function ChatScreen({
             <EditRow
               key={String(editInPlace._id)}
               initialText={editInPlace.text}
-              bubbleWidth={null}
               labels={{
                 cancel: t('edit.cancelA11y', { defaultValue: 'Cancel edit' }),
                 save: t('edit.saveA11y', { defaultValue: 'Save edit' }),

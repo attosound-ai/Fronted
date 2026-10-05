@@ -303,6 +303,12 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
     // iMessage keeps the row being edited right above the composer. In an
     // inverted list viewPosition 0 is the visual bottom. Once on entering and
     // again when the keyboard has finished rising.
+    // Rows dim on the UI thread from this value, so entering edit mode does not
+    // re-render the whole thread.
+    const editingSV = useSharedValue<string | null>(null);
+    useEffect(() => {
+      editingSV.value = editingId;
+    }, [editingId, editingSV]);
     const lastEditedId = useRef<string | null>(null);
     useEffect(() => {
       // Entering: bring the row down to the composer. Leaving (saved or
@@ -318,7 +324,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           ? listRef.current?.scrollToOffset({ offset: 0, animated: true })
           : listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 });
       go();
-      const late = setTimeout(go, 420);
+      const late = setTimeout(go, 260);
       return () => clearTimeout(late);
       // messages is read at the moment the edit starts or ends, on purpose.
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -394,11 +400,9 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             onToggleReaction={onToggleReaction}
             onPressQuote={scrollToMessage}
             renderMedia={renderMedia}
-            dimmed={
-              (focusedId !== null && focusedId !== String(item._id)) ||
-              (editingId !== null && editingId !== String(item._id))
-            }
+            dimmed={focusedId !== null && focusedId !== String(item._id)}
             editing={editingId !== null && editingId === String(item._id)}
+            editingSV={editingSV}
             timesReveal={timesReveal}
             onTimesRevealed={reportTimesRevealed}
             readLabel={readLabelId === String(item._id) ? readLabelText : null}
@@ -415,22 +419,11 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             onReplayEffect={onReplayEffect}
           />
         );
-        // While a message is being edited, a tap on any other row cancels the
-        // edit, like tapping the dimmed thread in iMessage. box-only keeps the
-        // row's own gestures (menus, swipes, links) from firing instead.
-        const otherRowWhileEditing = editingId !== null && editingId !== String(item._id);
-        const guarded = otherRowWhileEditing ? (
-          <Pressable onPress={onCancelEdit} accessible={false}>
-            <View pointerEvents="none">{row}</View>
-          </Pressable>
-        ) : (
-          row
-        );
         const body =
           justSentId === String(item._id) ? (
-            <Animated.View entering={sentFromComposer}>{guarded}</Animated.View>
+            <Animated.View entering={sentFromComposer}>{row}</Animated.View>
           ) : (
-            guarded
+            row
           );
         return (
           <Animated.View layout={rowLayout}>
@@ -578,6 +571,17 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
           removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         />
+
+        {/* While a message is edited, a tap anywhere on the thread cancels, like
+            tapping the dimmed thread in iMessage. One surface over the list
+            instead of a wrapper around every row. */}
+        {editingId !== null ? (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onCancelEdit}
+            accessible={false}
+          />
+        ) : null}
 
         {showFloatingDay && floatingDay && dayVisible ? (
           <Animated.View

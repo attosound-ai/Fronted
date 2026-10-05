@@ -114,6 +114,8 @@ export interface MessageRowProps {
   dimmed: boolean;
   /** This message is being edited: its row leaves its place to the editor. */
   editing?: boolean;
+  /** Id of the message being edited, read on the UI thread to dim the others. */
+  editingSV?: SharedValue<string | null>;
   /** 0..1 shared with every row: how far the list is dragged to reveal times. */
   timesReveal: SharedValue<number>;
   /** Called on the JS side when a left drag revealed the times (telemetry). */
@@ -212,6 +214,7 @@ function MessageRowInner({
   renderMedia,
   dimmed,
   editing = false,
+  editingSV,
   timesReveal,
   onTimesRevealed,
   readLabel,
@@ -368,9 +371,15 @@ function MessageRowInner({
     opacity: timesReveal.value,
     transform: [{ translateX: (1 - timesReveal.value) * 30 }],
   }));
-  const dimStyle = useAnimatedStyle(() => ({
-    opacity: withTiming(dimmed ? 0.3 : 1, { duration: 180 }),
-  }));
+  // The edit dim comes through a shared value, not a prop: entering edit mode
+  // must not re-render every row of the thread on the JS thread right when the
+  // keyboard has to come up (David, Oct 5 2026: "the edit animation takes long").
+  const rowId = String(message._id);
+  const dimStyle = useAnimatedStyle(() => {
+    const otherIsEdited =
+      editingSV != null && editingSV.value !== null && editingSV.value !== rowId;
+    return { opacity: withTiming(dimmed || otherIsEdited ? 0.3 : 1, { duration: 140 }) };
+  });
   const replyHint = useAnimatedStyle(() => {
     const p = Math.min(1, drag.value / replySwipeTrigger(isOwn));
     return {
@@ -842,11 +851,8 @@ function MessageRowInner({
             setTimeout(() => requestTapback('menu_react'), 260);
             return;
           }
-          if (nativeEvent.actionKey === 'edit') {
-            // The native menu is still animating out: swap the row once it is gone.
-            setTimeout(() => onMenuAction('edit', message), 260);
-            return;
-          }
+          // Edit starts right away, while the native menu is still closing, the
+          // way iMessage does it: the keyboard and the field rise under it.
           onMenuAction(nativeEvent.actionKey, message);
         }}
       >

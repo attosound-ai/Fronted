@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { Check, X } from 'lucide-react-native';
 
 import { haptic } from '@/lib/haptics/hapticService';
@@ -14,8 +7,6 @@ import { editToSave } from './editRules';
 
 interface Props {
   initialText: string;
-  /** Width the bubble had, so the field grows out of it instead of popping in. */
-  bubbleWidth: number | null;
   labels: { cancel: string; save: string; field: string };
   /** Called with the trimmed new text; unchanged or empty text cancels instead. */
   onSave: (text: string) => void;
@@ -36,22 +27,13 @@ const GAP = 8;
  * Uncontrolled field (defaultValue + ref): a controlled TextInput crashed iOS
  * with dictation (see the composer).
  */
-export function EditRow({ initialText, bubbleWidth, labels, onSave, onCancel }: Props) {
+export function EditRow({ initialText, labels, onSave, onCancel }: Props) {
   const draft = useRef(initialText);
   const [canSave, setCanSave] = useState(false);
-  // 0 = the bubble's own width hugging the right edge, 1 = the full field.
-  const grow = useSharedValue(0);
 
   useEffect(() => {
     void haptic('light');
-    grow.value = withTiming(1, { duration: 240, easing: Easing.out(Easing.cubic) });
-  }, [grow]);
-
-  const fieldStyle = useAnimatedStyle(() => {
-    const start = bubbleWidth ? Math.max(0, 1 - grow.value) : 0;
-    return { marginLeft: start * 140 };
-  });
-  const buttonStyle = useAnimatedStyle(() => ({ opacity: grow.value }));
+  }, []);
 
   const save = () => {
     const next = editToSave(initialText, draft.current);
@@ -63,20 +45,21 @@ export function EditRow({ initialText, bubbleWidth, labels, onSave, onCancel }: 
     onSave(next);
   };
 
+  // No entrance animation of its own: the field is there the moment Edit is
+  // tapped and the keyboard's own rise is the transition (iMessage does not
+  // wait either). Any fade here only adds to the time before one can type.
   return (
-    <Animated.View entering={FadeIn.duration(120)} style={styles.row}>
-      <Animated.View style={buttonStyle}>
-        <Pressable
-          onPress={onCancel}
-          hitSlop={8}
-          style={styles.cancel}
-          accessibilityRole="button"
-          accessibilityLabel={labels.cancel}
-        >
-          <X size={18} color="#FFFFFF" strokeWidth={2.75} />
-        </Pressable>
-      </Animated.View>
-      <Animated.View style={[styles.field, fieldStyle]}>
+    <View style={styles.row}>
+      <Pressable
+        onPress={onCancel}
+        hitSlop={8}
+        style={styles.cancel}
+        accessibilityRole="button"
+        accessibilityLabel={labels.cancel}
+      >
+        <X size={18} color="#FFFFFF" strokeWidth={2.75} />
+      </Pressable>
+      <View style={styles.field}>
         <TextInput
           autoFocus
           multiline
@@ -91,20 +74,18 @@ export function EditRow({ initialText, bubbleWidth, labels, onSave, onCancel }: 
           maxLength={4000}
           accessibilityLabel={labels.field}
         />
-      </Animated.View>
-      <Animated.View style={buttonStyle}>
-        <Pressable
-          onPress={save}
-          hitSlop={8}
-          style={[styles.save, !canSave && styles.saveIdle]}
-          accessibilityRole="button"
-          accessibilityLabel={labels.save}
-          accessibilityState={{ disabled: !canSave }}
-        >
-          <Check size={20} color="#000000" strokeWidth={3} />
-        </Pressable>
-      </Animated.View>
-    </Animated.View>
+      </View>
+      <Pressable
+        onPress={save}
+        hitSlop={8}
+        style={[styles.save, !canSave && styles.saveIdle]}
+        accessibilityRole="button"
+        accessibilityLabel={labels.save}
+        accessibilityState={{ disabled: !canSave }}
+      >
+        <Check size={20} color="#000000" strokeWidth={3} />
+      </Pressable>
+    </View>
   );
 }
 

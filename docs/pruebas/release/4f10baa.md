@@ -32,3 +32,5 @@ Cambios desde 71675f0 (registro completo en 71675f0.md, 17 de 22 OK en fix8): mo
 Sobre el binario 229 mismo (TestFlight, 5 oct 2026): contestar en frío con dos cuentas 12,5 s y 13,6 s; teléfono bloqueado con AirPods (motor 48000, hardware 24000, ~47976 fps medidos, call_engine_rate_summary clean, sin alarmas); rechazar 0,5 s con la hermana canceled; colgar desde ATTO 1,6 s; silenciar transmitiendo 17 de 17 s con tono.
 
 Hallazgo nuevo, no bloquea (ya existía): los borradores del chat se guardan por conversación y no por cuenta, y el texto cargado por la edición vieja queda como borrador.
+
+Liberado a Public Beta el 5 oct 2026 por decisión de David con M-EFECTOS pendiente (el código de efectos no cambió en este build y se verificó en los dos teléfonos en el anterior). Probar efectos con el Samsung en cuanto esté disponible.

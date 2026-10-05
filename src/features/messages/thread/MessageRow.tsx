@@ -862,7 +862,15 @@ function MessageRowInner({
             message_id: message._id,
           });
         }}
-        onPressMenuItem={({ nativeEvent }: { nativeEvent: { actionKey: string } }) => {
+        onPressMenuItem={({
+          nativeEvent,
+        }: {
+          nativeEvent: {
+            actionKey: string;
+            attoMsSinceMenuWillEnd?: number;
+            attoFastDismiss?: boolean;
+          };
+        }) => {
           if (nativeEvent.actionKey === 'react') {
             // The native menu is still animating out: measure once it is gone.
             setTimeout(() => requestTapback('menu_react'), 260);
@@ -870,7 +878,12 @@ function MessageRowInner({
           }
           // Edit starts right away, while the native menu is still closing, the
           // way iMessage does it: the keyboard and the field rise under it.
-          if (nativeEvent.actionKey === 'edit') markEditTap();
+          if (nativeEvent.actionKey === 'edit') {
+            markEditTap({
+              msSinceWillEnd: nativeEvent.attoMsSinceMenuWillEnd,
+              fastDismiss: nativeEvent.attoFastDismiss,
+            });
+          }
           onMenuAction(nativeEvent.actionKey, message, menuRect.current ?? undefined);
         }}
       >

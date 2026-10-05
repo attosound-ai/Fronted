@@ -1,0 +1,107 @@
+diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
+index ec1c0316f2d0e955b28dd80beb4712ef436dfdf1..e1136d9032876effd4473698d7c9e6dee1d228df 100644
+--- a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
++++ b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
+@@ -105,6 +105,19 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+     
+     guard self.isContextMenuVisible else { return };
+     
++    // ATTO: the system takes about 400 ms to put the menu away, and what the
++    // chosen action does (the in place editor, the reaction picker) stays
++    // covered by the menu's backdrop until then. iMessage's own menu is gone
++    // in about 130 ms. Run the dismissal faster instead of waiting for it.
++    self.attoMenuWillEndAt = CACurrentMediaTime();
++    self.attoFastDismissTarget = self.attoSpeedUpMenuDismissal();
++    animator?.addCompletion { [weak self] in
++      self?.attoRestoreMenuSpeed();
++    };
++    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
++      self?.attoRestoreMenuSpeed();
++    };
++    
+     self.dispatchEvent(
+       for: .onMenuWillHide,
+       withPayload: [:]
+@@ -237,3 +250,56 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+   };
+   #endif
+ };
++
++
++// MARK: - ATTO: fast menu dismissal
++// ----------------------------------
++
++fileprivate var attoWillEndKey: UInt8 = 0;
++fileprivate var attoTargetKey: UInt8 = 0;
++
++extension RNIContextMenuViewContent {
++  
++  static let attoDismissSpeed: Float = 4;
++  
++  var attoMenuWillEndAt: CFTimeInterval {
++    get { (objc_getAssociatedObject(self, &attoWillEndKey) as? NSNumber)?.doubleValue ?? 0 }
++    set { objc_setAssociatedObject(self, &attoWillEndKey, NSNumber(value: newValue), .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
++  };
++  
++  var attoFastDismissTarget: UIView? {
++    get { objc_getAssociatedObject(self, &attoTargetKey) as? UIView }
++    set { objc_setAssociatedObject(self, &attoTargetKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
++  };
++  
++  /// The view UIKit presents the menu in: a direct child of the window whose
++  /// class is the system's context menu container. Only that subtree runs
++  /// faster; the app's own animations and the keyboard keep their pace.
++  func attoSpeedUpMenuDismissal() -> UIView? {
++    guard let window = self.window else { return nil };
++    
++    func find(_ view: UIView, depth: Int) -> UIView? {
++      if String(describing: type(of: view)).contains("ContextMenu") { return view };
++      guard depth > 0 else { return nil };
++      for sub in view.subviews.reversed() {
++        if let hit = find(sub, depth: depth - 1) { return hit };
++      };
++      return nil;
++    };
++    
++    var container: UIView? = nil;
++    for sub in window.subviews.reversed() {
++      if let hit = find(sub, depth: 2) { container = hit; break };
++    };
++    guard let target = container else { return nil };
++    
++    target.layer.speed = Self.attoDismissSpeed;
++    return target;
++  };
++  
++  func attoRestoreMenuSpeed() {
++    guard let target = self.attoFastDismissTarget else { return };
++    target.layer.speed = 1;
++    self.attoFastDismissTarget = nil;
++  };
++};
+diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
+index c01e1ef8449defcc35b8513991de85c8e8acc07f..026c86b5bd9f44938bcb8e570dde22afad83335c 100644
+--- a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
++++ b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
+@@ -448,9 +448,20 @@ public final class RNIContextMenuViewContent: UIView, RNIContentView {
+   ){
+     self.didPressMenuItem = true;
+     
++    // ATTO: tells JS when this arrives relative to the start of the menu's
++    // dismissal (negative or zero: before it; positive: that many ms into
++    // it) and whether the faster dismissal found the menu's view.
++    var payload = dict;
++    let willEndAt = self.attoMenuWillEndAt;
++    payload["attoMsSinceMenuWillEnd"] = willEndAt > 0
++      ? Int((CACurrentMediaTime() - willEndAt) * 1000)
++      : -1;
++    payload["attoFastDismiss"] = self.attoFastDismissTarget != nil;
++    self.attoMenuWillEndAt = 0;
++    
+     self.dispatchEvent(
+       for: .onPressMenuItem,
+-      withPayload: dict
++      withPayload: payload
+     );
+   };
+   

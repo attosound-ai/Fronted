@@ -13,6 +13,7 @@ type Mark = 'mounted' | 'focused' | 'keyboard_will_show' | 'keyboard_shown';
 let tapAt = 0;
 let marks: Partial<Record<Mark, number>> = {};
 let reported = true;
+let extra: Record<string, number | boolean> = {};
 
 const now = () => globalThis.performance?.now?.() ?? Date.now();
 
@@ -27,9 +28,22 @@ export function timingPayload(
   return out;
 }
 
-export function markEditTap(): void {
+/**
+ * `menu` comes from the patched native menu: how many ms into the menu's
+ * dismissal the action reached JS (negative: before it began) and whether the
+ * faster dismissal found the menu's view. Without it the numbers above start
+ * late and hide the wait David sees.
+ */
+export function markEditTap(menu?: {
+  msSinceWillEnd?: number;
+  fastDismiss?: boolean;
+}): void {
   tapAt = now();
   marks = {};
+  extra = {};
+  const ms = menu?.msSinceWillEnd;
+  if (typeof ms === 'number' && ms < 5000) extra.menu_ms_since_will_end = ms;
+  if (typeof menu?.fastDismiss === 'boolean') extra.menu_fast_dismiss = menu.fastDismiss;
   reported = false;
 }
 
@@ -44,5 +58,8 @@ export function flushEditTiming(): void {
   if (reported) return;
   reported = true;
   if (marks.mounted === undefined) return;
-  analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_OPEN_TIMING, timingPayload(marks));
+  analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_OPEN_TIMING, {
+    ...timingPayload(marks),
+    ...extra,
+  });
 }

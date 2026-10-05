@@ -114,7 +114,8 @@
       "react-native@0.83.4": "patches/react-native@0.83.4.patch",
       "expo-audio@55.0.11": "patches/expo-audio@55.0.11.patch",
       "@stripe/stripe-react-native@0.58.0": "patches/@stripe__stripe-react-native@0.58.0.patch",
-      "@lodev09/react-native-true-sheet@3.11.13": "patches/@lodev09__react-native-true-sheet@3.11.13.patch"
+      "@lodev09/react-native-true-sheet@3.11.13": "patches/@lodev09__react-native-true-sheet@3.11.13.patch",
+      "react-native-ios-context-menu@3.2.1": "patches/react-native-ios-context-menu@3.2.1.patch"
     }
   },
   "private": true,

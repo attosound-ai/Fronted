@@ -38,3 +38,38 @@ export function orderConversations<
     return tb - ta;
   });
 }
+
+/**
+ * Drafts belong to an account, not just to a conversation: two linked accounts
+ * on one phone can share a conversation (a representative and their creator
+ * writing to each other), and one saw the other's unsent text (David, Oct 5
+ * 2026). Conversation ids are UUIDs, so ":" never appears in them.
+ */
+export function draftKey(
+  accountId: string | number | null | undefined,
+  conversationId: string
+): string {
+  return `${accountId == null || accountId === '' ? 'anon' : accountId}:${conversationId}`;
+}
+
+/** Drafts saved before keys carried the account cannot be attributed: drop them. */
+export function dropLegacyDrafts(drafts: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, text] of Object.entries(drafts ?? {})) {
+    if (key.includes(':')) out[key] = text;
+  }
+  return out;
+}
+
+/**
+ * What to store as the draft when leaving a chat. Text loaded into the
+ * composer by "Edit" is an existing message, never a draft: storing it made
+ * the old message come back as unsent text (and send again as a duplicate).
+ */
+export function draftToStore(
+  fieldText: string,
+  editing: boolean,
+  draftBeforeEdit: string | null
+): string {
+  return editing ? (draftBeforeEdit ?? '') : fieldText;
+}

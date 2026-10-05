@@ -61,7 +61,8 @@ import {
   useChatWallpaperStore,
 } from '@/stores/chatWallpaperStore';
 import { ChatWallpaperLayer } from './ChatWallpaperLayer';
-import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
+import { useConversationPrefsStore, draftKey } from '../stores/conversationPrefsStore';
+import { draftToStore } from '../stores/conversationPrefsModel';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
 import { type AttachAction } from './AttachMenu';
 import { TopFadeBlur } from './TopFadeBlur';
@@ -191,16 +192,21 @@ export function ChatScreen({
   // The unsent draft comes back when the chat is reopened (WhatsApp and
   // Telegram keep it per conversation and flag it in the list).
   const setStoredDraft = useConversationPrefsStore((s) => s.setDraft);
-  const draftRef = useRef(
-    useConversationPrefsStore.getState().drafts[conversationId] ?? ''
-  );
+  // Keyed by account too: two linked accounts can share this conversation.
+  const draftStoreKey = draftKey(userId, conversationId);
+  const draftRef = useRef(useConversationPrefsStore.getState().drafts[draftStoreKey] ?? '');
+  // While "Edit" has an existing message loaded in the composer, the field's
+  // text is not a draft; this keeps the real one to put back afterwards.
+  const editingRef = useRef(false);
+  const draftBeforeEdit = useRef<string | null>(null);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistDraft = useCallback(
     (text: string) => {
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
       draftSaveTimer.current = setTimeout(() => {
-        const had = !!useConversationPrefsStore.getState().drafts[conversationId];
-        setStoredDraft(conversationId, text);
+        if (editingRef.current) return;
+        const had = !!useConversationPrefsStore.getState().drafts[draftStoreKey];
+        setStoredDraft(draftStoreKey, text);
         if (!!text.trim() !== had) {
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.DRAFT_SAVED, {
             conversation_id: conversationId,
@@ -210,17 +216,28 @@ export function ChatScreen({
         }
       }, 400);
     },
-    [conversationId, setStoredDraft]
+    [conversationId, draftStoreKey, setStoredDraft]
   );
   useEffect(
     () => () => {
       // Leaving the screen: flush whatever the field holds right now.
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-      setStoredDraft(conversationId, draftRef.current);
+      setStoredDraft(
+        draftStoreKey,
+        draftToStore(draftRef.current, editingRef.current, draftBeforeEdit.current)
+      );
     },
     [conversationId, setStoredDraft]
   );
   const [composerGeneration, setComposerGeneration] = useState(0);
+  // Leaving the composer edit (saved or cancelled): the field goes back to the
+  // draft the person had before, never to the edited message's text.
+  const endComposerEdit = useCallback(() => {
+    editingRef.current = false;
+    draftRef.current = draftBeforeEdit.current ?? '';
+    draftBeforeEdit.current = null;
+    setComposerGeneration((g) => g + 1);
+  }, []);
   // The message this device just sent slides in from the composer (iMessage).
   const [justSentId, setJustSentId] = useState<string | null>(null);
   const [tapback, setTapback] = useState<{ message: AttoMessage; rect: Anchor } | null>(
@@ -392,8 +409,9 @@ export function ChatScreen({
       const content = (newMessages[0]?.text ?? '').trim();
       if (!content) return;
       if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-      draftRef.current = '';
-      setStoredDraft(conversationId, '');
+      const wasEditing = editingRef.current;
+      draftRef.current = wasEditing ? (draftBeforeEdit.current ?? '') : '';
+      if (!wasEditing) setStoredDraft(draftStoreKey, '');
 
       // Stop typing indicator on send
       if (isTypingRef.current) {
@@ -412,7 +430,7 @@ export function ChatScreen({
           { conversation_id: conversationId, message_id: editingMessage._id, outcome }
         );
         setEditingMessage(null);
-        composerRef.current?.clear();
+        endComposerEdit();
         return;
       }
 
@@ -641,6 +659,8 @@ export function ChatScreen({
           }
           // Load the message into the composer by remounting the native
           // field with the new draft (never through a controlled value).
+          draftBeforeEdit.current = draftRef.current;
+          editingRef.current = true;
           draftRef.current = msg.text;
           setComposerGeneration((g) => g + 1);
           setEditingMessage(msg);
@@ -708,7 +728,7 @@ export function ChatScreen({
   );
 
   const cancelEditing = useCallback(() => {
-    composerRef.current?.clear();
+    endComposerEdit();
     setEditingMessage(null);
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.EDIT_CANCELLED, {
       conversation_id: conversationId,

@@ -10,6 +10,7 @@ import { mmkvStorage } from '@/lib/storage/mmkv';
  */
 
 import type { ArchivedMark } from './conversationPrefsModel';
+import { dropLegacyDrafts } from './conversationPrefsModel';
 export type { ArchivedMark } from './conversationPrefsModel';
 
 interface ConversationPrefsState {
@@ -87,6 +88,15 @@ export const useConversationPrefsStore = create<ConversationPrefsState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => mmkvAdapter),
+      // v2 (Oct 5 2026): drafts are keyed by account + conversation.
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<ConversationPrefsState>;
+        if (version < 2) {
+          return { ...state, drafts: dropLegacyDrafts(state.drafts ?? {}) } as ConversationPrefsState;
+        }
+        return state as ConversationPrefsState;
+      },
       partialize: (state) => ({
         pinned: state.pinned,
         muted: state.muted,
@@ -97,4 +107,4 @@ export const useConversationPrefsStore = create<ConversationPrefsState>()(
   )
 );
 
-export { isArchived, orderConversations } from './conversationPrefsModel';
+export { isArchived, orderConversations, draftKey } from './conversationPrefsModel';

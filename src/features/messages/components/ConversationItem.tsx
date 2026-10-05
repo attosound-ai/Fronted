@@ -1,7 +1,8 @@
 import { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { BellOff, Pin } from 'lucide-react-native';
-import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
+import { useConversationPrefsStore, draftKey } from '../stores/conversationPrefsStore';
+import { useAuthStore } from '@/stores/authStore';
 import { stripMarkdown } from '../thread/markdown';
 import { previewFromServer } from '../media/chatMedia';
 import { useTranslation } from 'react-i18next';
@@ -39,7 +40,10 @@ function ConversationItemInner({
   const isMuted = useConversationPrefsStore(
     (s) => !!s.muted[conversation.conversationId]
   );
-  const draft = useConversationPrefsStore((s) => s.drafts[conversation.conversationId]);
+  const accountId = useAuthStore((s) => s.user?.id);
+  const draft = useConversationPrefsStore(
+    (s) => s.drafts[draftKey(accountId, conversation.conversationId)]
+  );
 
   return (
     <TouchableOpacity

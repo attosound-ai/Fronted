@@ -24,7 +24,9 @@ import {
   isArchived,
   orderConversations,
   useConversationPrefsStore,
+  draftKey,
 } from '../stores/conversationPrefsStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useConversationViewStore } from '../stores/conversationViewStore';
 import { ConversationSwipeRow } from './ConversationSwipeRow';
 import { ConversationsHeader } from './ConversationsHeader';
@@ -72,6 +74,7 @@ export function ConversationList({
   // WhatsApp and Telegram list everybody sees by default.
   const view = useConversationViewStore((s) => s.view);
   const drafts = useConversationPrefsStore((s) => s.drafts);
+  const accountId = useAuthStore((s) => s.user?.id);
   const conversations = useMemo(() => {
     const live = rawConversations.filter(
       (c) => !isArchived(archived, c.conversationId, c.lastMessageAt)
@@ -80,12 +83,12 @@ export function ConversationList({
       view === 'unread'
         ? live.filter((c) => c.unreadCount > 0)
         : view === 'drafts'
-          ? live.filter((c) => (drafts[c.conversationId] ?? '').trim().length > 0)
+          ? live.filter((c) => (drafts[draftKey(accountId, c.conversationId)] ?? '').trim().length > 0)
           : view === 'archived'
             ? archivedList
             : live;
     return orderConversations(slice, pinned);
-  }, [rawConversations, pinned, archived, archivedList, drafts, view]);
+  }, [rawConversations, pinned, archived, archivedList, drafts, view, accountId]);
   const header = useCollapsibleHeader();
 
   const handleConversationPress = useCallback(

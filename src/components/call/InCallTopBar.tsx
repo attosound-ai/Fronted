@@ -89,6 +89,83 @@ function formatElapsed(seconds: number): string {
  */
 export const CALL_BAR_MIRROR_TRANSMIT_EVENT = 'attoCallBarMirrorTransmit';
 
+/*
+ * Oct 4 2026 sentinels. The AirPods half speed bug had every configured rate
+ * right while the audio ran at half speed; its only door is the engine being
+ * restarted mid call (a format change Twilio may not follow). Since the client
+ * format is fixed at 48 kHz that must never happen, so a restart is an alarm,
+ * and so is a measured rate more than 5 percent away from the configured one.
+ */
+const sentinelBaseline: {
+  callSid: string | null;
+  firstCb: number | null;
+  startRendering: number | null;
+} = { callSid: null, firstCb: null, startRendering: null };
+
+let sentinelLiveReads = 0;
+
+function checkAudioSentinels(diag: any, trigger: string): void {
+  try {
+    const call = useCallStore.getState().activeCall;
+    const callSid = call?.callSid ?? null;
+    const started = typeof diag?.startRenderingCount === 'number' ? diag.startRenderingCount : null;
+    const cb = typeof diag?.playoutCbCount === 'number' ? diag.playoutCbCount : null;
+    if (callSid !== sentinelBaseline.callSid) {
+      sentinelBaseline.callSid = callSid;
+      sentinelBaseline.firstCb = cb;
+      sentinelBaseline.startRendering = null;
+      sentinelLiveReads = 0;
+    }
+    // Arm only once THIS call is connected and its audio is flowing. The first
+    // diagnostics of a call can land while it still rings (a route change before
+    // the answer), and the call's own first start then looked like a restart
+    // (false alarm on David's call, Oct 5 2026).
+    const live =
+      call?.state === 'connected' &&
+      cb != null &&
+      sentinelBaseline.firstCb != null &&
+      cb > sentinelBaseline.firstCb;
+    if (live && started != null) {
+      if (sentinelBaseline.startRendering == null) {
+        sentinelBaseline.startRendering = started;
+      } else if (started > sentinelBaseline.startRendering) {
+        analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_RESTARTED_MID_CALL, {
+          call_sid: callSid,
+          diag_trigger: trigger,
+          restarts: started - sentinelBaseline.startRendering,
+          hw_sample_rate_now: diag?.hwSampleRateNow ?? null,
+          rendering_format_rate: diag?.renderingFormatRate ?? null,
+          last_route_reason: diag?.lastRouteReason ?? null,
+        });
+        sentinelBaseline.startRendering = started;
+      }
+    }
+    // The measured rate is frames since the PREVIOUS read: the first live read
+    // of a call still averages in the silence before it, so only the second
+    // live read onwards is a real rate.
+    sentinelLiveReads = live ? sentinelLiveReads + 1 : 0;
+    const measured = Number(diag?.measuredPlayoutFps);
+    const configured = Number(diag?.unitOutputClientRate);
+    if (
+      sentinelLiveReads >= 2 &&
+      measured > 0 &&
+      configured > 0 &&
+      Math.abs(measured / configured - 1) > 0.05
+    ) {
+      analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_RATE_MEASURED_MISMATCH, {
+        call_sid: callSid,
+        diag_trigger: trigger,
+        measured_playout_fps: measured,
+        measured_record_fps: diag?.measuredRecordFps ?? null,
+        unit_output_client_rate: configured,
+        hw_sample_rate_now: diag?.hwSampleRateNow ?? null,
+      });
+    }
+  } catch {
+    /* telemetry never breaks the call bar */
+  }
+}
+
 export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
   const { t } = useTranslation('calls');
   const activeCall = useCallStore((s) => s.activeCall);
@@ -242,6 +319,7 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
     async (trigger: string) => {
       try {
         const diag = await mixerService.getMixDiagnostics();
+        checkAudioSentinels(diag, trigger);
         analytics.capture(ANALYTICS_EVENTS.CALL.AUDIO_INJECT_DIAG, {
           diag_trigger: trigger,
           record_cb_count: diag?.recordCbCount ?? null,
@@ -570,11 +648,18 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
         const active =
           Number(d.recordCbCount ?? 0) > 0 || Number(d.playoutCbCount ?? 0) > 0;
         if (active) engineWasActive = true;
+        // Oct 4 2026: the client format is fixed at 48 kHz and VoiceProcessingIO
+        // converts to whatever the hardware runs (24 kHz on AirPods HFP), so the
+        // hardware rate differing from the engines is BY DESIGN now and counting
+        // it flagged every Bluetooth second as a mismatch. What can still break
+        // the audio is our own pieces disagreeing: the engines vs the format
+        // Twilio was given (and the measured rate, see checkAudioSentinels).
+        const capturingNow = Number(d.capturingFormatRate ?? 0);
         const mismatch =
           active &&
           built > 0 &&
-          session > 0 &&
-          (built !== session || (rendering > 0 && rendering !== session));
+          rendering > 0 &&
+          (built !== rendering || (capturingNow > 0 && capturingNow !== rendering));
         if (mismatch) {
           mismatchSamples += 1;
           worst = { built, session, rendering };

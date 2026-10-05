@@ -19,6 +19,8 @@ import { paymentService } from '@/lib/api/paymentService';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { COLORS } from '@/constants/theme';
+import { isTestBridgeNumber } from '@/lib/telephony/testNumber';
+import { TestNumberNotice, type OfficialProfile } from './TestNumberNotice';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 40; // ~2 minutes
@@ -33,6 +35,8 @@ export const StepBridgeNumber: React.FC<
     forUserId?: number;
     /** No payment happened, so nothing requested the number yet: claim it. */
     claimWithoutPayment?: boolean;
+    /** Previews only: the official account to show without a lookup. */
+    officialProfile?: OfficialProfile | null;
   }
 > = ({
   state,
@@ -42,6 +46,7 @@ export const StepBridgeNumber: React.FC<
   apiError,
   forUserId,
   claimWithoutPayment = false,
+  officialProfile = null,
 }) => {
   const { t } = useTranslation(['registration', 'common']);
   const [provisioning, setProvisioning] = useState(!state.bridgeNumber);
@@ -197,6 +202,12 @@ export const StepBridgeNumber: React.FC<
             </RNText>
           )}
         </View>
+
+        {/* A Twilio test number looks real but never rings: say so, right
+            under it, without hiding anything (David, Oct 4 2026). */}
+        {!provisioning && !provisioningFailed && bridgeNumber && isTestBridgeNumber(bridgeNumber) ? (
+          <TestNumberNotice number={bridgeNumber} preloadedProfile={officialProfile} />
+        ) : null}
 
         {/* Action Buttons */}
         <View

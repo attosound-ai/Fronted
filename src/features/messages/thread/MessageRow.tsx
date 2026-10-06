@@ -228,6 +228,32 @@ function MessageRowInner({
 }: MessageRowProps) {
   const bubbleRef = useRef<View>(null);
   const menuRect = useRef<Anchor | null>(null);
+  // The native menu, to put it away ourselves the moment an action is chosen.
+  const menuRef = useRef<{ dismissMenu?: () => Promise<void> } | null>(null);
+  // Every action asks iOS to keep the menu presented. That sounds backwards,
+  // but it is what makes iOS hand the action over AT THE TAP: without it the
+  // system closes the menu first and only then delivers the action. Recorded
+  // at 60 fps on David's phone (Oct 6 2026): menu closed in 0.3 s, then 0.8 to
+  // 1.0 s of nothing, then the edit began. That dead second was the whole of
+  // "it hides everything first and only then brings it out". We dismiss the
+  // menu ourselves in the same instant, so it leaves while the action runs.
+  const nativeMenuKey = menuItems
+    .map(
+      (item) =>
+        `${item.actionKey}:${item.actionTitle}:${(item.menuAttributes ?? []).join(',')}`
+    )
+    .join('|');
+  const nativeMenuItems = useMemo(
+    () =>
+      menuItems.map((item) => ({
+        ...item,
+        menuAttributes: [...(item.menuAttributes ?? []), 'keepsMenuPresented'],
+      })),
+    // Keyed by content: the chat screen hands a new array on every render and
+    // the native menu must not be rebuilt each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nativeMenuKey]
+  );
   const [showEdits, setShowEdits] = useState(false);
   // Bubble size, only tracked for creator bubbles: the tail continues the
   // gold gradient, and the gradient runs across the whole bubble.
@@ -848,7 +874,8 @@ function MessageRowInner({
   const withMenu =
     ContextMenuView && !message.isDeleted ? (
       <ContextMenuView
-        menuConfig={{ menuTitle: '', menuItems }}
+        ref={menuRef}
+        menuConfig={{ menuTitle: '', menuItems: nativeMenuItems }}
         shouldWaitForMenuToHide={false}
         onMenuWillShow={() => {
           // Where the bubble sits before the menu lifts it: the editor grows
@@ -871,9 +898,12 @@ function MessageRowInner({
             attoFastDismiss?: boolean;
           };
         }) => {
+          // The action arrived with the menu still up (see nativeMenuItems):
+          // send the menu away now, in parallel with what the action does.
+          void menuRef.current?.dismissMenu?.().catch(() => {});
           if (nativeEvent.actionKey === 'react') {
             // The native menu is still animating out: measure once it is gone.
-            setTimeout(() => requestTapback('menu_react'), 260);
+            setTimeout(() => requestTapback('menu_react'), 320);
             return;
           }
           // Edit starts right away, while the native menu is still closing, the

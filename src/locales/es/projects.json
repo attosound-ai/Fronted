@@ -377,7 +377,7 @@
       "mono": "Mono",
       "stereo": "Estéreo",
       "titleField": "Título",
-      "titlePlaceholder": "Nombre del proyecto",
+      "titlePlaceholder": "Título de la pista",
       "author": "Autor",
       "authorPlaceholder": "Escribe el autor",
       "isrc": "ISRC",

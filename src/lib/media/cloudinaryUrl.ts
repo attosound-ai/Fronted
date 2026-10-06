@@ -9,6 +9,20 @@ const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dxzcutnlp';
 
 const BASE = `https://res.cloudinary.com/${CLOUD_NAME}`;
 
+/**
+ * True for anything that is already a whole address and must be used as it
+ * is: a web url, but also a file on the phone (file:, content:, ph:, an
+ * absolute path), a data: or a blob: uri. The builders below used to pass
+ * through only what began with "http", so the local file of a video that was
+ * still uploading was taken for a Cloudinary id and came out as
+ * https://res.cloudinary.com/.../sp_auto/file:///var/mobile/... The bubble
+ * could not play that and stayed empty until the upload finished (client and
+ * David, Oct 6 2026: "videos take a long time to show").
+ */
+export function isCompleteUri(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('/');
+}
+
 /** Named transformation presets (must match backend eager transforms). */
 const PRESETS: Record<string, string> = {
   // Avatars — face-detection crop
@@ -73,7 +87,7 @@ export function cloudinaryUrl(
   if (!publicId) return null;
 
   // Passthrough for full URLs (e.g. legacy local uploads or external URLs)
-  if (publicId.startsWith('http')) return publicId;
+  if (isCompleteUri(publicId)) return publicId;
 
   const transform = PRESETS[preset] ?? PRESETS.original;
   if (!transform) {
@@ -111,7 +125,7 @@ const MP4_FALLBACK_TRANSFORM = 'f_auto:video,q_auto,w_1080,c_limit';
 export function cloudinaryHlsUrl(publicId: string | null | undefined): string | null {
   if (!publicId) return null;
   // Full URLs (legacy local uploads, external ad creatives) can't be transformed.
-  if (publicId.startsWith('http')) return publicId;
+  if (isCompleteUri(publicId)) return publicId;
   const cleanId = publicId.replace(VIDEO_EXT, '');
   return `${BASE}${HLS_PATH}${cleanId}.m3u8`;
 }
@@ -126,7 +140,7 @@ export function cloudinaryPoster(
   publicId: string | null | undefined,
   variant: 'reel' | 'video' = 'video'
 ): string | null {
-  if (!publicId || publicId.startsWith('http')) return null;
+  if (!publicId || isCompleteUri(publicId)) return null;
   return cloudinaryUrl(
     publicId,
     variant === 'reel' ? 'reel_thumb' : 'video_thumb',
@@ -163,7 +177,7 @@ export function hlsToMp4Fallback(url: string | null | undefined): string | null 
 export function cloudinaryVideoMp4(publicId: string | null | undefined): string | null {
   if (!publicId) return null;
   // Already-built Cloudinary HLS url → rewrite to the MP4 transform.
-  if (publicId.startsWith('http')) return hlsToMp4Fallback(publicId) ?? publicId;
+  if (isCompleteUri(publicId)) return hlsToMp4Fallback(publicId) ?? publicId;
   const cleanId = publicId.replace(VIDEO_EXT, '');
   return `${BASE}/video/upload/${MP4_FALLBACK_TRANSFORM}/${cleanId}.mp4`;
 }

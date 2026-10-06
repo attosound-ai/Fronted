@@ -377,7 +377,7 @@
       "mono": "Mono",
       "stereo": "Stereo",
       "titleField": "Title",
-      "titlePlaceholder": "Project name",
+      "titlePlaceholder": "Track title",
       "author": "Author",
       "authorPlaceholder": "Please input author",
       "isrc": "ISRC",

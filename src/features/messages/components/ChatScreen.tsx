@@ -88,6 +88,7 @@ import {
   type OutgoingMedia,
 } from '../media/chatMedia';
 import { useUploadProgress } from '../media/uploadProgress';
+import { reconcileSentRow } from '../utils/sentRow';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Contacts from 'expo-contacts';
@@ -989,7 +990,9 @@ export function ChatScreen({
           metadata,
         });
         sentMessageIds.add(sent.messageId);
-        // The channel echo may have landed first with the real id: keep one row.
+        // One row for this message, whichever came first, the answer or the
+        // realtime echo. See reconcileSentRow: the previous two steps removed
+        // the row when the echo had already taken over the temporary one.
         queryClient.setQueryData(
           chatKey,
           (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
@@ -998,15 +1001,16 @@ export function ChatScreen({
               ...old,
               pages: old.pages.map((page) => ({
                 ...page,
-                messages: page.messages.filter(
-                  (m) => !(m.messageId === sent.messageId && m.messageId !== tempId)
-                ),
+                messages: reconcileSentRow(page.messages, tempId, sent.messageId, {
+                  content,
+                  metadata,
+                  status: 'sent' as const,
+                }),
               })),
             };
           }
         );
         useUploadProgress.getState().clear(tempId);
-        patchTemp({ messageId: sent.messageId, content, metadata, status: 'sent' });
         setJustSentId((cur) => (cur === tempId ? sent.messageId : cur));
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_SENT, {
           conversation_id: conversationId,

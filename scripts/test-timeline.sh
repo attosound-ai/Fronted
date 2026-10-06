@@ -38,6 +38,7 @@ TEST_FILES=(
   "src/lib/media/__tests__/uploadResponse.test.ts"
   "src/features/messages/media/__tests__/mediaBox.test.ts"
   "src/features/messages/media/__tests__/messagePreview.test.ts"
+  "src/features/messages/utils/__tests__/sentRow.test.ts"
   "src/lib/telephony/__tests__/testNumber.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"

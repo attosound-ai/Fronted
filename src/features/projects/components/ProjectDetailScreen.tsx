@@ -242,41 +242,53 @@ export function ProjectDetailScreen({
         </View>
       </View>
 
-      {/* The tracks, with the names and colors given in the editor, so the
-          project reads the same here as it does inside it. */}
-      {trackRows.length > 0 && (
-        <View style={styles.tracksBlock}>
-          <View style={styles.sectionHeader}>
-            <Text variant="body" style={styles.sectionTitle}>
-              {t('detail.sectionTracks')}
-            </Text>
-          </View>
-          <View style={styles.trackRows}>
-            {trackRows.map((track) => (
-              <View key={track.index} style={styles.trackRow}>
-                <View style={[styles.trackDot, { backgroundColor: track.color }]} />
-                <Text variant="body" numberOfLines={1} style={styles.trackName}>
-                  {track.name}
-                </Text>
-                <Text variant="caption" style={styles.trackMeta}>
-                  {t('detail.trackClips', { count: track.clipCount })}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      <View style={styles.sectionHeader}>
-        <Text variant="body" style={styles.sectionTitle}>
-          {t('detail.sectionAudioSegments')}
-        </Text>
-      </View>
-
       <FlatList
+        style={styles.list}
         data={segments}
         keyExtractor={(item) => item.id}
         renderItem={renderSegment}
+        // Everything above the segments scrolls WITH them. The tracks used to be
+        // a plain block above this list: with many tracks (26 in the project
+        // David opened on Oct 6 2026) it pushed the list and the Open Editor
+        // button below the screen, and nothing on the page could scroll, so
+        // the editor could not be reached from here at all.
+        // The blocks keep their own side padding; undo the list's so they sit
+        // exactly where they did.
+        ListHeaderComponentStyle={styles.listHeader}
+        ListHeaderComponent={
+          <>
+            {/* The tracks, with the names and colors given in the editor, so the
+                project reads the same here as it does inside it. */}
+            {trackRows.length > 0 && (
+              <View style={styles.tracksBlock}>
+                <View style={styles.sectionHeader}>
+                  <Text variant="body" style={styles.sectionTitle}>
+                    {t('detail.sectionTracks')}
+                  </Text>
+                </View>
+                <View style={styles.trackRows}>
+                  {trackRows.map((track) => (
+                    <View key={track.index} style={styles.trackRow}>
+                      <View style={[styles.trackDot, { backgroundColor: track.color }]} />
+                      <Text variant="body" numberOfLines={1} style={styles.trackName}>
+                        {track.name}
+                      </Text>
+                      <Text variant="caption" style={styles.trackMeta}>
+                        {t('detail.trackClips', { count: track.clipCount })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={styles.sectionHeader}>
+              <Text variant="body" style={styles.sectionTitle}>
+                {t('detail.sectionAudioSegments')}
+              </Text>
+            </View>
+          </>
+        }
         onScroll={header.onScroll}
         scrollEventThrottle={header.scrollEventThrottle}
         contentContainerStyle={styles.segmentList}
@@ -290,6 +302,8 @@ export function ProjectDetailScreen({
         }
       />
 
+      {/* Outside the list on purpose: the way into the editor stays on screen
+          however long the project is. */}
       <View style={styles.footer}>
         <Button
           title={t('detail.openEditorButton')}
@@ -433,6 +447,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textTransform: 'uppercase',
   },
+  list: { flex: 1 },
+  listHeader: { marginHorizontal: -16 },
   segmentList: {
     paddingHorizontal: 16,
     paddingBottom: 16,

@@ -9,6 +9,8 @@ import { showMessageNotification } from '@/components/ui/MessageNotificationBann
 import { useNotificationStore } from '@/stores/notificationStore';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import i18n from '@/lib/i18n';
+import { bannerPreview } from '../media/messagePreview';
 
 function extractString(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -67,8 +69,13 @@ export function useUserChannel() {
 
           const senderId = extractString(payload.sender_id);
           const conversationId = extractString(payload.conversation_id);
-          const lastMessage =
-            typeof payload.last_message === 'string' ? payload.last_message : '';
+          // Never the raw content: for a photo or a video that is the address
+          // of the file. The banner says what was sent, like the system push.
+          const lastMessage = bannerPreview(
+            typeof payload.last_message === 'string' ? payload.last_message : '',
+            extractString(payload.content_type) || null,
+            i18n.getFixedT(null, 'messages') as unknown as (key: string) => string
+          );
 
           // Don't count own messages or messages in the active chat
           if (senderId === uid) return;

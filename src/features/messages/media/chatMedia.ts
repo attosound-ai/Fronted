@@ -378,44 +378,8 @@ function defaultMime(media: OutgoingMedia): string {
   }
 }
 
-/** Short label for previews and notifications of a non text message. */
-export function mediaPreviewLabel(
-  contentType: string | undefined | null,
-  t: (key: string) => string
-): string | null {
-  switch (contentType) {
-    case 'audio':
-      return t('media.previewAudio');
-    case 'video_note':
-      return t('media.previewVideoNote');
-    case 'image':
-      return t('media.previewImage');
-    case 'video':
-      return t('media.previewVideo');
-    case 'file':
-      return t('media.previewFile');
-    case 'contact':
-      return t('media.previewContact');
-    case 'location':
-      return t('media.previewLocation');
-    case 'post':
-      return t('media.previewPost');
-    default:
-      return null;
-  }
-}
-
-/** The server writes `[audio]` style markers as the conversation preview. */
-export function previewFromServer(
-  lastMessage: string | null | undefined,
-  t: (key: string) => string
-): string {
-  if (!lastMessage) return '';
-  const marker = /^\[([a-z_]+)\]\s*/.exec(lastMessage);
-  if (!marker) return lastMessage;
-  if (marker[1] === 'thread') return lastMessage.slice(marker[0].length);
-  return mediaPreviewLabel(marker[1], t) ?? lastMessage;
-}
+// The preview labels live in a file with no native imports, so they are tested.
+export { bannerPreview, mediaPreviewLabel, previewFromServer } from './messagePreview';
 
 /** Downsample metering samples into `bars` values between 0 and 1. */
 export function waveformFromSamples(samples: number[], bars = 40): number[] {

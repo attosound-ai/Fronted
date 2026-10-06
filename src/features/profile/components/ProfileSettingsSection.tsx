@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ProfileSection } from './ProfileSection';
 import { useLanguage } from '@/hooks/useLanguage';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
-import { AppIconPickerSheet, useAppIconStore } from '@/features/appIcon';
+import { AppIconPickerSheet, useAppIconResync, useAppIconStore } from '@/features/appIcon';
 import { useEffectiveRecorderMode } from '@/features/settings/useEffectiveRecorderMode';
 import {
   EmbeddedSettings,
@@ -30,6 +30,8 @@ export function ProfileSettingsSection() {
   const { currentLanguage } = useLanguage();
   const [iconSheetVisible, setIconSheetVisible] = useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(!analytics.hasOptedOut());
+  // The row shows the icon the phone really has, not a remembered one.
+  useAppIconResync();
   const selectedIconSlot = useAppIconStore((s) => s.selectedSlot);
   const recorderMode = useEffectiveRecorderMode();
 

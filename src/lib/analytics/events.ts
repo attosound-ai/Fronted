@@ -784,6 +784,7 @@ export const ANALYTICS_EVENTS = {
     APP_ICON_PICKER_OPENED: 'profile_app_icon_picker_opened',
     APP_ICON_CHANGED: 'profile_app_icon_changed',
     APP_ICON_CHANGE_FAILED: 'profile_app_icon_change_failed',
+    APP_ICON_RESYNCED: 'profile_app_icon_resynced',
     SUPPORT_OPENED: 'profile_support_opened',
     SUPPORT_SUBMITTED: 'profile_support_submitted',
   },

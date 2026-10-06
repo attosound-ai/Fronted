@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Check } from 'lucide-react-native';
@@ -14,9 +14,11 @@ import { showToast } from '@/components/ui/Toast';
 import { haptic } from '@/lib/haptics/hapticService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { useAppIcons } from '../hooks/useAppIcons';
+import { useAppIconResync } from '../hooks/useAppIconResync';
 import { useAppIconStore } from '../stores/appIconStore';
 import { appIconService } from '../services/appIconService';
-import { setNativeAppIconWithReason } from '../lib/nativeIcon';
+import { getNativeAppIcon, setNativeAppIconWithReason } from '../lib/nativeIcon';
+import { isAlreadyOnPhone, resolveAttempt, slotFromNative } from '../lib/appIconModel';
 import type { AppIcon, AppIconSlot } from '../types';
 
 interface AppIconPickerSheetProps {
@@ -44,78 +46,99 @@ export function AppIconPickerSheet({ visible, onClose }: AppIconPickerSheetProps
     null
   );
 
+  // One change at a time. Only the tapped tile used to be disabled, so a second
+  // tile could be tapped while the first change was still being confirmed. Our
+  // own check then saw the SECOND icon, reported the first as blocked by iOS
+  // ("restart your iPhone", a false alarm: 6 of 6 failures on record were this)
+  // and put the picker back on a stale choice.
+  const inFlight = useRef(false);
+
+  // The phone decides what is selected, not what the app remembers. Asked every
+  // time the sheet opens, so a drifted memory heals itself on sight.
+  useAppIconResync(visible);
+
   const handleSelect = useCallback(
     async (slot: AppIconSlot, displayName: string) => {
-      // Already on this icon? Just dismiss.
-      if (slot === selectedSlot) {
-        onClose();
-        return;
-      }
+      if (inFlight.current) return;
+      inFlight.current = true;
+      try {
+        // A tap does nothing only when the PHONE already shows that icon. It
+        // used to compare with the remembered choice, so with the two out of
+        // step, tapping the icon the app believed active just closed the sheet
+        // (client, Oct 6 2026: "I can't change my app icon back").
+        const phoneBefore = slotFromNative(await getNativeAppIcon());
+        if (isAlreadyOnPhone(slot, phoneBefore)) {
+          setSelectedSlot(phoneBefore);
+          onClose();
+          return;
+        }
 
-      const busyKey = slot ?? PENDING_NONE;
-      setBusySlot(busyKey);
-      haptic('light');
+        setBusySlot(slot ?? PENDING_NONE);
+        haptic('light');
+        // Optimistic, so the tile reads as chosen while the system works.
+        setSelectedSlot(slot);
 
-      // Optimistic local update so the picker reflects the choice
-      // immediately, even before the OS / network confirm.
-      const previous = selectedSlot;
-      setSelectedSlot(slot);
+        const outcome = await setNativeAppIconWithReason(slot);
 
-      const outcome = await setNativeAppIconWithReason(slot);
-
-      if (!outcome.ok) {
-        // Revert the picker, leave the toast, and bail out before hitting
-        // the server. We never want the server preference to diverge from
-        // what the OS is actually showing.
-        setSelectedSlot(previous);
+        // Whatever the native call reported, look at the phone and show that.
+        const phoneNow = slotFromNative(await getNativeAppIcon());
+        const result = resolveAttempt(slot, phoneNow);
+        setSelectedSlot(result.selected);
         setBusySlot(null);
-        // Full native diagnostic payload goes to PostHog so we can root-cause
-        // OS-level rejections (NSError domain/code, pre/post alternate icon
-        // state, asset catalog vs Info.plist registration) without needing a
-        // device-side debugger. Picker is fail-closed; data is opt-in via
-        // existing analytics consent.
-        analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGE_FAILED, {
+
+        if (!result.applied) {
+          const reason = outcome.ok ? 'not_applied' : outcome.reason;
+          // Full native diagnostic payload goes to PostHog so an OS level
+          // rejection can be told apart without a device side debugger.
+          analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGE_FAILED, {
+            slot_name: slot,
+            stage: 'native_set',
+            reason,
+            phone_before: phoneBefore ?? 'default',
+            phone_now: phoneNow ?? 'default',
+            ...(outcome.ok ? {} : (outcome.diag ?? {})),
+          });
+          // iOS LSIconAlertManager regressions (iOS 18+/26, Apple Forum thread
+          // 812125): the only known recovery is a device reboot.
+          const isOsRejection =
+            reason === 'eagain' ||
+            reason === 'silent_rollback' ||
+            reason === 'native_error' ||
+            reason === 'not_applied';
+          const toastKey = isOsRejection
+            ? 'appIcon.errorChangeReboot'
+            : 'appIcon.errorChange';
+          const fallback = isOsRejection
+            ? 'iOS is blocking the icon change. Try restarting your iPhone.'
+            : "Couldn't change icon";
+          showToast(t(toastKey, { defaultValue: fallback }));
+          return;
+        }
+
+        analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGED, {
           slot_name: slot,
-          stage: 'native_set',
-          reason: outcome.reason,
-          ...(outcome.diag ?? {}),
+          display_name: displayName,
+          phone_before: phoneBefore ?? 'default',
+          // The native check can still say "failed" for a change that applied;
+          // kept so that disagreement stays visible.
+          native_reported: outcome.ok ? 'ok' : outcome.reason,
         });
-        // iOS LSIconAlertManager regressions (iOS 18+/26, Apple Forum thread
-        // 812125): the only known recovery is a device reboot. We treat three
-        // flavors as "the OS rejected the swap" — EAGAIN, silent rollback
-        // (SpringBoard accepts then reverts during commit), and the legacy
-        // `native_error` bucket (the unpatched plugin only said "false").
-        const isOsRejection =
-          outcome.reason === 'eagain' ||
-          outcome.reason === 'silent_rollback' ||
-          outcome.reason === 'native_error';
-        const toastKey = isOsRejection ? 'appIcon.errorChangeReboot' : 'appIcon.errorChange';
-        const fallback = isOsRejection
-          ? "iOS is blocking the icon change. Try restarting your iPhone."
-          : "Couldn't change icon";
-        showToast(t(toastKey, { defaultValue: fallback }));
-        return;
+
+        // Sync the server in the background. Failures here are non fatal: the
+        // OS already has the new icon; only cross device sync is lost.
+        appIconService.setMine(slot).catch(() => {
+          analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGE_FAILED, {
+            slot_name: slot,
+            stage: 'server_sync',
+          });
+        });
+
+        onClose();
+      } finally {
+        inFlight.current = false;
       }
-
-      analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGED, {
-        slot_name: slot,
-        display_name: displayName,
-      });
-
-      // Sync the server in the background — failures here are non-fatal:
-      // the OS already has the new icon; we just lose cross-device sync
-      // for this change until the next reconciliation.
-      appIconService.setMine(slot).catch(() => {
-        analytics.capture(ANALYTICS_EVENTS.PROFILE.APP_ICON_CHANGE_FAILED, {
-          slot_name: slot,
-          stage: 'server_sync',
-        });
-      });
-
-      setBusySlot(null);
-      onClose();
     },
-    [onClose, selectedSlot, setSelectedSlot, t]
+    [onClose, setSelectedSlot, t]
   );
 
   return (
@@ -131,6 +154,7 @@ export function AppIconPickerSheet({ visible, onClose }: AppIconPickerSheetProps
             label={t('appIcon.defaultLabel')}
             isSelected={selectedSlot === null}
             isBusy={busySlot === PENDING_NONE}
+            locked={busySlot !== null}
             onPress={() => handleSelect(null, t('appIcon.defaultLabel'))}
           />
           {icons.map((icon) => (
@@ -139,6 +163,7 @@ export function AppIconPickerSheet({ visible, onClose }: AppIconPickerSheetProps
               icon={icon}
               isSelected={selectedSlot === icon.slotName}
               isBusy={busySlot === icon.slotName}
+              locked={busySlot !== null}
               onPress={() => handleSelect(icon.slotName, icon.name)}
             />
           ))}
@@ -161,21 +186,19 @@ interface DefaultTileProps {
   label: string;
   isSelected: boolean;
   isBusy: boolean;
+  /** A change is in flight somewhere in the grid: no tile takes taps. */
+  locked: boolean;
   onPress: () => void;
 }
 
-function DefaultTile({ label, isSelected, isBusy, onPress }: DefaultTileProps) {
+function DefaultTile({ label, isSelected, isBusy, locked, onPress }: DefaultTileProps) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={isBusy}
+      disabled={locked}
       style={[styles.tile, isBusy && styles.tileBusy]}
     >
-      <Image
-        source={DEFAULT_ICON_SOURCE}
-        style={styles.tilePreview}
-        resizeMode="cover"
-      />
+      <Image source={DEFAULT_ICON_SOURCE} style={styles.tilePreview} resizeMode="cover" />
       <Text style={styles.tileLabel} numberOfLines={1}>
         {label}
       </Text>
@@ -188,14 +211,16 @@ interface IconTileProps {
   icon: AppIcon;
   isSelected: boolean;
   isBusy: boolean;
+  /** A change is in flight somewhere in the grid: no tile takes taps. */
+  locked: boolean;
   onPress: () => void;
 }
 
-function IconTile({ icon, isSelected, isBusy, onPress }: IconTileProps) {
+function IconTile({ icon, isSelected, isBusy, locked, onPress }: IconTileProps) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={isBusy}
+      disabled={locked}
       style={[styles.tile, isBusy && styles.tileBusy]}
     >
       <Image

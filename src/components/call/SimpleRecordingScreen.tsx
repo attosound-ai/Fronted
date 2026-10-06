@@ -62,6 +62,7 @@ import { router } from 'expo-router';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import type { AudioSegment } from '@/types/call';
 import { COLORS, SPACING } from '@/constants/theme';
+import { useAppLogo } from '@/features/feed/hooks/useAppLogo';
 
 interface SimpleRecordingScreenProps {
   onBack: () => void;
@@ -89,6 +90,12 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
   const { t } = useTranslation(['calls', 'common']);
   const insets = useSafeAreaInsets();
   const topInset = useScreenTopInset();
+  // The same wordmark as the feed header: the logo uploaded from the admin is
+  // the COMPLETE wordmark (it bakes "SOUND" in), so it replaces the bundled
+  // image and the app drawn subtext. This screen used to hard code the old
+  // image, so it kept showing the previous wordmark after the brand changed
+  // (client, Oct 6 2026: "the word mark is incorrect here").
+  const customLogoUri = useAppLogo();
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
 
@@ -712,13 +719,15 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
         </TouchableOpacity>
         <View style={styles.topNavLogoCenter} pointerEvents="none">
           <Image
-            source={{ uri: ATTO_LOGO_URI }}
-            style={styles.attoLogo}
+            source={{ uri: customLogoUri ?? ATTO_LOGO_URI }}
+            style={customLogoUri ? styles.attoCustomLogo : styles.attoLogo}
             resizeMode="contain"
           />
-          <Text style={styles.attoSubtext} numberOfLines={1}>
-            sound
-          </Text>
+          {!customLogoUri && (
+            <Text style={styles.attoSubtext} numberOfLines={1}>
+              sound
+            </Text>
+          )}
         </View>
       </View>
 
@@ -902,6 +911,12 @@ const styles = StyleSheet.create({
   attoLogo: {
     width: 100,
     height: 28,
+  },
+  // Same box as FeedHeader.customLogo: the uploaded wordmark carries its own
+  // "SOUND" line and needs the height the image plus the subtext used to take.
+  attoCustomLogo: {
+    width: 118,
+    height: 41,
   },
   attoSubtext: {
     // Match the home-feed header's "SOUND" exactly (FeedHeader.logoSubtext): a

@@ -16,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { showToast } from '@/components/ui/Toast';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
-import { AppIconPickerSheet, useAppIconStore } from '@/features/appIcon';
+import { AppIconPickerSheet, useAppIconResync, useAppIconStore } from '@/features/appIcon';
 import { DeleteAccountBottomSheet } from '@/features/profile/components/DeleteAccountBottomSheet';
 import { useBridgeNumber } from '@/features/profile/hooks/useBridgeNumber';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -59,6 +59,8 @@ export default function SettingsScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { currentLanguage } = useLanguage();
+  // The row shows the icon the phone really has, not a remembered one.
+  useAppIconResync();
   const selectedIconSlot = useAppIconStore((s) => s.selectedSlot);
   const [iconSheetVisible, setIconSheetVisible] = useState(false);
   const [deleteVisible, setDeleteVisible] = useState(false);

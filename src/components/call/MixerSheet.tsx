@@ -264,6 +264,9 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontFamily: 'Archivo_700Bold',
     fontSize: 22,
+    // Explicit: the shared Text sets a body line height, shorter than these
+    // digits, and their tops were cut off (David's screenshot, Oct 6 2026).
+    lineHeight: 28,
     minWidth: 56,
     textAlign: 'center',
   },

@@ -7,6 +7,7 @@
 
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { AppState } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Video as VideoCompressor } from 'react-native-compressor';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -20,6 +21,7 @@ import {
   VIDEO_COMPRESS_THRESHOLD_BYTES,
   VIDEO_MAX_UPLOAD_BYTES,
 } from './videoPostLimits';
+import { interpretUploadResponse, isStalled } from './uploadResponse';
 
 async function fileSizeBytes(uri: string): Promise<number | null> {
   try {
@@ -55,7 +57,10 @@ export class MediaTooLargeError extends Error {
  */
 async function prepareVideoForUpload(
   fileUri: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  /** Videos at or under this size go up as they are. The chat uses a lower
+   *  bar than a post: a message should move fast on a phone connection. */
+  thresholdBytes: number = VIDEO_COMPRESS_THRESHOLD_BYTES
 ): Promise<{
   uri: string;
   originalBytes: number | null;
@@ -63,7 +68,7 @@ async function prepareVideoForUpload(
   compressed: boolean;
 }> {
   const originalBytes = await fileSizeBytes(fileUri);
-  if (originalBytes !== null && originalBytes <= VIDEO_COMPRESS_THRESHOLD_BYTES) {
+  if (originalBytes !== null && originalBytes <= thresholdBytes) {
     return { uri: fileUri, originalBytes, finalBytes: originalBytes, compressed: false };
   }
   const smaller = (bytes: number | null) =>
@@ -295,6 +300,101 @@ async function uploadToCloudinary(
 }
 
 /**
+ * The same signed upload, carried by the system's BACKGROUND session, so it
+ * keeps going when the person leaves the app or locks the phone. The XHR
+ * upload above dies the moment iOS suspends the app: on Oct 6 2026 the client
+ * picked a 61 MB video, left the app ten seconds in, and came back to "Network
+ * error (0)". The system session is a little slower while the app is in front
+ * (it runs in another process), which is the price of surviving.
+ *
+ * Limit, stated plainly: if iOS ends the app altogether while it is away, the
+ * file still arrives at the host but nothing is left here to send the message.
+ */
+async function uploadToCloudinaryInBackground(
+  fileUri: string,
+  fileName: string,
+  mimeType: string,
+  params: SignedUploadParams,
+  onProgress?: (progress: number) => void
+): Promise<CloudinaryUploadResult> {
+  const parameters: Record<string, string> = {
+    api_key: params.api_key,
+    timestamp: String(params.timestamp),
+    signature: params.signature,
+    folder: params.folder,
+    public_id: params.public_id,
+  };
+  if (params.eager) parameters.eager = params.eager;
+  if (params.eager_async) parameters.eager_async = 'true';
+
+  let lastMove = Date.now();
+  let lastActive = 0;
+  let stalled = false;
+  const task = FileSystem.createUploadTask(
+    params.upload_url,
+    fileUri,
+    {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      // Explicit on purpose: the legacy API defaults the field to the file name.
+      fieldName: 'file',
+      mimeType,
+      parameters,
+      sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+    },
+    (raw) => {
+      lastMove = Date.now();
+      // The total includes the multipart framing; never divide by the file size.
+      if (raw.totalBytesExpectedToSend > 0) {
+        onProgress?.(Math.min(1, raw.totalBytesSent / raw.totalBytesExpectedToSend));
+      }
+    }
+  );
+  // Coming back to the app gives the upload a fresh minute: our clock stood
+  // still while the system kept sending.
+  const appState = AppState.addEventListener('change', (next) => {
+    if (next === 'active') lastActive = Date.now();
+  });
+  const watchdog = setInterval(() => {
+    if (AppState.currentState !== 'active') return;
+    if (
+      isStalled({
+        nowMs: Date.now(),
+        lastMoveMs: lastMove,
+        lastActiveMs: lastActive,
+        limitMs: 60_000,
+      })
+    ) {
+      stalled = true;
+      void task.cancelAsync().catch(() => {});
+    }
+  }, 5_000);
+
+  try {
+    const response = await task.uploadAsync();
+    if (stalled) throw new Error('Network stalled: no upload progress for 60 s');
+    if (!response) throw new Error('Upload cancelled');
+    const outcome = interpretUploadResponse(response.status, response.body);
+    if (outcome.kind === 'ok') return outcome.result as unknown as CloudinaryUploadResult;
+    if (outcome.kind === 'too_large')
+      throw new MediaTooLargeError(outcome.bytes, outcome.maxBytes);
+    const err = new Error(outcome.message) as Error & {
+      httpStatus?: number;
+      cloudinaryBody?: string;
+    };
+    err.httpStatus = outcome.httpStatus;
+    err.cloudinaryBody = outcome.body;
+    throw err;
+  } catch (error) {
+    if (stalled) throw new Error('Network stalled: no upload progress for 60 s');
+    throw error;
+  } finally {
+    clearInterval(watchdog);
+    appState.remove();
+  }
+}
+
+/**
  * Convenience: sign + upload in one call.
  *
  * @returns The full public_id (including folder) on success.
@@ -423,6 +523,8 @@ async function deleteMedia(
 export const mediaService = {
   getSignedParams,
   uploadToCloudinary,
+  uploadToCloudinaryInBackground,
+  prepareVideo: prepareVideoForUpload,
   upload,
   deleteMedia,
 };

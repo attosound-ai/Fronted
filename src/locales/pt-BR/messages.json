@@ -114,7 +114,9 @@
     "play": "Reproduzir",
     "pause": "Pausar",
     "speed": "Velocidade",
-    "previewPost": "🎵 Publicação"
+    "previewPost": "🎵 Publicação",
+    "notSent": "Não enviado. Toque para tentar de novo.",
+    "retry": "Enviar de novo"
   },
   "wallpaperPicker": {
     "title": "Plano de fundo do chat",

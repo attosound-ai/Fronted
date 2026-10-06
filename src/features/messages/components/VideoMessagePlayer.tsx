@@ -12,6 +12,7 @@ import { Play } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
+import { aspectOf, mediaBox } from '../media/mediaBox';
 import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import {
   videoLoadStarted,
@@ -23,14 +24,28 @@ import { COLORS } from '@/constants/theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const VIDEO_WIDTH = SCREEN_WIDTH * 0.65;
-const VIDEO_HEIGHT = VIDEO_WIDTH * (9 / 16);
+// A vertical clip may be this tall before it is narrowed instead.
+const VIDEO_MAX_HEIGHT = 360;
 
 interface VideoMessagePlayerProps {
   videoUrl: string;
+  /** width / height of the video, from the message. Without it the player asks
+   *  the video itself once it has loaded. */
+  aspect?: number | null;
+  /** Widest the bubble gets; the thread passes its media width. */
+  maxWidth?: number;
 }
 
-export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
+export function VideoMessagePlayer({
+  videoUrl,
+  aspect = null,
+  maxWidth = VIDEO_WIDTH,
+}: VideoMessagePlayerProps) {
   const { t } = useTranslation('messages');
+  // The bubble takes the shape of the video (WhatsApp): tall for 9:16, wide
+  // for 16:9. It used to be a fixed 16:9 strip that cropped vertical clips.
+  const [naturalAspect, setNaturalAspect] = useState<number | null>(null);
+  const box = mediaBox(aspect ?? naturalAspect, maxWidth, VIDEO_MAX_HEIGHT);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [VideoModule, setVideoModule] = useState<any>(null);
   const [loadError, setLoadError] = useState(false);
@@ -44,7 +59,7 @@ export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
 
   if (loadError) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, box]}>
         <Text style={styles.fallbackText}>{t('media.videoUnavailable')}</Text>
       </View>
     );
@@ -52,7 +67,7 @@ export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
 
   if (!VideoModule) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, box]}>
         <View style={styles.placeholder}>
           <Play size={24} color={COLORS.white} fill={COLORS.white} />
         </View>
@@ -67,6 +82,8 @@ export function VideoMessagePlayer({ videoUrl }: VideoMessagePlayerProps) {
       VideoView={VideoView}
       useVideoPlayer={useVideoPlayer}
       videoUrl={videoUrl}
+      box={box}
+      onNaturalAspect={aspect == null ? setNaturalAspect : undefined}
     />
   );
 }
@@ -78,12 +95,16 @@ function VideoViewWrapper({
   VideoView,
   useVideoPlayer,
   videoUrl,
+  box,
+  onNaturalAspect,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   VideoView: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useVideoPlayer: any;
   videoUrl: string;
+  box: { width: number; height: number };
+  onNaturalAspect?: (aspect: number) => void;
 }) {
   const player = useVideoPlayer(
     videoUrl,
@@ -161,9 +182,31 @@ function VideoViewWrapper({
     return () => sub.remove();
   }, [player, videoUrl]);
 
+  // Messages sent before sizes were stored have no proportions: read them from
+  // the video once its tracks are known, so those bubbles get their shape too.
+  useEffect(() => {
+    if (!player || !onNaturalAspect) return;
+    const report = (size?: { width?: number; height?: number } | null) => {
+      const value = aspectOf(size?.width, size?.height);
+      if (value !== null) onNaturalAspect(value);
+    };
+    let sub: { remove: () => void } | null = null;
+    try {
+      sub = player.addListener(
+        'sourceLoad',
+        (payload: {
+          availableVideoTracks?: Array<{ size?: { width?: number; height?: number } }>;
+        }) => report(payload?.availableVideoTracks?.[0]?.size)
+      );
+    } catch {
+      // An older player without this event: the bubble keeps the default shape.
+    }
+    return () => sub?.remove();
+  }, [player, onNaturalAspect]);
+
   if (engine.engineMode) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, box]}>
         <VideoView
           player={player}
           style={styles.video}
@@ -182,7 +225,7 @@ function VideoViewWrapper({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, box]}>
       <VideoView player={player} style={styles.video} contentFit="cover" nativeControls />
     </View>
   );
@@ -190,8 +233,6 @@ function VideoViewWrapper({
 
 const styles = StyleSheet.create({
   container: {
-    width: VIDEO_WIDTH,
-    height: VIDEO_HEIGHT,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#111',

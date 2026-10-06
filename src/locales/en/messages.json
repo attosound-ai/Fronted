@@ -75,7 +75,9 @@
     "play": "Play",
     "pause": "Pause",
     "speed": "Playback speed",
-    "previewPost": "🎵 Post"
+    "previewPost": "🎵 Post",
+    "notSent": "Not sent. Tap to try again.",
+    "retry": "Send again"
   },
   "newMessage": {
     "headerTitle": "New Message",

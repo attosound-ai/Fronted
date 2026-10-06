@@ -87,6 +87,7 @@ import {
   uploadChatMedia,
   type OutgoingMedia,
 } from '../media/chatMedia';
+import { useUploadProgress } from '../media/uploadProgress';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Contacts from 'expo-contacts';
@@ -195,7 +196,9 @@ export function ChatScreen({
   const setStoredDraft = useConversationPrefsStore((s) => s.setDraft);
   // Keyed by account too: two linked accounts can share this conversation.
   const draftStoreKey = draftKey(userId, conversationId);
-  const draftRef = useRef(useConversationPrefsStore.getState().drafts[draftStoreKey] ?? '');
+  const draftRef = useRef(
+    useConversationPrefsStore.getState().drafts[draftStoreKey] ?? ''
+  );
   // While "Edit" has an existing message loaded in the composer, the field's
   // text is not a draft; this keeps the real one to put back afterwards.
   const editingRef = useRef(false);
@@ -591,6 +594,35 @@ export function ChatScreen({
     [pinned]
   );
 
+  // Media that could not be sent, by the temporary id of its row, so the row
+  // can send it again with one tap.
+  const failedMedia = useRef(new Map<string, OutgoingMedia>());
+  // A row that only exists on this phone (still uploading, or failed) is taken
+  // out here, never through the server: asking the server to delete
+  // "temp-1791302607964" answered 500 (client, Oct 6 2026).
+  const removeLocalRow = useCallback(
+    (id: string) => {
+      failedMedia.current.delete(id);
+      useUploadProgress.getState().clear(id);
+      queryClient.setQueryData(
+        QUERY_KEYS.MESSAGES.CHAT(conversationId),
+        (old: { pages: ChatMessagesPage[]; pageParams: unknown[] } | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              messages: page.messages.filter(
+                (m) => m.messageId !== id && m.clientKey !== id
+              ),
+            })),
+          };
+        }
+      );
+    },
+    [conversationId, queryClient]
+  );
+
   const handleMenuAction = useCallback(
     (actionKey: string, msg: AttoMessage, rect?: Anchor) => {
       const eventProps = {
@@ -599,6 +631,13 @@ export function ChatScreen({
         action: actionKey,
       };
       analytics.capture(ANALYTICS_EVENTS.MESSAGES.CONTEXT_MENU_ACTION, eventProps);
+
+      // Not on the server yet: only what can be done on this phone.
+      if (String(msg._id).startsWith('temp-')) {
+        if (actionKey === 'delete') removeLocalRow(String(msg._id));
+        else if (actionKey === 'copy') Clipboard.setStringAsync(msg.text);
+        return;
+      }
 
       switch (actionKey) {
         case 'react':
@@ -692,6 +731,7 @@ export function ChatScreen({
       }
     },
     [
+      removeLocalRow,
       conversationId,
       deleteMessage,
       t,
@@ -939,7 +979,9 @@ export function ChatScreen({
         );
       threadRef.current?.scrollToBottom(true);
       try {
-        const { content, metadata } = await uploadChatMedia(media, conversationId);
+        const { content, metadata } = await uploadChatMedia(media, conversationId, (p) =>
+          useUploadProgress.getState().set(tempId, p)
+        );
         const sent = await messageService.sendMessage({
           conversationId,
           content,
@@ -963,6 +1005,7 @@ export function ChatScreen({
             };
           }
         );
+        useUploadProgress.getState().clear(tempId);
         patchTemp({ messageId: sent.messageId, content, metadata, status: 'sent' });
         setJustSentId((cur) => (cur === tempId ? sent.messageId : cur));
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_SENT, {
@@ -977,6 +1020,7 @@ export function ChatScreen({
         // and takes the row out of the thread, instead of a red tick with
         // no reason.
         if (error instanceof MediaRejectedError) {
+          useUploadProgress.getState().clear(tempId);
           dropTemp();
           analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_REJECTED, {
             conversation_id: conversationId,
@@ -993,6 +1037,10 @@ export function ChatScreen({
           );
           return;
         }
+        useUploadProgress.getState().clear(tempId);
+        // Kept so the row can send it again: a failed video used to leave a red
+        // mark and nothing to do about it.
+        failedMedia.current.set(tempId, media);
         patchTemp({ status: 'failed' });
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_FAILED, {
           conversation_id: conversationId,
@@ -1002,6 +1050,20 @@ export function ChatScreen({
       }
     },
     [conversationId, userId, queryClient, t]
+  );
+
+  const retryFailedMedia = useCallback(
+    (id: string) => {
+      const media = failedMedia.current.get(id);
+      if (!media) return;
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_RETRY, {
+        conversation_id: conversationId,
+        kind: media.kind,
+      });
+      removeLocalRow(id);
+      void handleSendMedia(media);
+    },
+    [conversationId, removeLocalRow, handleSendMedia]
   );
 
   // The camera is our own screen (ChatGPT's chrome, WhatsApp's round video
@@ -1395,9 +1457,9 @@ export function ChatScreen({
     // sides, so the media's own ink follows the bubble, not who sent it.
     (msg: AttoMessage, onLight: boolean) => {
       if (!msg.contentType || msg.contentType === 'text') return null;
-      return <MediaMessage message={msg} isOwn={onLight} />;
+      return <MediaMessage message={msg} isOwn={onLight} onRetry={retryFailedMedia} />;
     },
-    []
+    [retryFailedMedia]
   );
 
   if (!user) return null;

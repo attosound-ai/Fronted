@@ -586,6 +586,8 @@ export const ANALYTICS_EVENTS = {
     CACHE_PREPEND: 'messages_cache_prepend',
     MEDIA_COMPRESSED: 'messages_media_compressed',
     MEDIA_COMPRESS_FAILED: 'messages_media_compress_failed',
+    MEDIA_COMPRESS_SKIPPED: 'messages_media_compress_skipped',
+    MEDIA_RETRY: 'messages_media_retry',
     MEDIA_REJECTED: 'messages_media_rejected',
     SHARED_POST_SENT: 'messages_shared_post_sent',
     SHARED_POST_OPENED: 'messages_shared_post_opened',

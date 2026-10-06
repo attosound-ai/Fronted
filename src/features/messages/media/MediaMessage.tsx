@@ -1,6 +1,22 @@
 import { memo, useCallback, useEffect, useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { FileText, Phone, UserRound, Volume2, VolumeX } from 'lucide-react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+import {
+  FileText,
+  Phone,
+  RotateCw,
+  UserRound,
+  Volume2,
+  VolumeX,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { COLORS } from '@/constants/theme';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
@@ -8,6 +24,8 @@ import { VoiceNoteBubble } from './VoiceNoteBubble';
 import { VideoMessagePlayer } from '../components/VideoMessagePlayer';
 import { SharedPostCard } from './SharedPostCard';
 import type { AttoMessage } from '../utils/messageAdapter';
+import { aspectOf } from './mediaBox';
+import { useUploadProgress } from './uploadProgress';
 
 /** Widest a media bubble gets; WhatsApp and Telegram sit around 240 pt. */
 export const MEDIA_WIDTH = 236;
@@ -16,13 +34,99 @@ const VIDEO_NOTE_SIZE = 220;
 interface MediaMessageProps {
   message: AttoMessage;
   isOwn: boolean;
+  /** Sends a media message that failed again; the row carries the gesture. */
+  onRetry?: (messageId: string) => void;
+}
+
+const RING = 44;
+const RING_STROKE = 3;
+const RING_R = (RING - RING_STROKE) / 2;
+const RING_LENGTH = 2 * Math.PI * RING_R;
+
+/**
+ * What an outgoing photo or video shows while it goes up and when it could
+ * not be sent. Sending: the file is already visible underneath, with a ring
+ * that fills and the percent, so a long upload is visibly alive (it used to be
+ * an empty bubble; the client left the app thinking nothing was happening,
+ * Oct 6 2026). Failed: one tap sends it again.
+ */
+function UploadOverlay({
+  message,
+  onRetry,
+}: {
+  message: AttoMessage;
+  onRetry?: (messageId: string) => void;
+}) {
+  const { t } = useTranslation('messages');
+  const id = String(message._id);
+  const progress = useUploadProgress((state) => state.progress[id]);
+  const sending = message.pending || message.status === 'sending';
+  const failed = message.status === 'failed';
+  if (!sending && !failed) return null;
+
+  if (failed) {
+    return (
+      <Pressable
+        style={styles.overlay}
+        onPress={() => onRetry?.(id)}
+        disabled={!onRetry}
+        accessibilityRole="button"
+        accessibilityLabel={t('media.retry')}
+      >
+        <View style={styles.overlayDisc}>
+          <RotateCw size={20} color={COLORS.white} strokeWidth={2.5} />
+        </View>
+        <Text style={styles.overlayText}>{t('media.notSent')}</Text>
+      </Pressable>
+    );
+  }
+
+  const known = typeof progress === 'number';
+  const percent = known ? Math.round(progress * 100) : 0;
+  return (
+    <View style={styles.overlay} pointerEvents="none">
+      <View style={styles.overlayDisc}>
+        {known ? (
+          <>
+            <Svg width={RING} height={RING} style={styles.ring}>
+              <Circle
+                cx={RING / 2}
+                cy={RING / 2}
+                r={RING_R}
+                stroke="rgba(255,255,255,0.28)"
+                strokeWidth={RING_STROKE}
+                fill="none"
+              />
+              <Circle
+                cx={RING / 2}
+                cy={RING / 2}
+                r={RING_R}
+                stroke={COLORS.white}
+                strokeWidth={RING_STROKE}
+                strokeLinecap="round"
+                fill="none"
+                strokeDasharray={`${RING_LENGTH} ${RING_LENGTH}`}
+                strokeDashoffset={RING_LENGTH * (1 - progress)}
+                transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
+              />
+            </Svg>
+            <Text style={styles.overlayPercent} maxFontSizeMultiplier={1}>
+              {percent}%
+            </Text>
+          </>
+        ) : (
+          <ActivityIndicator color={COLORS.white} />
+        )}
+      </View>
+    </View>
+  );
 }
 
 /**
  * The body of a non text message: photo, video, round video note, voice
  * note, file or contact. Text messages never reach this component.
  */
-function MediaMessageInner({ message, isOwn }: MediaMessageProps) {
+function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
   const { t } = useTranslation('messages');
   const url = message.text;
   const meta = message.metadata ?? {};
@@ -47,13 +151,19 @@ function MediaMessageInner({ message, isOwn }: MediaMessageProps) {
             style={[styles.image, { height: Math.round(MEDIA_WIDTH / ratio) }]}
             resizeMode="cover"
           />
+          <UploadOverlay message={message} onRetry={onRetry} />
         </Pressable>
       );
     }
     case 'video':
       return (
         <View style={styles.video}>
-          <VideoMessagePlayer videoUrl={message.video ?? url} />
+          <VideoMessagePlayer
+            videoUrl={message.video ?? url}
+            aspect={aspectOf(meta.width, meta.height)}
+            maxWidth={MEDIA_WIDTH}
+          />
+          <UploadOverlay message={message} onRetry={onRetry} />
         </View>
       );
     case 'video_note':
@@ -257,7 +367,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  video: { width: MEDIA_WIDTH, borderRadius: 14, overflow: 'hidden' },
+  // No fixed width: the player takes the shape of the video (a vertical clip
+  // is narrower than the widest bubble).
+  video: { borderRadius: 14, overflow: 'hidden', alignSelf: 'flex-start' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    borderRadius: 14,
+    gap: 8,
+  },
+  overlayDisc: {
+    width: RING + 12,
+    height: RING + 12,
+    borderRadius: (RING + 12) / 2,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ring: { position: 'absolute' },
+  overlayPercent: {
+    color: COLORS.white,
+    fontFamily: 'Archivo_700Bold',
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+  },
+  overlayText: {
+    color: COLORS.white,
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
   videoNote: {
     width: VIDEO_NOTE_SIZE,
     height: VIDEO_NOTE_SIZE,

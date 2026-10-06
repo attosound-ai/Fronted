@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { Video as VideoCompressor } from 'react-native-compressor';
 import { mediaService } from '@/lib/media/mediaService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { MessageContentType, MessageMetadata } from '../types';
@@ -139,30 +138,37 @@ export async function prepareChatMedia(
       originalBytes === null ||
       originalBytes > CHAT_MEDIA_LIMITS.videoCompressAboveBytes
     ) {
-      try {
-        const out = await VideoCompressor.compress(
-          media.uri,
-          { compressionMethod: 'auto' },
-          (p) => onProgress?.(p * 0.4)
-        );
-        const outBytes = await fileBytes(out);
-        if (outBytes !== null && (originalBytes === null || outBytes < originalBytes)) {
-          uri = out;
-          finalBytes = outBytes;
-          analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_COMPRESSED, {
-            conversation_id: conversationId,
-            kind: media.kind,
-            original_bytes: originalBytes,
-            final_bytes: outBytes,
-            ratio: originalBytes ? Math.round((outBytes / originalBytes) * 100) : null,
-            elapsed_ms: Date.now() - started,
-          });
-        }
-      } catch (error) {
-        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_COMPRESS_FAILED, {
+      // The same compressor a post uses: ATTO's own first (fixed 2 Mbps HEVC,
+      // HDR tone mapped), the JS one only as a fallback. The chat used to call
+      // the JS one alone, which hands an iPhone HDR video back untouched and in
+      // silence: on Oct 6 2026 a 79 s clip went up at its full 61 MB.
+      const prep = await mediaService.prepareVideo(
+        media.uri,
+        onProgress,
+        CHAT_MEDIA_LIMITS.videoCompressAboveBytes
+      );
+      if (prep.compressed) {
+        uri = prep.uri;
+        finalBytes = prep.finalBytes ?? finalBytes;
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_COMPRESSED, {
           conversation_id: conversationId,
           kind: media.kind,
-          error: error instanceof Error ? error.message : String(error),
+          original_bytes: originalBytes,
+          final_bytes: prep.finalBytes,
+          ratio:
+            originalBytes && prep.finalBytes
+              ? Math.round((prep.finalBytes / originalBytes) * 100)
+              : null,
+          elapsed_ms: Date.now() - started,
+        });
+      } else {
+        // Over the bar and still the original: never silent again.
+        analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_COMPRESS_SKIPPED, {
+          conversation_id: conversationId,
+          kind: media.kind,
+          original_bytes: originalBytes,
+          duration_ms: media.durationMs ?? null,
+          elapsed_ms: Date.now() - started,
         });
       }
     }
@@ -272,6 +278,7 @@ export async function uploadChatMedia(
     };
   }
   if (!media.uri) throw new Error('media has no file');
+  const mediaUriBefore = media.uri;
   const prepared = await prepareChatMedia(media, conversationId, onProgress);
   const uploadUri = prepared.uri ?? media.uri;
   media = prepared;
@@ -284,18 +291,35 @@ export async function uploadChatMedia(
     kind: media.kind,
     bytes: media.bytes ?? null,
     duration_ms: media.durationMs ?? null,
+    compressed: uploadUri !== mediaUriBefore,
+    transport:
+      media.kind === 'video' || media.kind === 'video_note' || media.kind === 'file'
+        ? 'background'
+        : 'direct',
   });
   try {
     const params = await mediaService.getSignedParams(
       'chat',
       resourceTypeFor(media.kind)
     );
-    const result = await mediaService.uploadToCloudinary(
+    // Compressing filled the first 40 % of the ring; the upload takes the rest.
+    const from = uploadUri !== mediaUriBefore ? 0.4 : 0;
+    const onUpload = onProgress
+      ? (p: number) => onProgress(from + (1 - from) * p)
+      : undefined;
+    // Heavy kinds ride the system's background session so leaving the app does
+    // not kill them; photos and voice notes are quick and keep the direct path.
+    const heavy =
+      media.kind === 'video' || media.kind === 'video_note' || media.kind === 'file';
+    const send = heavy
+      ? mediaService.uploadToCloudinaryInBackground
+      : mediaService.uploadToCloudinary;
+    const result = await send(
       uploadUri,
       media.fileName ?? defaultFileName(media),
       media.mime ?? defaultMime(media),
       params,
-      onProgress
+      onUpload
     );
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_UPLOAD_DONE, {
       conversation_id: conversationId,

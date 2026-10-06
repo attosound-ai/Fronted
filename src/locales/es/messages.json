@@ -75,7 +75,9 @@
     "play": "Reproducir",
     "pause": "Pausar",
     "speed": "Velocidad",
-    "previewPost": "🎵 Publicación"
+    "previewPost": "🎵 Publicación",
+    "notSent": "No se envió. Toca para reintentar.",
+    "retry": "Enviar de nuevo"
   },
   "newMessage": {
     "headerTitle": "Nuevo mensaje",

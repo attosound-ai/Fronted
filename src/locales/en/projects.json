@@ -384,7 +384,9 @@
       "cover": "Cover art",
       "fileName": "File name",
       "mixdown": "Mixdown",
-      "post": "Post to the feed"
+      "post": "Post to the feed",
+      "saveToDevice": "Save to device",
+      "saveUnavailable": "Saving is not available on this device."
     },
     "automationButton": "Volume automation",
     "fromVideo": "Extract audio from a video",

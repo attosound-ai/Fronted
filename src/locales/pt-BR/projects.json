@@ -384,7 +384,9 @@
       "cover": "Capa",
       "fileName": "Nome do arquivo",
       "mixdown": "Mixar",
-      "post": "Publicar no feed"
+      "post": "Publicar no feed",
+      "saveToDevice": "Salvar no dispositivo",
+      "saveUnavailable": "Salvar não está disponível neste dispositivo."
     },
     "automationButton": "Automação de volume",
     "fromVideo": "Extrair o áudio de um vídeo",

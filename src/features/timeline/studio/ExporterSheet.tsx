@@ -40,6 +40,12 @@ interface Props {
   onMixdown: (options: ExportOptions, coverUri: string | null) => void;
   /** Label of the main action: post to the feed, or just mix down. */
   actionLabel: string;
+  /** Saves the mix as a file on the device (the share sheet, with "Save to
+   *  Files"), under the name typed in "File name". The outlined button under
+   *  the main action. Without it the sheet could only post, so that field named
+   *  a file nobody ever got (client, Oct 6 2026: naming at the beginning and
+   *  again at the end "doesn't make any sense"). */
+  onSaveToDevice?: (options: ExportOptions) => void;
   /** Length of the whole project, for the size estimate. */
   durationMs: number;
   /** The selected range, when there is one: it can go out on its own. */
@@ -70,6 +76,7 @@ export function ExporterSheet({
   onPickCover,
   onMixdown,
   actionLabel,
+  onSaveToDevice,
   durationMs,
   range,
   postLimitBytes,
@@ -133,6 +140,15 @@ export function ExporterSheet({
       ? { ...options, rangeStartMs: range!.startMs, rangeEndMs: range!.endMs }
       : options;
     onMixdown(out, coverUri);
+  };
+
+  // A file on the device has no post limit: the size warning is only for posts.
+  const saveToDevice = () => {
+    void haptic('medium');
+    const out: ExportOptions = useRange
+      ? { ...options, rangeStartMs: range!.startMs, rangeEndMs: range!.endMs }
+      : options;
+    onSaveToDevice?.(out);
   };
 
   const set = (patch: Partial<ExportOptions>) => {
@@ -416,6 +432,22 @@ export function ExporterSheet({
             </Text>
           )}
         </Pressable>
+        {onSaveToDevice ? (
+          <Pressable
+            onPress={saveToDevice}
+            disabled={busy}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.secondary,
+              busy && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text variant="body" style={styles.secondaryText}>
+              {t('studio.export.saveToDevice')}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </BottomSheet>
   );
@@ -580,6 +612,21 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: STUDIO_COLORS.onPrimary,
+    fontFamily: 'Archivo_700Bold',
+  },
+  // The second action: no fill, only a border (David, Oct 6 2026).
+  secondary: {
+    height: 52,
+    borderRadius: 26,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: STUDIO_COLORS.primary,
+  },
+  secondaryText: {
+    color: STUDIO_COLORS.primary,
     fontFamily: 'Archivo_700Bold',
   },
   disabled: {

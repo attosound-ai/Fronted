@@ -33,6 +33,7 @@ TEST_FILES=(
   "src/features/messages/thread/__tests__/editRules.test.ts"
   "src/features/messages/thread/__tests__/editMorph.test.ts"
   "src/features/appIcon/lib/__tests__/appIconModel.test.ts"
+  "src/features/timeline/utils/__tests__/exportFileName.test.ts"
   "src/lib/telephony/__tests__/testNumber.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"
   "src/features/timeline/hooks/__tests__/waveformResolution.test.ts"

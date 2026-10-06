@@ -15,7 +15,8 @@ import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import { showNetFailureToast } from '@/components/ui/netToast';
 import { Text } from '@/components/ui/Text';
 import { Toast, showToast } from '@/components/ui/Toast';
-import { AUDIO_POST_MAX_BYTES, megabytes } from '../utils/postSize';
+import { AUDIO_POST_MAX_BYTES, exportFileType, megabytes } from '../utils/postSize';
+import { exportFileName } from '../utils/exportFileName';
 import { laneMixFingerprint, planClose } from '../utils/closePlan';
 import { AudioPreparingModal } from './AudioPreparingModal';
 import { LaneEditSheet } from './LaneEditSheet';
@@ -75,6 +76,7 @@ import { studioPrefs } from '../studio/studioPrefs';
 import type { TipTarget } from '../studio/tipsCatalog';
 import { STUDIO, STUDIO_COLORS } from '../studio/studioTheme';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import type {
   TimelineViewRef,
   TimelineTapEvent,
@@ -142,6 +144,9 @@ interface TimelineEditorProps {
   settings?: ProjectSettings;
   onClose: () => void;
   /** `coverUri` is the local image picked in the exporter, when there is one. */
+  /** The project's name: what a file saved to the device is called when the
+   *  exporter's File name and Title are left empty. */
+  projectName?: string;
   onPublish?: (
     result: ExportResult,
     durationMs: number,
@@ -193,6 +198,7 @@ export function TimelineEditor({
   settings: serverSettings,
   onClose,
   onPublish,
+  projectName,
   recordingMode = 'mic',
   topSlot,
 }: TimelineEditorProps) {
@@ -933,7 +939,7 @@ export function TimelineEditor({
   // and the local image goes to the composer so the post can carry it.
   const pendingCoverRef = useRef<string | null>(null);
   const handleExport = useCallback(
-    async (exportOptions?: ExportOptions) => {
+    async (exportOptions?: ExportOptions, target: 'post' | 'device' = 'post') => {
       if (state.clips.length === 0) {
         showToast(t('timeline.errorNoClipsToExport'), 'warning');
         return;
@@ -961,6 +967,7 @@ export function TimelineEditor({
       // A "started" marker so a hang (no terminal event) is still visible.
       analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
         outcome: 'started',
+        target,
         clip_count: state.clips.length,
         timeline_duration_ms: timelineDurationMs,
         project_duration_ms: projectDurationMs,
@@ -1003,7 +1010,12 @@ export function TimelineEditor({
         // The estimate in the exporter is on the high side, but it is still an
         // estimate: check the real file before a doomed upload, and say both
         // numbers and what to do, instead of a bare "too large" at the end.
-        if (onPublish && fileSizeBytes !== null && fileSizeBytes > AUDIO_POST_MAX_BYTES) {
+        if (
+          target === 'post' &&
+          onPublish &&
+          fileSizeBytes !== null &&
+          fileSizeBytes > AUDIO_POST_MAX_BYTES
+        ) {
           analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
             outcome: 'too_large_for_post',
             clip_count: state.clips.length,
@@ -1026,7 +1038,34 @@ export function TimelineEditor({
           return;
         }
 
-        if (onPublish) {
+        if (target === 'device') {
+          // The mix as a file the person keeps: downloaded under the name they
+          // typed and handed to the system share sheet, which has Save to Files.
+          const tSaveFile = Date.now();
+          const { extension, mimeType } = exportFileType(result.downloadUrl);
+          const name = exportFileName({
+            fileName: exportOptions?.fileName,
+            title: exportOptions?.title,
+            projectName,
+            extension,
+          });
+          const dir = `${FileSystem.cacheDirectory}exports/`;
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(
+            () => {}
+          );
+          const localUri = `${dir}${encodeURIComponent(name)}`;
+          await FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => {});
+          await FileSystem.downloadAsync(result.downloadUrl, localUri);
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(localUri, {
+              mimeType,
+              dialogTitle: t('studio.export.saveToDevice'),
+            });
+          } else {
+            showToast(t('studio.export.saveUnavailable'), 'warning');
+          }
+          publishMs = Date.now() - tSaveFile;
+        } else if (onPublish) {
           const tPublish = Date.now();
           await onPublish(
             result,
@@ -1048,6 +1087,7 @@ export function TimelineEditor({
 
         analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
           outcome: 'succeeded',
+          target,
           clip_count: state.clips.length,
           timeline_duration_ms: timelineDurationMs,
           save_ms: saveMs,
@@ -1059,6 +1099,7 @@ export function TimelineEditor({
       } catch (error: unknown) {
         analytics.capture(ANALYTICS_EVENTS.PROJECT.EXPORTED, {
           outcome: 'failed',
+          target,
           clip_count: state.clips.length,
           timeline_duration_ms: timelineDurationMs,
           save_ms: saveMs,
@@ -1073,7 +1114,7 @@ export function TimelineEditor({
         setIsPublishing(false);
       }
     },
-    [projectId, state.clips, state.laneMeta, flushSave, onPublish, t]
+    [projectId, state.clips, state.laneMeta, flushSave, onPublish, projectName, t]
   );
 
   // ── Master effects and the exporter ──
@@ -1137,6 +1178,17 @@ export function TimelineEditor({
       pendingCoverRef.current = coverUri;
       setExporterVisible(false);
       void handleExport(options);
+    },
+    [handleExport]
+  );
+  const handleSaveToDevice = useCallback(
+    (options: ExportOptions) => {
+      const prefs = { ...options };
+      delete prefs.rangeStartMs;
+      delete prefs.rangeEndMs;
+      setSettings((prev) => ({ ...prev, exportPrefs: prefs }));
+      setExporterVisible(false);
+      void handleExport(options, 'device');
     },
     [handleExport]
   );
@@ -2571,6 +2623,7 @@ export function TimelineEditor({
         busy={isPublishing}
         onPickCover={handlePickCover}
         onMixdown={handleMixdown}
+        onSaveToDevice={handleSaveToDevice}
         actionLabel={onPublish ? t('studio.export.post') : t('studio.export.mixdown')}
         durationMs={totalDuration}
         range={

@@ -384,7 +384,9 @@
       "cover": "Portada",
       "fileName": "Nombre del archivo",
       "mixdown": "Mezclar",
-      "post": "Publicar en el feed"
+      "post": "Publicar en el feed",
+      "saveToDevice": "Guardar en el dispositivo",
+      "saveUnavailable": "Guardar no está disponible en este dispositivo."
     },
     "automationButton": "Automatizar volumen",
     "fromVideo": "Extraer el audio de un video",

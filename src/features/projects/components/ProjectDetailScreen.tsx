@@ -165,6 +165,7 @@ export function ProjectDetailScreen({
         // With an active call we use the same server-side Twilio capture the
         // dedicated call screen uses; with no call, plain mic recording.
         recordingMode={activeCall ? 'twilioCall' : 'mic'}
+        projectName={project.name}
         // Force a fresh mount whenever the server-side data changes
         // (e.g. after a refetch). This guarantees `useTimeline`'s
         // `useReducer` lazy init reads the latest lanes/clips instead

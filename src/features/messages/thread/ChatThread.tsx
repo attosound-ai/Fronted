@@ -394,7 +394,7 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             isOwn={isOwn}
             position={pos}
             currentUserId={currentUserId}
-            justSent={justSentId === String(item._id)}
+            justSent={justSentId === String(item._id) || justSentId === item.clientKey}
             senderIsCreator={creatorIds.has(String(item.user._id))}
             menuItems={menuItemsFor(item, isOwn)}
             labels={labels}
@@ -423,12 +423,23 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
             onReplayEffect={onReplayEffect}
           />
         );
-        const body =
-          justSentId === String(item._id) ? (
-            <Animated.View entering={sentFromComposer}>{row}</Animated.View>
-          ) : (
-            row
-          );
+        // Every row sits in the same wrapper, and only the one being sent gets
+        // the entry from the composer (the prop is read once, when it mounts).
+        // The wrapper used to exist for that row alone: sending the NEXT
+        // message took it away, the row was mounted again and its fade in
+        // replayed, so the previous bubble blinked on every send (mount log,
+        // Oct 7 2026).
+        const body = (
+          <Animated.View
+            entering={
+              justSentId === String(item._id) || justSentId === item.clientKey
+                ? sentFromComposer
+                : undefined
+            }
+          >
+            {row}
+          </Animated.View>
+        );
         return (
           <Animated.View layout={rowLayout}>
             {pill ? (

@@ -7,6 +7,7 @@
 import type { IMessage, User as GiftedUser } from 'react-native-gifted-chat';
 import { cloudinaryHlsUrl } from '@/lib/media/cloudinaryUrl';
 import type { ChatMessage, Reaction, MessageMetadata, EditVersion } from '../types';
+import { stableClientKey } from './clientKeys';
 
 export interface AttoMessage extends IMessage {
   conversationId: string;
@@ -45,7 +46,9 @@ export function toGiftedMessage(
 
   return {
     _id: msg.messageId,
-    clientKey: msg.clientKey,
+    // The key the row was sent with, even after a reload dropped it from the
+    // data: the row must stay the same row (see clientKeys).
+    clientKey: stableClientKey(msg),
     metadata: msg.metadata ?? null,
     threadId: msg.threadId ?? null,
     // Media messages keep the url in `text` for the renderer; the bubble

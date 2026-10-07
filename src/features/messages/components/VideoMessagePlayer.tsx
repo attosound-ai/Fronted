@@ -269,6 +269,7 @@ function VideoViewWrapper({
           style={styles.video}
           contentFit="cover"
           nativeControls={false}
+          allowsVideoFrameAnalysis={false}
         />
         <Pressable style={StyleSheet.absoluteFill} onPress={() => void engine.toggle()}>
           {!engine.isPlaying && (
@@ -292,6 +293,10 @@ function VideoViewWrapper({
         style={styles.video}
         contentFit="cover"
         nativeControls={started}
+        // Off: with the controls hidden iOS still laid its Live Text button over
+        // any frame with words in it, a stray icon in the corner of the bubble
+        // (seen on David's phone, Oct 6 2026).
+        allowsVideoFrameAnalysis={false}
       />
       {idle && showPlay ? (
         <Pressable

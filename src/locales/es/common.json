@@ -165,5 +165,10 @@
   },
   "create": {
     "videoTooLarge": "Este video es demasiado grande para subirlo, incluso después de comprimirlo. Recórtalo o expórtalo en menor calidad e inténtalo de nuevo."
+  },
+  "roles": {
+    "creator": "Creador",
+    "representative": "Representante",
+    "listener": "Oyente"
   }
 }

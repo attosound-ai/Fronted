@@ -6,6 +6,7 @@ import type {
   PlanChangeStartResult,
   UserSubscription,
 } from '@/types';
+import type { BridgeNumberResult } from './bridgeNumberTypes';
 import type { CheckoutResponse, PlanId, SubscriptionPlan } from '@/types/registration';
 
 export interface PaywallConfig {
@@ -17,10 +18,7 @@ export interface PaywallConfig {
   paidFeatures: string[];
 }
 
-export interface BridgeNumberResult {
-  bridgeNumber: string | null;
-  status: 'assigned' | 'provisioning' | 'failed';
-}
+export type { BridgeNumberResult } from './bridgeNumberTypes';
 
 /**
  * PaymentService — Pure API calls for payments and subscriptions.

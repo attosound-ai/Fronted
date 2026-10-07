@@ -1287,7 +1287,11 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   metaSpacer: {
-    color: 'transparent',
+    // Android reads plain 'transparent' (all zeros) as "no colour set" and
+    // paints the spacer in the message's ink: the time showed twice, one copy
+    // on top of the other (seen in the emulator, Oct 7 2026). Transparent
+    // white is just as invisible and is not that zero.
+    color: Platform.OS === 'android' ? 'rgba(255,255,255,0)' : 'transparent',
     fontSize: 11,
     fontFamily: 'Archivo_400Regular',
   },

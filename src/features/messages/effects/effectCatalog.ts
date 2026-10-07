@@ -210,6 +210,102 @@ export function echoCopies(seed: number, count = 26): Particle[] {
 }
 
 /**
+ * A phone whose clock runs behind the server's sees a new message stamped in
+ * the future. That is clock drift, not history: it still counts as new.
+ */
+const CLOCK_DRIFT_MS = 5 * 60_000;
+
+/**
+ * Whether a message is recent enough for its effect to play as it lands.
+ * Older ones are history and stay quiet, the way iMessage never replays on
+ * the way back into a conversation.
+ */
+export function isFreshForEffect(
+  createdAt: unknown,
+  now: number,
+  freshMs: number
+): boolean {
+  const stamped =
+    createdAt instanceof Date
+      ? createdAt.getTime()
+      : typeof createdAt === 'number'
+        ? createdAt
+        : createdAt
+          ? Date.parse(String(createdAt))
+          : NaN;
+  if (Number.isNaN(stamped)) return false;
+  const age = now - stamped;
+  return age > -CLOCK_DRIFT_MS && age < freshMs;
+}
+
+/**
+ * Every id one message goes by: its own and the client key it was sent with.
+ * The sender's optimistic row and the server's copy of it share the client
+ * key, so what one of them has played the other has played too.
+ */
+export function effectIdsOf(message: {
+  messageId?: string | null;
+  clientKey?: string | null;
+}): string[] {
+  const ids: string[] = [];
+  for (const id of [message.messageId, message.clientKey]) {
+    if (typeof id === 'string' && id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/** Where played effects are remembered (storage on the phone, a set in tests). */
+export interface EffectMemory {
+  has: (id: string) => boolean;
+  mark: (id: string) => void;
+}
+
+/** Everything in the thread when the chat opens counts as already seen. */
+export function seedPlayedEffects(
+  messages: { messageId?: string | null; clientKey?: string | null }[],
+  memory: EffectMemory
+): void {
+  for (const message of messages) {
+    for (const id of effectIdsOf(message)) memory.mark(id);
+  }
+}
+
+/**
+ * The screen effect to start after a change in the thread, or null. A message
+ * is marked under every id it goes by, so the sender's phone starts ONE effect
+ * and not a second one when the server's copy replaces the optimistic row
+ * (PostHog showed both, Oct 6 2026).
+ */
+export function nextScreenEffect(
+  messages: {
+    messageId: string;
+    clientKey?: string | null;
+    metadata?: unknown;
+    createdAt?: unknown;
+    content?: string | null;
+  }[],
+  memory: EffectMemory,
+  now: number,
+  freshMs: number
+): { name: ScreenEffectName; messageId: string; text?: string } | null {
+  for (const message of messages) {
+    const effect = effectFromMetadata(message.metadata);
+    if (!effect || effect.kind !== 'screen') continue;
+    const ids = effectIdsOf(message);
+    const seen = ids.some((id) => memory.has(id));
+    for (const id of ids) memory.mark(id);
+    if (seen) continue;
+    if (!isFreshForEffect(message.createdAt, now, freshMs)) continue;
+    return {
+      name: effect.name,
+      messageId: message.messageId,
+      text: message.content ?? undefined,
+    };
+  }
+  return null;
+}
+
+/**
  * Effects play once, when the message first shows up. A module level set is
  * enough: a fresh launch replaying an old effect is exactly what iMessage
  * does not do, and the set lives as long as the session.

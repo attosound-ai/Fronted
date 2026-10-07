@@ -53,7 +53,7 @@ import { hasMarkdown, parseMarkdown } from './markdown';
 import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
 import { useVideoControls } from '../media/videoControls';
 import { BubbleEffect } from '../effects/BubbleEffect';
-import { effectFromMetadata } from '../effects/effectCatalog';
+import { effectFromMetadata, isFreshForEffect } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import type { Anchor } from './TapbackOverlay';
 import { markEditTap } from './editTiming';
@@ -439,8 +439,7 @@ function MessageRowInner({
     // An effect belongs to the moment the message lands. Anything older than
     // a minute is history: opening the conversation again must be quiet, the
     // way iMessage is.
-    const age = Date.now() - new Date(message.createdAt).getTime();
-    if (!justSent && !(age >= 0 && age < EFFECT_FRESH_MS)) {
+    if (!justSent && !isFreshForEffect(message.createdAt, Date.now(), EFFECT_FRESH_MS)) {
       markEffectPlayed(effectId);
       return false;
     }

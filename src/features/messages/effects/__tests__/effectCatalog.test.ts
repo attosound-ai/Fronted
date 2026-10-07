@@ -10,6 +10,11 @@ import {
   confettiParticles,
   echoCopies,
   effectFromMetadata,
+  effectIdsOf,
+  isFreshForEffect,
+  nextScreenEffect,
+  seedPlayedEffects,
+  type EffectMemory,
   fireworkBursts,
   hasEffectPlayed,
   heartParticles,
@@ -129,4 +134,135 @@ test('an effect plays once per message', () => {
   assert.equal(hasEffectPlayed('y'), false);
   resetPlayedEffects();
   assert.equal(hasEffectPlayed('x'), false);
+});
+
+// ── One effect per message, on both phones ─────────────────────────────
+
+function memory(): EffectMemory & { ids: Set<string> } {
+  const ids = new Set<string>();
+  return { ids, has: (id) => ids.has(id), mark: (id) => void ids.add(id) };
+}
+const NOW = Date.parse('2026-10-06T23:20:00Z');
+const FRESH = 60_000;
+const confetti = { effect: { kind: 'screen', name: 'confetti' } };
+const at = (secondsAgo: number) => new Date(NOW - secondsAgo * 1000).toISOString();
+
+test('a message goes by its own id and by the client key it was sent with', () => {
+  assert.deepEqual(effectIdsOf({ messageId: 'real-1', clientKey: 'temp-1' }), [
+    'real-1',
+    'temp-1',
+  ]);
+  assert.deepEqual(effectIdsOf({ messageId: 'temp-1', clientKey: 'temp-1' }), ['temp-1']);
+  assert.deepEqual(effectIdsOf({ messageId: 'real-1' }), ['real-1']);
+  assert.deepEqual(effectIdsOf({ messageId: '', clientKey: null }), []);
+});
+
+test('the receiver starts the effect once, however many times the thread changes', () => {
+  const mem = memory();
+  const thread = [
+    { messageId: 'real-1', metadata: confetti, createdAt: at(1), content: 'hi' },
+  ];
+  assert.deepEqual(nextScreenEffect(thread, mem, NOW, FRESH), {
+    name: 'confetti',
+    messageId: 'real-1',
+    text: 'hi',
+  });
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH), null);
+  assert.equal(nextScreenEffect([...thread], mem, NOW + 500, FRESH), null);
+});
+
+test('the sender starts it once: the server copy of the optimistic row stays quiet', () => {
+  const mem = memory();
+  const optimistic = [
+    {
+      messageId: 'temp-9',
+      clientKey: 'temp-9',
+      metadata: confetti,
+      createdAt: at(0),
+      content: 'hi',
+    },
+  ];
+  assert.equal(nextScreenEffect(optimistic, mem, NOW, FRESH)?.messageId, 'temp-9');
+  // The REST answer (or the live echo) swaps the id and keeps the client key.
+  const confirmed = [
+    {
+      messageId: 'real-9',
+      clientKey: 'temp-9',
+      metadata: confetti,
+      createdAt: at(0),
+      content: 'hi',
+    },
+  ];
+  assert.equal(nextScreenEffect(confirmed, mem, NOW + 300, FRESH), null);
+  // And the real id is remembered too, for the next time the chat opens.
+  assert.equal(mem.has('real-9'), true);
+});
+
+test('what is in the thread when the chat opens never plays', () => {
+  const mem = memory();
+  const thread = [
+    { messageId: 'real-1', metadata: confetti, createdAt: at(5), content: 'old' },
+    {
+      messageId: 'real-2',
+      clientKey: 'temp-2',
+      metadata: confetti,
+      createdAt: at(2),
+      content: 'mine',
+    },
+  ];
+  seedPlayedEffects(thread, mem);
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH), null);
+  assert.deepEqual([...mem.ids].sort(), ['real-1', 'real-2', 'temp-2']);
+});
+
+test('history that loads later stays quiet, and is not offered again', () => {
+  const mem = memory();
+  const old = [
+    { messageId: 'real-3', metadata: confetti, createdAt: at(3600), content: 'old' },
+  ];
+  assert.equal(nextScreenEffect(old, mem, NOW, FRESH), null);
+  assert.equal(mem.has('real-3'), true);
+});
+
+test('only the first new effect of a pass starts; the next one waits its turn', () => {
+  const mem = memory();
+  const thread = [
+    { messageId: 'real-5', metadata: confetti, createdAt: at(1), content: 'a' },
+    {
+      messageId: 'real-4',
+      metadata: { effect: { kind: 'screen', name: 'balloons' } },
+      createdAt: at(2),
+      content: 'b',
+    },
+  ];
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH)?.messageId, 'real-5');
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH)?.messageId, 'real-4');
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH), null);
+});
+
+test('bubble effects and plain messages are not screen effects', () => {
+  const mem = memory();
+  const thread = [
+    {
+      messageId: 'real-6',
+      metadata: { effect: { kind: 'bubble', name: 'slam' } },
+      createdAt: at(1),
+    },
+    { messageId: 'real-7', metadata: null, createdAt: at(1) },
+  ];
+  assert.equal(nextScreenEffect(thread, mem, NOW, FRESH), null);
+  // The row owns bubble effects: the screen pass must not mark them played.
+  assert.equal(mem.has('real-6'), false);
+});
+
+test('a phone whose clock runs behind still plays the effect', () => {
+  // Stamped two seconds in the future from this phone's point of view.
+  assert.equal(isFreshForEffect(at(-2), NOW, FRESH), true);
+  assert.equal(isFreshForEffect(new Date(NOW + 2000), NOW, FRESH), true);
+  assert.equal(isFreshForEffect(NOW - 59_000, NOW, FRESH), true);
+  // A minute old is history; so is a stamp that is plainly wrong or missing.
+  assert.equal(isFreshForEffect(at(60), NOW, FRESH), false);
+  assert.equal(isFreshForEffect(at(-3600), NOW, FRESH), false);
+  assert.equal(isFreshForEffect(null, NOW, FRESH), false);
+  assert.equal(isFreshForEffect('not a date', NOW, FRESH), false);
 });

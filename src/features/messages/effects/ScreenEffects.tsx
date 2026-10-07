@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
@@ -46,6 +46,14 @@ const EASE_OUT = Easing.out(Easing.cubic);
 function ScreenEffectOverlayInner({ effect, onDone }: ScreenEffectOverlayProps) {
   const { width, height } = useWindowDimensions();
 
+  // The effect starts once per effect, whatever the parent does with its
+  // callback: it used to restart (event, haptic and timer again) whenever the
+  // chat handed over a new `onDone`, up to five times for one message
+  // (PostHog, Oct 6 2026).
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
   useEffect(() => {
     if (!effect) return;
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.EFFECT_PLAYED, {
@@ -56,9 +64,12 @@ function ScreenEffectOverlayInner({ effect, onDone }: ScreenEffectOverlayProps) 
     void haptic(
       effect.name === 'lasers' || effect.name === 'fireworks' ? 'heavy' : 'medium'
     );
-    const timer = setTimeout(onDone, EFFECT_DURATION_MS[effect.name] + 200);
+    const timer = setTimeout(
+      () => onDoneRef.current(),
+      EFFECT_DURATION_MS[effect.name] + 200
+    );
     return () => clearTimeout(timer);
-  }, [effect, onDone]);
+  }, [effect]);
 
   if (!effect) return null;
   const seed = seedFromId(effect.messageId);

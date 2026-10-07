@@ -79,7 +79,13 @@ import { useThreadSavedStore } from '../stores/threadSavedStore';
 import { useThreadFollowStore } from '../stores/threadFollowStore';
 import { SendEffectPicker } from '../effects/SendEffectPicker';
 import { ScreenEffectOverlay, type ActiveScreenEffect } from '../effects/ScreenEffects';
-import { effectFromMetadata, type MessageEffect } from '../effects/effectCatalog';
+import {
+  effectFromMetadata,
+  nextScreenEffect,
+  seedPlayedEffects,
+  type EffectMemory,
+  type MessageEffect,
+} from '../effects/effectCatalog';
 import { MediaMessage } from '../media/MediaMessage';
 import {
   CHAT_MEDIA_LIMITS,
@@ -119,6 +125,8 @@ interface ChatScreenProps {
  */
 /** A screen effect only fires for a message that just arrived. */
 const SCREEN_EFFECT_FRESH_MS = 60_000;
+/** Played effects live in storage: a relaunch must not replay the history. */
+const EFFECT_MEMORY: EffectMemory = { has: hasEffectPlayed, mark: markEffectPlayed };
 
 function mediaLimitMessage(
   error: MediaRejectedError,
@@ -832,21 +840,21 @@ export function ChatScreen({
     if (!messages.length) return;
     if (!effectsSeeded.current) {
       effectsSeeded.current = true;
-      for (const msg of messages) markEffectPlayed(msg.messageId);
+      seedPlayedEffects(messages, EFFECT_MEMORY);
       return;
     }
-    for (const msg of messages) {
-      const effect = effectFromMetadata(msg.metadata);
-      if (!effect || effect.kind !== 'screen') continue;
-      if (hasEffectPlayed(msg.messageId)) continue;
-      markEffectPlayed(msg.messageId);
-      const stamped = msg.createdAt ? Date.parse(String(msg.createdAt)) : NaN;
-      const age = Number.isNaN(stamped) ? Infinity : Date.now() - stamped;
-      if (!(age >= 0 && age < SCREEN_EFFECT_FRESH_MS)) continue;
-      setScreenEffect({ name: effect.name, messageId: msg.messageId, text: msg.content });
-      break;
-    }
+    const next = nextScreenEffect(
+      messages,
+      EFFECT_MEMORY,
+      Date.now(),
+      SCREEN_EFFECT_FRESH_MS
+    );
+    if (next) setScreenEffect(next);
   }, [messages]);
+  // One function for the life of the screen: the overlay is memoised and a new
+  // one on every render made it start over (event, haptic and timer) each time
+  // the chat redrew.
+  const clearScreenEffect = useCallback(() => setScreenEffect(null), []);
   const replayEffect = useCallback((message: AttoMessage) => {
     const effect = effectFromMetadata(message.metadata);
     if (!effect) return;
@@ -1640,7 +1648,7 @@ export function ChatScreen({
         onClose={() => setEmojiPickerVisible(false)}
       />
       {/* Above the thread and the chrome: an effect covers the screen. */}
-      <ScreenEffectOverlay effect={screenEffect} onDone={() => setScreenEffect(null)} />
+      <ScreenEffectOverlay effect={screenEffect} onDone={clearScreenEffect} />
     </View>
   );
 }

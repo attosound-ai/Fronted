@@ -40,8 +40,10 @@ export function PostEngagement({ post, onViewComments }: PostEngagementProps) {
         <TouchableOpacity onPress={onViewComments} activeOpacity={0.7}>
           <Text variant="body" style={styles.viewComments} maxFontSizeMultiplier={1.1}>
             {t('post.viewAllComments', {
-              count: formatCount(post.commentsCount),
-            } as Record<string, unknown>)}
+              // The number picks singular or plural; `shown` is what is read.
+              count: post.commentsCount,
+              shown: formatCount(post.commentsCount),
+            })}
           </Text>
         </TouchableOpacity>
       )}

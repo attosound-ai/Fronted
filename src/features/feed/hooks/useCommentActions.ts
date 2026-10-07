@@ -18,6 +18,8 @@ import {
   reportSocialAction,
   reportSocialActionFailed,
 } from '@/lib/analytics/socialTelemetry';
+import { removedWith } from '../comments/commentCount';
+import { reconcileCommentCount } from '../comments/reconcileCommentCount';
 import type { Comment } from './useComments';
 
 export function useCommentActions(postId: string) {
@@ -84,9 +86,16 @@ export function useCommentActions(postId: string) {
     async (commentId: string) => {
       if (!userId) return;
 
-      const commentsSnapshot = queryClient.getQueryData(QUERY_KEYS.FEED.COMMENTS(postId));
+      const commentsSnapshot = queryClient.getQueryData<{
+        pages: { data?: Comment[] }[];
+      }>(QUERY_KEYS.FEED.COMMENTS(postId));
       await cancelPostQueries(queryClient, postId);
       const postSnapshot = snapshotPostCaches(queryClient, postId);
+      // A comment leaves with its replies: the number drops by all of them.
+      const leaving = removedWith(
+        (commentsSnapshot?.pages ?? []).flatMap((page) => page.data ?? []),
+        commentId
+      );
 
       // Optimistic: remove from list
       queryClient.setQueryData(
@@ -111,11 +120,12 @@ export function useCommentActions(postId: string) {
       // Optimistic: decrement count
       patchPostInCaches(queryClient, postId, (post) => ({
         ...post,
-        commentsCount: Math.max(0, (post.commentsCount || 0) - 1),
+        commentsCount: Math.max(0, (post.commentsCount || 0) - leaving),
       }));
 
       try {
         await feedService.deleteComment(postId, commentId);
+        await reconcileCommentCount(queryClient, postId, 'comment_delete');
         reportSocialAction('comment_delete', postId, 'applied', {
           comment_id: commentId,
         });

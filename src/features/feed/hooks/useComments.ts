@@ -3,13 +3,8 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { feedService } from '../services/feedService';
+import { cancelPostQueries, patchPostInCaches } from '../utils/postCacheSync';
 import {
-  cancelPostQueries,
-  patchPostInCaches,
-  findPostInCaches,
-} from '../utils/postCacheSync';
-import {
-  countedPending,
   find,
   newPendingComment,
   pendingFor,
@@ -17,11 +12,11 @@ import {
   type PendingStatus,
 } from '../comments/commentOutbox';
 import { useCommentOutbox } from '../comments/commentOutboxStore';
+import { reconcileCommentCount } from '../comments/reconcileCommentCount';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   reportSocialAction,
   reportSocialActionFailed,
-  reportCounterDivergence,
 } from '@/lib/analytics/socialTelemetry';
 import type { Role } from '@/types';
 
@@ -125,44 +120,7 @@ export function useComments(postId: string) {
           queryKey: QUERY_KEYS.FEED.COMMENTS(postId),
         });
 
-        // RECONCILE THE BADGE with the server's authoritative count. The
-        // optimistic +1 is applied to whatever the cached post object held,
-        // and that can be OLDER than the comment list: David opened a post the
-        // instant its push arrived (count 0), someone else commented, then he
-        // commented — his badge showed 0+1=1 while the refetched list showed 2
-        // (Aug 23; verified against the DB: 3 real comments, Redis 3, badge 1).
-        // We patch ONLY the count on the already-cached post objects: no feed
-        // invalidation, so nothing refetches, reorders or flickers.
-        try {
-          // NOTE: feedService.getPost returns the RAW API shape (it does not
-          // run the feed mapper), so the count lives under `interactions`.
-          const fresh = (await feedService.getPost(postId)) as unknown as {
-            commentsCount?: number;
-            interactions?: { commentsCount?: number };
-          };
-          const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
-          if (typeof serverCount === 'number') {
-            // Whatever is still on its way is not in the server's number yet.
-            const stillSending = countedPending(
-              useCommentOutbox.getState().outbox,
-              postId
-            );
-            const shown = findPostInCaches(queryClient, postId)?.commentsCount;
-            reportCounterDivergence({
-              action: 'comment_create',
-              targetId: postId,
-              field: 'commentsCount',
-              shown,
-              server: serverCount + stillSending,
-            });
-            patchPostInCaches(queryClient, postId, (post) => ({
-              ...post,
-              commentsCount: serverCount + stillSending,
-            }));
-          }
-        } catch {
-          // Best-effort reconciliation; the optimistic count stands.
-        }
+        await reconcileCommentCount(queryClient, postId, 'comment_create');
         reportSocialAction('comment_create', postId, 'applied', {
           attempts: entry.attempts,
         });

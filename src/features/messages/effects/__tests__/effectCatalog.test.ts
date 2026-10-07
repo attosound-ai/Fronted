@@ -13,7 +13,9 @@ import {
   effectIdsOf,
   isFreshForEffect,
   nextScreenEffect,
+  rememberBubbleEffect,
   seedPlayedEffects,
+  shouldPlayBubbleEffect,
   type EffectMemory,
   fireworkBursts,
   hasEffectPlayed,
@@ -265,4 +267,73 @@ test('a phone whose clock runs behind still plays the effect', () => {
   assert.equal(isFreshForEffect(at(-3600), NOW, FRESH), false);
   assert.equal(isFreshForEffect(null, NOW, FRESH), false);
   assert.equal(isFreshForEffect('not a date', NOW, FRESH), false);
+});
+
+// ── Bubble effects: once per message, whatever happens to the row ─────
+
+const slam = { effect: { kind: 'bubble', name: 'slam' } };
+
+test('the sender sees a bubble effect once, even after the thread reloads', () => {
+  const mem = memory();
+  // The optimistic row mounts and plays.
+  const optimistic = {
+    messageId: 'temp-3',
+    clientKey: 'temp-3',
+    metadata: slam,
+    createdAt: at(0),
+  };
+  assert.equal(shouldPlayBubbleEffect(optimistic, mem, NOW, FRESH, true), true);
+  // The same row takes the server's id without remounting.
+  rememberBubbleEffect({ messageId: 'real-3', clientKey: 'temp-3', metadata: slam }, mem);
+  // The socket reconnects 23 s later, the thread reloads and the server's copy
+  // (no client key, a new list key) mounts as a new row: it must stay quiet.
+  const reloaded = { messageId: 'real-3', metadata: slam, createdAt: at(23) };
+  assert.equal(shouldPlayBubbleEffect(reloaded, mem, NOW, FRESH, false), false);
+});
+
+test('without remembering the real id that reload would replay it', () => {
+  // The hole this closes: only the client key was marked.
+  const mem = memory();
+  mem.mark('temp-3');
+  const reloaded = { messageId: 'real-3', metadata: slam, createdAt: at(23) };
+  assert.equal(shouldPlayBubbleEffect(reloaded, mem, NOW, FRESH, false), true);
+});
+
+test('the receiver sees it once, and a remount stays quiet', () => {
+  const mem = memory();
+  const incoming = { messageId: 'real-8', metadata: slam, createdAt: at(1) };
+  assert.equal(shouldPlayBubbleEffect(incoming, mem, NOW, FRESH, false), true);
+  assert.equal(shouldPlayBubbleEffect(incoming, mem, NOW, FRESH, false), false);
+});
+
+test('an old bubble effect is history, and is remembered as such', () => {
+  const mem = memory();
+  const old = { messageId: 'real-2', metadata: slam, createdAt: at(3600) };
+  assert.equal(shouldPlayBubbleEffect(old, mem, NOW, FRESH, false), false);
+  assert.equal(mem.has('real-2'), true);
+  // Just sent wins over the clock: the sender's own row always plays.
+  const mine = {
+    messageId: 'temp-4',
+    clientKey: 'temp-4',
+    metadata: slam,
+    createdAt: at(3600),
+  };
+  assert.equal(shouldPlayBubbleEffect(mine, mem, NOW, FRESH, true), true);
+});
+
+test('a row never marks a screen effect: the chat still has to start it', () => {
+  const mem = memory();
+  const screen = {
+    messageId: 'real-5',
+    clientKey: 'temp-5',
+    metadata: confetti,
+    createdAt: at(0),
+  };
+  assert.equal(shouldPlayBubbleEffect(screen, mem, NOW, FRESH, true), false);
+  rememberBubbleEffect(screen, mem);
+  assert.equal(mem.ids.size, 0);
+  assert.equal(
+    nextScreenEffect([{ ...screen, content: 'hi' }], mem, NOW, FRESH)?.messageId,
+    'real-5'
+  );
 });

@@ -305,6 +305,52 @@ export function nextScreenEffect(
   return null;
 }
 
+/** What a row needs to know about its message to decide on a bubble effect. */
+interface BubbleEffectMessage {
+  messageId: string;
+  clientKey?: string | null;
+  metadata?: unknown;
+  createdAt?: unknown;
+}
+
+/**
+ * Whether a row that is mounting plays its bubble effect. Either way the
+ * message is marked under every id it goes by. A message with a screen effect
+ * is left alone: the chat owns those, and marking it here would silence it.
+ */
+export function shouldPlayBubbleEffect(
+  message: BubbleEffectMessage,
+  memory: EffectMemory,
+  now: number,
+  freshMs: number,
+  justSent: boolean
+): boolean {
+  const effect = effectFromMetadata(message.metadata);
+  if (!effect || effect.kind !== 'bubble') return false;
+  const ids = effectIdsOf(message);
+  const seen = ids.some((id) => memory.has(id));
+  for (const id of ids) memory.mark(id);
+  if (seen) return false;
+  return justSent || isFreshForEffect(message.createdAt, now, freshMs);
+}
+
+/**
+ * The optimistic row turns into the server's copy without remounting, so the
+ * decision above never sees the real id. When the thread is then reloaded (the
+ * socket reconnecting after a token refresh) that copy comes back without its
+ * client key, under a new list key, and the row mounts again: unless the real
+ * id was remembered here, the sender saw the effect a second time (Android,
+ * Oct 7 2026, 23 s after sending).
+ */
+export function rememberBubbleEffect(
+  message: Pick<BubbleEffectMessage, 'messageId' | 'clientKey' | 'metadata'>,
+  memory: EffectMemory
+): void {
+  const effect = effectFromMetadata(message.metadata);
+  if (!effect || effect.kind !== 'bubble') return;
+  for (const id of effectIdsOf(message)) memory.mark(id);
+}
+
 /**
  * Effects play once, when the message first shows up. A module level set is
  * enough: a fresh launch replaying an old effect is exactly what iMessage

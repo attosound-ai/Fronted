@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   type LayoutChangeEvent,
@@ -53,7 +53,12 @@ import { hasMarkdown, parseMarkdown } from './markdown';
 import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
 import { useVideoControls } from '../media/videoControls';
 import { BubbleEffect } from '../effects/BubbleEffect';
-import { effectFromMetadata, isFreshForEffect } from '../effects/effectCatalog';
+import {
+  effectFromMetadata,
+  rememberBubbleEffect,
+  shouldPlayBubbleEffect,
+  type EffectMemory,
+} from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
 import type { Anchor } from './TapbackOverlay';
 import { markEditTap } from './editTiming';
@@ -169,6 +174,8 @@ export interface MessageRowProps {
 // this far below the bubble's bottom edge (see BubbleShape).
 /** An effect only plays for a message that just landed. */
 const EFFECT_FRESH_MS = 60_000;
+/** Played effects live in storage: a relaunch must not replay the history. */
+const EFFECT_MEMORY: EffectMemory = { has: hasEffectPlayed, mark: markEffectPlayed };
 const TAIL_DROP = 8;
 // The reaction pill hangs from the bottom edge on the inner side (the tail
 // owns the outer corner), overlapping the bubble by a few points so it never
@@ -429,23 +436,35 @@ function MessageRowInner({
   };
   const hasReactions = !!message.reactions && message.reactions.length > 0;
 
-  // An effect plays once, the first time the bubble appears. The identity is
-  // the client key so the optimistic row and its server copy count as one.
+  // An effect plays once, the first time the bubble appears, and belongs to
+  // the moment the message lands: anything older than a minute is history, so
+  // opening the conversation again is quiet, the way iMessage is. The message
+  // counts under its own id and under its client key, so the optimistic row
+  // and its server copy are one.
   const effect = effectFromMetadata(message.metadata);
   const effectId = String(message.clientKey ?? message._id);
-  const [playEffectOnMount] = useState(() => {
-    if (!effect || effect.kind !== 'bubble') return false;
-    if (hasEffectPlayed(effectId)) return false;
-    // An effect belongs to the moment the message lands. Anything older than
-    // a minute is history: opening the conversation again must be quiet, the
-    // way iMessage is.
-    if (!justSent && !isFreshForEffect(message.createdAt, Date.now(), EFFECT_FRESH_MS)) {
-      markEffectPlayed(effectId);
-      return false;
-    }
-    markEffectPlayed(effectId);
-    return true;
-  });
+  const [playEffectOnMount] = useState(() =>
+    shouldPlayBubbleEffect(
+      {
+        messageId: rowId,
+        clientKey: message.clientKey,
+        metadata: message.metadata,
+        createdAt: message.createdAt,
+      },
+      EFFECT_MEMORY,
+      Date.now(),
+      EFFECT_FRESH_MS,
+      justSent
+    )
+  );
+  // The row keeps living when the optimistic copy takes the server's id:
+  // remember that id as well (see rememberBubbleEffect).
+  useEffect(() => {
+    rememberBubbleEffect(
+      { messageId: rowId, clientKey: message.clientKey, metadata: message.metadata },
+      EFFECT_MEMORY
+    );
+  }, [rowId, message.clientKey, message.metadata]);
 
   const isMedia = isMediaContentType(message.contentType);
   const isVisual = isVisualContentType(message.contentType);

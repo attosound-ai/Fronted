@@ -34,7 +34,8 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
     hasMore,
     loadMore,
     addComment,
-    isAddingComment,
+    retryComment,
+    discardComment,
   } = useComments(postId);
 
   const { editComment, deleteComment, canEditOrDelete } = useCommentActions(postId);
@@ -59,7 +60,7 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
       editComment(editing.id, trimmed);
       setEditing(null);
     } else {
-      addComment(trimmed, replyTo?.id);
+      void addComment(trimmed, replyTo?.id);
       setReplyTo(null);
     }
     setText('');
@@ -93,7 +94,10 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
       onReply={handleReply}
       onEdit={handleEdit}
       onDelete={handleDelete}
-      canModify={canEditOrDelete(item.userId)}
+      onRetry={(id) => void retryComment(id)}
+      onDiscard={discardComment}
+      // Nothing to edit or delete on the server while it has not got there.
+      canModify={!item.status && canEditOrDelete(item.userId)}
     />
   );
 
@@ -165,15 +169,14 @@ export function CommentsSheet({ visible, onClose, postId }: CommentsSheetProps) 
         />
         <TouchableOpacity
           onPress={handleSend}
-          disabled={!text.trim() || isAddingComment}
+          disabled={!text.trim()}
           hitSlop={8}
           style={[styles.sendButton, { opacity: text.trim() ? 1 : 0.3 }]}
         >
-          {isAddingComment ? (
-            <ActivityIndicator color="#000000" size="small" />
-          ) : (
-            <SendHorizontal size={18} color="#000000" strokeWidth={2.25} />
-          )}
+          {/* The comment itself says "Posting…" while it is on its way. The
+              button used to spin, and block the field, for as long as the
+              request took: fifteen seconds on a weak connection. */}
+          <SendHorizontal size={18} color="#000000" strokeWidth={2.25} />
         </TouchableOpacity>
       </View>
     </BottomSheet>

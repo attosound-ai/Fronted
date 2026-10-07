@@ -28,6 +28,7 @@ TEST_FILES=(
   "src/lib/analytics/__tests__/fixedFeatures.test.ts"
   "src/hooks/__tests__/callLandingModel.test.ts"
   "src/features/feed/__tests__/mentions.test.ts"
+  "src/features/feed/comments/__tests__/commentOutbox.test.ts"
   "src/lib/push/__tests__/pushTapPlan.test.ts"
   "src/lib/calls/__tests__/inviteSiblings.test.ts"
   "src/features/messages/thread/__tests__/editRules.test.ts"

@@ -1,14 +1,23 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { feedService } from '../services/feedService';
 import {
   cancelPostQueries,
-  snapshotPostCaches,
-  rollbackPostCaches,
   patchPostInCaches,
   findPostInCaches,
 } from '../utils/postCacheSync';
+import {
+  countedPending,
+  find,
+  newPendingComment,
+  pendingFor,
+  type PendingComment,
+  type PendingStatus,
+} from '../comments/commentOutbox';
+import { useCommentOutbox } from '../comments/commentOutboxStore';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   reportSocialAction,
   reportSocialActionFailed,
@@ -33,6 +42,9 @@ export interface Comment {
   createdAt: string;
   isEdited?: boolean;
   isDeleted?: boolean;
+  /** Set only while the comment exists on this phone and not on the server:
+   *  on its way, or failed and waiting to be sent again. */
+  status?: PendingStatus;
   author?: CommentAuthor;
   replies?: Comment[];
 }
@@ -56,123 +68,173 @@ export function useComments(postId: string) {
       enabled: !!postId,
     });
 
-  const addCommentMutation = useMutation({
-    mutationFn: ({ text, parentId }: { text: string; parentId?: string }) =>
-      feedService.addComment(postId, text, parentId),
-    onMutate: async ({ text, parentId }) => {
-      await cancelPostQueries(queryClient, postId);
-      const snapshot = snapshotPostCaches(queryClient, postId);
+  // ── Sending a comment ───────────────────────────────────────────────
+  // A comment the server does not have yet lives in the outbox, not in the
+  // list that comes from the server: on its way it shows as "Posting…", and
+  // if the request fails it stays there, marked, to be sent again or
+  // discarded. It used to be removed without a word (see commentOutbox).
+  const pending = useCommentOutbox((state) => pendingFor(state.outbox, postId));
 
-      // Optimistically increment comment count
+  const bumpCount = useCallback(
+    (delta: number) => {
       patchPostInCaches(queryClient, postId, (post) => ({
         ...post,
-        commentsCount: (post.commentsCount || 0) + 1,
+        commentsCount: Math.max(0, (post.commentsCount || 0) + delta),
       }));
-
-      // Snapshot comments cache
-      const prevComments = queryClient.getQueryData(QUERY_KEYS.FEED.COMMENTS(postId));
-
-      // Build optimistic comment
-      const user = useAuthStore.getState().user;
-      const optimisticComment: Comment = {
-        id: `temp-${Date.now()}`,
-        userId: user ? String(user.id) : '',
-        contentId: postId,
-        comment: text,
-        parentId: parentId ?? null,
-        createdAt: new Date().toISOString(),
-        author: user
-          ? {
-              id: String(user.id),
-              username: user.username,
-              displayName: user.displayName || user.username,
-              avatar: user.avatar || null,
-            }
-          : undefined,
-        replies: [],
-      };
-
-      // Inject at the beginning of the first page
-      queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), (old: any) => {
-        if (!old?.pages?.length) {
-          return {
-            pages: [
-              {
-                data: [optimisticComment],
-                meta: { pagination: { page: 1, totalPages: 1 } },
-              },
-            ],
-            pageParams: [1],
-          };
-        }
-        return {
-          ...old,
-          pages: old.pages.map((page: any, i: number) =>
-            i === 0 ? { ...page, data: [optimisticComment, ...(page.data ?? [])] } : page
-          ),
-        };
-      });
-
-      return { snapshot, prevComments };
     },
-    onError: (_err, {}, context) => {
-      reportSocialActionFailed('comment_create', postId, _err);
-      if (context?.snapshot) {
-        rollbackPostCaches(queryClient, postId, context.snapshot);
-      }
-      if (context?.prevComments !== undefined) {
-        queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), context.prevComments);
-      }
-    },
-    onSuccess: async () => {
-      // Replace optimistic comment with real server data
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FEED.COMMENTS(postId) });
+    [queryClient, postId]
+  );
 
-      // RECONCILE THE BADGE with the server's authoritative count. The
-      // optimistic +1 above is applied to whatever the cached post object held,
-      // and that can be OLDER than the comment list: David opened a post the
-      // instant its push arrived (count 0), someone else commented, then he
-      // commented — his badge showed 0+1=1 while the refetched list showed 2
-      // (Aug 23; verified against the DB: 3 real comments, Redis 3, badge 1).
-      // Invalidating only the comment list never corrected that. We patch ONLY
-      // the count on the already-cached post objects: no feed invalidation, so
-      // nothing refetches, reorders or flickers. A failure keeps the optimistic
-      // value, exactly as before.
+  const send = useCallback(
+    async (entry: PendingComment) => {
+      const box = useCommentOutbox.getState();
       try {
-        // NOTE: feedService.getPost returns the RAW API shape (it does not run
-        // the feed mapper), so the count lives under `interactions`. Read both
-        // shapes — otherwise this whole reconciliation is a silent no-op, which
-        // is exactly how it was written the first time.
-        const fresh = (await feedService.getPost(postId)) as unknown as {
-          commentsCount?: number;
-          interactions?: { commentsCount?: number };
-        };
-        const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
-        if (typeof serverCount === 'number') {
-          // What the user is CURRENTLY seeing, read before we correct it. If it
-          // disagrees with the server we emit the divergence — the alarm that
-          // would have surfaced this whole class of bug without a human noticing.
-          const shown = findPostInCaches(queryClient, postId)?.commentsCount;
-          reportCounterDivergence({
-            action: 'comment_create',
-            targetId: postId,
-            field: 'commentsCount',
-            shown,
-            server: serverCount,
+        const res = await feedService.addComment(
+          postId,
+          entry.text,
+          entry.parentId ?? undefined
+        );
+        // The server's copy goes into the list in the same breath as the
+        // pending one leaves, so the comment never blinks out of sight while
+        // the list reloads.
+        const saved = (res as { data?: Partial<Comment> } | undefined)?.data;
+        if (saved?.id) {
+          const user = useAuthStore.getState().user;
+          const serverComment: Comment = {
+            ...toComment(entry, user),
+            ...saved,
+            id: String(saved.id),
+            status: undefined,
+          };
+          queryClient.setQueryData(QUERY_KEYS.FEED.COMMENTS(postId), (old: any) => {
+            if (!old?.pages?.length) return old;
+            const known = old.pages.some((page: any) =>
+              (page.data ?? []).some((c: Comment) => c.id === serverComment.id)
+            );
+            if (known) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page: any, i: number) =>
+                i === 0 ? { ...page, data: [serverComment, ...(page.data ?? [])] } : page
+              ),
+            };
           });
-          patchPostInCaches(queryClient, postId, (post) => ({
-            ...post,
-            commentsCount: serverCount,
-          }));
         }
-      } catch {
-        // Best-effort reconciliation; the optimistic count stands.
-      }
-      reportSocialAction('comment_create', postId, 'applied');
-    },
-  });
+        box.remove(postId, entry.id);
+        void queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.FEED.COMMENTS(postId),
+        });
 
-  const comments: Comment[] = data?.pages.flatMap((page: any) => page.data ?? []) ?? [];
+        // RECONCILE THE BADGE with the server's authoritative count. The
+        // optimistic +1 is applied to whatever the cached post object held,
+        // and that can be OLDER than the comment list: David opened a post the
+        // instant its push arrived (count 0), someone else commented, then he
+        // commented — his badge showed 0+1=1 while the refetched list showed 2
+        // (Aug 23; verified against the DB: 3 real comments, Redis 3, badge 1).
+        // We patch ONLY the count on the already-cached post objects: no feed
+        // invalidation, so nothing refetches, reorders or flickers.
+        try {
+          // NOTE: feedService.getPost returns the RAW API shape (it does not
+          // run the feed mapper), so the count lives under `interactions`.
+          const fresh = (await feedService.getPost(postId)) as unknown as {
+            commentsCount?: number;
+            interactions?: { commentsCount?: number };
+          };
+          const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
+          if (typeof serverCount === 'number') {
+            // Whatever is still on its way is not in the server's number yet.
+            const stillSending = countedPending(
+              useCommentOutbox.getState().outbox,
+              postId
+            );
+            const shown = findPostInCaches(queryClient, postId)?.commentsCount;
+            reportCounterDivergence({
+              action: 'comment_create',
+              targetId: postId,
+              field: 'commentsCount',
+              shown,
+              server: serverCount + stillSending,
+            });
+            patchPostInCaches(queryClient, postId, (post) => ({
+              ...post,
+              commentsCount: serverCount + stillSending,
+            }));
+          }
+        } catch {
+          // Best-effort reconciliation; the optimistic count stands.
+        }
+        reportSocialAction('comment_create', postId, 'applied', {
+          attempts: entry.attempts,
+        });
+      } catch (err) {
+        reportSocialActionFailed('comment_create', postId, err, {
+          attempts: entry.attempts,
+          kept_for_retry: true,
+        });
+        // The server never got it: it stops counting, and it stays in sight.
+        bumpCount(-1);
+        box.markFailed(postId, entry.id);
+      }
+    },
+    [postId, queryClient, bumpCount]
+  );
+
+  const addComment = useCallback(
+    async (text: string, parentId?: string) => {
+      const entry = newPendingComment(postId, text, parentId, Date.now());
+      await cancelPostQueries(queryClient, postId);
+      useCommentOutbox.getState().enqueue(entry);
+      bumpCount(1);
+      await send(entry);
+    },
+    [postId, queryClient, bumpCount, send]
+  );
+
+  const retryComment = useCallback(
+    async (id: string) => {
+      const box = useCommentOutbox.getState();
+      const failed = find(box.outbox, postId, id);
+      // Only a failed comment is sent again; one on its way already is.
+      if (!failed || failed.status !== 'failed') return;
+      box.markRetrying(postId, id);
+      const entry = find(useCommentOutbox.getState().outbox, postId, id);
+      if (!entry) return;
+      analytics.capture(ANALYTICS_EVENTS.SOCIAL.COMMENT_RETRIED, {
+        target_id: postId,
+        attempts: entry.attempts,
+      });
+      await cancelPostQueries(queryClient, postId);
+      bumpCount(1);
+      await send(entry);
+    },
+    [postId, queryClient, bumpCount, send]
+  );
+
+  const discardComment = useCallback(
+    (id: string) => {
+      const box = useCommentOutbox.getState();
+      const entry = find(box.outbox, postId, id);
+      if (!entry) return;
+      // One still on its way was counted; a failed one was not.
+      if (entry.status === 'sending') bumpCount(-1);
+      box.remove(postId, id);
+      analytics.capture(ANALYTICS_EVENTS.SOCIAL.COMMENT_DISCARDED, {
+        target_id: postId,
+        attempts: entry.attempts,
+      });
+    },
+    [postId, bumpCount]
+  );
+
+  const serverComments: Comment[] =
+    data?.pages.flatMap((page: any) => page.data ?? []) ?? [];
+  // What is only on this phone goes first, newest on top, then the server's.
+  const comments: Comment[] = useMemo(() => {
+    if (pending.length === 0) return serverComments;
+    const user = useAuthStore.getState().user;
+    return [...pending.map((entry) => toComment(entry, user)), ...serverComments];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, data]);
 
   return {
     comments,
@@ -181,8 +243,41 @@ export function useComments(postId: string) {
     hasMore: hasNextPage ?? false,
     loadMore: fetchNextPage,
     refresh: refetch,
-    addComment: (text: string, parentId?: string) =>
-      addCommentMutation.mutateAsync({ text, parentId }),
-    isAddingComment: addCommentMutation.isPending,
+    addComment,
+    retryComment,
+    discardComment,
+    isAddingComment: pending.some((c) => c.status === 'sending'),
+  };
+}
+
+/** A pending comment in the shape the list draws. */
+function toComment(
+  entry: PendingComment,
+  user: {
+    id: string | number;
+    username: string;
+    displayName?: string;
+    avatar?: string | null;
+    role?: Role;
+  } | null
+): Comment {
+  return {
+    id: entry.id,
+    userId: user ? String(user.id) : '',
+    contentId: entry.postId,
+    comment: entry.text,
+    parentId: entry.parentId,
+    createdAt: entry.createdAt,
+    status: entry.status,
+    author: user
+      ? {
+          id: String(user.id),
+          username: user.username,
+          displayName: user.displayName || user.username,
+          avatar: user.avatar || null,
+          role: user.role,
+        }
+      : undefined,
+    replies: [],
   };
 }

@@ -859,6 +859,11 @@ export const ANALYTICS_EVENTS = {
     // pre-existing per-action events still fire untouched; this is the layer
     // that says what actually HAPPENED, which the intent-time events cannot.
     ACTION: 'social_action',
+    // A comment that could not be sent stays on screen (Oct 7 2026): these two
+    // say what the person did with it. The failure itself is `social_action`
+    // with action=comment_create, outcome=failed, kept_for_retry=true.
+    COMMENT_RETRIED: 'social_comment_retried',
+    COMMENT_DISCARDED: 'social_comment_discarded',
     // Fires ONLY when a number on screen disagrees with the server after a
     // mutation reconciles — a zero-noise alarm. This is the signal that would
     // have surfaced the Aug 23 comment badge (shown 1, server 3) by itself.

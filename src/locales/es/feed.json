@@ -195,7 +195,11 @@
     "editedBadge": "(editado)",
     "reply": "Responder",
     "editingLabel": "Editando comentario",
-    "editPlaceholder": "Edita tu comentario..."
+    "editPlaceholder": "Edita tu comentario...",
+    "posting": "Publicando…",
+    "notSent": "No se pudo publicar",
+    "retry": "Reintentar",
+    "discard": "Eliminar"
   },
   "poem": {
     "showMore": "Ver más",

@@ -26,7 +26,7 @@ patchedDependencies:
     hash: bbbaee07030d87803ae4907d47d7b7c982d4a222a89e6bccd2cfc56759d6d9c8
     path: patches/expo-audio@55.0.11.patch
   react-native-compressor:
-    hash: af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e
+    hash: 43ab995a1b0b0710ecd373db352f22c3189f6db1b7ebae96bb3a10d4c59160d6
     path: patches/react-native-compressor.patch
   react-native-device-info@15.0.2:
     hash: b3940e508f24c94742426f04864a28762b6bd8a2bd620466b44ca02faa3ee470
@@ -236,7 +236,7 @@ importers:
         version: 1.1.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-compressor:
         specifier: 1.10.3
-        version: 1.10.3(patch_hash=af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 1.10.3(patch_hash=43ab995a1b0b0710ecd373db352f22c3189f6db1b7ebae96bb3a10d4c59160d6)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^15.0.2
         version: 15.0.2(patch_hash=b3940e508f24c94742426f04864a28762b6bd8a2bd620466b44ca02faa3ee470)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
@@ -9953,7 +9953,7 @@ snapshots:
       sf-symbols-typescript: 2.2.0
       use-latest-callback: 0.2.6(react@19.2.0)
 
-  react-native-compressor@1.10.3(patch_hash=af45a013e34dd69badcd3e284281bdf0cdd893b352fd43bf76fb583ce37e603e)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  react-native-compressor@1.10.3(patch_hash=43ab995a1b0b0710ecd373db352f22c3189f6db1b7ebae96bb3a10d4c59160d6)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       react: 19.2.0
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)

@@ -8,3 +8,67 @@ index 6fe5e9ce2c3467f65508ecba95b68ad025a61c6d..af8a0b56637af10a898b697f823202dc
  import AVFoundation
  import Photos
  import MobileCoreServices
+diff --git a/android/src/main/java/com/reactnativecompressor/Audio/AudioHelper.kt b/android/src/main/java/com/reactnativecompressor/Audio/AudioHelper.kt
+--- a/android/src/main/java/com/reactnativecompressor/Audio/AudioHelper.kt
++++ b/android/src/main/java/com/reactnativecompressor/Audio/AudioHelper.kt
+@@ -58,7 +58,7 @@
+       var destinationBitrate = originalBitrate
+       Utils.addLog("source bitrate: $originalBitrate")
+ 
+-      when (quality.toLowerCase()) {
++      when (quality.lowercase()) {
+         "low" -> destinationBitrate = maxOf(64, (originalBitrate * 0.3).toInt())
+         "medium" -> destinationBitrate = (originalBitrate * 0.5).toInt()
+         "high" -> destinationBitrate = minOf(320, (originalBitrate * 0.7).toInt())
+diff --git a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+--- a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
++++ b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+@@ -161,7 +161,7 @@
+     if (mimeType == null) {
+       val fileExtension = MimeTypeMap.getFileExtensionFromUrl(fileUri.toString())
+       if (fileExtension != null) {
+-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileExtension.toLowerCase())
++        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileExtension.lowercase())
+       }
+     }
+ 
+diff --git a/android/src/main/java/com/reactnativecompressor/Utils/createVideoThumbnail.kt b/android/src/main/java/com/reactnativecompressor/Utils/createVideoThumbnail.kt
+--- a/android/src/main/java/com/reactnativecompressor/Utils/createVideoThumbnail.kt
++++ b/android/src/main/java/com/reactnativecompressor/Utils/createVideoThumbnail.kt
+@@ -9,7 +9,6 @@
+ import android.text.TextUtils
+ import android.webkit.URLUtil
+ import com.facebook.react.bridge.Arguments
+-import com.facebook.react.bridge.GuardedResultAsyncTask
+ import com.facebook.react.bridge.Promise
+ import com.facebook.react.bridge.ReactApplicationContext
+ import com.facebook.react.bridge.ReactContext
+@@ -25,13 +24,27 @@
+ import java.util.UUID
+ 
+ 
++// ATTO: React Native 0.8x removed GuardedResultAsyncTask and this file stopped
++// compiling, which broke every Android build of the app. Same contract, done
++// with a plain thread: the work off the main thread, the result back on it.
++abstract class AttoResultTask<Result> {
++    protected abstract fun doInBackgroundGuarded(): Result
++    protected abstract fun onPostExecuteGuarded(result: Result)
++    fun execute() {
++        Thread {
++            val result = doInBackgroundGuarded()
++            android.os.Handler(android.os.Looper.getMainLooper()).post { onPostExecuteGuarded(result) }
++        }.start()
++    }
++}
++
+ class CreateVideoThumbnailClass(private val reactContext: ReactApplicationContext) {
+     @ReactMethod
+     fun create(fileUrl:String,options: ReadableMap, promise: Promise) {
+         ProcessDataTask(reactContext,fileUrl, promise, options).execute()
+     }
+ 
+-    private class ProcessDataTask(reactContext: ReactContext,private val filePath:String, private val promise: Promise, private val options: ReadableMap) : GuardedResultAsyncTask<ReadableMap?>(reactContext.exceptionHandler) {
++    private class ProcessDataTask(reactContext: ReactContext,private val filePath:String, private val promise: Promise, private val options: ReadableMap) : AttoResultTask<ReadableMap?>() {
+         private val weakContext: WeakReference<Context>
+ 
+         init {

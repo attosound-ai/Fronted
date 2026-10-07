@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
 import { aspectOf, mediaBox } from '../media/mediaBox';
+import { formatClock } from '../media/mediaTime';
 import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import {
   videoLoadStarted,
@@ -34,12 +35,19 @@ interface VideoMessagePlayerProps {
   aspect?: number | null;
   /** Widest the bubble gets; the thread passes its media width. */
   maxWidth?: number;
+  /** Length of the video, from the message, for the label in the corner. */
+  durationMs?: number | null;
+  /** False while the message is still uploading or failed: the upload ring or
+   *  the retry button owns the centre then. */
+  showPlay?: boolean;
 }
 
 export function VideoMessagePlayer({
   videoUrl,
   aspect = null,
   maxWidth = VIDEO_WIDTH,
+  durationMs = null,
+  showPlay = true,
 }: VideoMessagePlayerProps) {
   const { t } = useTranslation('messages');
   // The bubble takes the shape of the video (WhatsApp): tall for 9:16, wide
@@ -84,6 +92,8 @@ export function VideoMessagePlayer({
       videoUrl={videoUrl}
       box={box}
       onNaturalAspect={aspect == null ? setNaturalAspect : undefined}
+      durationMs={durationMs}
+      showPlay={showPlay}
     />
   );
 }
@@ -97,6 +107,8 @@ function VideoViewWrapper({
   videoUrl,
   box,
   onNaturalAspect,
+  durationMs,
+  showPlay,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   VideoView: any;
@@ -105,7 +117,19 @@ function VideoViewWrapper({
   videoUrl: string;
   box: { width: number; height: number };
   onNaturalAspect?: (aspect: number) => void;
+  durationMs: number | null;
+  showPlay: boolean;
 }) {
+  const { t } = useTranslation('messages');
+  // A video must read as a video before anyone touches it. It used to be a
+  // still frame with no mark at all, so it passed for a photo (David, Oct 6
+  // 2026). Two marks, the ones people already know: the length in the top
+  // left corner (Telegram, measured on his phone) and a play button in the
+  // centre (Instagram, WhatsApp). Once it has been started the system
+  // controls take over, and the marks come back when it ends.
+  const [started, setStarted] = useState(false);
+  const [loadedMs, setLoadedMs] = useState<number | null>(null);
+  const clock = formatClock(durationMs ?? loadedMs);
   const player = useVideoPlayer(
     videoUrl,
     (p: { loop: boolean; audioMixingMode: string }) => {
@@ -204,6 +228,39 @@ function VideoViewWrapper({
     return () => sub?.remove();
   }, [player, onNaturalAspect]);
 
+  // The length, for messages that did not store it, and the return of the
+  // marks when playback reaches the end.
+  useEffect(() => {
+    if (!player) return;
+    const subs: Array<{ remove: () => void }> = [];
+    try {
+      subs.push(
+        player.addListener('sourceLoad', (payload: { duration?: number }) => {
+          if (typeof payload?.duration === 'number' && payload.duration > 0) {
+            setLoadedMs(payload.duration * 1000);
+          }
+        })
+      );
+      subs.push(player.addListener('playToEnd', () => setStarted(false)));
+    } catch {
+      // Without these events the marks simply stay as they are.
+    }
+    return () => subs.forEach((sub) => sub.remove());
+  }, [player]);
+
+  const startPlayback = () => {
+    setStarted(true);
+    try {
+      // From the top when it had already ended.
+      if (player.duration > 0 && player.currentTime >= player.duration - 0.25) {
+        player.currentTime = 0;
+      }
+      player.play();
+    } catch {
+      // player disposed: nothing to start
+    }
+  };
+
   if (engine.engineMode) {
     return (
       <View style={[styles.container, box]}>
@@ -216,17 +273,51 @@ function VideoViewWrapper({
         <Pressable style={StyleSheet.absoluteFill} onPress={() => void engine.toggle()}>
           {!engine.isPlaying && (
             <View style={styles.placeholder}>
-              <Play size={24} color={COLORS.white} fill={COLORS.white} />
+              <View style={styles.playDisc}>
+                <Play size={24} color={COLORS.white} fill={COLORS.white} />
+              </View>
             </View>
           )}
         </Pressable>
+        {!engine.isPlaying && clock ? <DurationPill clock={clock} /> : null}
       </View>
     );
   }
 
+  const idle = !started;
   return (
     <View style={[styles.container, box]}>
-      <VideoView player={player} style={styles.video} contentFit="cover" nativeControls />
+      <VideoView
+        player={player}
+        style={styles.video}
+        contentFit="cover"
+        nativeControls={started}
+      />
+      {idle && showPlay ? (
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.placeholder]}
+          onPress={startPlayback}
+          accessibilityRole="button"
+          accessibilityLabel={t('media.playVideo')}
+        >
+          <View style={styles.playDisc}>
+            <Play size={24} color={COLORS.white} fill={COLORS.white} />
+          </View>
+        </Pressable>
+      ) : null}
+      {idle && clock ? <DurationPill clock={clock} /> : null}
+    </View>
+  );
+}
+
+/** The length of the video, top left, the way Telegram labels one. */
+function DurationPill({ clock }: { clock: string }) {
+  return (
+    <View style={styles.durationPill} pointerEvents="none">
+      <Play size={9} color={COLORS.white} fill={COLORS.white} />
+      <Text style={styles.durationText} maxFontSizeMultiplier={1}>
+        {clock}
+      </Text>
     </View>
   );
 }
@@ -245,6 +336,35 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  playDisc: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // The triangle looks off centre in a circle unless it sits a hair right.
+    paddingLeft: 3,
+  },
+  durationPill: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  durationText: {
+    color: COLORS.white,
+    fontFamily: 'Archivo_600SemiBold',
+    fontSize: 12,
+    lineHeight: 15,
+    fontVariant: ['tabular-nums'],
   },
   fallbackText: {
     color: COLORS.gray[500],

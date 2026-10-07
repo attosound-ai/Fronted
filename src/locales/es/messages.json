@@ -77,7 +77,8 @@
     "speed": "Velocidad",
     "previewPost": "🎵 Publicación",
     "notSent": "No se envió. Toca para reintentar.",
-    "retry": "Enviar de nuevo"
+    "retry": "Enviar de nuevo",
+    "playVideo": "Reproducir video"
   },
   "newMessage": {
     "headerTitle": "Nuevo mensaje",

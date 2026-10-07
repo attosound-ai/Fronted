@@ -162,6 +162,14 @@ function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
             videoUrl={message.video ?? url}
             aspect={aspectOf(meta.width, meta.height)}
             maxWidth={MEDIA_WIDTH}
+            durationMs={typeof meta.durationMs === 'number' ? meta.durationMs : null}
+            showPlay={
+              !(
+                message.pending ||
+                message.status === 'sending' ||
+                message.status === 'failed'
+              )
+            }
           />
           <UploadOverlay message={message} onRetry={onRetry} />
         </View>

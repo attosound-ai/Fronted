@@ -1,5 +1,5 @@
 diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
-index ec1c0316f2d0e955b28dd80beb4712ef436dfdf1..e1136d9032876effd4473698d7c9e6dee1d228df 100644
+index ec1c031..7289fb6 100644
 --- a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
 +++ b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
 @@ -105,6 +105,19 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
@@ -22,7 +22,39 @@ index ec1c0316f2d0e955b28dd80beb4712ef436dfdf1..e1136d9032876effd4473698d7c9e6de
      self.dispatchEvent(
        for: .onMenuWillHide,
        withPayload: [:]
-@@ -237,3 +250,56 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+@@ -202,7 +215,7 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+     highlightPreviewForItemWithIdentifier identifier: NSCopying
+   ) -> UITargetedPreview? {
+     
+-    return self.menuTargetedPreview;
++    return self.menuTargetedPreviewIfAttached;
+   };
+   #else
+   /// deprecated in iOS 16
+@@ -211,7 +224,7 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+     previewForHighlightingMenuWithConfiguration: UIContextMenuConfiguration
+   ) -> UITargetedPreview? {
+   
+-    return self.menuTargetedPreview;
++    return self.menuTargetedPreviewIfAttached;
+   };
+   #endif
+   
+@@ -223,7 +236,7 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+       dismissalPreviewForItemWithIdentifier identifier: NSCopying
+   ) -> UITargetedPreview? {
+     
+-    return self.menuTargetedPreview;
++    return self.menuTargetedPreviewIfAttached;
+   };
+   #else
+   /// deprecated in iOS 16
+@@ -233,7 +246,60 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
+     configuration: UIContextMenuConfiguration
+   ) -> UITargetedPreview? {
+     
+-    return self.menuTargetedPreview;
++    return self.menuTargetedPreviewIfAttached;
    };
    #endif
  };
@@ -80,10 +112,29 @@ index ec1c0316f2d0e955b28dd80beb4712ef436dfdf1..e1136d9032876effd4473698d7c9e6de
 +  };
 +};
 diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
-index c01e1ef8449defcc35b8513991de85c8e8acc07f..026c86b5bd9f44938bcb8e570dde22afad83335c 100644
+index c01e1ef..c7dfef8 100644
 --- a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
 +++ b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
-@@ -448,9 +448,20 @@ public final class RNIContextMenuViewContent: UIView, RNIContentView {
+@@ -251,6 +251,18 @@ public final class RNIContextMenuViewContent: UIView, RNIContentView {
+       parameters: self.menuPreviewParameters
+     );
+   };
++
++  /// ATTO patch: `UITargetedPreview(view:parameters:)` raises
++  /// NSInternalInconsistencyException when the view is not in a window, and
++  /// that aborts the app. It happens when React unmounts the row while its
++  /// menu is still on screen (the list reloading, or the message being
++  /// deleted by the other person). Seen in production on Oct 7 2026
++  /// (REACT-NATIVE-5V). Returning nil lets UIKit close the menu with its
++  /// default animation instead.
++  var menuTargetedPreviewIfAttached: UITargetedPreview? {
++    guard self.menuPreviewTargetView.window != nil else { return nil };
++    return self.menuTargetedPreview;
++  };
+   
+   var isUsingCustomPreview: Bool {
+        self.previewConfig.previewType == .CUSTOM
+@@ -448,9 +460,20 @@ public final class RNIContextMenuViewContent: UIView, RNIContentView {
    ){
      self.didPressMenuItem = true;
      

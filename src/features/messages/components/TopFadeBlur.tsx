@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,6 +16,25 @@ interface TopFadeBlurProps {
  * masked by a gradient instead of being cut at a hard line.
  */
 export function TopFadeBlur({ height, intensity = 44 }: TopFadeBlurProps) {
+  // Android has no real blur here (the BlurView is a faint veil there), so the
+  // messages showed plainly behind the header pills and the status bar clock
+  // (emulator, Oct 7 2026). The same band, drawn as darkness instead of blur:
+  // solid at the top and gone a little below the header.
+  if (Platform.OS === 'android') {
+    return (
+      <LinearGradient
+        pointerEvents="none"
+        colors={[
+          'rgba(0,0,0,0.94)',
+          'rgba(0,0,0,0.94)',
+          'rgba(0,0,0,0.55)',
+          'transparent',
+        ]}
+        locations={[0, 0.5, 0.78, 1]}
+        style={[styles.wrap, { height }]}
+      />
+    );
+  }
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }]}>
       <MaskedView

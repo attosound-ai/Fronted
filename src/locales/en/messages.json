@@ -38,7 +38,11 @@
     "startingConversation": "Starting conversation...",
     "errorFailedToStart": "Couldn't open this conversation",
     "retry": "Try again",
-    "messageDeleted": "Message deleted",
+    "messageDeleted": "This message was deleted",
+    "messageDeletedByYou": "You deleted this message",
+    "read": "Read",
+    "loadingEarlier": "Loading…",
+    "jumpToLatest": "Jump to latest",
     "you": "You",
     "edited": "edited",
     "editPlaceholder": "Edit message..."
@@ -76,6 +80,8 @@
     "pause": "Pause",
     "speed": "Playback speed",
     "previewPost": "🎵 Post",
+    "previewDeleted": "🚫 This message was deleted",
+    "previewDeletedByYou": "🚫 You deleted this message",
     "notSent": "Not sent. Tap to try again.",
     "retry": "Send again",
     "playVideo": "Play video"
@@ -320,5 +326,9 @@
     "cancelA11y": "Cancel editing",
     "fieldA11y": "Edit message",
     "saveA11y": "Save edit"
+  },
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
   }
 }

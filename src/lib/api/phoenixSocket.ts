@@ -24,6 +24,9 @@ interface ChatChannelHandlers {
 
 interface UserChannelHandlers {
   onConversationUpdated?: MessageHandler;
+  /** The preview of a conversation changed with no new message (its last
+   *  message was deleted): refresh the list, no banner and no badge. */
+  onConversationPreviewChanged?: MessageHandler;
   onNewNotification?: MessageHandler;
 }
 
@@ -588,6 +591,9 @@ class PhoenixSocketManager {
 
     if (handlers.onConversationUpdated) {
       channel.on('conversation_updated', handlers.onConversationUpdated);
+    }
+    if (handlers.onConversationPreviewChanged) {
+      channel.on('conversation_preview_changed', handlers.onConversationPreviewChanged);
     }
     if (handlers.onNewNotification) {
       channel.on('new_notification', handlers.onNewNotification);

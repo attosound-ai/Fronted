@@ -247,7 +247,10 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
     const labels = useMemo(
       () => ({
         you: t('chat.you', { defaultValue: 'You' }),
-        deleted: t('chat.messageDeleted', { defaultValue: 'Message deleted' }),
+        deleted: t('chat.messageDeleted', { defaultValue: 'This message was deleted' }),
+        deletedByYou: t('chat.messageDeletedByYou', {
+          defaultValue: 'You deleted this message',
+        }),
         edited: t('chat.edited', { defaultValue: 'edited' }),
         editedTap: t('edit.edited', { defaultValue: 'Edited' }),
         hideEdits: t('edit.hideEdits', { defaultValue: 'Hide Edits' }),

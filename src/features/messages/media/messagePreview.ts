@@ -30,12 +30,28 @@ export function mediaPreviewLabel(
   }
 }
 
+/**
+ * What the server stores as the preview when the last message of a chat is
+ * deleted: one sentence in the row of the other person and another in the row
+ * of whoever deleted it (chat service, `ConversationPreview`). Plain English
+ * and not a `[deleted]` marker so the builds released before this one, which
+ * show the stored text as it comes, read right too. Must match the server
+ * character for character.
+ */
+export const SERVER_PREVIEW_DELETED = '🚫 This message was deleted';
+export const SERVER_PREVIEW_DELETED_BY_YOU = '🚫 You deleted this message';
+
 /** The server writes `[audio]` style markers as the conversation preview. */
 export function previewFromServer(
   lastMessage: string | null | undefined,
   t: (key: string) => string
 ): string {
   if (!lastMessage) return '';
+  // The last message of the chat was deleted: the list says so in the
+  // person's language, the way WhatsApp does.
+  if (lastMessage === SERVER_PREVIEW_DELETED) return t('media.previewDeleted');
+  if (lastMessage === SERVER_PREVIEW_DELETED_BY_YOU)
+    return t('media.previewDeletedByYou');
   const marker = /^\[([a-z_]+)\]\s*/.exec(lastMessage);
   if (!marker) return lastMessage;
   if (marker[1] === 'thread') return lastMessage.slice(marker[0].length);

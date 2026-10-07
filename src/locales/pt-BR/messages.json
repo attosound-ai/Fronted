@@ -38,7 +38,11 @@
     "startingConversation": "Iniciando conversa...",
     "errorFailedToStart": "Não foi possível abrir esta conversa",
     "retry": "Tentar novamente",
-    "messageDeleted": "Mensagem excluída",
+    "messageDeleted": "Esta mensagem foi apagada",
+    "messageDeletedByYou": "Você apagou esta mensagem",
+    "read": "Lida",
+    "loadingEarlier": "Carregando…",
+    "jumpToLatest": "Ir para a última mensagem",
     "you": "Você",
     "edited": "editado",
     "editPlaceholder": "Editar mensagem..."
@@ -115,6 +119,8 @@
     "pause": "Pausar",
     "speed": "Velocidade",
     "previewPost": "🎵 Publicação",
+    "previewDeleted": "🚫 Esta mensagem foi apagada",
+    "previewDeletedByYou": "🚫 Você apagou esta mensagem",
     "notSent": "Não enviado. Toque para tentar de novo.",
     "retry": "Enviar de novo",
     "playVideo": "Reproduzir vídeo"
@@ -320,5 +326,9 @@
     "cancelA11y": "Cancelar edição",
     "fieldA11y": "Editar mensagem",
     "saveA11y": "Salvar edição"
+  },
+  "day": {
+    "today": "Hoje",
+    "yesterday": "Ontem"
   }
 }

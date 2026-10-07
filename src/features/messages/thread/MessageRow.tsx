@@ -24,6 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   ArrowUpLeft,
+  Ban,
   Clock,
   AlertCircle,
   Bookmark,
@@ -92,7 +93,10 @@ export interface MessageRowProps {
   menuItems: MenuItem[];
   labels: {
     you: string;
+    /** "This message was deleted", for a message someone else took back. */
     deleted: string;
+    /** "You deleted this message", for your own. */
+    deletedByYou: string;
     edited: string;
     /** iMessage's tappable "Edited" under the bubble, and its "Hide Edits". */
     editedTap: string;
@@ -174,6 +178,8 @@ export interface MessageRowProps {
 // this far below the bubble's bottom edge (see BubbleShape).
 /** An effect only plays for a message that just landed. */
 const EFFECT_FRESH_MS = 60_000;
+/** Ink of a deleted message: its icon and its sentence. */
+const DELETED_INK = 'rgba(255,255,255,0.5)';
 /** Played effects live in storage: a relaunch must not replay the history. */
 const EFFECT_MEMORY: EffectMemory = { has: hasEffectPlayed, mark: markEffectPlayed };
 const TAIL_DROP = 8;
@@ -529,11 +535,24 @@ function MessageRowInner({
     </>
   );
 
+  // A deleted message keeps its place in the thread and says what happened,
+  // the way WhatsApp does: the barred circle, the sentence in italics (its own
+  // wording when it was yours) and the time it was sent.
   const bubble = message.isDeleted ? (
-    <View style={[styles.bubble, styles.bubbleDeleted, cornerStyle]}>
-      <RNText style={styles.deletedText} maxFontSizeMultiplier={1.1}>
-        {labels.deleted}
-      </RNText>
+    <View
+      style={[styles.bubble, styles.bubbleDeleted, cornerStyle]}
+      accessible
+      accessibilityLabel={isOwn ? labels.deletedByYou : labels.deleted}
+    >
+      <View style={styles.deletedRow}>
+        <Ban size={14} color={DELETED_INK} strokeWidth={2} />
+        <RNText style={styles.deletedText} maxFontSizeMultiplier={1.1}>
+          {isOwn ? labels.deletedByYou : labels.deleted}
+        </RNText>
+        <RNText style={styles.deletedTime} maxFontSizeMultiplier={1.0}>
+          {formatTime(message.createdAt)}
+        </RNText>
+      </View>
     </View>
   ) : emojiCount > 0 ? (
     <View style={styles.emojiOnly}>
@@ -1208,11 +1227,19 @@ const styles = StyleSheet.create({
   },
   shape: { position: 'absolute', left: 0, top: 0 },
   bubbleDeleted: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  deletedRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deletedText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: DELETED_INK,
     fontSize: 14,
     fontStyle: 'italic',
     fontFamily: 'Archivo_400Regular',
+    flexShrink: 1,
+  },
+  deletedTime: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11,
+    fontFamily: 'Archivo_400Regular',
+    marginLeft: 4,
   },
   text: {
     color: COLORS.white,

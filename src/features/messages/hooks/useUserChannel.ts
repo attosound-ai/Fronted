@@ -62,6 +62,11 @@ export function useUserChannel() {
             queryKey: QUERY_KEYS.NOTIFICATIONS.UNREAD,
           });
         },
+        onConversationPreviewChanged: () => {
+          void queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),
+          });
+        },
         onConversationUpdated: (payload: Record<string, unknown>) => {
           queryClient.invalidateQueries({
             queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS(),

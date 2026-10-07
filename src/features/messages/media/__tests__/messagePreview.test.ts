@@ -62,3 +62,36 @@ test('the list helpers still behave as before', () => {
   assert.equal(previewFromServer('[audio]', t), 'media.previewAudio');
   assert.equal(previewFromServer('[unknown]', t), '[unknown]');
 });
+
+test('a deleted last message reads like WhatsApp in the list', () => {
+  // The row of the other person, and the row of whoever deleted it: the exact
+  // sentences the chat service stores.
+  assert.equal(
+    previewFromServer('🚫 This message was deleted', t),
+    'media.previewDeleted'
+  );
+  assert.equal(
+    previewFromServer('🚫 You deleted this message', t),
+    'media.previewDeletedByYou'
+  );
+  // Anything else is shown as written.
+  assert.equal(
+    previewFromServer('This message was deleted', t),
+    'This message was deleted'
+  );
+  assert.equal(
+    previewFromServer('you deleted this message?', t),
+    'you deleted this message?'
+  );
+});
+
+test('the deleted preview is translated in a banner too', () => {
+  assert.equal(
+    bannerPreview('🚫 This message was deleted', null, t),
+    'media.previewDeleted'
+  );
+  assert.equal(
+    bannerPreview('🚫 You deleted this message', 'text', t),
+    'media.previewDeletedByYou'
+  );
+});

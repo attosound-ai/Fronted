@@ -88,7 +88,7 @@ export function ChatHeader({
 
       <GlassSurface radius={20} style={styles.namePill}>
         <MenuHost
-          style={styles.nameRow}
+          style={ContextMenuView ? styles.nameRow : styles.nameHost}
           menuConfig={{
             menuTitle: '',
             menuItems: [
@@ -224,10 +224,18 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 14,
   },
+  // Without the native menu (Android) the host is a plain view. As a row, its
+  // only child is `flex: 1`, a basis of zero, so the pill got no width from its
+  // content: Android showed a clipped avatar and no name (Galaxy A16, Oct 6
+  // 2026). As a column the child fills the height and keeps its own width.
+  nameHost: { flex: 1 },
   pillAvatar: { flexShrink: 0 },
   name: {
     color: COLORS.white,
     textAlign: 'center',
+    // A long name gives way to the avatar and the badge instead of pushing
+    // them out of the pill.
+    ...(Platform.OS === 'android' ? { flexShrink: 1 } : null),
   },
   // Same width as the back button so the pill sits centred between them.
   rightContainer: {

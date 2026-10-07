@@ -51,6 +51,7 @@ import {
 } from './threadModel';
 import { hasMarkdown, parseMarkdown } from './markdown';
 import { isMediaContentType, isVisualContentType } from '../media/chatMedia';
+import { useVideoControls } from '../media/videoControls';
 import { BubbleEffect } from '../effects/BubbleEffect';
 import { effectFromMetadata } from '../effects/effectCatalog';
 import { hasEffectPlayed, markEffectPlayed } from '../effects/effectMemory';
@@ -476,6 +477,11 @@ function MessageRowInner({
   // The time and ticks: over a picture they sit on glass (white), elsewhere
   // they take the bubble's own ink.
   const onGlass = isVisual && !isVideoNote;
+  // A playing video shows the system scrubber, whose time left sits where the
+  // time of the message goes: the message's time steps aside until it ends.
+  const videoControlsUp = useVideoControls(
+    (state) => message.contentType === 'video' && !!state.open[rowId]
+  );
   const onDarkMeta = onGlass || isVideoNote;
   const metaContent = (
     <>
@@ -643,7 +649,7 @@ function MessageRowInner({
       ) : null}
       {/* Over a picture the time rides on liquid glass in white; on a
           bubble it keeps the bubble's own colour. */}
-      {onGlass ? (
+      {onGlass && videoControlsUp ? null : onGlass ? (
         <GlassSurface radius={11} style={styles.metaGlass}>
           <View style={styles.metaGlassInner}>{metaContent}</View>
         </GlassSurface>

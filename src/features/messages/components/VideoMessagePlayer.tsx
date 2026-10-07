@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/Text';
 import { hlsToMp4Fallback } from '@/lib/media/cloudinaryUrl';
 import { aspectOf, mediaBox } from '../media/mediaBox';
 import { formatClock } from '../media/mediaTime';
+import { useVideoControls } from '../media/videoControls';
 import { useCallPlaybackVideo } from '@/lib/callAudio/session/useCallPlaybackVideo';
 import {
   videoLoadStarted,
@@ -40,6 +41,9 @@ interface VideoMessagePlayerProps {
   /** False while the message is still uploading or failed: the upload ring or
    *  the retry button owns the centre then. */
   showPlay?: boolean;
+  /** The message this video belongs to. With it the row knows when the system
+   *  controls are up and takes its time label out of their way. */
+  messageId?: string;
 }
 
 export function VideoMessagePlayer({
@@ -48,6 +52,7 @@ export function VideoMessagePlayer({
   maxWidth = VIDEO_WIDTH,
   durationMs = null,
   showPlay = true,
+  messageId,
 }: VideoMessagePlayerProps) {
   const { t } = useTranslation('messages');
   // The bubble takes the shape of the video (WhatsApp): tall for 9:16, wide
@@ -94,6 +99,7 @@ export function VideoMessagePlayer({
       onNaturalAspect={aspect == null ? setNaturalAspect : undefined}
       durationMs={durationMs}
       showPlay={showPlay}
+      messageId={messageId}
     />
   );
 }
@@ -109,6 +115,7 @@ function VideoViewWrapper({
   onNaturalAspect,
   durationMs,
   showPlay,
+  messageId,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   VideoView: any;
@@ -119,6 +126,7 @@ function VideoViewWrapper({
   onNaturalAspect?: (aspect: number) => void;
   durationMs: number | null;
   showPlay: boolean;
+  messageId?: string;
 }) {
   const { t } = useTranslation('messages');
   // A video must read as a video before anyone touches it. It used to be a
@@ -247,6 +255,15 @@ function VideoViewWrapper({
     }
     return () => subs.forEach((sub) => sub.remove());
   }, [player]);
+
+  // The scrubber writes the time left in the corner where the row draws the
+  // time of the message: tell the row while the controls are up.
+  const setControls = useVideoControls((state) => state.set);
+  useEffect(() => {
+    if (!messageId) return;
+    setControls(messageId, started);
+    return () => setControls(messageId, false);
+  }, [messageId, started, setControls]);
 
   const startPlayback = () => {
     setStarted(true);

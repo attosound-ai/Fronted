@@ -163,6 +163,7 @@ function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
             aspect={aspectOf(meta.width, meta.height)}
             maxWidth={MEDIA_WIDTH}
             durationMs={typeof meta.durationMs === 'number' ? meta.durationMs : null}
+            messageId={String(message._id)}
             showPlay={
               !(
                 message.pending ||

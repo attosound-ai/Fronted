@@ -16,7 +16,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { showToast } from '@/components/ui/Toast';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
-import { AppIconPickerSheet, useAppIconResync, useAppIconStore } from '@/features/appIcon';
+import {
+  AppIconPickerSheet,
+  useAppIconResync,
+  useAppIconStore,
+} from '@/features/appIcon';
 import { DeleteAccountBottomSheet } from '@/features/profile/components/DeleteAccountBottomSheet';
 import { useBridgeNumber } from '@/features/profile/hooks/useBridgeNumber';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -235,6 +239,7 @@ export default function SettingsScreen() {
                 <ProfileCardRow
                   name={user.displayName || user.username}
                   subtitle={`@${user.username} · ${roleLabel}`}
+                  avatarUri={user.avatar}
                   onPress={() => router.push('/edit-profile')}
                 />
               </InsetGroup>

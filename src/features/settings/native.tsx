@@ -6,6 +6,7 @@
  * native confirmation sheet. Everything here renders inside a Host.
  */
 import { Children, Fragment, type ReactNode } from 'react';
+import { View } from 'react-native';
 import {
   Button,
   ConfirmationDialog,
@@ -17,6 +18,7 @@ import {
   LabeledContent,
   List,
   Picker,
+  RNHostView,
   Section,
   Spacer,
   Text,
@@ -39,6 +41,7 @@ import {
   scrollDisabled,
   tag,
 } from '@expo/ui/swift-ui/modifiers';
+import { Avatar } from '@/components/ui/Avatar';
 
 export { Section };
 
@@ -236,15 +239,26 @@ export function ActionRow({
   );
 }
 
+/** Side of the picture in the profile card, the size the symbol always had. */
+const PROFILE_AVATAR = 54;
+const profileAvatarStyle = {
+  width: PROFILE_AVATAR,
+  height: PROFILE_AVATAR,
+  borderRadius: PROFILE_AVATAR / 2,
+};
+
 /** The card at the top of Apple's Settings: avatar, name, subtitle, chevron. */
 export function ProfileCardRow({
   name,
   subtitle,
   onPress,
+  avatarUri,
 }: {
   name: string;
   subtitle: string;
   onPress: () => void;
+  /** The person's own picture. Without one the card shows Apple's grey figure. */
+  avatarUri?: string | null;
 }) {
   return (
     <Button onPress={onPress} modifiers={[...buttonRow(), accessibilityLabel(name)]}>
@@ -256,11 +270,27 @@ export function ProfileCardRow({
           background(ROW_BG),
         ]}
       >
-        <Image
-          systemName={'person.crop.circle.fill' as never}
-          size={54}
-          color={SECONDARY}
-        />
+        {avatarUri ? (
+          // The card drew the grey figure for everyone, picture or not (David's
+          // own account, Oct 7 2026). The picture is the app's Avatar, hosted
+          // inside the native row; touches go through it to the button.
+          <RNHostView matchContents>
+            <View style={profileAvatarStyle} pointerEvents="none">
+              <Avatar
+                uri={avatarUri}
+                size="lg"
+                style={profileAvatarStyle}
+                fallbackText={name}
+              />
+            </View>
+          </RNHostView>
+        ) : (
+          <Image
+            systemName={'person.crop.circle.fill' as never}
+            size={PROFILE_AVATAR}
+            color={SECONDARY}
+          />
+        )}
         <VStack alignment="leading" spacing={2}>
           <Text
             modifiers={[font({ size: 20, weight: 'semibold' }), foregroundStyle(INK)]}

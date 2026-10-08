@@ -197,11 +197,16 @@
     "strike": "Strikethrough",
     "code": "Code",
     "camera": "Camera",
-    "cameraHint": "Hold to record a video note"
+    "cameraHint": "Hold to record a video note",
+    "caption": "Add a comment…",
+    "attachments_one": "1 attachment",
+    "attachments_other": "{{count}} attachments",
+    "removeAttachment": "Remove attachment",
+    "trayFull": "That's the most you can attach at once."
   },
   "attachMenu": {
     "camera": "Camera",
-    "photos": "Photos",
+    "photos": "Gallery",
     "videoNote": "Video note",
     "voice": "Voice note",
     "file": "File",

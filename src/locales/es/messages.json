@@ -197,11 +197,16 @@
     "strike": "Tachado",
     "code": "Código",
     "camera": "Cámara",
-    "cameraHint": "Mantén pulsado para grabar una nota de video"
+    "cameraHint": "Mantén pulsado para grabar una nota de video",
+    "caption": "Añade un comentario…",
+    "attachments_one": "1 adjunto",
+    "attachments_other": "{{count}} adjuntos",
+    "removeAttachment": "Quitar adjunto",
+    "trayFull": "Es el máximo que puedes adjuntar a la vez."
   },
   "attachMenu": {
     "camera": "Cámara",
-    "photos": "Fotos",
+    "photos": "Galería",
     "videoNote": "Nota de video",
     "voice": "Nota de voz",
     "file": "Archivo",

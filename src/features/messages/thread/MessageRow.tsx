@@ -474,6 +474,19 @@ function MessageRowInner({
 
   const isMedia = isMediaContentType(message.contentType);
   const isVisual = isVisualContentType(message.contentType);
+  // The line typed with a photo or a video, kept in the metadata (the text
+  // field holds the file's address for media). WhatsApp shows it inside the
+  // same bubble, under the picture (David, Oct 8 2026).
+  const captionText =
+    isMedia && typeof message.metadata?.caption === 'string'
+      ? message.metadata.caption
+      : '';
+  const hasCaption = captionText.trim().length > 0;
+  // What the bubble renders as words: the message for a text bubble, the
+  // caption for a media bubble. For media, `message.text` is the url, never
+  // body text.
+  const bodyText = isMedia ? captionText : (message.text ?? '');
+  const hasBodyText = isMedia ? hasCaption : !!message.text;
   // WhatsApp and Telegram hang a video note as a bare circle: no bubble, no
   // tail, no colour behind it. Only the time rides on its lower edge.
   const isVideoNote = message.contentType === 'video_note';
@@ -481,8 +494,10 @@ function MessageRowInner({
   // does it: no frame of colour around it, just the rounded picture. A reply
   // keeps its bubble, since the quote above the picture needs the ground.
   // (`message.text` carries the media url for these, never a caption.)
+  // A caption gives the picture its bubble back: the line sits in the colour
+  // under the photo, so the frame returns and the photo is no longer bare.
   const isBareVisual =
-    isVisual && (!message.replyToId || message.replyToId === hideQuoteFor);
+    isVisual && !hasCaption && (!message.replyToId || message.replyToId === hideQuoteFor);
   // A shared post keeps its bubble, but the cover has to reach the bubble's
   // own edges: the padding moves inside the card.
   const isPostCard = message.contentType === 'post';
@@ -500,7 +515,9 @@ function MessageRowInner({
 
   // The time and ticks: over a picture they sit on glass (white), elsewhere
   // they take the bubble's own ink.
-  const onGlass = isVisual && !isVideoNote;
+  // With a caption the time moves off the picture and onto the end of the
+  // caption line, the way a text bubble carries it.
+  const onGlass = isVisual && !isVideoNote && !hasCaption;
   // A playing video shows the system scrubber, whose time left sits where the
   // time of the message goes: the message's time steps aside until it ends.
   const videoControlsUp = useVideoControls(
@@ -577,6 +594,10 @@ function MessageRowInner({
       style={[
         styles.bubble,
         isVisual && styles.bubbleVisual,
+        // A captioned photo bleeds to the bubble edge (no frame): drop the
+        // padding bubbleVisual adds, the picture fills and the caption sits
+        // below on the colour.
+        hasCaption && isVisual && styles.bubbleCaptioned,
         isBareVisual && styles.bubbleBare,
         isPostCard && styles.bubblePost,
       ]}
@@ -653,36 +674,55 @@ function MessageRowInner({
           </View>
         </View>
       ) : null}
-      {renderMedia?.(message, isOwn || senderIsCreator)}
-      {message.text && !isMedia ? (
-        <RNText
-          style={[styles.text, (isOwn || senderIsCreator) && styles.textOwn]}
-          maxFontSizeMultiplier={1.2}
-          selectable={false}
+      {hasCaption && isVisual ? (
+        // Round only the top, to the bubble's own top corners, and clip the
+        // square picture to it. The bottom stays square where it meets the
+        // caption on the bubble colour.
+        <View
+          style={[
+            styles.captionMediaClip,
+            {
+              borderTopLeftRadius: corners.topLeft,
+              borderTopRightRadius: corners.topRight,
+            },
+          ]}
         >
-          {hasMarkdown(message.text)
-            ? parseMarkdown(message.text).map((span, i) => (
-                <RNText
-                  key={i}
-                  style={[
-                    span.bold && styles.spanBold,
-                    span.italic && styles.spanItalic,
-                    span.strike && styles.spanStrike,
-                    span.code && styles.spanCode,
-                    span.code && (isOwn || senderIsCreator) && styles.spanCodeOwn,
-                  ]}
-                >
-                  {span.text}
-                </RNText>
-              ))
-            : message.text}
-          {/* Invisible copy of the meta so the last line reserves its width:
+          {renderMedia?.(message, isOwn || senderIsCreator)}
+        </View>
+      ) : (
+        renderMedia?.(message, isOwn || senderIsCreator)
+      )}
+      {hasBodyText ? (
+        <View style={hasCaption ? styles.captionWrap : undefined}>
+          <RNText
+            style={[styles.text, (isOwn || senderIsCreator) && styles.textOwn]}
+            maxFontSizeMultiplier={1.2}
+            selectable={false}
+          >
+            {hasMarkdown(bodyText)
+              ? parseMarkdown(bodyText).map((span, i) => (
+                  <RNText
+                    key={i}
+                    style={[
+                      span.bold && styles.spanBold,
+                      span.italic && styles.spanItalic,
+                      span.strike && styles.spanStrike,
+                      span.code && styles.spanCode,
+                      span.code && (isOwn || senderIsCreator) && styles.spanCodeOwn,
+                    ]}
+                  >
+                    {span.text}
+                  </RNText>
+                ))
+              : bodyText}
+            {/* Invisible copy of the meta so the last line reserves its width:
               the time floats into that gap when it fits, or the spacer wraps
               and the time takes the new line (WhatsApp and Telegram). */}
-          <RNText style={styles.metaSpacer} maxFontSizeMultiplier={1.0}>
-            {metaSpacer}
+            <RNText style={styles.metaSpacer} maxFontSizeMultiplier={1.0}>
+              {metaSpacer}
+            </RNText>
           </RNText>
-        </RNText>
+        </View>
       ) : null}
       {/* Over a picture the time rides on liquid glass in white; on a
           bubble it keeps the bubble's own colour. */}
@@ -694,7 +734,7 @@ function MessageRowInner({
         <View
           style={[
             styles.meta,
-            message.text && !isMedia ? styles.metaFloating : null,
+            hasBodyText ? styles.metaFloating : null,
             isVideoNote ? styles.metaUnderCircle : null,
             message.contentType === 'audio' ? styles.metaCorner : null,
             isPostCard ? styles.metaPost : null,
@@ -1273,6 +1313,19 @@ const styles = StyleSheet.create({
   // time needs its own, or it touches the edge of the bubble.
   metaPost: { marginRight: 12 },
   bubbleVisual: { paddingHorizontal: 3, paddingTop: 3, paddingBottom: 3, minWidth: 0 },
+  // A captioned photo: no frame around the picture (it bleeds to the bubble
+  // edges), the colour shows only under the caption.
+  bubbleCaptioned: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, minWidth: 0 },
+  // Rounds the picture's top to the bubble's top corners and clips it; the
+  // square bottom meets the caption.
+  captionMediaClip: {
+    overflow: 'hidden',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  // The caption under a photo or a video sits on the bubble colour, with its
+  // own side padding and room above and below.
+  captionWrap: { paddingHorizontal: 10, paddingTop: 5, paddingBottom: 6 },
   // A video note is only the circle: no padding, no background, no shape.
   bubbleBare: { padding: 0, minWidth: 0, backgroundColor: 'transparent' },
   // A post card brings its own padding so its cover can bleed to the edge.

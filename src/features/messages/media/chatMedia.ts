@@ -3,6 +3,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { mediaService } from '@/lib/media/mediaService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { MessageContentType, MessageMetadata } from '../types';
+import type { OutgoingMedia } from './outgoingMedia';
 
 /**
  * What a chat will carry. Generous, like WhatsApp and Telegram, but bounded,
@@ -209,19 +210,10 @@ export async function prepareChatMedia(
  * Something the user picked or recorded and wants to send. `uri` is local
  * until `uploadChatMedia` returns the hosted url; a contact has no file.
  */
-export interface OutgoingMedia {
-  kind: Exclude<MessageContentType, 'text' | 'location'>;
-  uri?: string;
-  mime?: string;
-  fileName?: string;
-  bytes?: number;
-  width?: number;
-  height?: number;
-  durationMs?: number;
-  /** 0 to 1 bars, voice notes only. */
-  waveform?: number[];
-  contact?: { name: string; phone?: string; email?: string };
-}
+// The outgoing media shape lives in its own native-free file so the pure
+// attachment logic can import it without pulling in this upload pipeline.
+// Re-exported here so the many `from './chatMedia'` imports keep working.
+export type { OutgoingMedia } from './outgoingMedia';
 
 export const MEDIA_CONTENT_TYPES: MessageContentType[] = [
   'audio',

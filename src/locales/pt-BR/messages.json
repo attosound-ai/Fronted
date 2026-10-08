@@ -197,11 +197,16 @@
     "strike": "Tachado",
     "code": "Código",
     "camera": "Câmera",
-    "cameraHint": "Segure para gravar um vídeo curto"
+    "cameraHint": "Segure para gravar um vídeo curto",
+    "caption": "Adicione um comentário…",
+    "attachments_one": "1 anexo",
+    "attachments_other": "{{count}} anexos",
+    "removeAttachment": "Remover anexo",
+    "trayFull": "É o máximo que você pode anexar de uma vez."
   },
   "attachMenu": {
     "camera": "Câmera",
-    "photos": "Fotos",
+    "photos": "Galeria",
     "videoNote": "Vídeo curto",
     "voice": "Mensagem de voz",
     "file": "Arquivo",

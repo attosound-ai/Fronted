@@ -36,6 +36,11 @@ interface MediaMessageProps {
   isOwn: boolean;
   /** Sends a media message that failed again; the row carries the gesture. */
   onRetry?: (messageId: string) => void;
+  /**
+   * Opens a photo full screen inside the app. Without it a tap used to open
+   * the Cloudinary address in the browser (David, Oct 8 2026).
+   */
+  onOpenImage?: (url: string) => void;
 }
 
 const RING = 44;
@@ -126,10 +131,14 @@ function UploadOverlay({
  * The body of a non text message: photo, video, round video note, voice
  * note, file or contact. Text messages never reach this component.
  */
-function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
+function MediaMessageInner({ message, isOwn, onRetry, onOpenImage }: MediaMessageProps) {
   const { t } = useTranslation('messages');
   const url = message.text;
   const meta = message.metadata ?? {};
+  // With a caption the photo or video sits flush in the bubble and the row
+  // rounds only its top, so here its own corners go square (WhatsApp: no frame
+  // around the picture, the colour is only under the text).
+  const hasCaption = typeof meta.caption === 'string' && meta.caption.trim().length > 0;
 
   switch (message.contentType) {
     case 'image': {
@@ -141,14 +150,22 @@ function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
         <Pressable
           onPress={() => {
             analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_OPENED, { kind: 'image' });
-            void Linking.openURL(url);
+            // A photo opens full screen in the app (pinch and swipe to close),
+            // the way Telegram and WhatsApp do it. The browser fallback is only
+            // for a row that reaches here without the handler.
+            if (onOpenImage) onOpenImage(url);
+            else void Linking.openURL(url);
           }}
           accessibilityRole="imagebutton"
           accessibilityLabel={t('media.previewImage')}
         >
           <Image
             source={{ uri: url }}
-            style={[styles.image, { height: Math.round(MEDIA_WIDTH / ratio) }]}
+            style={[
+              styles.image,
+              hasCaption && styles.mediaSquare,
+              { height: Math.round(MEDIA_WIDTH / ratio) },
+            ]}
             resizeMode="cover"
           />
           <UploadOverlay message={message} onRetry={onRetry} />
@@ -157,7 +174,7 @@ function MediaMessageInner({ message, isOwn, onRetry }: MediaMessageProps) {
     }
     case 'video':
       return (
-        <View style={styles.video}>
+        <View style={[styles.video, hasCaption && styles.mediaSquare]}>
           <VideoMessagePlayer
             videoUrl={message.video ?? url}
             aspect={aspectOf(meta.width, meta.height)}
@@ -376,6 +393,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  // Captioned: the picture's own corners go square so the bubble can round
+  // only the top around it and keep the colour under the text.
+  mediaSquare: { borderRadius: 0 },
   // No fixed width: the player takes the shape of the video (a vertical clip
   // is narrower than the widest bubble).
   video: { borderRadius: 14, overflow: 'hidden', alignSelf: 'flex-start' },

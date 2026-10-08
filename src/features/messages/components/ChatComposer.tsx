@@ -25,7 +25,9 @@ import {
 } from 'react';
 import {
   Alert,
+  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text as RNText,
   TextInput,
@@ -43,12 +45,16 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   Camera,
+  FileText,
   Maximize2,
   Mic,
+  Play,
   Plus,
   SendHorizontal,
   Smile,
   Trash2,
+  UserRound,
+  X,
 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -60,6 +66,7 @@ import { useComposerExpandStore } from '../stores/composerExpandStore';
 import { useAttachSheet } from '../hooks/useAttachSheet';
 import { useVoiceNote } from '../media/useVoiceNote';
 import type { OutgoingMedia } from '../media/chatMedia';
+import type { PendingAttachment } from '../media/pendingAttachments';
 import { TAPBACK_EMOJI } from '../thread/TapbackOverlay';
 import { AttachMenuButton, type AttachAction } from './AttachMenu';
 
@@ -93,6 +100,12 @@ interface ChatComposerProps {
   onAttachPick?: (action: AttachAction) => void;
   /** A recorded voice note ready to send. */
   onSendMedia?: (media: OutgoingMedia) => void;
+  /** Attachments staged and waiting for a caption, shown as a tray. */
+  pendingAttachments?: PendingAttachment[];
+  /** Take one staged attachment back out of the tray. */
+  onRemoveAttachment?: (id: string) => void;
+  /** Send every staged attachment with the field's text as the caption. */
+  onSendAttachments?: (caption: string) => void;
   /** Hold the send button: the screen opens the effect picker with this text. */
   onSendWithEffect?: (text: string) => void;
   /** The camera button beside the mic (WhatsApp keeps one there). */
@@ -134,6 +147,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       onAttachPress,
       onAttachPick,
       onSendMedia,
+      pendingAttachments,
+      onRemoveAttachment,
+      onSendAttachments,
       onSendWithEffect,
       onCameraPress,
       onVideoNotePress,
@@ -144,6 +160,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const { t } = useTranslation('messages');
     const inputRef = useRef<TextInput>(null);
     const [hasText, setHasText] = useState(() => draftRef.current.trim().length > 0);
+    // With attachments waiting, the send button shows even on an empty field
+    // (a photo can go with no caption) and the mic and camera step aside.
+    const pendingCount = pendingAttachments?.length ?? 0;
+    const hasPending = pendingCount > 0;
+    const canSend = hasText || hasPending;
     // Two or more lines: Telegram shows an expand button at the top right of
     // the field that opens the full screen editor.
     const [tall, setTall] = useState(false);
@@ -237,13 +258,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
     // Send grows from a dot inside the capsule; the mic slides out to the
     // right and fades. Both driven by one progress value, on the UI thread.
-    const sendIn = useSharedValue(hasText ? 1 : 0);
+    const sendIn = useSharedValue(canSend ? 1 : 0);
     useEffect(() => {
-      sendIn.value = withTiming(hasText ? 1 : 0, {
-        duration: hasText ? SEND_IN_MS : SEND_OUT_MS,
-        easing: hasText ? EASE_OUT : EASE_IN,
+      sendIn.value = withTiming(canSend ? 1 : 0, {
+        duration: canSend ? SEND_IN_MS : SEND_OUT_MS,
+        easing: canSend ? EASE_OUT : EASE_IN,
       });
-    }, [hasText, sendIn]);
+    }, [canSend, sendIn]);
     const sendStyle = useAnimatedStyle(() => ({
       transform: [{ scale: 0.1 + 0.9 * sendIn.value }],
       opacity: sendIn.value,
@@ -276,6 +297,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
     const handleSend = useCallback(() => {
       const content = draftRef.current.trim();
+      // With attachments staged, send goes to the tray: the pictures leave
+      // with this text as the caption on the last one. An empty caption is
+      // fine (a photo can go on its own).
+      if (hasPending && onSendAttachments) {
+        haptic('light');
+        onSendAttachments(content);
+        clear();
+        return;
+      }
       if (!content) {
         // The button is visually idle, but a tap here is a signal that the
         // user sees text the app does not (the old desync symptom).
@@ -287,7 +317,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
       haptic('light');
       onSend(content);
       clear();
-    }, [clear, conversationId, draftRef, onSend]);
+    }, [clear, conversationId, draftRef, onSend, hasPending, onSendAttachments]);
 
     const { openAttach } = useAttachSheet(conversationId);
 
@@ -404,6 +434,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
 
           <GlassSurface radius={24} style={styles.capsule}>
             {preview}
+            {hasPending ? (
+              <AttachmentTray
+                items={pendingAttachments ?? []}
+                onRemove={onRemoveAttachment}
+              />
+            ) : null}
             {voice.recording ? (
               <Animated.View entering={FadeIn.duration(120)} style={styles.recordingRow}>
                 <View style={[styles.recDot, { opacity: 0.5 + 0.5 * voice.level }]} />
@@ -433,7 +469,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   ref={inputRef}
                   defaultValue={draftRef.current}
                   onChangeText={handleChangeText}
-                  placeholder={placeholder}
+                  placeholder={hasPending ? t('composer.caption') : placeholder}
                   placeholderTextColor={COLORS.gray[500]}
                   multiline
                   style={[styles.input, tall && styles.inputTall]}
@@ -474,11 +510,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
                   strokeWidth={2}
                 />
               </Pressable>
-              {hasText ? (
+              {canSend ? (
                 <Animated.View style={[styles.sendSlot, sendStyle]}>
                   <Pressable
                     onPress={handleSend}
                     onLongPress={() => {
+                      // A screen effect is for a plain text message, not for a
+                      // batch of attachments: hold does nothing while the tray
+                      // has something in it.
+                      if (hasPending) return;
                       const content = draftRef.current.trim();
                       if (!content || !onSendWithEffect) return;
                       void haptic('medium');
@@ -500,7 +540,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             </View>
           </GlassSurface>
 
-          {!hasText ? (
+          {!canSend ? (
             <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
               <GlassSurface radius={22} style={styles.roundButton}>
                 <Pressable
@@ -524,7 +564,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
             </Animated.View>
           ) : null}
 
-          {!hasText ? (
+          {!canSend ? (
             <Animated.View style={micStyle} exiting={FadeOut.duration(SEND_IN_MS)}>
               <Pressable
                 onPressIn={onMicPressIn}
@@ -554,8 +594,128 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
   }
 );
 
+/**
+ * The strip of staged attachments above the field, the way iMessage and
+ * WhatsApp show what is about to go: a photo or a video as a thumbnail, a file
+ * or a contact as a labelled chip, each with an x to take it back out. It
+ * scrolls when more than a few are waiting.
+ */
+function AttachmentTray({
+  items,
+  onRemove,
+}: {
+  items: PendingAttachment[];
+  onRemove?: (id: string) => void;
+}) {
+  const { t } = useTranslation('messages');
+  return (
+    <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.tray}
+      >
+        {items.map((item) => {
+          const { kind, uri, fileName, contact } = item.media;
+          const isVisual = kind === 'image' || kind === 'video';
+          return (
+            <View key={item.id} style={styles.trayItem}>
+              {isVisual && uri ? (
+                <View style={styles.trayThumb}>
+                  <Image source={{ uri }} style={styles.trayThumbImage} />
+                  {kind === 'video' ? (
+                    <View style={styles.trayPlay}>
+                      <Play size={16} color={COLORS.white} fill={COLORS.white} />
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={[styles.trayThumb, styles.trayChip]}>
+                  {kind === 'contact' ? (
+                    <UserRound size={22} color={COLORS.white} strokeWidth={2} />
+                  ) : (
+                    <FileText size={22} color={COLORS.white} strokeWidth={2} />
+                  )}
+                  <RNText
+                    style={styles.trayChipLabel}
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={1.0}
+                  >
+                    {kind === 'contact'
+                      ? (contact?.name ?? t('media.previewContact'))
+                      : (fileName ?? t('media.previewFile'))}
+                  </RNText>
+                </View>
+              )}
+              <Pressable
+                onPress={() => {
+                  void haptic('selection');
+                  onRemove?.(item.id);
+                }}
+                hitSlop={8}
+                style={styles.trayRemove}
+                accessibilityRole="button"
+                accessibilityLabel={t('composer.removeAttachment')}
+              >
+                <X size={13} color={COLORS.white} strokeWidth={2.5} />
+              </Pressable>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   column: { gap: 8 },
+  tray: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  trayItem: { width: 62, height: 62 },
+  trayThumb: {
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  trayThumbImage: { width: '100%', height: '100%' },
+  trayPlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trayChip: { alignItems: 'center', justifyContent: 'center', padding: 5, gap: 2 },
+  trayChipLabel: {
+    color: COLORS.white,
+    fontSize: 9,
+    lineHeight: 11,
+    fontFamily: 'Archivo_400Regular',
+    textAlign: 'center',
+  },
+  trayRemove: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',

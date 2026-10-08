@@ -64,6 +64,7 @@ import { ChatWallpaperLayer } from './ChatWallpaperLayer';
 import { useConversationPrefsStore, draftKey } from '../stores/conversationPrefsStore';
 import { draftToStore } from '../stores/conversationPrefsModel';
 import { WallpaperPickerSheet } from './WallpaperPickerSheet';
+import { FullscreenImageViewer } from '@/components/ui/FullscreenImageViewer';
 import { type AttachAction } from './AttachMenu';
 import { TopFadeBlur } from './TopFadeBlur';
 import { PinnedBar } from './PinnedBar';
@@ -93,6 +94,12 @@ import {
   uploadChatMedia,
   type OutgoingMedia,
 } from '../media/chatMedia';
+import {
+  addPending,
+  planAttachmentSend,
+  removePending,
+  type PendingAttachment,
+} from '../media/pendingAttachments';
 import { useUploadProgress } from '../media/uploadProgress';
 import { reconcileSentRow } from '../utils/sentRow';
 import * as ImagePicker from 'expo-image-picker';
@@ -155,6 +162,11 @@ function mediaLimitMessage(
       return t('mediaLimits.generic');
   }
 }
+
+// A counter so two attachments sent in the same millisecond (a whole album at
+// once) never share a temporary id, which would collide in the cache and the
+// list keys.
+let outgoingMediaSeq = 0;
 
 export function ChatScreen({
   conversationId,
@@ -297,6 +309,8 @@ export function ChatScreen({
     [globalWallpaperId, perConversationWallpaper, conversationId]
   );
   const [wallpaperPickerVisible, setWallpaperPickerVisible] = useState(false);
+  // A tapped photo opens here, full screen in the app, instead of the browser.
+  const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
   const activeWallpaper = useMemo(() => {
     if (selectedWallpaperId === CHAT_WALLPAPER_NONE_ID) return null;
     // A choice that points at a wallpaper the admin retired falls back to
@@ -605,7 +619,29 @@ export function ChatScreen({
 
   // Media that could not be sent, by the temporary id of its row, so the row
   // can send it again with one tap.
-  const failedMedia = useRef(new Map<string, OutgoingMedia>());
+  // Media that could not be sent, kept so the row can try again with its
+  // caption intact.
+  const failedMedia = useRef(
+    new Map<string, { media: OutgoingMedia; caption?: string }>()
+  );
+
+  // Attachments staged in the composer, waiting for a caption and a send, the
+  // way iMessage and WhatsApp hold a picture before it goes (David, Oct 8
+  // 2026: picking a photo used to send it at once).
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const stageAttachments = useCallback(
+    (medias: OutgoingMedia[]) => {
+      setPending((current) => {
+        const { next, overflow } = addPending(current, medias);
+        if (overflow) Alert.alert(t('composer.trayFull'));
+        return next;
+      });
+    },
+    [t]
+  );
+  const removeAttachment = useCallback((id: string) => {
+    setPending((current) => removePending(current, id));
+  }, []);
   // A row that only exists on this phone (still uploading, or failed) is taken
   // out here, never through the server: asking the server to delete
   // "temp-1791302607964" answered 500 (client, Oct 6 2026).
@@ -880,9 +916,10 @@ export function ChatScreen({
    * hosted copy. Failures keep the row with status failed.
    */
   const handleSendMedia = useCallback(
-    async (media: OutgoingMedia) => {
-      const tempId = `temp-${Date.now()}`;
+    async (media: OutgoingMedia, caption?: string) => {
+      const tempId = `temp-${Date.now()}-${(outgoingMediaSeq += 1)}`;
       const chatKey = QUERY_KEYS.MESSAGES.CHAT(conversationId);
+      const captionTrimmed = caption?.trim() ? caption.trim() : undefined;
       const localContent =
         media.kind === 'contact'
           ? JSON.stringify(media.contact ?? {})
@@ -895,6 +932,8 @@ export function ChatScreen({
         fileName: media.fileName,
         bytes: media.bytes,
         contact: media.contact,
+        // The line typed with the picture, shown under it in the same bubble.
+        caption: captionTrimmed,
       };
       sentMessageIds.add(tempId);
       setJustSentId(tempId);
@@ -988,9 +1027,14 @@ export function ChatScreen({
         );
       threadRef.current?.scrollToBottom(true);
       try {
-        const { content, metadata } = await uploadChatMedia(media, conversationId, (p) =>
+        const uploaded = await uploadChatMedia(media, conversationId, (p) =>
           useUploadProgress.getState().set(tempId, p)
         );
+        const content = uploaded.content;
+        // The caption rides in the metadata; the content stays the file's url.
+        const metadata = captionTrimmed
+          ? { ...uploaded.metadata, caption: captionTrimmed }
+          : uploaded.metadata;
         const sent = await messageService.sendMessage({
           conversationId,
           content,
@@ -1025,6 +1069,7 @@ export function ChatScreen({
           kind: media.kind,
           duration_ms: media.durationMs ?? null,
           bytes: metadata.bytes ?? null,
+          has_caption: !!captionTrimmed,
         });
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.MESSAGES.CONVERSATIONS() });
       } catch (error) {
@@ -1052,7 +1097,7 @@ export function ChatScreen({
         useUploadProgress.getState().clear(tempId);
         // Kept so the row can send it again: a failed video used to leave a red
         // mark and nothing to do about it.
-        failedMedia.current.set(tempId, media);
+        failedMedia.current.set(tempId, { media, caption: captionTrimmed });
         patchTemp({ status: 'failed' });
         analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_MESSAGE_FAILED, {
           conversation_id: conversationId,
@@ -1066,16 +1111,43 @@ export function ChatScreen({
 
   const retryFailedMedia = useCallback(
     (id: string) => {
-      const media = failedMedia.current.get(id);
-      if (!media) return;
+      const entry = failedMedia.current.get(id);
+      if (!entry) return;
       analytics.capture(ANALYTICS_EVENTS.MESSAGES.MEDIA_RETRY, {
         conversation_id: conversationId,
-        kind: media.kind,
+        kind: entry.media.kind,
       });
       removeLocalRow(id);
-      void handleSendMedia(media);
+      void handleSendMedia(entry.media, entry.caption);
     },
     [conversationId, removeLocalRow, handleSendMedia]
+  );
+
+  // Send everything staged in the composer: the pictures in order, the typed
+  // line on the last one (planAttachmentSend). The tray and the field clear
+  // at once so the user sees it leave.
+  const handleSendAttachments = useCallback(
+    (caption: string) => {
+      const plan = planAttachmentSend(pending, caption);
+      if (plan.length === 0) return;
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.ATTACH_MENU_PICKED, {
+        conversation_id: conversationId,
+        action: 'send_tray',
+        count: plan.length,
+        has_caption: plan.some((p) => !!p.caption),
+      });
+      setPending([]);
+      threadRef.current?.scrollToBottom(true);
+      // One after another, not all at once: the server stamps each message as
+      // it arrives and the list orders by that time, so a parallel send would
+      // let the pictures land out of order and the caption (on the last one)
+      // stop being last. handleSendMedia never rejects (it marks the row
+      // failed instead), so the run always finishes.
+      void (async () => {
+        for (const item of plan) await handleSendMedia(item.media, item.caption);
+      })();
+    },
+    [pending, conversationId, handleSendMedia]
   );
 
   // The camera is our own screen (ChatGPT's chrome, WhatsApp's round video
@@ -1099,8 +1171,14 @@ export function ChatScreen({
   useEffect(() => {
     if (!cameraResult || cameraResult.conversationId !== conversationId) return;
     useCameraStore.getState().consume();
-    void handleSendMedia(cameraResult.media);
-  }, [cameraResult, conversationId, handleSendMedia]);
+    // A round video note is a quick capture and release, like a voice note:
+    // it goes straight. A camera photo joins the tray to get a caption.
+    if (cameraResult.media.kind === 'video_note') {
+      void handleSendMedia(cameraResult.media);
+    } else {
+      stageAttachments([cameraResult.media]);
+    }
+  }, [cameraResult, conversationId, handleSendMedia, stageAttachments]);
 
   const handleAttachPick = useCallback(
     async (action: AttachAction) => {
@@ -1134,11 +1212,13 @@ export function ChatScreen({
             selectionLimit: 5,
           });
           if (!res.canceled) {
-            for (const asset of res.assets ?? []) {
-              void handleSendMedia(
+            // Into the tray, not straight out: the user writes a line and
+            // sends them together.
+            stageAttachments(
+              (res.assets ?? []).map((asset) =>
                 fromAsset(asset, asset.type === 'video' ? 'video' : 'image')
-              );
-            }
+              )
+            );
           }
         } else if (action === 'video_note') {
           openCamera('video_note');
@@ -1151,29 +1231,33 @@ export function ChatScreen({
           });
           const asset = res.assets?.[0];
           if (!res.canceled && asset) {
-            void handleSendMedia({
-              kind: 'file',
-              uri: asset.uri,
-              mime: asset.mimeType,
-              fileName: asset.name,
-              bytes: asset.size,
-            });
+            stageAttachments([
+              {
+                kind: 'file',
+                uri: asset.uri,
+                mime: asset.mimeType,
+                fileName: asset.name,
+                bytes: asset.size,
+              },
+            ]);
           }
         } else if (action === 'contact') {
           const perm = await Contacts.requestPermissionsAsync();
           if (!perm.granted) return Alert.alert(t('media.permissionContacts'));
           const picked = await Contacts.presentContactPickerAsync();
           if (picked) {
-            void handleSendMedia({
-              kind: 'contact',
-              contact: {
-                name:
-                  picked.name ??
-                  [picked.firstName, picked.lastName].filter(Boolean).join(' '),
-                phone: picked.phoneNumbers?.[0]?.number ?? undefined,
-                email: picked.emails?.[0]?.email ?? undefined,
+            stageAttachments([
+              {
+                kind: 'contact',
+                contact: {
+                  name:
+                    picked.name ??
+                    [picked.firstName, picked.lastName].filter(Boolean).join(' '),
+                  phone: picked.phoneNumbers?.[0]?.number ?? undefined,
+                  email: picked.emails?.[0]?.email ?? undefined,
+                },
               },
-            });
+            ]);
           }
         } else {
           Alert.alert(t('composer.comingSoonTitle'), t('composer.comingSoonBody'));
@@ -1187,7 +1271,7 @@ export function ChatScreen({
         });
       }
     },
-    [conversationId, handleSendMedia, openCamera, t]
+    [conversationId, stageAttachments, openCamera, t]
   );
 
   // Reply and edit previews sit inside the composer's glass capsule (Telegram).
@@ -1256,6 +1340,9 @@ export function ChatScreen({
         }}
         onAttachPick={(action) => void handleAttachPick(action)}
         onSendMedia={handleSendMedia}
+        pendingAttachments={pending}
+        onRemoveAttachment={removeAttachment}
+        onSendAttachments={handleSendAttachments}
         onSendWithEffect={(text) => setEffectDraft(text)}
         onCameraPress={() => void handleAttachPick('camera')}
         onVideoNotePress={() => void handleAttachPick('video_note')}
@@ -1469,7 +1556,14 @@ export function ChatScreen({
     // sides, so the media's own ink follows the bubble, not who sent it.
     (msg: AttoMessage, onLight: boolean) => {
       if (!msg.contentType || msg.contentType === 'text') return null;
-      return <MediaMessage message={msg} isOwn={onLight} onRetry={retryFailedMedia} />;
+      return (
+        <MediaMessage
+          message={msg}
+          isOwn={onLight}
+          onRetry={retryFailedMedia}
+          onOpenImage={setImageViewerUrl}
+        />
+      );
     },
     [retryFailedMedia]
   );
@@ -1649,6 +1743,13 @@ export function ChatScreen({
       />
       {/* Above the thread and the chrome: an effect covers the screen. */}
       <ScreenEffectOverlay effect={screenEffect} onDone={clearScreenEffect} />
+
+      {/* A photo full screen, pinch to zoom and swipe to close (Telegram). */}
+      <FullscreenImageViewer
+        uri={imageViewerUrl ?? ''}
+        visible={!!imageViewerUrl}
+        onClose={() => setImageViewerUrl(null)}
+      />
     </View>
   );
 }

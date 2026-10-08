@@ -671,7 +671,11 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       const dead = accounts.find((a) => Number(a.user.id) === Number(deadId));
       const fallbackId = Number(fallback.user.id);
 
-      await applyAccountSwitchCore(fallbackId, fallback.user, fallback.tokens, null);
+      // With its screens: the account the phone falls back on shows what it
+      // had, at once, instead of loading everything again.
+      await applyAccountSwitchCore(fallbackId, fallback.user, fallback.tokens, deadId, {
+        carryScreens: true,
+      });
       const { useSubscriptionStore } = await import('./subscriptionStore');
       useSubscriptionStore.getState().adoptCached(fallbackId);
       void useSubscriptionStore.getState().fetchSubscription();

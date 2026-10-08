@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  accessIsExpired,
   pickFallbackAccount,
   REFRESH_MARGIN_MS,
   sessionIsUsable,
@@ -14,8 +15,7 @@ const DAY = 24 * 60 * MINUTE;
 
 /** A token shaped like the server's: the user id in `sub`, the end in `exp` (seconds). */
 function jwt(sub: string | number, expMs: number): string {
-  const part = (o: object) =>
-    Buffer.from(JSON.stringify(o)).toString('base64url');
+  const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
   return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: String(sub), exp: Math.floor(expMs / 1000) })}.firma`;
 }
 
@@ -40,8 +40,14 @@ test('a session older than a week is asked for again', () => {
 });
 
 test('a refresh token about to end is not trusted', () => {
-  assert.equal(switchRoute(153, session(153, MINUTE, REFRESH_MARGIN_MS - 1000), NOW), 'link');
-  assert.equal(switchRoute(153, session(153, MINUTE, REFRESH_MARGIN_MS + 1000), NOW), 'stored');
+  assert.equal(
+    switchRoute(153, session(153, MINUTE, REFRESH_MARGIN_MS - 1000), NOW),
+    'link'
+  );
+  assert.equal(
+    switchRoute(153, session(153, MINUTE, REFRESH_MARGIN_MS + 1000), NOW),
+    'stored'
+  );
 });
 
 test('an account the phone holds no session for goes through the server', () => {
@@ -58,17 +64,28 @@ test('tokens that belong to another account are never used (Aug 1 2026)', () => 
   const alive = session(152, 14 * MINUTE, 7 * DAY);
   assert.equal(switchRoute(153, alive, NOW), 'link');
   assert.equal(
-    switchRoute(153, { accessToken: jwt(153, NOW + MINUTE), refreshToken: alive.refreshToken }, NOW),
+    switchRoute(
+      153,
+      { accessToken: jwt(153, NOW + MINUTE), refreshToken: alive.refreshToken },
+      NOW
+    ),
     'link'
   );
   assert.equal(
-    switchRoute(153, { accessToken: alive.accessToken, refreshToken: jwt(153, NOW + DAY) }, NOW),
+    switchRoute(
+      153,
+      { accessToken: alive.accessToken, refreshToken: jwt(153, NOW + DAY) },
+      NOW
+    ),
     'link'
   );
 });
 
 test('a token that cannot be read goes through the server', () => {
-  assert.equal(switchRoute(153, { accessToken: 'x.y.z', refreshToken: 'basura' }, NOW), 'link');
+  assert.equal(
+    switchRoute(153, { accessToken: 'x.y.z', refreshToken: 'basura' }, NOW),
+    'link'
+  );
   const noExp = `${Buffer.from('{}').toString('base64url')}.${Buffer.from('{"sub":"153"}').toString('base64url')}.f`;
   assert.equal(
     switchRoute(153, { accessToken: jwt(153, NOW + MINUTE), refreshToken: noExp }, NOW),
@@ -77,7 +94,10 @@ test('a token that cannot be read goes through the server', () => {
 });
 
 test('the id may arrive as text and still match', () => {
-  assert.equal(sessionIsUsable('153' as unknown as number, session(153, MINUTE, DAY), NOW), true);
+  assert.equal(
+    sessionIsUsable('153' as unknown as number, session(153, MINUTE, DAY), NOW),
+    true
+  );
 });
 
 // ── Where to land when the session in use dies ──────────────────────────────
@@ -104,4 +124,19 @@ test('accounts whose own session is dead are not a way out', () => {
   assert.equal(pickFallbackAccount([stale, creator], 153, 152, NOW), null);
   assert.equal(pickFallbackAccount([creator], 153, null, NOW), null);
   assert.equal(pickFallbackAccount([], 153, null, NOW), null);
+});
+
+// ── Is the access token still good right now ────────────────────────────────
+
+test('an access token past its end, or within five seconds of it, is expired', () => {
+  assert.equal(accessIsExpired(jwt(153, NOW - MINUTE), NOW), true);
+  assert.equal(accessIsExpired(jwt(153, NOW + 3000), NOW), true);
+  assert.equal(accessIsExpired(jwt(153, NOW + 6000), NOW), false);
+  assert.equal(accessIsExpired(jwt(153, NOW + 14 * MINUTE), NOW), false);
+});
+
+test('a token that is missing or cannot be read is left for the server to judge', () => {
+  assert.equal(accessIsExpired(null, NOW), false);
+  assert.equal(accessIsExpired('', NOW), false);
+  assert.equal(accessIsExpired('x.y.z', NOW), false);
 });

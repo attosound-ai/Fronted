@@ -6,6 +6,7 @@ import { authStorage } from '@/lib/auth/storage';
 import { getSessionEpoch, bumpSessionEpoch } from '@/lib/auth/sessionEpoch';
 import { getTokenUserId } from '@/lib/auth/jwt';
 import {
+  accessIsExpired,
   pickFallbackAccount,
   switchRoute,
   type SwitchRoute,
@@ -46,7 +47,7 @@ export interface AccountEntry {
 // all again (some 35 requests per switch). Two accounts is the usual case;
 // what was kept longer ago than the limit is not shown.
 const SCREENS_MAX_ACCOUNTS = 3;
-const SCREENS_MAX_AGE_MS = 10 * 60 * 1000;
+const SCREENS_MAX_AGE_MS = 30 * 60 * 1000;
 let screens: Recent<DehydratedState> = {};
 
 // One switch at a time: a second one asked for while the first is still
@@ -229,14 +230,31 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
   const syncAfterSwitch = (userId: number, route: SwitchRoute) => {
     const epoch = getSessionEpoch();
     const stillOurs = () => getSessionEpoch() === epoch;
+    // A stored session may come with an access token that already ran out.
+    // Requests renew it by themselves before they go out; the socket does
+    // not, and with the old token its join is refused (seen in the
+    // simulator: three "unauthorized" before the renewal landed). So the
+    // renewal is asked for here and the socket connects after it. It is the
+    // same single renewal the first request waits for, not a second one.
+    const entry = get().accounts.find((a) => Number(a.user.id) === Number(userId));
+    const renewed: Promise<unknown> = accessIsExpired(
+      entry?.tokens.accessToken,
+      Date.now()
+    )
+      ? import('./authStore')
+          .then(({ useAuthStore }) => useAuthStore.getState().refreshTokens())
+          .catch(() => null)
+      : Promise.resolve(null);
     void Promise.allSettled([
-      import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
-        if (!stillOurs()) return;
-        phoenixSocket.disconnect();
-        // The tokens are already the new account's, so connect() picks up the
-        // right JWT (auth derives the user from it).
-        phoenixSocket.connect();
-      }),
+      Promise.all([import('@/lib/api/phoenixSocket'), renewed]).then(
+        ([{ phoenixSocket }]) => {
+          if (!stillOurs()) return;
+          phoenixSocket.disconnect();
+          // The tokens are already the new account's, so connect() picks up the
+          // right JWT (auth derives the user from it).
+          phoenixSocket.connect();
+        }
+      ),
       Promise.all([
         import('@/features/messages/services/messageService'),
         import('@/features/messages/stores/chatStore'),

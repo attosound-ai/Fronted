@@ -35,6 +35,22 @@ function expiryMs(token: string): number | null {
 }
 
 /**
+ * True when the access token has run out, or is about to. The session is
+ * still good (its refresh token renews it); what cannot wait for a request
+ * to renew it, like the chat socket, renews it first. A token whose end
+ * cannot be read is left for the server to judge.
+ */
+export function accessIsExpired(
+  accessToken: string | null | undefined,
+  nowMs: number,
+  skewMs: number = 5000
+): boolean {
+  if (!accessToken) return false;
+  const end = expiryMs(accessToken);
+  return end !== null && end <= nowMs + skewMs;
+}
+
+/**
  * True when the stored session can be used as it is: both tokens are this
  * account's, and the refresh token has life left. A stored entry holding
  * another account's tokens (seen on Aug 1 2026) is never usable.

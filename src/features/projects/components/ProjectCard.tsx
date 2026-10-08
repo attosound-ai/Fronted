@@ -19,47 +19,55 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function formatDate(dateStr: string): string {
+/** "Oct 7" in English, "7 oct" in Spanish: the date follows the app's language. */
+function formatDate(dateStr: string, language: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(language || 'en-US', {
     month: 'short',
     day: 'numeric',
   });
 }
 
 export function ProjectCard({ project, onPress, onMore }: ProjectCardProps) {
-  const { t } = useTranslation('projects');
+  const { t, i18n } = useTranslation('projects');
+  // Two buttons side by side, never one inside the other: the row opens the
+  // project (a long press opens its options) and the dots open the options.
+  // Nested, the row was one accessibility element that hid the dots.
   return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={onPress}
-      onLongPress={onMore}
-      delayLongPress={350}
-      accessibilityRole="button"
-      accessibilityLabel={project.name}
-    >
-      <View style={styles.iconContainer}>
-        <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
-      </View>
-      <View style={styles.info}>
-        <Text variant="body" style={styles.name} numberOfLines={1}>
-          {project.name}
-        </Text>
-        <View style={styles.meta}>
-          <Text variant="caption" style={styles.metaText}>
-            {project.segmentCount}{' '}
-            {project.segmentCount !== 1 ? t('card.trackPlural') : t('card.trackSingular')}
-          </Text>
-          <View style={styles.dot} />
-          <Text variant="caption" style={styles.metaText}>
-            {formatDuration(project.totalDurationMs)}
-          </Text>
-          <View style={styles.dot} />
-          <Text variant="caption" style={styles.metaText}>
-            {formatDate(project.updatedAt)}
-          </Text>
+    <View style={styles.card}>
+      <Pressable
+        style={({ pressed }) => [styles.open, pressed && styles.cardPressed]}
+        onPress={onPress}
+        onLongPress={onMore}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityLabel={project.name}
+      >
+        <View style={styles.iconContainer}>
+          <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
         </View>
-      </View>
+        <View style={styles.info}>
+          <Text variant="body" style={styles.name} numberOfLines={1}>
+            {project.name}
+          </Text>
+          <View style={styles.meta}>
+            <Text variant="caption" style={styles.metaText}>
+              {project.segmentCount}{' '}
+              {project.segmentCount !== 1
+                ? t('card.trackPlural')
+                : t('card.trackSingular')}
+            </Text>
+            <View style={styles.dot} />
+            <Text variant="caption" style={styles.metaText}>
+              {formatDuration(project.totalDurationMs ?? 0)}
+            </Text>
+            <View style={styles.dot} />
+            <Text variant="caption" style={styles.metaText}>
+              {formatDate(project.updatedAt, i18n.language)}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
       <Pressable
         onPress={onMore}
         hitSlop={10}
@@ -69,7 +77,7 @@ export function ProjectCard({ project, onPress, onMore }: ProjectCardProps) {
       >
         <Ellipsis size={22} color="#9A9A9A" strokeWidth={2.25} />
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 
@@ -85,6 +93,13 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     opacity: 0.7,
+  },
+  // The part of the row that opens the project: everything but the dots.
+  open: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   iconContainer: {
     width: 48,

@@ -1,7 +1,10 @@
 {
   "list": {
     "title": "Projects",
-    "errorCreateFailed": "Failed to create project"
+    "errorCreateFailed": "Failed to create project",
+    "rename": "Rename",
+    "errorRenameFailed": "Could not rename the project",
+    "moreOptions": "Options for {{name}}"
   },
   "empty": {
     "title": "No projects yet",
@@ -36,6 +39,10 @@
     "namePlaceholder": "Project name",
     "descriptionPlaceholder": "Description (optional)",
     "createButton": "Create"
+  },
+  "rename": {
+    "sheetTitle": "Rename project",
+    "saveButton": "Save"
   },
   "timeline": {
     "editorTitle": "Timeline Editor",

@@ -1,31 +1,18 @@
 import { exportFileType } from '@/features/timeline/utils/postSize';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  FlatList,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CollapsibleHeader } from '@/components/ui/CollapsibleHeader';
-import { useCollapsibleHeader } from '@/hooks/useCollapsibleHeader';
 import { router } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallStore } from '@/stores/callStore';
-import { X, Trash2, Mic } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { Toast, showToast } from '@/components/ui/Toast';
 import { useProjectDetail } from '../hooks/useProjectDetail';
-import { useDeleteProject } from '../hooks/useProjects';
 import { usePreloadEditor } from '@/features/timeline/hooks/usePreloadEditor';
 import { EditorLoadingModal } from '@/features/timeline/components/EditorLoadingModal';
 import { useCreatePostStore } from '@/stores/createPostStore';
-import type { AudioSegment } from '@/types/call';
 import type { ExportResult } from '@/types/project';
 import { COLORS } from '@/constants/theme';
 
@@ -34,22 +21,14 @@ interface ProjectDetailScreenProps {
   publishMode?: boolean;
 }
 
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
 export function ProjectDetailScreen({
   projectId,
   publishMode = false,
 }: ProjectDetailScreenProps) {
-  const { t } = useTranslation('projects');
+  const { t } = useTranslation(['projects', 'common']);
   const queryClient = useQueryClient();
-  const { data, isLoading } = useProjectDetail(projectId);
-  const header = useCollapsibleHeader();
-  const deleteProject = useDeleteProject();
+  const { data, isLoading, isFetching, isFetchedAfterMount, isPaused } =
+    useProjectDetail(projectId);
   const [editorOpen, setEditorOpen] = useState(false);
   const editorWasOpened = useRef(false);
   const { isPreloading, progress, preloadEditor } = usePreloadEditor(data?.clips ?? []);
@@ -59,46 +38,34 @@ export function ProjectDetailScreen({
   // there. See the recordingMode prop for the failure this prevents.
   const activeCall = useCallStore((s) => s.activeCall);
 
-  // In publish mode, auto-open the editor ONCE when data is loaded
+  // A project opens straight in the editor, ONCE, as soon as its data is
+  // here. This screen used to stop on a page of its own first (tracks, clips,
+  // status and an "Open Editor" button), and only publish mode skipped it.
+  // The client asked for that step to go (Oct 7 2026: "an extra step that we
+  // don't really need"); renaming and deleting moved to the list.
+  //
+  // It opens from what the server has NOW, not from the copy kept from the
+  // last visit: that copy is from before the last edit, and the editor would
+  // open on it and then start over when the fresh one arrived. Without a
+  // connection the kept copy is what there is, and it opens on that.
+  const [waitedLongEnough, setWaitedLongEnough] = useState(false);
   useEffect(() => {
-    if (!publishMode || !data || editorWasOpened.current || isPreloading) return;
+    const timer = setTimeout(() => setWaitedLongEnough(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
+  const readyToOpen =
+    !!data && !isFetching && (isFetchedAfterMount || isPaused || waitedLongEnough);
+  useEffect(() => {
+    if (!readyToOpen || editorWasOpened.current || isPreloading) return;
     editorWasOpened.current = true;
     preloadEditor().then(() => setEditorOpen(true));
-  }, [publishMode, data, isPreloading, preloadEditor]);
+  }, [readyToOpen, isPreloading, preloadEditor]);
 
-  const handleDelete = useCallback(() => {
-    Alert.alert(t('detail.deleteAlertTitle'), t('detail.deleteAlertMessage'), [
-      { text: t('detail.deleteAlertCancel'), style: 'cancel' },
-      {
-        text: t('detail.deleteAlertConfirm'),
-        style: 'destructive',
-        onPress: () => {
-          deleteProject.mutate(projectId, {
-            onSuccess: () => router.back(),
-            onError: () => showToast(t('detail.errorDeleteFailed')),
-          });
-        },
-      },
-    ]);
-  }, [projectId, deleteProject]);
-
-  const renderSegment = useCallback(
-    ({ item }: { item: AudioSegment & { downloadUrl: string } }) => (
-      <View style={styles.segmentCard}>
-        <Mic size={20} color="#FFFFFF" strokeWidth={2.25} />
-        <View style={styles.segmentInfo}>
-          <Text variant="body" style={styles.segmentLabel}>
-            {item.label ||
-              t('detail.segmentDefaultLabel', { index: item.segmentIndex + 1 })}
-          </Text>
-          <Text variant="caption" style={styles.segmentMeta}>
-            {formatDuration(item.durationMs)}
-          </Text>
-        </View>
-      </View>
-    ),
-    []
-  );
+  /** Out of the project: back to where it was opened from. */
+  const leave = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)');
+  }, []);
 
   if (isLoading) {
     return (
@@ -117,6 +84,7 @@ export function ProjectDetailScreen({
           <Text variant="body" style={{ color: '#666' }}>
             {t('detail.projectNotFound')}
           </Text>
+          <Button title={t('common:buttons.back')} onPress={leave} />
         </View>
       </SafeAreaView>
     );
@@ -178,173 +146,28 @@ export function ProjectDetailScreen({
         segments={segments}
         lanes={project.lanes}
         settings={project.settings}
-        onClose={async () => {
-          // Refetch BEFORE unmounting so detail view has fresh data
-          await queryClient.refetchQueries({ queryKey: ['project', projectId] });
-          setEditorOpen(false);
+        onClose={() => {
+          // The list shows the new length and date of the project. The
+          // project itself is read again the next time it is opened (see
+          // useProjectDetail); reading it now would restart this editor
+          // while the screen is on its way out.
+          void queryClient.invalidateQueries({ queryKey: ['projects'] });
+          leave();
         }}
         onPublish={handlePublish}
       />
     );
   }
 
-  // One row per lane the project has: its name, its color and how many clips
-  // sit on it. Lanes with no metadata still show, named like the editor names
-  // them, so a recorded take is visible here right away.
-  const trackRows = (() => {
-    const lanes = project.lanes ?? {};
-    const laneIndexes = new Set<number>();
-    for (const key of Object.keys(lanes)) laneIndexes.add(Number(key));
-    for (const clip of clips) laneIndexes.add(clip.laneIndex ?? 0);
-    return Array.from(laneIndexes)
-      .filter((i) => Number.isFinite(i))
-      .sort((a, b) => a - b)
-      .map((index) => {
-        const meta = lanes[String(index)];
-        return {
-          index,
-          name: meta?.name || t('detail.trackDefaultName', { n: index + 1 }),
-          color: meta?.color || '#3B82F6',
-          clipCount: clips.filter((c) => (c.laneIndex ?? 0) === index).length,
-        };
-      });
-  })();
-
+  // The project is loaded and the editor is getting ready (waveforms). There
+  // is nothing to read here: the screen that used to show tracks, clips and
+  // an "Open Editor" button is gone.
   return (
     <View style={styles.container}>
-      {/* Spacer pushes statsRow and all content below the floating header overlay */}
-      <View style={{ height: header.height }} />
-
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text variant="caption" style={styles.statLabel}>
-            {t('detail.statTracks')}
-          </Text>
-          <Text variant="body" style={styles.statValue}>
-            {segments.length}
-          </Text>
-        </View>
-        <View style={styles.stat}>
-          <Text variant="caption" style={styles.statLabel}>
-            {t('detail.statClips')}
-          </Text>
-          <Text variant="body" style={styles.statValue}>
-            {clips.length}
-          </Text>
-        </View>
-        <View style={styles.stat}>
-          <Text variant="caption" style={styles.statLabel}>
-            {t('detail.statStatus')}
-          </Text>
-          <Text variant="body" style={styles.statValue}>
-            {project.status}
-          </Text>
-        </View>
-      </View>
-
-      <FlatList
-        style={styles.list}
-        data={segments}
-        keyExtractor={(item) => item.id}
-        renderItem={renderSegment}
-        // Everything above the segments scrolls WITH them. The tracks used to be
-        // a plain block above this list: with many tracks (26 in the project
-        // David opened on Oct 6 2026) it pushed the list and the Open Editor
-        // button below the screen, and nothing on the page could scroll, so
-        // the editor could not be reached from here at all.
-        // The blocks keep their own side padding; undo the list's so they sit
-        // exactly where they did.
-        ListHeaderComponentStyle={styles.listHeader}
-        ListHeaderComponent={
-          <>
-            {/* The tracks, with the names and colors given in the editor, so the
-                project reads the same here as it does inside it. */}
-            {trackRows.length > 0 && (
-              <View style={styles.tracksBlock}>
-                <View style={styles.sectionHeader}>
-                  <Text variant="body" style={styles.sectionTitle}>
-                    {t('detail.sectionTracks')}
-                  </Text>
-                </View>
-                <View style={styles.trackRows}>
-                  {trackRows.map((track) => (
-                    <View key={track.index} style={styles.trackRow}>
-                      <View style={[styles.trackDot, { backgroundColor: track.color }]} />
-                      <Text variant="body" numberOfLines={1} style={styles.trackName}>
-                        {track.name}
-                      </Text>
-                      <Text variant="caption" style={styles.trackMeta}>
-                        {t('detail.trackClips', { count: track.clipCount })}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <View style={styles.sectionHeader}>
-              <Text variant="body" style={styles.sectionTitle}>
-                {t('detail.sectionAudioSegments')}
-              </Text>
-            </View>
-          </>
-        }
-        onScroll={header.onScroll}
-        scrollEventThrottle={header.scrollEventThrottle}
-        contentContainerStyle={styles.segmentList}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-        ListEmptyComponent={
-          <View style={styles.emptySegments}>
-            <Text variant="body" style={{ color: '#666' }}>
-              {t('detail.emptySegments')}
-            </Text>
-          </View>
-        }
-      />
-
-      {/* Outside the list on purpose: the way into the editor stays on screen
-          however long the project is. */}
-      <View style={styles.footer}>
-        <Button
-          title={t('detail.openEditorButton')}
-          onPress={async () => {
-            await preloadEditor();
-            setEditorOpen(true);
-          }}
-        />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
       </View>
       <EditorLoadingModal visible={isPreloading} progress={progress} />
-      <Toast />
-      <CollapsibleHeader animatedStyle={header.animatedStyle}>
-        <TouchableOpacity
-          onPress={() => {
-            console.log('[ProjectDetail] X pressed, canGoBack:', router.canGoBack());
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/(tabs)');
-            }
-          }}
-          style={styles.backButton}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          activeOpacity={0.5}
-        >
-          <X size={24} color="#FFF" strokeWidth={2.25} />
-        </TouchableOpacity>
-        <View style={styles.headerTitle}>
-          <Text variant="h3" style={styles.title} numberOfLines={1}>
-            {project.name}
-          </Text>
-          {project.description ? (
-            <Text variant="caption" style={styles.description} numberOfLines={1}>
-              {project.description}
-            </Text>
-          ) : null}
-        </View>
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-          <Trash2 size={22} color="#EF4444" strokeWidth={2.25} />
-        </TouchableOpacity>
-      </CollapsibleHeader>
     </View>
   );
 }
@@ -358,130 +181,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    gap: 2,
-  },
-  title: {
-    color: '#FFF',
-  },
-  description: {
-    color: '#666',
-  },
-  deleteButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 24,
-  },
-  stat: {
-    gap: 2,
-  },
-  tracksBlock: {
-    marginBottom: 4,
-  },
-  trackRows: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  trackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 44,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#111111',
-  },
-  trackDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  trackName: {
-    flex: 1,
-    color: '#FFFFFF',
-  },
-  trackMeta: {
-    color: '#888888',
-  },
-  statLabel: {
-    color: '#666',
-    fontSize: 11,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    color: '#FFF',
-    fontFamily: 'Archivo_600SemiBold',
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  sectionTitle: {
-    color: '#888',
-    fontFamily: 'Archivo_500Medium',
-    fontSize: 13,
-    textTransform: 'uppercase',
-  },
-  list: { flex: 1 },
-  listHeader: { marginHorizontal: -16 },
-  segmentList: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  segmentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111',
-    borderRadius: 10,
-    padding: 14,
-    gap: 12,
-  },
-  segmentInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  segmentLabel: {
-    color: '#FFF',
-    fontSize: 14,
-  },
-  segmentMeta: {
-    color: '#666',
-    fontSize: 12,
-  },
-  emptySegments: {
-    paddingVertical: 32,
-    alignItems: 'center',
-  },
-  footer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#222',
+    gap: 16,
   },
 });

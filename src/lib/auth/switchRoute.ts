@@ -81,7 +81,8 @@ export function pickFallbackAccount<
   );
   if (alive.length === 0) return null;
   return (
-    alive.find((a) => preferredId !== null && Number(a.user.id) === Number(preferredId)) ??
-    alive[0]
+    alive.find(
+      (a) => preferredId !== null && Number(a.user.id) === Number(preferredId)
+    ) ?? alive[0]
   );
 }

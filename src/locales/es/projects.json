@@ -1,7 +1,10 @@
 {
   "list": {
     "title": "Proyectos",
-    "errorCreateFailed": "No se pudo crear el proyecto"
+    "errorCreateFailed": "No se pudo crear el proyecto",
+    "rename": "Renombrar",
+    "errorRenameFailed": "No se pudo renombrar el proyecto",
+    "moreOptions": "Opciones de {{name}}"
   },
   "empty": {
     "title": "Aún no hay proyectos",
@@ -36,6 +39,10 @@
     "namePlaceholder": "Nombre del proyecto",
     "descriptionPlaceholder": "Descripción (opcional)",
     "createButton": "Crear"
+  },
+  "rename": {
+    "sheetTitle": "Renombrar proyecto",
+    "saveButton": "Guardar"
   },
   "timeline": {
     "editorTitle": "Editor de línea de tiempo",

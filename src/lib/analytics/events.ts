@@ -678,6 +678,10 @@ export const ANALYTICS_EVENTS = {
     // succeeded | failed | cancelled | aborted_or_timeout | picker_cancelled |
     // no_file, with size_bytes / duration_ms / error / timed_out.
     AUDIO_IMPORT: 'project_audio_import',
+    /** A project renamed from the list. `outcome`: renamed | failed. */
+    RENAMED: 'project_renamed',
+    /** A tap on a project in the list, which now opens the editor directly. */
+    OPENED_FROM_LIST: 'project_opened_from_list',
     /** A track colour saved from the lane sheet: hex and whether a swatch or the wheel. */
     LANE_COLOR: 'timeline_lane_color',
     // Decile-sampled byte progress during an import upload (~10 per import, not

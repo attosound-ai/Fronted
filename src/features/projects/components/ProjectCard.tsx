@@ -1,12 +1,15 @@
 import { View, StyleSheet, Pressable } from 'react-native';
-import { Music, ChevronRight } from 'lucide-react-native';
+import { Music, Ellipsis } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
 import type { Project } from '@/types/project';
 
 interface ProjectCardProps {
   project: Project;
+  /** Opens the project in the editor. */
   onPress: () => void;
+  /** Opens the options of the project (rename, delete): the button and a long press. */
+  onMore: () => void;
 }
 
 function formatDuration(ms: number): string {
@@ -24,12 +27,16 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function ProjectCard({ project, onPress }: ProjectCardProps) {
+export function ProjectCard({ project, onPress, onMore }: ProjectCardProps) {
   const { t } = useTranslation('projects');
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       onPress={onPress}
+      onLongPress={onMore}
+      delayLongPress={350}
+      accessibilityRole="button"
+      accessibilityLabel={project.name}
     >
       <View style={styles.iconContainer}>
         <Music size={24} color="#FFFFFF" strokeWidth={2.25} />
@@ -53,7 +60,15 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
           </Text>
         </View>
       </View>
-      <ChevronRight size={20} color="#444" strokeWidth={2.25} />
+      <Pressable
+        onPress={onMore}
+        hitSlop={10}
+        style={({ pressed }) => [styles.more, pressed && styles.cardPressed]}
+        accessibilityRole="button"
+        accessibilityLabel={t('list.moreOptions', { name: project.name })}
+      >
+        <Ellipsis size={22} color="#9A9A9A" strokeWidth={2.25} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -95,6 +110,14 @@ const styles = StyleSheet.create({
   metaText: {
     color: '#666',
     fontSize: 12,
+  },
+  // 44 pt target for the options of the project.
+  more: {
+    width: 44,
+    height: 44,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 3,

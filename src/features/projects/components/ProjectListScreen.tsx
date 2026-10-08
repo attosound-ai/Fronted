@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   View,
   FlatList,
+  Platform,
   StyleSheet,
   RefreshControl,
-  Pressable,
   TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -17,7 +19,14 @@ import { Toast, showToast } from '@/components/ui/Toast';
 import { ProjectCard } from './ProjectCard';
 import { EmptyProjectsState } from './EmptyProjectsState';
 import { CreateProjectSheet } from './CreateProjectSheet';
-import { useProjects, useCreateProject } from '../hooks/useProjects';
+import { RenameProjectSheet } from './RenameProjectSheet';
+import {
+  useProjects,
+  useCreateProject,
+  useDeleteProject,
+  useRenameProject,
+} from '../hooks/useProjects';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { Project } from '@/types/project';
 import { COLORS } from '@/constants/theme';
 
@@ -25,7 +34,10 @@ export function ProjectListScreen() {
   const { t } = useTranslation('projects');
   const { data: projects, isLoading, refetch } = useProjects();
   const createProject = useCreateProject();
+  const renameProject = useRenameProject();
+  const deleteProject = useDeleteProject();
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [renaming, setRenaming] = useState<Project | null>(null);
   const header = useCollapsibleHeader();
 
   const handleCreate = useCallback(
@@ -43,18 +55,89 @@ export function ProjectListScreen() {
         }
       );
     },
-    [createProject]
+    [createProject, t]
   );
 
+  // A tap opens the editor: the screen that used to sit in between (tracks,
+  // clips, status and an "Open Editor" button) was a step nobody needed
+  // (client, Oct 7 2026). What it offered besides lives in the menu below.
   const handleProjectPress = useCallback((project: Project) => {
+    analytics.capture(ANALYTICS_EVENTS.PROJECT.OPENED_FROM_LIST, {
+      project_id: project.id,
+    });
     router.push(`/project/${project.id}`);
   }, []);
 
+  const handleRename = useCallback(
+    (id: string, name: string) => {
+      renameProject.mutate(
+        { id, name },
+        {
+          onSuccess: () => setRenaming(null),
+          onError: () => showToast(t('list.errorRenameFailed')),
+        }
+      );
+    },
+    [renameProject, t]
+  );
+
+  const confirmDelete = useCallback(
+    (project: Project) => {
+      Alert.alert(t('detail.deleteAlertTitle'), t('detail.deleteAlertMessage'), [
+        { text: t('detail.deleteAlertCancel'), style: 'cancel' },
+        {
+          text: t('detail.deleteAlertConfirm'),
+          style: 'destructive',
+          onPress: () =>
+            deleteProject.mutate(project.id, {
+              onError: () => showToast(t('detail.errorDeleteFailed')),
+            }),
+        },
+      ]);
+    },
+    [deleteProject, t]
+  );
+
+  /** Rename and Delete, from the button of the row or a long press on it. */
+  const handleMore = useCallback(
+    (project: Project) => {
+      const rename = t('list.rename');
+      const remove = t('detail.deleteAlertConfirm');
+      const cancel = t('detail.deleteAlertCancel');
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: project.name,
+            options: [rename, remove, cancel],
+            destructiveButtonIndex: 1,
+            cancelButtonIndex: 2,
+            userInterfaceStyle: 'dark',
+          },
+          (index) => {
+            if (index === 0) setRenaming(project);
+            if (index === 1) confirmDelete(project);
+          }
+        );
+        return;
+      }
+      Alert.alert(project.name, '', [
+        { text: rename, onPress: () => setRenaming(project) },
+        { text: remove, style: 'destructive', onPress: () => confirmDelete(project) },
+        { text: cancel, style: 'cancel' },
+      ]);
+    },
+    [confirmDelete, t]
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Project }) => (
-      <ProjectCard project={item} onPress={() => handleProjectPress(item)} />
+      <ProjectCard
+        project={item}
+        onPress={() => handleProjectPress(item)}
+        onMore={() => handleMore(item)}
+      />
     ),
-    [handleProjectPress]
+    [handleProjectPress, handleMore]
   );
 
   return (
@@ -86,6 +169,12 @@ export function ProjectListScreen() {
         onClose={() => setSheetVisible(false)}
         onSubmit={handleCreate}
         isLoading={createProject.isPending}
+      />
+      <RenameProjectSheet
+        project={renaming}
+        onClose={() => setRenaming(null)}
+        onSubmit={handleRename}
+        isLoading={renameProject.isPending}
       />
       <TouchableOpacity
         style={styles.fab}

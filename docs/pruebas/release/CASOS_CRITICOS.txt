@@ -28,3 +28,4 @@ M-MENU-BORRADO    A message deleted by the other person while its menu is open: 
 F-COMENTARIO      A comment that cannot reach the server stays in the list as failed, with Try again and Delete; it never disappears
 F-CONTADOR        The number of comments on a post equals the comments its list shows, after commenting, replying and deleting
 A-NUMERO          An account that is not a creator sees no bridge number row in Settings, and the app asks for the number once, not on a timer
+C-CAMBIO          Switching accounts (double tap on the profile tab, or the switcher) never waits for the network: the other account is on screen within half a second, also on a slow connection

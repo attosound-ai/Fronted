@@ -16,6 +16,7 @@ import { showToast } from '@/components/ui/Toast';
 import { useConversationPrefsStore } from '../stores/conversationPrefsStore';
 import { messageService } from '../services/messageService';
 import type { ChatConversation } from '../types';
+import { useParticipantProfile } from '../hooks/useParticipantAvatar';
 
 const ACTION_WIDTH = 78;
 // The one colour on this screen. iOS paints a destructive swipe red and the
@@ -57,6 +58,7 @@ export function ConversationSwipeRow({
   const queryClient = useQueryClient();
   const [deleting, setDeleting] = useState(false);
 
+  const { username } = useParticipantProfile(conversation.participantId);
   const remove = useCallback(async () => {
     const id = conversation.conversationId;
     setDeleting(true);
@@ -83,7 +85,11 @@ export function ConversationSwipeRow({
 
   const confirmDelete = useCallback(() => {
     haptic('warning');
-    const name = conversation.participantName || t('conversation.fallbackUserName');
+    // The same name the row shows: the profile's first. A chat somebody else
+    // opened can carry no name of its own, and the question then read "User
+    // keeps their copy" under a row that showed the person's name.
+    const name =
+      username || conversation.participantName || t('conversation.fallbackUserName');
     Alert.alert(
       t('listActions.deleteConfirmTitle'),
       t('listActions.deleteConfirmBody', { name }),
@@ -100,7 +106,7 @@ export function ConversationSwipeRow({
         },
       ]
     );
-  }, [conversation.participantName, remove, t]);
+  }, [conversation.participantName, remove, t, username]);
 
   const run = useCallback(
     (action: 'pin' | 'mute' | 'archive') => {

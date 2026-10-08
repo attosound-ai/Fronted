@@ -2,7 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { reportCounterDivergence } from '@/lib/analytics/socialTelemetry';
 import { feedService } from '../services/feedService';
 import { findPostInCaches, patchPostInCaches } from '../utils/postCacheSync';
-import { countedPending } from './commentOutbox';
+import { useAuthStore } from '@/stores/authStore';
+import { countedPending, outboxSlot } from './commentOutbox';
 import { useCommentOutbox } from './commentOutboxStore';
 
 /**
@@ -31,7 +32,11 @@ export async function reconcileCommentCount(
     const serverCount = fresh?.interactions?.commentsCount ?? fresh?.commentsCount;
     if (typeof serverCount !== 'number') return;
     // Whatever is still on its way is not in the server's number yet.
-    const stillSending = countedPending(useCommentOutbox.getState().outbox, postId);
+    const accountId = useAuthStore.getState().user?.id ?? '';
+    const stillSending = countedPending(
+      useCommentOutbox.getState().outbox,
+      outboxSlot(accountId, postId)
+    );
     const shown = findPostInCaches(queryClient, postId)?.commentsCount;
     reportCounterDivergence({
       action,

@@ -16,27 +16,27 @@ import {
 interface CommentOutboxState {
   outbox: Outbox;
   enqueue: (comment: PendingComment) => void;
-  markFailed: (postId: string, id: string) => void;
-  markRetrying: (postId: string, id: string) => void;
-  remove: (postId: string, id: string) => void;
+  markFailed: (slot: string, id: string) => void;
+  markRetrying: (slot: string, id: string) => void;
+  remove: (slot: string, id: string) => void;
 }
 
 export const useCommentOutbox = create<CommentOutboxState>()((set) => ({
   outbox: {},
   enqueue: (comment) => set((s) => ({ outbox: enqueue(s.outbox, comment) })),
-  markFailed: (postId, id) =>
+  markFailed: (slot, id) =>
     set((s) => {
-      const outbox = markFailed(s.outbox, postId, id);
+      const outbox = markFailed(s.outbox, slot, id);
       return outbox === s.outbox ? s : { outbox };
     }),
-  markRetrying: (postId, id) =>
+  markRetrying: (slot, id) =>
     set((s) => {
-      const outbox = markRetrying(s.outbox, postId, id);
+      const outbox = markRetrying(s.outbox, slot, id);
       return outbox === s.outbox ? s : { outbox };
     }),
-  remove: (postId, id) =>
+  remove: (slot, id) =>
     set((s) => {
-      const outbox = remove(s.outbox, postId, id);
+      const outbox = remove(s.outbox, slot, id);
       return outbox === s.outbox ? s : { outbox };
     }),
 }));

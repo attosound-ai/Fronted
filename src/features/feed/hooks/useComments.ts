@@ -7,6 +7,7 @@ import { cancelPostQueries, patchPostInCaches } from '../utils/postCacheSync';
 import {
   find,
   newPendingComment,
+  outboxSlot,
   pendingFor,
   type PendingComment,
   type PendingStatus,
@@ -68,7 +69,11 @@ export function useComments(postId: string) {
   // list that comes from the server: on its way it shows as "Posting…", and
   // if the request fails it stays there, marked, to be sent again or
   // discarded. It used to be removed without a word (see commentOutbox).
-  const pending = useCommentOutbox((state) => pendingFor(state.outbox, postId));
+  // The comments this account still has on their way or failed. Another
+  // account of the phone has its own, and never sees or sends these.
+  const accountId = useAuthStore((s) => (s.user?.id != null ? String(s.user.id) : ''));
+  const slot = outboxSlot(accountId, postId);
+  const pending = useCommentOutbox((state) => pendingFor(state.outbox, slot));
 
   const bumpCount = useCallback(
     (delta: number) => {
@@ -83,6 +88,14 @@ export function useComments(postId: string) {
   const send = useCallback(
     async (entry: PendingComment) => {
       const box = useCommentOutbox.getState();
+      const entrySlot = outboxSlot(entry.accountId, entry.postId);
+      // The phone changed account before this one went out: it would be
+      // posted by the other account. It waits, as failed, for its own.
+      const current = useAuthStore.getState().user?.id;
+      if (current == null || String(current) !== entry.accountId) {
+        box.markFailed(entrySlot, entry.id);
+        return;
+      }
       try {
         const res = await feedService.addComment(
           postId,
@@ -115,7 +128,7 @@ export function useComments(postId: string) {
             };
           });
         }
-        box.remove(postId, entry.id);
+        box.remove(entrySlot, entry.id);
         void queryClient.invalidateQueries({
           queryKey: QUERY_KEYS.FEED.COMMENTS(postId),
         });
@@ -131,7 +144,7 @@ export function useComments(postId: string) {
         });
         // The server never got it: it stops counting, and it stays in sight.
         bumpCount(-1);
-        box.markFailed(postId, entry.id);
+        box.markFailed(entrySlot, entry.id);
       }
     },
     [postId, queryClient, bumpCount]
@@ -139,23 +152,23 @@ export function useComments(postId: string) {
 
   const addComment = useCallback(
     async (text: string, parentId?: string) => {
-      const entry = newPendingComment(postId, text, parentId, Date.now());
+      const entry = newPendingComment(accountId, postId, text, parentId, Date.now());
       await cancelPostQueries(queryClient, postId);
       useCommentOutbox.getState().enqueue(entry);
       bumpCount(1);
       await send(entry);
     },
-    [postId, queryClient, bumpCount, send]
+    [accountId, postId, queryClient, bumpCount, send]
   );
 
   const retryComment = useCallback(
     async (id: string) => {
       const box = useCommentOutbox.getState();
-      const failed = find(box.outbox, postId, id);
+      const failed = find(box.outbox, slot, id);
       // Only a failed comment is sent again; one on its way already is.
       if (!failed || failed.status !== 'failed') return;
-      box.markRetrying(postId, id);
-      const entry = find(useCommentOutbox.getState().outbox, postId, id);
+      box.markRetrying(slot, id);
+      const entry = find(useCommentOutbox.getState().outbox, slot, id);
       if (!entry) return;
       analytics.capture(ANALYTICS_EVENTS.SOCIAL.COMMENT_RETRIED, {
         target_id: postId,
@@ -165,23 +178,23 @@ export function useComments(postId: string) {
       bumpCount(1);
       await send(entry);
     },
-    [postId, queryClient, bumpCount, send]
+    [postId, slot, queryClient, bumpCount, send]
   );
 
   const discardComment = useCallback(
     (id: string) => {
       const box = useCommentOutbox.getState();
-      const entry = find(box.outbox, postId, id);
+      const entry = find(box.outbox, slot, id);
       if (!entry) return;
       // One still on its way was counted; a failed one was not.
       if (entry.status === 'sending') bumpCount(-1);
-      box.remove(postId, id);
+      box.remove(slot, id);
       analytics.capture(ANALYTICS_EVENTS.SOCIAL.COMMENT_DISCARDED, {
         target_id: postId,
         attempts: entry.attempts,
       });
     },
-    [postId, bumpCount]
+    [postId, slot, bumpCount]
   );
 
   const serverComments: Comment[] =

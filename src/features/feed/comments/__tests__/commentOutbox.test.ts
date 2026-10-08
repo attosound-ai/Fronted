@@ -8,16 +8,21 @@ import {
   markFailed,
   markRetrying,
   newPendingComment,
+  outboxSlot,
   pendingFor,
   remove,
   type Outbox,
 } from '../commentOutbox';
 
-const POST = '6ac6c4eeefc6bc677c7ee9da';
+const POST_ID = '6ac6c4eeefc6bc677c7ee9da';
+// The account that writes in these cases: the client's representative account.
+const ACCOUNT = '152';
+/** Where that account's comments on that post wait. */
+const POST = outboxSlot(ACCOUNT, POST_ID);
 const NOW = Date.parse('2026-10-07T22:18:48Z');
 
-function written(text: string, at = NOW, post = POST) {
-  return newPendingComment(post, text, null, at);
+function written(text: string, at = NOW, postId = POST_ID, account = ACCOUNT) {
+  return newPendingComment(account, postId, text, null, at);
 }
 
 test('the reported case: a comment that times out stays, with its text', () => {
@@ -100,9 +105,54 @@ test('one post never shows the pending comments of another', () => {
     ['here']
   );
   assert.deepEqual(
-    pendingFor(box, 'another-post').map((c) => c.text),
+    pendingFor(box, outboxSlot(ACCOUNT, 'another-post')).map((c) => c.text),
     ['there']
   );
+});
+
+// A phone holds several accounts (the client's: a representative, 152, and
+// the creator it manages, 153) and switches between them at a tap.
+test('a comment that failed as one account is not shown to the other account of the phone', () => {
+  const asRep = written('from the representative');
+  let box = markFailed(enqueue({}, asRep), POST, asRep.id);
+
+  const creatorSlot = outboxSlot('153', POST_ID);
+  assert.deepEqual(pendingFor(box, creatorSlot), []);
+  assert.equal(countedPending(box, creatorSlot), 0);
+  // The creator cannot send it again or discard it: it is not theirs.
+  assert.equal(find(box, creatorSlot, asRep.id), null);
+  assert.equal(markRetrying(box, creatorSlot, asRep.id), box);
+  assert.equal(remove(box, creatorSlot, asRep.id), box);
+
+  // Back on the representative's account it is still there, to send again.
+  assert.deepEqual(
+    pendingFor(box, POST).map((c) => [c.text, c.status, c.accountId]),
+    [['from the representative', 'failed', '152']]
+  );
+  box = markRetrying(box, POST, asRep.id);
+  assert.equal(find(box, POST, asRep.id)?.status, 'sending');
+});
+
+test('each account has its own comments on the same post', () => {
+  const asRep = written('mine');
+  const asCreator = written('also mine', NOW + 5, POST_ID, '153');
+  const box = enqueue(enqueue({}, asRep), asCreator);
+
+  assert.deepEqual(
+    pendingFor(box, POST).map((c) => c.text),
+    ['mine']
+  );
+  assert.deepEqual(
+    pendingFor(box, outboxSlot('153', POST_ID)).map((c) => c.text),
+    ['also mine']
+  );
+  assert.equal(countedPending(box, POST), 1);
+});
+
+test('an account id given as a number is the same account', () => {
+  const c = newPendingComment(152, POST_ID, 'x', null, NOW);
+  assert.equal(c.accountId, '152');
+  assert.equal(outboxSlot(152, POST_ID), POST);
 });
 
 test('the number under the post counts what is on its way, not what failed', () => {
@@ -117,7 +167,7 @@ test('the number under the post counts what is on its way, not what failed', () 
 });
 
 test('a reply keeps the comment it answers; ids are unique for fast typists', () => {
-  const reply = newPendingComment(POST, 'me too', 'parent-1', NOW);
+  const reply = newPendingComment(ACCOUNT, POST_ID, 'me too', 'parent-1', NOW);
   assert.equal(reply.parentId, 'parent-1');
   assert.equal(written('x').parentId, null);
   const ids = new Set(Array.from({ length: 50 }, () => written('same instant').id));

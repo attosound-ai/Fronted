@@ -29,3 +29,5 @@ F-COMENTARIO      A comment that cannot reach the server stays in the list as fa
 F-CONTADOR        The number of comments on a post equals the comments its list shows, after commenting, replying and deleting
 A-NUMERO          An account that is not a creator sees no bridge number row in Settings, and the app asks for the number once, not on a timer
 C-CAMBIO          Switching accounts (double tap on the profile tab, or the switcher) never waits for the network: the other account is on screen within half a second, also on a slow connection
+M-ADJUNTO         Picking media from the gallery stages it in a tray with a caption; sending sends the pictures in order with the caption on the last, as one bubble where the photo bleeds to the edge and the colour shows only under the caption
+M-FOTO-VISOR      Tapping a photo in the chat opens a full screen viewer inside the app (pinch to zoom, swipe down to close), never the Cloudinary link in the browser

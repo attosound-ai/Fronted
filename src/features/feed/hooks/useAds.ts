@@ -1,11 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
-import {
-  cloudinaryUrl,
-  cloudinaryHlsUrl,
-  cloudinaryPoster,
-} from '@/lib/media/cloudinaryUrl';
+import { cloudinaryUrl, sponsoredVideo } from '@/lib/media/cloudinaryUrl';
 import type { FeedPost } from '@/types/post';
 
 interface AdData {
@@ -19,6 +15,7 @@ interface AdData {
 }
 
 function adToFeedPost(ad: AdData): FeedPost {
+  const video = sponsoredVideo(ad.videoUrl);
   return {
     id: `ad-${ad.id}`,
     type: 'reel',
@@ -33,10 +30,10 @@ function adToFeedPost(ad: AdData): FeedPost {
       avatar: cloudinaryUrl(ad.brandAvatar, 'brand_ad_avatar'),
       isFollowing: false,
     },
-    // Ad creatives are Cloudinary public_ids — stream them adaptively (HLS)
-    // with a poster, same as user posts.
-    videoUrl: cloudinaryHlsUrl(ad.videoUrl) ?? ad.videoUrl,
-    thumbnailUrl: cloudinaryPoster(ad.videoUrl, 'reel') ?? undefined,
+    // Streamed adaptively (HLS) with a poster, same as user posts, whether
+    // the creative came as an id or as the whole address of its file.
+    videoUrl: video.videoUrl ?? ad.videoUrl,
+    thumbnailUrl: video.posterUrl ?? undefined,
     description: ad.caption,
     likesCount: 0,
     commentsCount: 0,

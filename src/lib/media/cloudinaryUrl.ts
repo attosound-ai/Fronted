@@ -148,6 +148,44 @@ export function cloudinaryPoster(
   );
 }
 
+// The whole address of an ORIGINAL video on Cloudinary, in any cloud:
+// …/video/upload/v123/<id>.mp4. An address that already carries a
+// transformation has no version right after "upload" and does not match: it
+// says by itself how it wants to be served.
+const ORIGINAL_VIDEO =
+  /^(https:\/\/res\.cloudinary\.com\/[a-z0-9_-]+)\/video\/upload\/v\d+\/(.+)\.(?:mp4|mov|m4v|webm|avi|mkv|hevc|3gp|ogv)$/i;
+
+/**
+ * How a sponsored video is served: what to play and the still shown while it
+ * loads.
+ *
+ * The admin panel stores the whole address of the file it uploaded, not its
+ * id, and the builders above pass a whole address through untouched. So every
+ * ad played its original file, two of them 20 and 32 MB, with a black
+ * rectangle until it arrived (Oct 7 2026: 2 % of ad plays ended in an error).
+ * An original on Cloudinary, whichever cloud it lives in, is streamed and
+ * gets its poster; an id works as always; anything else is used as it comes.
+ *
+ * Only for ads. A chat video is also a whole Cloudinary address and must keep
+ * playing its own file, the one the phone already compressed.
+ */
+export function sponsoredVideo(source: string | null | undefined): {
+  videoUrl: string | null;
+  posterUrl: string | null;
+} {
+  if (!source) return { videoUrl: null, posterUrl: null };
+  if (!isCompleteUri(source)) {
+    return { videoUrl: cloudinaryHlsUrl(source), posterUrl: cloudinaryPoster(source, 'reel') };
+  }
+  const original = ORIGINAL_VIDEO.exec(source);
+  if (!original) return { videoUrl: source, posterUrl: null };
+  const [, cloud, id] = original;
+  return {
+    videoUrl: `${cloud}${HLS_PATH}${id}.m3u8`,
+    posterUrl: `${cloud}/video/upload/${PRESETS.reel_thumb}/${id}`,
+  };
+}
+
 /**
  * Convert an HLS URL produced by `cloudinaryHlsUrl` into an optimized MP4
  * delivery URL, used as a runtime fallback when the player errors on the

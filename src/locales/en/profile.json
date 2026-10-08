@@ -227,7 +227,8 @@
     "title": "Switch account",
     "activeNow": "Active now",
     "addAccount": "Add account",
-    "accountGone": "@{{username}} no longer exists. It was removed from this phone."
+    "accountGone": "@{{username}} no longer exists. It was removed from this phone.",
+    "sessionEnded": "The session of @{{username}} ended. You are now on @{{current}}."
   },
   "preview": {
     "nameFallback": "Your Name"

@@ -103,6 +103,16 @@ function isDefinitiveAuthRejection(error: unknown): boolean {
   return status === 400 || status === 401 || status === 403;
 }
 
+// The reasons a session is expired for that mean the SERVER refused it (its
+// refresh token, or the account behind it). With another live account on the
+// phone, these move the app there instead of signing everything out.
+const SESSION_PROVEN_DEAD = new Set([
+  'interceptor_refresh_failed',
+  'preflight_refresh_failed',
+  'init_refresh_failed',
+  'init_getme_after_refresh',
+]);
+
 // Single-flight guards. Concurrent callers share one in-flight promise so a
 // cold start (initialize + interceptor 401s) performs exactly one refresh,
 // and parallel desync observers trigger exactly one reconciliation.
@@ -477,7 +487,7 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
     } finally {
       analytics.reset();
       Sentry.setUser(null);
-      subscriptionStore().getState().clear();
+      subscriptionStore().getState().forgetAll();
       await useAccountStore.getState().clearAll();
       await authStorage.clearAll();
       set({ ...initialState, isLoading: false });
@@ -604,6 +614,23 @@ export const useAuthStore = create<AuthState & AuthActions>((set, get) => ({
    * definitively fails — never as a side effect of refreshTokens().
    */
   expireSession: async (reason: string) => {
+    // The session in use is dead, but the phone may hold another account
+    // whose own session is alive: go there instead of the sign in screen.
+    // Only when the server itself refused this session; an unexpected error
+    // proves nothing about it.
+    if (SESSION_PROVEN_DEAD.has(reason)) {
+      const deadId = get().user?.id;
+      if (deadId != null) {
+        try {
+          const moved = await useAccountStore
+            .getState()
+            .leaveDeadAccount(Number(deadId), reason);
+          if (moved) return;
+        } catch {
+          // Could not move: expire as always, below.
+        }
+      }
+    }
     bumpSessionEpoch();
     analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_EXPIRED, { reason });
     analytics.reset();

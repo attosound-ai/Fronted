@@ -59,6 +59,10 @@ export const ANALYTICS_EVENTS = {
     // so the switch could proceed.
     ACCOUNT_SWITCH_ATTEMPTED: 'auth_account_switch_attempted',
     ACCOUNT_SWITCH_SUCCEEDED: 'auth_account_switch_succeeded',
+    /** The swap failed and the phone went back to the account it was on. `route`, `status`. */
+    ACCOUNT_SWITCH_FAILED: 'auth_account_switch_failed',
+    /** The session in use died for good and the app moved to another account of the phone instead of the sign in screen. */
+    SESSION_MOVED_TO_ACCOUNT: 'auth_session_moved_to_account',
     ACCOUNT_SWITCH_BLOCKED: 'auth_account_switch_blocked',
     ACCOUNT_SWITCH_STALE_CALL_CLEARED: 'auth_account_switch_stale_call_cleared',
     // A linked account the backend reports was missing from this device's local

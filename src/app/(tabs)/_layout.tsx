@@ -64,9 +64,17 @@ export default function TabsLayout() {
   // toggles isAuthenticated — without this dep a switch-time fetch failure would
   // never be re-driven by navigation and the plan would stay stuck at "—".
   // fetchSubscription self-retries + dedups, so this extra trigger is idempotent.
+  //
+  // Only when the plan is NOT resolved: session restore and the account
+  // switch each ask for it themselves, and this effect runs a moment later,
+  // after their request has come back, so asking again here was a second
+  // request for the same plan on every switch (seen Oct 7 2026).
   useEffect(() => {
     if (!isAuthenticated) return;
-    void useSubscriptionStore.getState().fetchSubscription();
+    const plan = useSubscriptionStore.getState();
+    if (plan.getResolvedPlan() === null || plan.lastFetchFailed) {
+      void plan.fetchSubscription();
+    }
   }, [isAuthenticated, activeAccountId]);
 
   useEffect(() => {

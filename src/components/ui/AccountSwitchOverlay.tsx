@@ -12,6 +12,10 @@ import { Avatar } from './Avatar';
 import { Text } from './Text';
 import { COLORS } from '@/constants/theme';
 
+/** The cover and the avatar coming in, and leaving. */
+const IN_MS = 170;
+const OUT_MS = 190;
+
 export function AccountSwitchOverlay() {
   const phase = useAccountSwitchAnimationStore((s) => s.phase);
   const targetUser = useAccountSwitchAnimationStore((s) => s.targetUser);
@@ -22,54 +26,38 @@ export function AccountSwitchOverlay() {
   const contentOpacity = useSharedValue(0);
   const contentScale = useSharedValue(0.7);
 
-  // Phase 1: Fade in overlay → reveal avatar with scale-up
+  // The switch itself is now a local swap of some tens of milliseconds, so
+  // this animation IS the time a switch takes. It used to run one step after
+  // another, 550 ms in and 450 ms out: a second of black screen at best. Now
+  // the cover and the avatar move together, IN_MS in and OUT_MS out, long
+  // enough to read whose account it is and to hide the screens changing
+  // underneath. A switch that does have to wait for the server holds on the
+  // avatar until it is done.
+  // Phase 1: cover and avatar come in together
   useEffect(() => {
     if (phase === 'flipping') {
       overlayOpacity.value = 0;
       contentOpacity.value = 0;
-      contentScale.value = 0.7;
+      contentScale.value = 0.86;
 
-      overlayOpacity.value = withTiming(
-        1,
-        { duration: 300, easing: Easing.out(Easing.cubic) },
-        () => {
-          // Overlay opaque — animate avatar in
-          contentOpacity.value = withTiming(1, {
-            duration: 250,
-            easing: Easing.out(Easing.cubic),
-          });
-          contentScale.value = withTiming(
-            1,
-            { duration: 250, easing: Easing.out(Easing.cubic) },
-            () => {
-              runOnJS(holdFlip)();
-            }
-          );
-        }
-      );
+      const timing = { duration: IN_MS, easing: Easing.out(Easing.cubic) };
+      overlayOpacity.value = withTiming(1, timing);
+      contentOpacity.value = withTiming(1, timing);
+      contentScale.value = withTiming(1, timing, () => {
+        runOnJS(holdFlip)();
+      });
     }
   }, [phase, overlayOpacity, contentOpacity, contentScale, holdFlip]);
 
-  // Phase 2: Avatar zooms out + overlay fades revealing new content
+  // Phase 2: both leave together, showing the new account
   useEffect(() => {
     if (phase === 'done') {
-      contentScale.value = withTiming(1.15, {
-        duration: 200,
-        easing: Easing.in(Easing.cubic),
+      const timing = { duration: OUT_MS, easing: Easing.in(Easing.cubic) };
+      contentScale.value = withTiming(1.08, timing);
+      contentOpacity.value = withTiming(0, timing);
+      overlayOpacity.value = withTiming(0, timing, () => {
+        runOnJS(reset)();
       });
-      contentOpacity.value = withTiming(
-        0,
-        { duration: 200, easing: Easing.in(Easing.cubic) },
-        () => {
-          overlayOpacity.value = withTiming(
-            0,
-            { duration: 250, easing: Easing.in(Easing.cubic) },
-            () => {
-              runOnJS(reset)();
-            }
-          );
-        }
-      );
     }
   }, [phase, overlayOpacity, contentOpacity, contentScale, reset]);
 

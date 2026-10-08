@@ -32,6 +32,7 @@ TEST_FILES=(
   "src/features/feed/comments/__tests__/commentCount.test.ts"
   "src/features/projects/__tests__/projectName.test.ts"
   "src/lib/auth/__tests__/switchRoute.test.ts"
+  "src/lib/api/__tests__/sessionReads.test.ts"
   "src/lib/auth/__tests__/recentByAccount.test.ts"
   "src/features/profile/hooks/__tests__/bridgeNumberWatch.test.ts"
   "src/lib/push/__tests__/pushTapPlan.test.ts"

@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import { AxiosError } from 'axios';
+import { dehydrate, hydrate, type DehydratedState } from '@tanstack/react-query';
 import { authService } from '@/lib/api/authService';
 import { authStorage } from '@/lib/auth/storage';
 import { getSessionEpoch, bumpSessionEpoch } from '@/lib/auth/sessionEpoch';
 import { getTokenUserId } from '@/lib/auth/jwt';
+import {
+  pickFallbackAccount,
+  switchRoute,
+  type SwitchRoute,
+} from '@/lib/auth/switchRoute';
+import { forget, recall, remember, type Recent } from '@/lib/auth/recentByAccount';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import {
   getAccountIds,
@@ -20,6 +27,7 @@ import {
 import { queryClient } from '@/lib/queryClient';
 import {
   apiClient,
+  abortSessionReads,
   pauseRequests,
   resumeRequests,
   clearRefreshQueue,
@@ -31,6 +39,20 @@ export interface AccountEntry {
   user: User;
   tokens: TokenPair;
 }
+
+// What each account had on screen when the phone left it: its query cache,
+// kept apart per account. Coming back to an account shows that at once and
+// refreshes it underneath, instead of emptying every screen and loading it
+// all again (some 35 requests per switch). Two accounts is the usual case;
+// what was kept longer ago than the limit is not shown.
+const SCREENS_MAX_ACCOUNTS = 3;
+const SCREENS_MAX_AGE_MS = 10 * 60 * 1000;
+let screens: Recent<DehydratedState> = {};
+
+// One switch at a time: a second one asked for while the first is still
+// swapping the session waits for it, so two can never interleave their
+// writes to the keychain and the stores.
+let switchQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * The backend's "forbidden: accounts are not linked" rejection. Reaching it
@@ -98,6 +120,13 @@ interface AccountActions {
    * with the call on the current account or reject.
    */
   switchToAccountForIncomingCall: (userId: number) => Promise<void>;
+  /**
+   * The session of `deadId` is over for good (its refresh token was refused,
+   * or the account no longer exists). When another account of this phone has
+   * a live session the app moves to it instead of dropping to the sign in
+   * screen, and says so. False when there is nowhere to go.
+   */
+  leaveDeadAccount: (deadId: number, reason: string) => Promise<boolean>;
   removeAccount: (userId: number) => Promise<void>;
   loadAccounts: () => Promise<void>;
   /**
@@ -125,13 +154,22 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     userId: number,
     user: User,
     tokens: TokenPair,
-    prevActiveId: number | null
+    prevActiveId: number | null,
+    // Only the switch the person asks for carries screens across and drops
+    // the reads of the account being left. The switch made for an incoming
+    // call keeps the behaviour it has always had.
+    opts: { carryScreens?: boolean } = {}
   ) => {
     // Ownership changes NOW: any in-flight initialize/refresh result from
     // the previous identity becomes stale and must discard itself.
     bumpSessionEpoch();
     pauseRequests();
     clearRefreshQueue();
+    if (opts.carryScreens) {
+      // The reads of the account being left would only compete with the new
+      // account's for the connection; their answers are thrown away anyway.
+      abortSessionReads();
+    }
 
     await Promise.all([
       authStorage.setToken(tokens.accessToken),
@@ -148,8 +186,23 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
           : get().previousAccountId,
     });
 
-    // Invalidate ALL query caches to prevent stale data from previous account
+    // Nothing the previous account loaded may be shown to this one. With
+    // carryScreens, what it had is put aside under its own id first, and
+    // what THIS account had last time comes back in its place.
+    if (opts.carryScreens && prevActiveId !== null && prevActiveId !== userId) {
+      screens = remember(
+        screens,
+        prevActiveId,
+        dehydrate(queryClient),
+        Date.now(),
+        SCREENS_MAX_ACCOUNTS
+      );
+    }
     queryClient.clear();
+    if (opts.carryScreens) {
+      const kept = recall(screens, userId, Date.now(), SCREENS_MAX_AGE_MS);
+      if (kept) hydrate(queryClient, kept);
+    }
 
     // Reset unread badge immediately so it doesn't flash the old account's count
     const { useChatStore } = await import('@/features/messages/stores/chatStore');
@@ -165,6 +218,303 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
 
     // Unblock requests — they will now use the new token
     resumeRequests();
+  };
+
+  /**
+   * What follows a switch and never holds it up: the chat socket moves to the
+   * new account, its unread badge is counted, and (when the switch used the
+   * session stored on the phone) its profile is read again, which also tells
+   * whether the account still exists.
+   */
+  const syncAfterSwitch = (userId: number, route: SwitchRoute) => {
+    const epoch = getSessionEpoch();
+    const stillOurs = () => getSessionEpoch() === epoch;
+    void Promise.allSettled([
+      import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
+        if (!stillOurs()) return;
+        phoenixSocket.disconnect();
+        // The tokens are already the new account's, so connect() picks up the
+        // right JWT (auth derives the user from it).
+        phoenixSocket.connect();
+      }),
+      Promise.all([
+        import('@/features/messages/services/messageService'),
+        import('@/features/messages/stores/chatStore'),
+      ]).then(async ([{ messageService }, { useChatStore: chatStore }]) => {
+        const convos = await messageService.getConversations();
+        if (!stillOurs()) return;
+        const unread = convos.reduce(
+          (sum: number, c: { unreadCount: number }) => sum + c.unreadCount,
+          0
+        );
+        chatStore.getState().setTotalUnread(unread);
+      }),
+      route === 'stored'
+        ? authService
+            .getMe()
+            .then(async (me) => {
+              if (!stillOurs()) return;
+              const { useAuthStore } = await import('./authStore');
+              if (Number(me.id) !== Number(userId)) {
+                // The stored tokens answer for another account: the server's
+                // word wins, as everywhere else.
+                void useAuthStore
+                  .getState()
+                  .reconcileServerIdentity('stored_switch_mismatch');
+                return;
+              }
+              const shown = useAuthStore.getState().user;
+              if (JSON.stringify(shown) === JSON.stringify(me)) return;
+              useAuthStore.getState().setUser(me);
+              await setAccountUser(userId, me);
+              set({
+                accounts: get().accounts.map((a) =>
+                  Number(a.user.id) === Number(userId) ? { ...a, user: me } : a
+                ),
+              });
+            })
+            .catch((err: unknown) => {
+              if (!stillOurs()) return;
+              // The account was deleted while its session sat on this phone.
+              if (err instanceof AxiosError && err.response?.status === 404) {
+                void get().leaveDeadAccount(userId, 'switch_target_gone');
+              }
+            })
+        : Promise.resolve(),
+    ]);
+  };
+
+  /**
+   * Switch the active session to `userId`.
+   *
+   *  Stored: the phone holds a live session for the account (see
+   *    switchRoute). The swap is local, some tens of milliseconds, and nothing
+   *    waits for the network: not the tokens, not the plan. This is every
+   *    switch back and forth between two accounts in use.
+   *  Link: no live session stored (never issued, older than a week). The
+   *    server issues one through the account in use; that one request is the
+   *    only thing the switch waits for.
+   *  Then, without holding the switch: the plan, the socket, the badge, the
+   *    profile (syncAfterSwitch).
+   *  If the swap fails: reconcile identity (403 not linked) and retry once,
+   *    else roll back to the account the phone was on.
+   *
+   * Until Oct 7 2026 every switch asked the server for tokens and then for the
+   * plan, twice, behind a black screen: 2 s at best, 9 s on the client's
+   * connection ("it got stuck").
+   */
+  const runSwitch = async (userId: number, allowHealRetry: boolean): Promise<void> => {
+    const { accounts, activeAccountId } = get();
+
+    // No-op when the target is already the authenticated account. The
+    // backend treats a self-switch as "accounts are not linked" (403), so
+    // reaching it with userId === current would fail pointlessly.
+    const { useAuthStore: authStorePreflight } = await import('./authStore');
+    const currentId = authStorePreflight.getState().user?.id ?? activeAccountId;
+    if (currentId !== null && Number(currentId) === Number(userId)) {
+      return;
+    }
+
+    const startedAt = Date.now();
+    const stored = accounts.find((a) => Number(a.user.id) === Number(userId));
+    const route: SwitchRoute = switchRoute(userId, stored?.tokens, startedAt);
+
+    // First-class switch telemetry (Sep 8 2026 incident): make blocked/failed
+    // switches answerable from PostHog, not only inferable from a Sentry
+    // unhandled rejection. Gated on allowHealRetry so the heal-retry recursion
+    // does not double-count a single user action.
+    if (allowHealRetry) {
+      analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_ATTEMPTED, {
+        from_account_id: activeAccountId,
+        to_account_id: userId,
+        route,
+      });
+    }
+
+    // Preflight: do not allow switching while a call is active. Tearing down
+    // Twilio + CallKit + the audio session mid-conversation is fragile and
+    // degrades the experience for both sides.
+    //
+    // BUT distinguish a REAL active call from an ORPHANED activeCall — a call
+    // that ended without endCall() running. A phantom entry would block
+    // switching forever (the Sep 8 2026 "stuck on wrong account" class). We
+    // trust the native Voice SDK, not just this JS mirror: if the store thinks
+    // a call is active but the SDK holds none, clear the phantom and proceed.
+    const { useCallStore } = await import('./callStore');
+    if (useCallStore.getState().activeCall != null) {
+      const { hasLiveNativeCall } = await import('@/hooks/useTwilioVoice');
+      const live = await hasLiveNativeCall();
+      if (live) {
+        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_BLOCKED, {
+          from_account_id: activeAccountId,
+          to_account_id: userId,
+          reason: 'active_call',
+        });
+        const err = new Error('CANNOT_SWITCH_DURING_ACTIVE_CALL');
+        (err as Error & { code?: string }).code = 'CANNOT_SWITCH_DURING_ACTIVE_CALL';
+        throw err;
+      }
+      // Orphaned: no live native call behind the store entry. Clear it so the
+      // switch is never permanently blocked by stale call state.
+      analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_STALE_CALL_CLEARED, {
+        from_account_id: activeAccountId,
+        to_account_id: userId,
+      });
+      useCallStore.getState().endCall();
+    }
+
+    // Save rollback state
+    const prevToken = await authStorage.getToken();
+    const prevRefreshToken = await authStorage.getRefreshToken();
+    const prevUser = await authStorage.getUser<User>();
+    const prevActiveId = activeAccountId;
+
+    // The avatar and the name of the account the phone is moving to.
+    const { useAccountSwitchAnimationStore } =
+      await import('./accountSwitchAnimationStore');
+    const cachedUser = stored?.user;
+    if (cachedUser) {
+      useAccountSwitchAnimationStore
+        .getState()
+        .startFlip({ username: cachedUser.username, avatar: cachedUser.avatar });
+    }
+
+    try {
+      let user: User;
+      let tokens: TokenPair;
+      if (route === 'stored' && stored) {
+        user = stored.user;
+        tokens = stored.tokens;
+      } else {
+        // The stored session is not usable (or there is none): the server
+        // issues a new one through the account in use. Using a stale stored
+        // pair instead is how sessions used to die on a switch.
+        const minted = await authService.switchAccount(userId);
+        user = minted.user;
+        tokens = minted.tokens;
+        await get().addAccount({ user, tokens });
+        if (!cachedUser) {
+          useAccountSwitchAnimationStore
+            .getState()
+            .startFlip({ username: user.username, avatar: user.avatar });
+        }
+      }
+
+      // Block all API requests while tokens are being swapped to prevent
+      // race conditions where requests use the old account's token.
+      // `currentId`, not activeAccountId: the latter is still empty on a
+      // phone that has never switched, and the account being left is the one
+      // whose screens are kept and the one a double tap comes back to.
+      await applyAccountSwitchCore(
+        userId,
+        user,
+        tokens,
+        currentId !== null ? Number(currentId) : activeAccountId,
+        { carryScreens: true }
+      );
+
+      // The plan: the last one known for THIS account, at once, so the plan
+      // of the account just left is never shown and nothing waits; the fresh
+      // one arrives underneath. The switch used to wait here for the server
+      // (0.2 s on a good connection, 7 s on the client's).
+      const { useSubscriptionStore } = await import('./subscriptionStore');
+      useSubscriptionStore.getState().adoptCached(userId);
+      void useSubscriptionStore.getState().fetchSubscription();
+
+      useAccountSwitchAnimationStore.getState().endFlip();
+
+      syncAfterSwitch(userId, route);
+
+      analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_SUCCEEDED, {
+        account_id: userId,
+        route,
+        duration_ms: Date.now() - startedAt,
+      });
+    } catch (error) {
+      // ── Reconcile or roll back ──
+      if (isNotLinkedError(error) && allowHealRetry) {
+        // The server refused the link. If our own identity drifted (UI
+        // user ≠ token subject), the request was really a self-switch —
+        // reconcile against the server, then retry the switch ONCE with
+        // a coherent identity.
+        //
+        // Unblock the request pipe FIRST: reconcile runs getMe through
+        // apiClient, which would queue forever if a pause leaked from a
+        // partial swap (deadlock). Resuming when not paused is a no-op.
+        resumeRequests();
+        const { useAuthStore } = await import('./authStore');
+        const healed = await useAuthStore
+          .getState()
+          .reconcileServerIdentity('switch_not_linked');
+        if (healed) {
+          useAccountSwitchAnimationStore.getState().endFlip();
+          if (Number(healed.id) === Number(userId)) {
+            // The heal itself landed us on the requested account.
+            return;
+          }
+          // Straight to runSwitch: this call already holds the queue.
+          return runSwitch(userId, false);
+        }
+      }
+
+      // Rollback: restore the previous identity wholesale.
+      console.warn('[AccountSwitch] Failed, rolling back:', error);
+      const targetGone = isTargetGoneError(error);
+      analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_FAILED, {
+        from_account_id: prevActiveId,
+        to_account_id: userId,
+        route,
+        duration_ms: Date.now() - startedAt,
+        status: error instanceof AxiosError ? error.response?.status : undefined,
+        error_code: error instanceof AxiosError ? error.code : undefined,
+      });
+      bumpSessionEpoch();
+      if (prevToken) await authStorage.setToken(prevToken);
+      if (prevRefreshToken) await authStorage.setRefreshToken(prevRefreshToken);
+      if (prevUser) {
+        await authStorage.setUser(prevUser);
+        const { useAuthStore } = await import('./authStore');
+        useAuthStore.getState().setUser(prevUser);
+      }
+      if (prevActiveId) {
+        await setActiveAccountId(prevActiveId);
+        set({ activeAccountId: prevActiveId });
+        // If the swap got as far as putting its screens aside, they come back.
+        const kept = recall(screens, prevActiveId, Date.now(), SCREENS_MAX_AGE_MS);
+        if (kept) {
+          queryClient.clear();
+          hydrate(queryClient, kept);
+        }
+        const { useSubscriptionStore } = await import('./subscriptionStore');
+        useSubscriptionStore.getState().adoptCached(prevActiveId);
+      }
+      resumeRequests(); // Unblock requests even on failure
+      useAccountSwitchAnimationStore.getState().endFlip();
+      if (targetGone) {
+        // Drop it from this phone and say so, instead of failing silently
+        // on every tap.
+        const gone = get().accounts.find((a) => Number(a.user.id) === Number(userId));
+        await get().removeAccount(userId);
+        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
+          anchor_user_id: prevActiveId,
+          outcome: 'purged_target_gone',
+          purged_user_ids: [userId],
+        });
+        const { showToast } = await import('@/components/ui/Toast');
+        const i18n = (await import('@/lib/i18n')).default;
+        showToast(
+          i18n.t('profile:accountSwitcher.accountGone', {
+            username: gone?.user.username ?? '',
+            defaultValue:
+              'That account no longer exists. It was removed from this phone.',
+          }),
+          'warning'
+        );
+        const err = new Error('TARGET_ACCOUNT_GONE');
+        (err as Error & { code?: string }).code = 'TARGET_ACCOUNT_GONE';
+        throw err;
+      }
+    }
   };
 
   return {
@@ -210,228 +560,13 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
     },
 
     /**
-     * Switch active session to the given userId.
-     *
-     * Optimistic, non-blocking design (Instagram-style):
-     *  Phase A — Synchronous swap (~50ms): write cached tokens, update state, end animation
-     *  Phase B — Fire-and-forget: getMe, fetchSubscription, WebSocket reconnect in parallel
-     *  Phase C — Error handling: if Phase A fails, reconcile identity (403
-     *            not-linked) and retry once, else rollback
+     * Switch the active session to `userId`. See runSwitch for how; here the
+     * switches are only lined up one after another.
      */
-    switchToAccount: async (userId: number, allowHealRetry: boolean = true) => {
-      const { accounts, activeAccountId } = get();
-
-      // No-op when the target is already the authenticated account. The
-      // backend treats a self-switch as "accounts are not linked" (403), so
-      // reaching it with userId === current would fail pointlessly.
-      const { useAuthStore: authStorePreflight } = await import('./authStore');
-      const currentId = authStorePreflight.getState().user?.id ?? activeAccountId;
-      if (currentId !== null && Number(currentId) === Number(userId)) {
-        return;
-      }
-
-      // First-class switch telemetry (Sep 8 2026 incident): make blocked/failed
-      // switches answerable from PostHog, not only inferable from a Sentry
-      // unhandled rejection. Gated on allowHealRetry so the heal-retry recursion
-      // does not double-count a single user action.
-      if (allowHealRetry) {
-        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_ATTEMPTED, {
-          from_account_id: activeAccountId,
-          to_account_id: userId,
-        });
-      }
-
-      // Preflight: do not allow switching while a call is active. Tearing down
-      // Twilio + CallKit + the audio session mid-conversation is fragile and
-      // degrades the experience for both sides.
-      //
-      // BUT distinguish a REAL active call from an ORPHANED activeCall — a call
-      // that ended without endCall() running. A phantom entry would block
-      // switching forever (the Sep 8 2026 "stuck on wrong account" class). We
-      // trust the native Voice SDK, not just this JS mirror: if the store thinks
-      // a call is active but the SDK holds none, clear the phantom and proceed.
-      const { useCallStore } = await import('./callStore');
-      if (useCallStore.getState().activeCall != null) {
-        const { hasLiveNativeCall } = await import('@/hooks/useTwilioVoice');
-        const live = await hasLiveNativeCall();
-        if (live) {
-          analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_BLOCKED, {
-            from_account_id: activeAccountId,
-            to_account_id: userId,
-            reason: 'active_call',
-          });
-          const err = new Error('CANNOT_SWITCH_DURING_ACTIVE_CALL');
-          (err as Error & { code?: string }).code = 'CANNOT_SWITCH_DURING_ACTIVE_CALL';
-          throw err;
-        }
-        // Orphaned: no live native call behind the store entry. Clear it so the
-        // switch is never permanently blocked by stale call state.
-        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_STALE_CALL_CLEARED, {
-          from_account_id: activeAccountId,
-          to_account_id: userId,
-        });
-        useCallStore.getState().endCall();
-      }
-
-      // Save rollback state
-      const prevToken = await authStorage.getToken();
-      const prevRefreshToken = await authStorage.getRefreshToken();
-      const prevUser = await authStorage.getUser<User>();
-      const prevActiveId = activeAccountId;
-
-      // Trigger flip animation optimistically using cached user info
-      const { useAccountSwitchAnimationStore } =
-        await import('./accountSwitchAnimationStore');
-      const cachedUser = accounts.find((a) => a.user.id === userId)?.user;
-      if (cachedUser) {
-        useAccountSwitchAnimationStore
-          .getState()
-          .startFlip({ username: cachedUser.username, avatar: cachedUser.avatar });
-      }
-
-      try {
-        // Always get fresh tokens from the backend via the current session.
-        // Previously, cached tokens from the accounts array were used directly,
-        // but they become stale after access/refresh token expiry and caused
-        // session death when the interceptor tried to refresh expired tokens.
-        const { user, tokens } = await authService.switchAccount(userId);
-        const entry = { user, tokens };
-        await get().addAccount(entry);
-
-        if (!cachedUser) {
-          useAccountSwitchAnimationStore
-            .getState()
-            .startFlip({ username: user.username, avatar: user.avatar });
-        }
-
-        // ── Phase A: Synchronous swap (target: <50ms) ──
-        // Block all API requests while tokens are being swapped to prevent
-        // race conditions where requests use the old account's token.
-        await applyAccountSwitchCore(userId, user, tokens, activeAccountId);
-
-        // Clear the previous account's subscription cache BEFORE fetching the
-        // new one. Otherwise the brief window between swap and fetch shows the
-        // stale subscription (e.g. user just paid for the managed creator,
-        // switched to it, but momentarily saw "Connect (Free)" from the
-        // representative's store).
-        const { useSubscriptionStore } = await import('./subscriptionStore');
-        useSubscriptionStore.getState().clear();
-
-        // Refresh the subscription BEFORE ending the animation. This trades
-        // ~200-400ms of switch latency for correctness — users never see a
-        // stale plan after switching. Other state (websocket, unread badge)
-        // can still be fire-and-forget below.
-        try {
-          await useSubscriptionStore.getState().fetchSubscription();
-        } catch {
-          // Non-fatal. fetchSubscription self-retries (bounded backoff) and never
-          // rejects; a persistent failure leaves the plan UNRESOLVED ("—", NOT free
-          // — a cleared store does not default to free), and the tabs/profile
-          // self-heal effects (keyed on activeAccountId / focus) re-drive it.
-        }
-
-        // End animation NOW — user sees the new account with the right plan
-        useAccountSwitchAnimationStore.getState().endFlip();
-
-        // ── Phase B: Fire-and-forget background sync ──
-        // Tokens are fresh from switchAccount(), so these calls won't trigger
-        // 401 cascades that previously nuked the session.
-        Promise.allSettled([
-          // Reconnect WebSocket (non-blocking)
-          import('@/lib/api/phoenixSocket').then(({ phoenixSocket }) => {
-            phoenixSocket.disconnect();
-            // Tokens are already swapped to the new account at this point, so
-            // connect() picks up the right JWT (auth derives the user from it).
-            phoenixSocket.connect();
-          }),
-          // Refresh unread message badge for new account
-          Promise.all([
-            import('@/features/messages/services/messageService'),
-            import('@/features/messages/stores/chatStore'),
-          ]).then(async ([{ messageService }, { useChatStore: chatStore }]) => {
-            const convos = await messageService.getConversations();
-            const unread = convos.reduce(
-              (sum: number, c: { unreadCount: number }) => sum + c.unreadCount,
-              0
-            );
-            chatStore.getState().setTotalUnread(unread);
-          }),
-        ]).catch(() => {
-          // All errors are non-fatal — cached data is already displayed
-        });
-
-        analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_SWITCH_SUCCEEDED, {
-          account_id: userId,
-        });
-        return; // Skip finally's endFlip — already called above
-      } catch (error) {
-        // ── Phase C: reconcile-or-rollback ──
-        if (isNotLinkedError(error) && allowHealRetry) {
-          // The server refused the link. If our own identity drifted (UI
-          // user ≠ token subject), the request was really a self-switch —
-          // reconcile against the server, then retry the switch ONCE with
-          // a coherent identity.
-          //
-          // Unblock the request pipe FIRST: reconcile runs getMe through
-          // apiClient, which would queue forever if a pause leaked from a
-          // partial Phase A (deadlock). Resuming when not paused is a no-op.
-          resumeRequests();
-          const { useAuthStore } = await import('./authStore');
-          const healed = await useAuthStore
-            .getState()
-            .reconcileServerIdentity('switch_not_linked');
-          if (healed) {
-            useAccountSwitchAnimationStore.getState().endFlip();
-            if (Number(healed.id) === Number(userId)) {
-              // The heal itself landed us on the requested account.
-              return;
-            }
-            return get().switchToAccount(userId, false);
-          }
-        }
-
-        // Rollback: restore the previous identity wholesale.
-        console.warn('[AccountSwitch] Failed, rolling back:', error);
-        const targetGone = isTargetGoneError(error);
-        bumpSessionEpoch();
-        if (prevToken) await authStorage.setToken(prevToken);
-        if (prevRefreshToken) await authStorage.setRefreshToken(prevRefreshToken);
-        if (prevUser) {
-          await authStorage.setUser(prevUser);
-          const { useAuthStore } = await import('./authStore');
-          useAuthStore.getState().setUser(prevUser);
-        }
-        if (prevActiveId) {
-          await setActiveAccountId(prevActiveId);
-          set({ activeAccountId: prevActiveId });
-        }
-        resumeRequests(); // Unblock requests even on failure
-        useAccountSwitchAnimationStore.getState().endFlip();
-        if (targetGone) {
-          // Drop it from this phone and say so, instead of failing silently
-          // on every tap.
-          const gone = get().accounts.find((a) => Number(a.user.id) === Number(userId));
-          await get().removeAccount(userId);
-          analytics.capture(ANALYTICS_EVENTS.AUTH.ACCOUNT_GHOST_PURGED, {
-            anchor_user_id: prevActiveId,
-            outcome: 'purged_target_gone',
-            purged_user_ids: [userId],
-          });
-          const { showToast } = await import('@/components/ui/Toast');
-          const i18n = (await import('@/lib/i18n')).default;
-          showToast(
-            i18n.t('profile:accountSwitcher.accountGone', {
-              username: gone?.user.username ?? '',
-              defaultValue:
-                'That account no longer exists. It was removed from this phone.',
-            }),
-            'warning'
-          );
-          const err = new Error('TARGET_ACCOUNT_GONE');
-          (err as Error & { code?: string }).code = 'TARGET_ACCOUNT_GONE';
-          throw err;
-        }
-      }
+    switchToAccount: (userId: number, allowHealRetry: boolean = true) => {
+      const run = switchQueue.then(() => runSwitch(userId, allowHealRetry));
+      switchQueue = run.catch(() => undefined);
+      return run;
     },
 
     switchToAccountForIncomingCall: async (userId: number) => {
@@ -506,6 +641,58 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
       void useSubscriptionStore.getState().fetchSubscription();
     },
 
+    leaveDeadAccount: async (deadId: number, reason: string) => {
+      const { accounts, previousAccountId } = get();
+      const fallback = pickFallbackAccount(
+        accounts,
+        deadId,
+        previousAccountId,
+        Date.now()
+      );
+      if (!fallback) return false;
+      const dead = accounts.find((a) => Number(a.user.id) === Number(deadId));
+      const fallbackId = Number(fallback.user.id);
+
+      await applyAccountSwitchCore(fallbackId, fallback.user, fallback.tokens, null);
+      const { useSubscriptionStore } = await import('./subscriptionStore');
+      useSubscriptionStore.getState().adoptCached(fallbackId);
+      void useSubscriptionStore.getState().fetchSubscription();
+
+      // Its session is dead: it leaves the switcher. A linked account comes
+      // back by itself, with a new session issued through the link, when
+      // syncLinkedAccounts runs below.
+      await get().removeAccount(deadId);
+      set({ previousAccountId: null });
+
+      analytics.capture(ANALYTICS_EVENTS.AUTH.SESSION_MOVED_TO_ACCOUNT, {
+        dead_account_id: deadId,
+        fallback_account_id: fallbackId,
+        reason,
+      });
+      const { showToast } = await import('@/components/ui/Toast');
+      const i18n = (await import('@/lib/i18n')).default;
+      const gone = reason === 'switch_target_gone';
+      showToast(
+        gone
+          ? i18n.t('profile:accountSwitcher.accountGone', {
+              username: dead?.user.username ?? '',
+              defaultValue:
+                'That account no longer exists. It was removed from this phone.',
+            })
+          : i18n.t('profile:accountSwitcher.sessionEnded', {
+              username: dead?.user.username ?? '',
+              current: fallback.user.username,
+              defaultValue:
+                'The session of @{{username}} ended. You are now on @{{current}}.',
+            }),
+        'warning'
+      );
+
+      syncAfterSwitch(fallbackId, 'stored');
+      void get().syncLinkedAccounts();
+      return true;
+    },
+
     removeAccount: async (userId: number) => {
       const { accounts, activeAccountId } = get();
       await clearAccount(userId);
@@ -518,6 +705,10 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
         accounts: remaining,
         activeAccountId: activeAccountId === userId ? null : activeAccountId,
       });
+      // Nothing of an account that left the phone is kept.
+      screens = forget(screens, userId);
+      const { useSubscriptionStore } = await import('./subscriptionStore');
+      useSubscriptionStore.getState().forgetUser(userId);
     },
 
     /**
@@ -745,6 +936,7 @@ export const useAccountStore = create<AccountState & AccountActions>((set, get) 
 
     clearAll: async () => {
       await clearAllAccountData();
+      screens = {};
       set({ accounts: [], activeAccountId: null, previousAccountId: null });
     },
   };

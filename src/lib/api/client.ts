@@ -3,11 +3,13 @@ import axios, {
   AxiosError,
   AxiosResponse,
   InternalAxiosRequestConfig,
+  isCancel,
 } from 'axios';
 import { API_CONFIG } from '@/constants/config';
 import { authStorage } from '@/lib/auth/storage';
 import { getSessionEpoch } from '@/lib/auth/sessionEpoch';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { isSessionRead } from './sessionReads';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 // ── Request-body sanitisation ────────────────────────────────────
@@ -196,9 +198,31 @@ function waitUntilResumed(): Promise<void> {
   });
 }
 
+// ── Reads of the account in use ──
+// Every read is tied to the account that asked for it (see sessionReads.ts).
+let sessionReads = new AbortController();
+
+/**
+ * Drops the reads still in flight for the account the phone is leaving. The
+ * ones asked for from now on belong to the next account and are not touched.
+ */
+export function abortSessionReads(): void {
+  const leaving = sessionReads;
+  sessionReads = new AbortController();
+  leaving.abort();
+}
+
 // --- Request Interceptor: Attach Bearer token ---
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    // Tied to the account in use at the moment it is asked for, BEFORE any
+    // wait: a read that waits out a switch belongs to the account it was
+    // asked for under.
+    if (!config.signal && isSessionRead(config.method, config.url)) {
+      config.signal = sessionReads.signal;
+      (config as RetryableConfig)._sessionRead = true;
+    }
+
     // Wait if account switch is in progress
     await waitUntilResumed();
 
@@ -445,6 +469,8 @@ declare module 'axios' {
 type RetryableConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
   _transientRetryCount?: number;
+  /** A read tied to the account in use; an account switch drops it. */
+  _sessionRead?: boolean;
   retryOnTransient?: boolean;
 };
 
@@ -479,6 +505,12 @@ apiClient.interceptors.response.use(
   },
   async (error: AxiosError) => {
     const originalRequest = error.config as RetryableConfig;
+
+    // Dropped on purpose by an account switch: nothing failed, so it is not
+    // reported as an error and nothing below (retry, refresh) applies.
+    if (isCancel(error) && originalRequest?._sessionRead) {
+      return Promise.reject(error);
+    }
 
     // Track failed requests with full context (sensitive fields redacted)
     const props = buildRequestProperties(

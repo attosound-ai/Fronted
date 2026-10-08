@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { paymentService } from '@/lib/api/paymentService';
 import { useAuthStore } from './authStore';
+import { forget, recall, remember, type Recent } from '@/lib/auth/recentByAccount';
 import type { UserSubscription, Entitlement, PlanId } from '@/types';
 
 /** Map legacy backend plan values to new PlanId values. */
@@ -47,7 +48,16 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  */
 let inFlightFetch: { userId: number | null; promise: Promise<void> } | null = null;
 
+/** How many accounts keep their last known plan. A phone holds two, rarely three. */
+const KNOWN_PLANS_MAX = 6;
+
 interface SubscriptionState {
+  /**
+   * The last plan the server gave for each account of this phone. Switching
+   * to an account shows its plan at once from here while the fresh one loads;
+   * the switch used to wait for that request behind a black screen.
+   */
+  byUser: Recent<UserSubscription>;
   subscription: UserSubscription | null;
   /**
    * The account id the cached `subscription` belongs to. The store is a single
@@ -90,6 +100,16 @@ interface SubscriptionActions {
    */
   entitlementState: (entitlement: Entitlement) => boolean | null;
   clear: () => void;
+  /**
+   * Makes the last known plan of `userId` the current one, without asking the
+   * server. True when there was one. Call it right after the active account
+   * changes; a fetch still follows to bring the fresh plan.
+   */
+  adoptCached: (userId: number) => boolean;
+  /** Drops what is remembered about an account that left this phone. */
+  forgetUser: (userId: number) => void;
+  /** Sign out: nothing about any account stays. */
+  forgetAll: () => void;
 }
 
 // MMKV-backed adapter for zustand persist (sync native storage → fast rehydrate).
@@ -116,6 +136,7 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
       };
 
       return {
+        byUser: {},
         subscription: null,
         ownerUserId: null,
         isLoading: false,
@@ -161,6 +182,7 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
                 ownerUserId: owner,
                 isLoading: false,
                 lastFetchFailed: false,
+                byUser: remember(get().byUser, owner, sub, Date.now(), KNOWN_PLANS_MAX),
               });
               return true;
             };
@@ -234,6 +256,33 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
             isLoading: false,
             lastFetchFailed: false,
           }),
+
+        adoptCached: (userId: number) => {
+          const known = recall(
+            get().byUser,
+            userId,
+            Date.now(),
+            Number.POSITIVE_INFINITY
+          );
+          set({
+            subscription: known,
+            ownerUserId: known ? userId : null,
+            isLoading: false,
+            lastFetchFailed: false,
+          });
+          return known !== null;
+        },
+
+        forgetUser: (userId: number) => set({ byUser: forget(get().byUser, userId) }),
+
+        forgetAll: () =>
+          set({
+            byUser: {},
+            subscription: null,
+            ownerUserId: null,
+            isLoading: false,
+            lastFetchFailed: false,
+          }),
       };
     },
     {
@@ -244,6 +293,7 @@ export const useSubscriptionStore = create<SubscriptionState & SubscriptionActio
       partialize: (state) => ({
         subscription: state.subscription,
         ownerUserId: state.ownerUserId,
+        byUser: state.byUser,
       }),
       onRehydrateStorage: () => (state) => {
         useSubscriptionStore.setState({ hasHydrated: true });

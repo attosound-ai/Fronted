@@ -227,7 +227,8 @@
     "title": "Cambiar de cuenta",
     "activeNow": "Activa ahora",
     "addAccount": "Agregar cuenta",
-    "accountGone": "@{{username}} ya no existe. Se quitó de este teléfono."
+    "accountGone": "@{{username}} ya no existe. Se quitó de este teléfono.",
+    "sessionEnded": "La sesión de @{{username}} terminó. Ahora estás en @{{current}}."
   },
   "preview": {
     "nameFallback": "Tu nombre"

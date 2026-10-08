@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import {
@@ -17,8 +17,15 @@ import { useAudioPlayback } from '@/features/feed/hooks/useAudioPlayback';
 import { AudioWaveform } from '@/features/feed/components/AudioWaveform';
 import { useRegisterNowPlaying } from '@/lib/callAudio/useRegisterNowPlaying';
 import type { SharedPost } from '../types';
+import { aspectOf } from './mediaBox';
+import {
+  knownCoverAspect,
+  POST_CARD_WIDTH,
+  postCoverBox,
+  rememberCoverAspect,
+} from './postCover';
 
-export const POST_CARD_WIDTH = 248;
+export { POST_CARD_WIDTH };
 
 interface SharedPostCardProps {
   post: SharedPost;
@@ -53,6 +60,12 @@ function SharedPostCardInner({ post, caption, onLight }: SharedPostCardProps) {
   useRegisterNowPlaying({ kind: 'message', uri: audio ?? '' }, isPlaying);
 
   const cover = post.coverUrl || post.thumbnailUrl || post.imageUrl || null;
+  // The card takes the shape of the post: what the picture itself says once
+  // it has loaded, and until then what a post of this kind usually is.
+  const [coverAspect, setCoverAspect] = useState<number | null>(() =>
+    knownCoverAspect(cover)
+  );
+  const box = postCoverBox(coverAspect, post.type);
   const fg = onLight ? COLORS.black : COLORS.white;
   const dim = onLight ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.6)';
   const track = onLight ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.28)';
@@ -83,15 +96,26 @@ function SharedPostCardInner({ post, caption, onLight }: SharedPostCardProps) {
   const remaining = Math.max(0, (durationSec || post.duration || 0) - currentSec);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { width: box.width }]}>
       <Pressable
         onPress={open}
         accessibilityRole="button"
         accessibilityLabel={post.title || kindLabel}
       >
-        <View style={styles.coverWrap}>
+        <View style={[styles.coverWrap, box]}>
           {cover ? (
-            <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" />
+            <Image
+              source={{ uri: cover }}
+              style={styles.cover}
+              resizeMode="cover"
+              onLoad={(e) => {
+                const source = e.nativeEvent.source;
+                const measured = aspectOf(source?.width, source?.height);
+                if (measured === null) return;
+                rememberCoverAspect(cover, measured);
+                setCoverAspect(measured);
+              }}
+            />
           ) : (
             <View style={[styles.cover, styles.coverEmpty]}>
               {post.type === 'audio' ? (
@@ -218,9 +242,8 @@ const styles = StyleSheet.create({
   // WhatsApp's photo with a caption: the picture runs edge to edge under
   // the bubble's top corners and cuts straight across the bottom, so it
   // flows into the text instead of floating above it.
+  // Width and height come from postCoverBox, per post.
   coverWrap: {
-    width: POST_CARD_WIDTH,
-    height: 150,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',

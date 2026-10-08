@@ -697,6 +697,7 @@ function MessageRowInner({
             message.text && !isMedia ? styles.metaFloating : null,
             isVideoNote ? styles.metaUnderCircle : null,
             message.contentType === 'audio' ? styles.metaCorner : null,
+            isPostCard ? styles.metaPost : null,
           ]}
         >
           {metaContent}
@@ -1268,6 +1269,9 @@ const styles = StyleSheet.create({
   // A voice note keeps its duration on the last line; the time and ticks
   // sit at that line's right end instead of taking another line.
   metaCorner: { position: 'absolute', right: 12, bottom: 5, marginTop: 0 },
+  // A post card runs edge to edge, so its bubble has no side padding: the
+  // time needs its own, or it touches the edge of the bubble.
+  metaPost: { marginRight: 12 },
   bubbleVisual: { paddingHorizontal: 3, paddingTop: 3, paddingBottom: 3, minWidth: 0 },
   // A video note is only the circle: no padding, no background, no shape.
   bubbleBare: { padding: 0, minWidth: 0, backgroundColor: 'transparent' },

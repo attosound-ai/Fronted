@@ -45,13 +45,13 @@ test('consecutive messages from one author within a minute form one group', () =
   ]);
 });
 
-test('a change of author or a pause over the group window starts a new group', () => {
-  // 'c' sits 11 minutes after 'b': past Telegram's 10 minute window.
+test('a change of author starts a new group; a pause does not', () => {
+  // 'c' sits 11 minutes after 'b' and still belongs to the same run.
   const items = [m('d', 'b', 700), m('c', 'a', 670), m('b', 'a', 10), m('a', 'a', 0)];
   assert.deepEqual(groupPositions(items), [
     { first: true, last: true },
-    { first: true, last: true },
     { first: false, last: true },
+    { first: false, last: false },
     { first: true, last: false },
   ]);
 });
@@ -158,14 +158,24 @@ test('unread divider sits above the oldest unread received message', () => {
   assert.equal(unreadDividerIndex(items, 'me', 4), null);
 });
 
-test("the group window is Telegram's ten minutes, exclusive", () => {
-  const justUnder = [m('b', 'a', 599), m('a', 'a', 0)];
-  assert.deepEqual(groupPositions(justUnder), [
+test('two messages in a row from one person: only the last has the tail, however far apart (David, Oct 7 2026)', () => {
+  // His capture: "Prueba de edicion" at 6:49 PM and "Edicion rapida" at
+  // 7:18 PM, 29 minutes apart, each with its own tail.
+  const twentyNineMinutes = [m('b', 'a', 29 * 60), m('a', 'a', 0)];
+  assert.deepEqual(groupPositions(twentyNineMinutes), [
     { first: false, last: true },
     { first: true, last: false },
   ]);
-  const exactly = [m('b', 'a', 600), m('a', 'a', 0)];
-  assert.deepEqual(groupPositions(exactly), [
+  const fiveHours = [m('c', 'a', 5 * 3600), m('b', 'a', 600), m('a', 'a', 0)];
+  assert.deepEqual(
+    groupPositions(fiveHours).map((p) => p.last),
+    [true, false, false]
+  );
+});
+
+test('a day pill between two messages of one person ends the run', () => {
+  const nextDay = [m('b', 'a', 24 * 3600), m('a', 'a', 0)];
+  assert.deepEqual(groupPositions(nextDay), [
     { first: true, last: true },
     { first: true, last: true },
   ]);

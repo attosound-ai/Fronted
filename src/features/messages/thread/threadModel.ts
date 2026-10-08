@@ -25,13 +25,6 @@ function mergeable(item: ThreadItem): boolean {
   return item.contentType !== 'video_note' && !item.deleted;
 }
 
-/** Bubbles closer than this from the same author share a group. */
-/**
- * Telegram merges consecutive messages from one author when they are less
- * than ten minutes apart (`abs(t1 - t2) < 10 * 60` in messagesShouldBeMerged,
- * ChatMessageItemImpl.swift). Exactly ten minutes does not merge.
- */
-export const GROUP_GAP_MS = 10 * 60_000;
 /** Corner radius of a bubble edge that faces the outside of its group. */
 export const RADIUS_OUTER = 18;
 /** Corner radius of an edge that touches a neighbour in the group. */
@@ -63,12 +56,19 @@ export function groupPositions(items: ThreadItem[]): GroupPosition[] {
   });
 }
 
+/**
+ * Consecutive messages from one author are one run, however far apart they
+ * were written, and only the last bubble of a run carries the tail.
+ *
+ * A run used to end after ten minutes of silence (Telegram's rule), so two
+ * messages sent 29 minutes apart each had a tail, one under the other (David,
+ * Oct 7 2026: only the last one should have it).
+ */
 function sameGroup(older: ThreadItem, newer: ThreadItem): boolean {
   if (older.senderId !== newer.senderId) return false;
   if (!mergeable(older) || !mergeable(newer)) return false;
-  if (newer.createdAt - older.createdAt >= GROUP_GAP_MS) return false;
-  // A day pill between two messages ends the run, as a different date header
-  // does in Telegram.
+  // A day pill between two messages ends the run: something is drawn between
+  // them, so they are not one under the other.
   return sameDay(older.createdAt, newer.createdAt);
 }
 

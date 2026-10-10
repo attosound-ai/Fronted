@@ -62,6 +62,10 @@ let currentScreen: string | null = null;
 export function noteScreen(pathname: string): void {
   currentScreen = pathname;
 }
+/** The last route noted by the screen tracker (null before the first one). */
+export function notedScreen(): string | null {
+  return currentScreen;
+}
 
 async function emitAmbientTick(reason: string): Promise<void> {
   // Don't double-emit while a call is active — callTelemetry covers that window.

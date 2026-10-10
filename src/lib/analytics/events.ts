@@ -293,6 +293,13 @@ export const ANALYTICS_EVENTS = {
     // analyses of the AirPods no-audio incident could neither confirm nor exclude
     // the connect-time write storm. Also closes the sub-750ms transient blind spot.
     SESSION_WRITE: 'call_session_write',
+    // The call is connected and this phone has sent nothing for UPLINK_DEAD_AFTER_MS:
+    // the far party hears silence. Once per call, with the session as it is now.
+    // Oct 10 2026: the client's call with Larry ran 36 s at packets_sent 0 and
+    // nothing raised a hand; the fields were there, the alarm was not.
+    UPLINK_DEAD: 'call_uplink_dead',
+    // The uplink came back after UPLINK_DEAD (packets_sent moved again).
+    UPLINK_RECOVERED: 'call_uplink_recovered',
     // ONE row per call describing the invite→answer audio transition. Carries the
     // invite-time route/category/rate (before anything of ours touched the session),
     // the same at the connect instant and again once settled, ms_invite_to_answer,
@@ -837,6 +844,17 @@ export const ANALYTICS_EVENTS = {
     // botón. Si aparece mucho y nadie lo toca, es que el destino no abre.
     UPDATE_GATE_SHOWN: 'runtime_update_gate_shown',
     UPDATE_GATE_OPENED: 'runtime_update_gate_opened',
+    // The deep resume remount ran (or was held back). Carries the screen the
+    // user was on, which the remount used to throw away without a trace.
+    DEEP_RESUME_REMOUNT: 'runtime_deep_resume_remount',
+  },
+
+  // ── Navigation ─────────────────────────────────
+  NAV: {
+    // The router focused a root screen and iOS never showed it (Oct 9 2026,
+    // New Post dead until the app was killed). See telemetry/navPresence.ts.
+    SCREEN_NOT_PRESENTED: 'nav_screen_not_presented',
+    SCREEN_PRESENTED_LATE: 'nav_screen_presented_late',
   },
 
   // ── Network ────────────────────────────────────

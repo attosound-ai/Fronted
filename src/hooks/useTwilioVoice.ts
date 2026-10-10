@@ -16,6 +16,7 @@ import i18n from '@/lib/i18n';
 import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
+import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
 import {
   startCallTelemetry,
   registerCallCadenceListener,
@@ -159,7 +160,9 @@ function inviteLike(invite: any): InviteLike {
   let params: Record<string, string | undefined> = {};
   try {
     params =
-      typeof invite.getCustomParameters === 'function' ? invite.getCustomParameters() ?? {} : {};
+      typeof invite.getCustomParameters === 'function'
+        ? (invite.getCustomParameters() ?? {})
+        : {};
   } catch {
     /* fall back to caller + target */
   }
@@ -479,6 +482,59 @@ let lastBytesReceived: number | null = null;
 let lastBytesReceivedAtMs: number | null = null;
 let lastBytesReceivedCallSid: string | null = null;
 
+// ── Uplink watchdog (`call_uplink_dead`) ─────────────────────────────────────
+// One event when a connected call stops sending audio, one when it comes back.
+// The rule lives in lib/calls/uplinkWatch.ts (Oct 10 2026, the Larry call).
+const uplinkWatch = newUplinkWatch();
+
+function checkUplink(
+  sid: string | null,
+  ac: ReturnType<typeof useCallStore.getState>['activeCall'],
+  flat: Record<string, unknown>,
+  nowMs: number
+): void {
+  try {
+    const verdict = stepUplinkWatch(uplinkWatch, {
+      sid,
+      connected: ac?.state === 'connected',
+      connectedAtMs: ac?.connectedAt ? ac.connectedAt.getTime() : null,
+      muted: ac?.isMuted ?? false,
+      onHold: ac?.isOnHold ?? false,
+      packetsSent: typeof flat.packets_sent === 'number' ? flat.packets_sent : null,
+      nowMs,
+    });
+    if (!verdict) return;
+    if (verdict.kind === 'recovered') {
+      analytics.capture(ANALYTICS_EVENTS.CALL.UPLINK_RECOVERED, {
+        call_sid: sid,
+        dead_for_ms: verdict.deadForMs,
+        packets_sent: flat.packets_sent ?? null,
+      });
+      return;
+    }
+    void getCallAudioState()
+      .catch(() => null)
+      .then((s) => {
+        analytics.capture(ANALYTICS_EVENTS.CALL.UPLINK_DEAD, {
+          call_sid: sid,
+          direction: ac?.direction ?? null,
+          connected_ms: verdict.connectedMs,
+          flat_for_ms: verdict.flatForMs,
+          never_sent: verdict.neverSent,
+          packets_sent: flat.packets_sent ?? null,
+          packets_received: flat.packets_received ?? null,
+          mic_audio_level: flat.mic_audio_level ?? null,
+          remote_audio_level: flat.remote_audio_level ?? null,
+          app_state: AppState.currentState,
+          live_callkit_calls: s?.liveCallKitCalls ?? null,
+          ...sessionStateFields('observed', s),
+        });
+      });
+  } catch {
+    // Telemetry must never break a call.
+  }
+}
+
 async function captureCallStats(reason: string): Promise<Record<string, unknown> | null> {
   if (!activeCallObj) return null;
   try {
@@ -520,6 +576,7 @@ async function captureCallStats(reason: string): Promise<Record<string, unknown>
       is_muted: ac?.isMuted ?? null,
       ...payload,
     });
+    checkUplink(sid, ac, flat, nowMs);
     return payload;
   } catch {
     // getStats() can reject before media is flowing; the next tick retries.

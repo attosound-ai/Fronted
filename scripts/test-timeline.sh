@@ -37,6 +37,8 @@ TEST_FILES=(
   "src/features/profile/hooks/__tests__/bridgeNumberWatch.test.ts"
   "src/lib/push/__tests__/pushTapPlan.test.ts"
   "src/lib/calls/__tests__/inviteSiblings.test.ts"
+  "src/lib/calls/__tests__/uplinkWatch.test.ts"
+  "src/lib/navigation/__tests__/modalRoutes.test.ts"
   "src/features/messages/thread/__tests__/editRules.test.ts"
   "src/features/messages/thread/__tests__/editMorph.test.ts"
   "src/features/appIcon/lib/__tests__/appIconModel.test.ts"

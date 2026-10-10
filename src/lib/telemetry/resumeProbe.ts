@@ -33,6 +33,37 @@ export function msSinceBackground(): number | null {
   return lastBackgroundAt != null ? Date.now() - lastBackgroundAt : null;
 }
 
+let lastResumeAt: number | null = null;
+let deepRemounts = 0;
+let lastDeepRemountAt: number | null = null;
+let lastRouteLostToRemount: string | null = null;
+
+/** Call when AppState returns to 'active'. */
+export function markAppResumed(): void {
+  lastResumeAt = Date.now();
+}
+
+/** Call when the deep resume remount runs, with the screen it throws away. */
+export function markDeepRemount(routeBefore: string | null): void {
+  deepRemounts += 1;
+  lastDeepRemountAt = Date.now();
+  lastRouteLostToRemount = routeBefore;
+}
+
+/**
+ * Where this run stands relative to the last resume and the last deep remount,
+ * for events that need to say whether a remount came before them.
+ */
+export function resumeContext(): Record<string, unknown> {
+  const now = Date.now();
+  return {
+    ms_since_resume: lastResumeAt != null ? now - lastResumeAt : null,
+    deep_remounts_this_run: deepRemounts,
+    ms_since_deep_remount: lastDeepRemountAt != null ? now - lastDeepRemountAt : null,
+    route_lost_to_remount: lastRouteLostToRemount,
+  };
+}
+
 /**
  * Schedule a one-shot resume probe and emit `eventName` ~300ms after resume with
  * the compositor-liveness signal merged into `props`.

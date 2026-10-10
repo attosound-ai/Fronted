@@ -25,6 +25,14 @@ import { useVideoSoundStore } from '@/stores/videoSoundStore';
  * Pure JS — ships over-the-air. Pair with the PlayAndRecord re-assert in
  * `useTwilioVoice`'s onConnected for the case where a video already held
  * Playback before the call connected.
+ *
+ * Correction, Oct 9 2026: `mixWithOthers` alone never kept the category.
+ * expo-video's VideoManager.setAudioSession writes category Playback with mode
+ * MoviePlayback whenever a player is created, changes play state or gets
+ * `muted` assigned; the mixing mode only adds an option to that write. What
+ * keeps the call's PlayAndRecord session now is the native guard in
+ * patches/expo-video@55.0.13.patch, which skips that write while CallKit holds a
+ * live call. This hook still matters for the mixing option outside calls.
  */
 /**
  * The mute a video player must actually carry right now: the user's global

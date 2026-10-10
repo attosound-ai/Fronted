@@ -52,6 +52,11 @@ export interface NativeCallAudioState {
   answerActionAt: number;
   callConnectAt: number;
   twilioAudioEnabled: boolean;
+  /**
+   * CallKit calls that have not ended, read from CXCallObserver at snapshot time.
+   * Ahead of the JS call store on a lock screen answer. Absent before build 243.
+   */
+  liveCallKitCalls?: number;
   liveCategory: string;
   liveMode: string;
   liveOutputPort: string;

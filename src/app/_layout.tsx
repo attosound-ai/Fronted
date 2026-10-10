@@ -15,7 +15,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 // timeline playback uses `expo-audio` (no audible pan, but Twilio-safe).
 import { useMountEffect } from '@/hooks';
 import { useTranslation } from 'react-i18next';
-import { Stack, usePathname } from 'expo-router';
+import { Stack, usePathname, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -35,7 +35,10 @@ import { useTwilioVoice } from '@/hooks/useTwilioVoice';
 import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
-import { noteScreen, startAmbientTelemetry } from '@/lib/telemetry';
+import { noteScreen, notedScreen, startAmbientTelemetry } from '@/lib/telemetry';
+import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
+import { navPresenceListeners } from '@/lib/telemetry/navPresence';
+import { presentedModal } from '@/lib/navigation/modalRoutes';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
@@ -48,13 +51,15 @@ import { AudioProblemHost } from '@/components/call/AudioProblemHost';
 import {
   probeResume,
   markAppBackgrounded,
+  markAppResumed,
+  markDeepRemount,
   msSinceBackground,
 } from '@/lib/telemetry/resumeProbe';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { AccountSwitchBlockedSheet } from '@/components/ui/AccountSwitchBlockedSheet';
 import { ActiveCallIndicator } from '@/components/call/ActiveCallIndicator';
 import { UpdateRequiredGate } from '@/components/UpdateRequiredScreen';
-import { analytics, POSTHOG_CONFIG } from '@/lib/analytics';
+import { analytics, ANALYTICS_EVENTS, POSTHOG_CONFIG } from '@/lib/analytics';
 
 // QueryClient is extracted to a shared module so stores can import it
 // for cache invalidation (e.g., on account switch).
@@ -183,6 +188,56 @@ function AnalyticsInitializer() {
 }
 
 /**
+ * Decides whether the deep resume remount runs now, and records the decision
+ * with the screen it throws away (it used to vanish without a trace).
+ *
+ * Held while a call is live. On Oct 10 2026 a call answered from the lock screen
+ * resumed the app with the JS call store still empty; the remount rebuilt the
+ * feed, its video players took the audio session, and the call sent 0 packets
+ * for 36 s. CallKit's own list is asked first because it knows before JS does.
+ *
+ * Held while a modal screen is presented. Tearing the navigator down under a
+ * presented modal left the native stack unable to present any modal again
+ * until the app was killed: New Post dead for the client on Oct 9 2026 and on
+ * Sep 10 (see lib/navigation/modalRoutes.ts). Holding also keeps what the user
+ * was writing there.
+ */
+async function deepResumeRemount(
+  routeBefore: string | null,
+  awayMs: number | null,
+  stackRoutes: string[]
+): Promise<boolean> {
+  const native = await getCallAudioState();
+  const liveCallKitCalls = native?.liveCallKitCalls ?? null;
+  const storeCall = useCallStore.getState().activeCall != null;
+  const modal = presentedModal(stackRoutes);
+  const hold =
+    storeCall || (liveCallKitCalls ?? 0) > 0 ? 'call_live' : modal ? 'modal_open' : null;
+  if (!hold) markDeepRemount(routeBefore);
+  analytics.capture(ANALYTICS_EVENTS.RUNTIME.DEEP_RESUME_REMOUNT, {
+    action: hold ? 'held' : 'remounted',
+    hold_reason: hold,
+    route_before: routeBefore,
+    modal_open: modal,
+    stack: stackRoutes,
+    ms_since_background: awayMs,
+    live_callkit_calls: liveCallKitCalls,
+    store_call: storeCall,
+  });
+  return hold == null;
+}
+
+/** Route names of the root stack, bottom first (empty if not ready). */
+function rootStackRoutes(ref: ReturnType<typeof useNavigationContainerRef>): string[] {
+  try {
+    if (!ref.isReady()) return [];
+    return ref.getRootState()?.routes.map((r) => r.name) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Manual screen tracking for Expo Router v3+ (React Navigation v7).
  * RN v7 restricts navigation hooks, so automatic screen capture is unreliable.
  * This component fires posthog.screen() on every pathname change.
@@ -272,6 +327,7 @@ function RootLayout() {
   // is never remounted; providers/call store/Twilio call live above it and are
   // untouched.
   const [deepResumeKey, setDeepResumeKey] = useState(0);
+  const navigationRef = useNavigationContainerRef();
   const DEEP_RESUME_MS = 120_000;
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
@@ -283,21 +339,33 @@ function RootLayout() {
       }
       SplashScreen.hideAsync().catch(() => {});
       if (prev !== 'active') {
-        const deep = (msSinceBackground() ?? 0) >= DEEP_RESUME_MS;
+        markAppResumed();
+        const awayMs = msSinceBackground();
+        const deep = (awayMs ?? 0) >= DEEP_RESUME_MS;
+        const routeBefore = notedScreen();
         probeResume('app_resume_probe', {
           in_call: useCallStore.getState().activeCall != null,
           prev_state: prev,
           deep_resume: deep,
           remounted: deep,
+          route_before: routeBefore,
         });
         setResumeNudge(true);
         requestAnimationFrame(() => requestAnimationFrame(() => setResumeNudge(false)));
         // Deep suspension → remount to recover from a purged drawable (black screen).
-        if (deep) setDeepResumeKey((k) => k + 1);
+        if (deep) {
+          void deepResumeRemount(
+            routeBefore,
+            awayMs,
+            rootStackRoutes(navigationRef)
+          ).then((remount) => {
+            if (remount) setDeepResumeKey((k) => k + 1);
+          });
+        }
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [navigationRef]);
 
   // Invalidate project cache when a call ends (covers all end scenarios)
   useMountEffect(() => {
@@ -379,6 +447,7 @@ function RootLayout() {
                       <MixerHost />
                       <AudioProblemHost />
                       <Stack
+                        screenListeners={navPresenceListeners}
                         screenOptions={{
                           headerShown: true,
                           headerBackTitle: '',

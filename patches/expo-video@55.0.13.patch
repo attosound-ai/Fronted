@@ -1,0 +1,41 @@
+diff --git a/ios/VideoManager.swift b/ios/VideoManager.swift
+index 0b82a77c4c2d895ab5c92342935ed1407361222b..829e39ad369abdd8425b207ae580248063885f97 100644
+--- a/ios/VideoManager.swift
++++ b/ios/VideoManager.swift
+@@ -1,6 +1,7 @@
+ // Copyright 2024-present 650 Industries. All rights reserved.
+ 
+ import AVKit
++import CallKit
+ import Foundation
+ import ExpoModulesCore
+ 
+@@ -70,8 +71,28 @@ class VideoManager {
+     }
+   }
+ 
++  // ATTO patch (Oct 9 2026). This function always writes category .playback with
++  // mode .moviePlayback; `mixWithOthers` only adds an option, it never keeps the
++  // category. During a phone call that write takes the microphone away from the
++  // call (Playback has no input) and the voice engine does not recover: on Oct 10
++  // 2026 a call answered from the lock screen connected with 0 packets sent for
++  // 36 s because the feed's players were created at that moment. While a call is
++  // live the session belongs to the call, so the players mix into it as is.
++  private static let callObserver = CXCallObserver()
++
++  private static func isPhoneCallLive(_ audioSession: AVAudioSession) -> Bool {
++    if callObserver.calls.contains(where: { !$0.hasEnded }) {
++      return true
++    }
++    return audioSession.category == .playAndRecord
++      && (audioSession.mode == .voiceChat || audioSession.mode == .videoChat)
++  }
++
+   private func setAudioSession() {
+     let audioSession = AVAudioSession.sharedInstance()
++    if Self.isPhoneCallLive(audioSession) {
++      return
++    }
+     let audioMixingMode = findAudioMixingMode()
+     var audioSessionCategoryOptions: AVAudioSession.CategoryOptions = audioSession.categoryOptions
+ 

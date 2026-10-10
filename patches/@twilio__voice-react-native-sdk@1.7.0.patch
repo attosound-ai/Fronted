@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..d42c16ea10f137e223c6df7fdf6af906dcf08163
+index 0000000000000000000000000000000000000000..a32c2efda4a5725437d823b3789c0328a8fb79c0
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,162 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -153,13 +153,25 @@ index 0000000000000000000000000000000000000000..d42c16ea10f137e223c6df7fdf6af906
 + */
 +- (NSDictionary *)mixLevels;
 +
++/*
++ * ATTO (Oct 10 2026) — SELF HEAL. Fired on the device's heal queue with one
++ * dictionary per phase: stall, attempt, result, exhausted. The same dictionaries
++ * are kept in a small ring in NSUserDefaults because JS can be asleep during a
++ * lock screen call; drainHealRing returns and clears it.
++ */
++@property (nonatomic, copy, nullable) void (^onHeal)(NSDictionary * _Nonnull event);
++- (NSArray<NSDictionary *> * _Nonnull)drainHealRing;
++
++/* TEST ONLY: break a live call on purpose (see injectFault: in the .m). */
++- (NSString * _Nullable)injectFault:(NSString * _Nonnull)mode;
++
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb4ad89a6e
+index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675ab42fbd24
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,3969 @@
+@@ -0,0 +1,4298 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -176,6 +188,8 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +#import "AttoAudioEngineDevice.h"
 +
 +#import <stdatomic.h>
++#import <CallKit/CallKit.h>
++#import "AttoHealPolicy.h"
 +#import <QuartzCore/QuartzCore.h>
 +
 +// We want to get as close to 10 msec buffers as possible because this is what the media engine prefers.
@@ -458,6 +472,31 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +static NSString * const kAttoRenderFormatRecheckKey = @"atto_engine_render_format_recheck";
 +
 +/*
++ * ATTO (Oct 10 2026) — SELF HEAL constants. See the "Self heal" section below.
++ *
++ * kAttoSelfHealOffKey      remote kill switch, written from JS (PostHog flag
++ *                          engine_self_heal_off). Absent means ON.
++ * kAttoFaultInjectionKey   test only: lets injectFault: break a live call on
++ *                          purpose. Written YES only for David's test accounts.
++ * kAttoHealRingKey         the last kAttoHealRingMax heal events, persisted so JS
++ *                          can report them after a lock screen call where it slept.
++ */
++static NSString * const kAttoSelfHealOffKey = @"atto_engine_self_heal_off";
++static NSString * const kAttoFaultInjectionKey = @"atto_fault_injection";
++static NSString * const kAttoHealRingKey = @"atto_heal_ring";
++static const double kAttoHealTickSec = 0.25;          // watchdog period; thresholds live in AttoHealPolicy.h
++static const NSUInteger kAttoHealRingMax = 12;
++
++static NSString *AttoHealCauseName(NSInteger cause) {
++    switch (cause) {
++        case AttoHealCauseCallbacksFrozen: return @"callbacks_frozen";
++        case AttoHealCauseCategoryLost: return @"category_lost";
++        case AttoHealCauseUnitMissing: return @"unit_missing";
++        default: return @"none";
++    }
++}
++
++/*
 + * Number of slots in the per-reason route-change histogram. Indexed directly by
 + * AVAudioSessionRouteChangeReason, whose largest value is
 + * AVAudioSessionRouteChangeReasonRouteConfigurationChange == 8. An enum constant
@@ -726,6 +765,23 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +    float *_metronomeClickSamples;    // synthesized mono click (consumer format)
 +    size_t _metronomeClickLength;     // frames in the click
 +    size_t _metronomeClickPos;        // current playhead within an active click (== length when idle)
++
++    /*
++     * ATTO (Oct 10 2026) — SELF HEAL state. Touched only on _healQueue, except the
++     * _dbgHeal* counters, which are plain scalars read by mixDiagnostics.
++     */
++    dispatch_queue_t _healQueue;
++    dispatch_source_t _healTimer;
++    CXCallObserver *_healCallObserver;
++    AttoHealState _heal;             // the decision state, see AttoHealPolicy.h
++    uint64_t _dbgHealStallCount;
++    uint64_t _dbgHealAttemptCount;
++    uint64_t _dbgHealOkCount;
++    uint64_t _dbgHealExhaustedCount;
++    uint64_t _dbgHealOffSkipCount;
++    uint64_t _dbgMediaResetRebuildCount;
++    double _dbgHealLastRecoverMs;
++    NSInteger _dbgHealLastCause;
 +}
 +
 +#pragma mark - Init & Dealloc
@@ -745,6 +801,10 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +    if (self) {
 +        // By default audio device is enabled
 +        _enabled = true;
++
++        // ATTO (Oct 10 2026): the self heal watchdog runs on its own serial queue,
++        // never on main and never on the real-time threads.
++        _healQueue = dispatch_queue_create("com.atto.audio.selfheal", DISPATCH_QUEUE_SERIAL);
 +
 +        // Injection defaults
 +        _fileGain = 1.0f;
@@ -1304,6 +1364,7 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +                    NSLog(@"[AttoAudioEngine] setEnabled:YES failed to rebuild the audio unit");
 +                }
 +            });
++            [self attoHealArm];
 +        } else {
 +            // ATTO (build 92): plain stop — NO worker block, NO teardown. This runs at
 +            // CallKit didDeactivate (hang-up); dispatching into the media worker while
@@ -2503,6 +2564,15 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +    merged[@"stemRecordVolume"] = stemRecordVolume;
 +    merged[@"stemPlayoutPlaying"] = stemPlayoutPlaying;
 +    merged[@"stemPoolSize"] = @(self.recordStemPlayers.count);
++    // ATTO (Oct 10 2026): self heal counters (see the Self heal section).
++    merged[@"healStallCount"] = @(_dbgHealStallCount);
++    merged[@"healAttemptCount"] = @(_dbgHealAttemptCount);
++    merged[@"healOkCount"] = @(_dbgHealOkCount);
++    merged[@"healExhaustedCount"] = @(_dbgHealExhaustedCount);
++    merged[@"healOffSkipCount"] = @(_dbgHealOffSkipCount);
++    merged[@"healLastRecoverMs"] = @(_dbgHealLastRecoverMs);
++    merged[@"healLastCause"] = AttoHealCauseName(_dbgHealLastCause);
++    merged[@"mediaResetRebuildCount"] = @(_dbgMediaResetRebuildCount);
 +    return merged;
 +}
 +
@@ -3258,6 +3328,7 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +        }
 +
 +        BOOL success = [self startAudioUnit];
++        [self attoHealArm];
 +        return success;
 +    }
 +}
@@ -4117,8 +4188,18 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +        // If the worker block is executed, then context is guaranteed to be valid.
 +        TVOAudioDeviceContext context = [self deviceContext];
 +        if (context) {
++            /*
++             * ATTO (Oct 10 2026): handleMediaServiceLost disposed the unit, so the
++             * old `[self startAudioUnit]` here started NULL and a media services
++             * reset during a call left it dead for good. After a reset every audio
++             * object is gone and the session configuration with it (Apple:
++             * AVAudioSessionMediaServicesWereResetNotification), so rebuild through
++             * the same path CallKit's didActivate uses: reconfigure and activate the
++             * session, rebuild the unit, start it.
++             */
++            _dbgMediaResetRebuildCount++;
 +            AttoSafeExecuteWorkerBlock(context, ^{
-+                [self startAudioUnit];
++                [self attoRebuildUnitOnWorker];
 +            });
 +        }
 +    }
@@ -4126,6 +4207,266 @@ index 0000000000000000000000000000000000000000..1cd7391ae1971068f6d82921c303fcdb
 +
 +- (void)unregisterAVAudioSessionObservers {
 +    [[NSNotificationCenter defaultCenter] removeObserver:self];
++}
++
++#pragma mark - Self heal (Oct 10 2026)
++
++/*
++ * ATTO (Oct 10 2026) — THE VOICE ENGINE HEALS ITSELF.
++ *
++ * Incident: the client answered a call from the lock screen, the app resumed, the
++ * feed's video players wrote AVAudioSession category Playback / MoviePlayback, and
++ * this unit's capture and playout callbacks froze at 17 for the whole 36 s call:
++ * 0 packets sent, silence both ways. JS put PlayAndRecord back one second later,
++ * and nothing ever restarted the unit: every restart path in this file is keyed on
++ * a FORMAT change, and the format has been pinned to 48 kHz since Oct 4. In the 30
++ * days before, 64 of 172 connected calls went through MoviePlayback; most were
++ * lucky.
++ *
++ * iOS can always take the audio away (another library, another app, Siri, a route,
++ * mediaserverd). Serious VoIP apps watch the engine itself, not the causes. So:
++ *
++ *   DETECT  every kAttoHealTickSec on _healQueue, only while a CallKit call is
++ *           connected, not ended and not on hold, the device is enabled, not
++ *           interrupted, and ATTO_HEAL_GRACE_SEC after arming (every threshold
++ *           and decision is the pure C in AttoHealPolicy.h, tested on the Mac):
++ *             callbacks_frozen  capture cbCount flat for ATTO_HEAL_FROZEN_SEC
++ *             unit_missing      no AudioUnit for ATTO_HEAL_UNIT_MISSING_SEC
++ *             category_lost     session category is not PlayAndRecord
++ *   HEAL    L1 = the exact rebuild CallKit's didActivate runs (setEnabled:YES):
++ *           reassert the session (idempotent, options preserving), rebuild and
++ *           start the unit. L2 = the escalation the interruption resume has
++ *           shipped since Aug 3: clear the latched formats and let Twilio drive a
++ *           full stop -> start through TVOAudioDeviceFormatChanged. Ladder L1, L2,
++ *           L1, at most ATTO_HEAL_MAX_ATTEMPTS per stall, spaced 1, 2, 4 s, and the
++ *           attempts come back after ATTO_HEAL_HEALTHY_RESET_SEC of healthy audio.
++ *   REPORT  onHeal (live, to JS) and a ring in NSUserDefaults (JS may be asleep on
++ *           a lock screen call), plus counters in mixDiagnostics.
++ *
++ * Nothing new runs on the real-time threads: the callbacks already count. The
++ * watchdog reads those counters without the device lock (aligned 64 bit loads) so
++ * it can never take part in the hang up deadlock (RN-4N); every action goes
++ * through the worker block wrappers that the rest of this file already uses.
++ */
++
++- (void)attoHealArm {
++    dispatch_async(_healQueue, ^{
++        AttoHealArm(&self->_heal, CACurrentMediaTime());
++        if (self->_healCallObserver == nil) {
++            self->_healCallObserver = [[CXCallObserver alloc] init];
++        }
++        if (self->_healTimer != nil) {
++            return;
++        }
++        dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, self->_healQueue);
++        dispatch_source_set_timer(timer,
++                                  dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kAttoHealTickSec * NSEC_PER_SEC)),
++                                  (uint64_t)(kAttoHealTickSec * NSEC_PER_SEC),
++                                  (uint64_t)(0.05 * NSEC_PER_SEC));
++        __weak typeof(self) weakSelf = self;
++        dispatch_source_set_event_handler(timer, ^{
++            [weakSelf attoHealTick];
++        });
++        self->_healTimer = timer;
++        dispatch_resume(timer);
++    });
++}
++
++// _healQueue only. A CallKit call that is connected, not ended and not on hold.
++- (BOOL)attoHealCallIsLive {
++    for (CXCall *call in _healCallObserver.calls) {
++        if (call.hasConnected && !call.hasEnded && !call.isOnHold) {
++            return YES;
++        }
++    }
++    return NO;
++}
++
++// _healQueue only: read the signals, let AttoHealStep decide, act on its answer.
++- (void)attoHealTick {
++    const double now = CACurrentMediaTime();
++    AttoHealInput in = {0};
++    in.now = now;
++    // Plain reads, no device lock: see the section comment.
++    in.context = [self deviceContext];
++    in.enabled = _enabled;
++    in.interrupted = self.isInterrupted;
++    in.hasUnit = (_audioUnit != NULL);
++    in.recCb = self.capturingContext ? self.capturingContext->cbCount : 0;
++    in.callLive = (in.context != NULL) && [self attoHealCallIsLive];
++    if (in.context != NULL && AttoHealSessionCheckDue(&_heal, now)) {
++        in.sessionChecked = true;
++        in.categoryIsPlayAndRecord =
++            [[AVAudioSession sharedInstance].category isEqualToString:AVAudioSessionCategoryPlayAndRecord];
++    }
++    in.healOff = [[NSUserDefaults standardUserDefaults] boolForKey:kAttoSelfHealOffKey];
++
++    const AttoHealOutput out = AttoHealStep(&_heal, &in);
++
++    if (out.disarm) {
++        if (_healTimer != nil) {
++            dispatch_source_cancel(_healTimer);
++            _healTimer = nil;
++        }
++        return;
++    }
++    if (out.emitResultOk) {
++        _dbgHealOkCount++;
++        _dbgHealLastRecoverMs = out.recoverMs;
++        [self attoHealEmit:@"result" extra:@{
++            @"ok": @YES,
++            @"recover_ms": @(llround(out.recoverMs)),
++            @"attempts": @(out.attemptsSoFar),
++            @"cause": AttoHealCauseName(out.cause),
++        }];
++    }
++    if (out.emitStall) {
++        _dbgHealStallCount++;
++        _dbgHealLastCause = out.cause;
++        [self attoHealEmit:@"stall" extra:@{ @"cause": AttoHealCauseName(out.cause) }];
++    }
++    if (out.offSkipFirst) {
++        _dbgHealOffSkipCount++;
++    }
++    if (out.emitExhausted) {
++        _dbgHealExhaustedCount++;
++        [self attoHealEmit:@"exhausted" extra:@{
++            @"cause": AttoHealCauseName(out.cause),
++            @"attempts": @(out.attemptsSoFar),
++            @"stalled_ms": @(llround(out.stalledMs)),
++        }];
++    }
++    if (out.attempt > 0) {
++        _dbgHealAttemptCount++;
++        [self attoHealEmit:@"attempt" extra:@{
++            @"cause": AttoHealCauseName(out.cause),
++            @"level": @(out.level),
++            @"attempt": @(out.attempt),
++        }];
++        if (out.level == 2) {
++            [self attoHealReinitialize];
++        } else {
++            @synchronized(self) {
++                TVOAudioDeviceContext context = [self deviceContext];
++                if (context && !self.isInterrupted) {
++                    AttoSafeExecuteWorkerBlock(context, ^{
++                        [self attoRebuildUnitOnWorker];
++                    });
++                }
++            }
++        }
++    }
++}
++
++/*
++ * Media engine worker only. The rebuild CallKit's didActivate runs in setEnabled:YES,
++ * shared by the self heal (L1) and the media services reset.
++ * ensureEngineFormatForActiveSession reasserts PlayAndRecord / VoiceChat only when
++ * the session is wrong (it never clears a speaker pick on a healthy session) and
++ * keeps AllowBluetooth.
++ */
++- (void)attoRebuildUnitOnWorker {
++    if (self.audioUnit) {
++        [self stopAudioUnit];
++        [self teardownAudioUnit];
++    }
++    [self ensureEngineFormatForActiveSession];
++    if ([self setupAudioUnitWithRenderContext:self.renderingContext
++                               captureContext:self.capturingContext]) {
++        [self startAudioUnit];
++    } else {
++        NSLog(@"[AttoAudioEngine] rebuild failed to set up the audio unit");
++    }
++}
++
++// L2: the interruption resume escalation (see handleAudioInterruption:).
++- (void)attoHealReinitialize {
++    @synchronized(self) {
++        _renderingFormat = nil;
++        _capturingFormat = nil;
++        TVOAudioDeviceContext ctx = [self deviceContext];
++        if (ctx) {
++            AttoSafeFormatChanged(ctx);
++        }
++    }
++}
++
++// _healQueue only.
++- (void)attoHealEmit:(NSString *)phase extra:(NSDictionary *)extra {
++    AVAudioSession *session = [AVAudioSession sharedInstance];
++    AVAudioSessionPortDescription *input = session.currentRoute.inputs.firstObject;
++    AVAudioSessionPortDescription *output = session.currentRoute.outputs.firstObject;
++    NSMutableDictionary *event = [@{
++        @"phase": phase,
++        @"at": @([[NSDate date] timeIntervalSince1970]),
++        @"category": session.category ?: @"",
++        @"mode": session.mode ?: @"",
++        @"input_port": input.portType ?: @"none",
++        @"output_port": output.portType ?: @"none",
++        @"rec_cb": @(self.capturingContext ? self.capturingContext->cbCount : 0),
++        @"play_cb": @(self.renderingContext ? self.renderingContext->cbCount : 0),
++        @"has_unit": @(_audioUnit != NULL),
++        @"enabled": @(_enabled),
++        @"heal_off": @([[NSUserDefaults standardUserDefaults] boolForKey:kAttoSelfHealOffKey]),
++    } mutableCopy];
++    [event addEntriesFromDictionary:extra];
++    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++    NSMutableArray *ring = [[ud arrayForKey:kAttoHealRingKey] mutableCopy] ?: [NSMutableArray new];
++    [ring addObject:event];
++    while (ring.count > kAttoHealRingMax) {
++        [ring removeObjectAtIndex:0];
++    }
++    [ud setObject:ring forKey:kAttoHealRingKey];
++    void (^onHeal)(NSDictionary *) = self.onHeal;
++    if (onHeal) {
++        onHeal([event copy]);
++    }
++}
++
++- (NSArray<NSDictionary *> *)drainHealRing {
++    __block NSArray *ring = nil;
++    dispatch_sync(_healQueue, ^{
++        NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
++        ring = [ud arrayForKey:kAttoHealRingKey];
++        [ud removeObjectForKey:kAttoHealRingKey];
++    });
++    return ring ?: @[];
++}
++
++/*
++ * TEST ONLY. Breaks a live call on purpose so the self heal can be proven on a
++ * real phone. Refused unless kAttoFaultInjectionKey is YES, which JS writes only
++ * for David's test accounts. Returns nil when applied, otherwise why not.
++ *   playback_movie  exactly what expo-video wrote on Oct 10: Playback / MoviePlayback
++ *   stop_unit       stops the unit without counting it, i.e. a silent starvation
++ */
++- (NSString * _Nullable)injectFault:(NSString * _Nonnull)mode {
++    if (![[NSUserDefaults standardUserDefaults] boolForKey:kAttoFaultInjectionKey]) {
++        return @"fault_injection_off";
++    }
++    if ([mode isEqualToString:@"playback_movie"]) {
++        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
++            NSError *err = nil;
++            [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
++                                                    mode:AVAudioSessionModeMoviePlayback
++                                                 options:AVAudioSessionCategoryOptionMixWithOthers
++                                                   error:&err];
++            if (err) {
++                NSLog(@"[AttoAudioEngine] fault playback_movie failed: %@", err);
++            }
++        });
++        return nil;
++    }
++    if ([mode isEqualToString:@"stop_unit"]) {
++        @synchronized(self) {
++            if (_audioUnit == NULL) {
++                return @"no_unit";
++            }
++            AudioOutputUnitStop(_audioUnit);
++        }
++        return nil;
++    }
++    return @"unknown_mode";
 +}
 +
 +@end
@@ -4153,10 +4494,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..3b8cfeb540206d21509a73bdcfc3a9758ea1fafd
+index 0000000000000000000000000000000000000000..74018fd31b1b607ca2057bb37d2b6551fee912e1
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,465 @@
+@@ -0,0 +1,495 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -4199,7 +4540,8 @@ index 0000000000000000000000000000000000000000..3b8cfeb540206d21509a73bdcfc3a975
 +    // AttoCallPlaybackEvent (Sep 15 2026) is the playback session's channel. It
 +    // is deliberately separate from the legacy event: the legacy JS listener
 +    // turns any `ended` into "stopped", which must never happen to a session tick.
-+    return @[@"AttoAudioInjectionEvent", @"AttoCallPlaybackEvent"];
++    // AttoCallAudioHealEvent (Oct 10 2026): the voice engine's self heal phases.
++    return @[@"AttoAudioInjectionEvent", @"AttoCallPlaybackEvent", @"AttoCallAudioHealEvent"];
 +}
 +
 +- (void)startObserving {
@@ -4241,6 +4583,13 @@ index 0000000000000000000000000000000000000000..3b8cfeb540206d21509a73bdcfc3a975
 +        }
 +        // Called on the session queue; RCTEventEmitter is safe from any thread.
 +        [strongSelf sendEventWithName:@"AttoCallPlaybackEvent" body:payload];
++    };
++    [AttoAudioEngineDevice sharedDevice].onHeal = ^(NSDictionary *event) {
++        __strong typeof(weakSelf) strongSelf = weakSelf;
++        if (strongSelf == nil || !strongSelf->_hasListeners) {
++            return; // the device keeps the event in its ring for drainCallAudioHealRing
++        }
++        [strongSelf sendEventWithName:@"AttoCallAudioHealEvent" body:event];
 +    };
 +}
 +
@@ -4562,6 +4911,28 @@ index 0000000000000000000000000000000000000000..3b8cfeb540206d21509a73bdcfc3a975
 +    } @catch (NSException *exception) {
 +        reject(@"mix_diagnostics_failed", exception.reason ?: @"Failed to read mix diagnostics", nil);
 +    }
++}
++
++/*
++ * ATTO (Oct 10 2026): the self heal events the engine kept while JS could not hear
++ * them (lock screen call, no listener). Returns and clears them.
++ */
++RCT_EXPORT_METHOD(drainCallAudioHealRing:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    @try {
++        [self wireStatusHook]; // live events from now on, not only the ring
++        resolve([[AttoAudioEngineDevice sharedDevice] drainHealRing]);
++    } @catch (NSException *exception) {
++        reject(@"heal_ring_failed", exception.reason ?: @"Failed to read the heal ring", nil);
++    }
++}
++
++/* TEST ONLY: see -[AttoAudioEngineDevice injectFault:]. Resolves null when applied. */
++RCT_EXPORT_METHOD(injectCallAudioFault:(NSString *)mode
++                  resolver:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    NSString *refused = [[AttoAudioEngineDevice sharedDevice] injectFault:mode];
++    resolve(refused ?: [NSNull null]);
 +}
 +
 +/* Live { remote, mic } RMS levels for the record-screen waveform (poll while recording). */
@@ -5744,6 +6115,230 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +}
 +
 +@end
+diff --git a/ios/AttoHealPolicy.h b/ios/AttoHealPolicy.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca0794a202671
+--- /dev/null
++++ b/ios/AttoHealPolicy.h
+@@ -0,0 +1,218 @@
++/*
++ * ATTO (Oct 10 2026) — the self heal decision, as pure C.
++ *
++ * AttoAudioEngineDevice's watchdog feeds one AttoHealInput per tick and acts on
++ * the AttoHealOutput. Every decision lives here so it can be proven off the phone:
++ * front/scripts/test-native.sh compiles this header with a scenario suite
++ * (front/native-tests/heal_policy_test.c), including the Oct 10 Larry call.
++ *
++ * No Objective-C, no allocation, no clock: time comes in as `now` (seconds).
++ */
++#ifndef ATTO_HEAL_POLICY_H
++#define ATTO_HEAL_POLICY_H
++
++#include <stdbool.h>
++#include <stdint.h>
++
++#define ATTO_HEAL_FROZEN_SEC 1.0          /* capture callbacks flat this long = stalled */
++#define ATTO_HEAL_UNIT_MISSING_SEC 2.0    /* no AudioUnit this long = stalled */
++#define ATTO_HEAL_GRACE_SEC 1.5           /* after arming, CallKit activation settles */
++#define ATTO_HEAL_SESSION_CHECK_SEC 1.0   /* category read period (an XPC, keep it rare) */
++#define ATTO_HEAL_HEALTHY_RESET_SEC 10.0  /* healthy this long gives the attempts back */
++#define ATTO_HEAL_MAX_ATTEMPTS 3          /* per stall episode: L1, L2, L1 */
++#define ATTO_HEAL_FORGET_SEC 30.0         /* disarmed this long = the next arm is a new call */
++
++typedef enum {
++    AttoHealCauseNone = 0,
++    AttoHealCauseCallbacksFrozen = 1,
++    AttoHealCauseCategoryLost = 2,
++    AttoHealCauseUnitMissing = 3,
++} AttoHealCause;
++
++typedef struct {
++    double armedAt;
++    double disarmedAt;        /* 0 while armed */
++    bool armed;
++    uint64_t lastRecCb;
++    double lastMovedAt;
++    double lastSessionCheckAt;
++    bool categoryLost;
++    const void *context;      /* the device context the attempts belong to */
++    uint8_t attempts;
++    double nextAllowedAt;
++    double stallStartedAt;    /* 0 while healthy */
++    double healthySince;
++    int stallCause;
++    bool exhaustedEmitted;
++    bool offCounted;
++    /*
++     * Recovery needs evidence, not just the absence of a symptom: after a stall
++     * starts and after every action, the capture callbacks must move past
++     * recCbAtLastAction AND a session read taken after the action must show
++     * PlayAndRecord. Without this, resetting our own baselines after an action
++     * looked like a recovery 250 ms later while the audio was still dead.
++     */
++    uint64_t recCbAtLastAction;
++    bool sessionReadSinceAction;
++} AttoHealState;
++
++typedef struct {
++    double now;
++    const void *context;      /* NULL when no call media stack exists */
++    bool enabled;             /* CallKit activated the device */
++    bool interrupted;
++    bool hasUnit;
++    uint64_t recCb;           /* capture callback count */
++    bool callLive;            /* a CallKit call connected, not ended, not on hold */
++    bool sessionChecked;      /* the caller read the category this tick */
++    bool categoryIsPlayAndRecord;
++    bool healOff;             /* remote kill switch */
++} AttoHealInput;
++
++typedef struct {
++    bool disarm;              /* stop the timer: the call is over */
++    bool emitStall;
++    bool emitResultOk;
++    double recoverMs;
++    bool emitExhausted;
++    double stalledMs;
++    bool offSkipFirst;        /* first tick of a stall while the kill switch is on */
++    int attempt;              /* 1 based; 0 = no attempt this tick */
++    int level;                /* 1 rebuild the unit, 2 format changed (full restart) */
++    int cause;                /* AttoHealCause of the stall in progress */
++    int attemptsSoFar;
++} AttoHealOutput;
++
++/* Call when the watchdog (re)starts. */
++static inline void AttoHealArm(AttoHealState *st, double now) {
++    if (st->disarmedAt > 0 && (now - st->disarmedAt) >= ATTO_HEAL_FORGET_SEC) {
++        /* A previous call, not a restart of this one. */
++        st->stallStartedAt = 0;
++        st->attempts = 0;
++        st->nextAllowedAt = 0;
++        st->exhaustedEmitted = false;
++        st->offCounted = false;
++        st->context = 0;
++        st->categoryLost = false;
++    }
++    st->armed = true;
++    st->armedAt = now;
++    st->lastMovedAt = now;
++    st->disarmedAt = 0;
++}
++
++/* Should the caller read the session category before the next AttoHealStep? */
++static inline bool AttoHealSessionCheckDue(const AttoHealState *st, double now) {
++    return (now - st->lastSessionCheckAt) >= ATTO_HEAL_SESSION_CHECK_SEC;
++}
++
++static inline AttoHealOutput AttoHealStep(AttoHealState *st, const AttoHealInput *in) {
++    AttoHealOutput out = {0};
++    const double now = in->now;
++
++    if (in->context == 0) {
++        /*
++         * The call media stack is gone. This also happens for a moment inside
++         * every stop -> start cycle, including the one our own level 2 causes, so
++         * only the timer stops: the attempts belong to the context and survive.
++         */
++        st->armed = false;
++        st->disarmedAt = now;
++        out.disarm = true;
++        return out;
++    }
++    if (in->recCb != st->lastRecCb) {
++        st->lastRecCb = in->recCb;
++        st->lastMovedAt = now;
++    }
++    if (in->context != st->context) {
++        st->context = in->context;
++        st->attempts = 0;
++        st->nextAllowedAt = 0;
++        st->stallStartedAt = 0;
++        st->exhaustedEmitted = false;
++        st->offCounted = false;
++    }
++    if (!in->enabled || in->interrupted || (now - st->armedAt) < ATTO_HEAL_GRACE_SEC || !in->callLive) {
++        /* Nothing to judge: keep the baseline fresh so the gap itself is never judged. */
++        st->lastMovedAt = now;
++        return out;
++    }
++    if (in->sessionChecked) {
++        st->lastSessionCheckAt = now;
++        st->categoryLost = !in->categoryIsPlayAndRecord;
++        st->sessionReadSinceAction = true;
++    }
++
++    int cause = AttoHealCauseNone;
++    if (!in->hasUnit) {
++        if ((now - st->lastMovedAt) >= ATTO_HEAL_UNIT_MISSING_SEC) cause = AttoHealCauseUnitMissing;
++    } else if ((now - st->lastMovedAt) >= ATTO_HEAL_FROZEN_SEC) {
++        cause = AttoHealCauseCallbacksFrozen;
++    }
++    if (cause == AttoHealCauseNone && st->categoryLost) cause = AttoHealCauseCategoryLost;
++
++    if (cause == AttoHealCauseNone) {
++        if (st->stallStartedAt > 0) {
++            if (in->recCb <= st->recCbAtLastAction || !st->sessionReadSinceAction) {
++                return out; /* no evidence yet: wait, the next ticks judge again */
++            }
++            out.emitResultOk = true;
++            out.recoverMs = (now - st->stallStartedAt) * 1000.0;
++            out.cause = st->stallCause;
++            out.attemptsSoFar = st->attempts;
++            st->stallStartedAt = 0;
++            st->healthySince = now;
++            st->exhaustedEmitted = false;
++            st->offCounted = false;
++        } else if (st->healthySince == 0) {
++            st->healthySince = now;
++        }
++        if (st->attempts > 0 && (now - st->healthySince) >= ATTO_HEAL_HEALTHY_RESET_SEC) {
++            st->attempts = 0;
++        }
++        return out;
++    }
++
++    st->healthySince = 0;
++    out.cause = cause;
++    if (st->stallStartedAt == 0) {
++        st->stallStartedAt = now;
++        st->stallCause = cause;
++        st->recCbAtLastAction = in->recCb;
++        st->sessionReadSinceAction = false;
++        st->lastSessionCheckAt = 0; /* confirm the category on the next tick */
++        out.emitStall = true;
++    }
++    if (in->healOff) {
++        if (!st->offCounted) {
++            st->offCounted = true;
++            out.offSkipFirst = true;
++        }
++        return out;
++    }
++    if (now < st->nextAllowedAt) return out;
++    if (st->attempts >= ATTO_HEAL_MAX_ATTEMPTS) {
++        if (!st->exhaustedEmitted) {
++            st->exhaustedEmitted = true;
++            out.emitExhausted = true;
++            out.stalledMs = (now - st->stallStartedAt) * 1000.0;
++            out.attemptsSoFar = st->attempts;
++        }
++        return out;
++    }
++    st->attempts++;
++    out.attempt = st->attempts;
++    out.attemptsSoFar = st->attempts;
++    out.level = (st->attempts == 2) ? 2 : 1;
++    /* 1, 2, 4 s apart, plus time for the rebuild to pump. */
++    st->nextAllowedAt = now + (double)(1u << (st->attempts - 1)) + 0.8;
++    /* Judge the result on fresh callbacks and a fresh session read only. */
++    st->lastMovedAt = now;
++    st->recCbAtLastAction = in->recCb;
++    st->sessionReadSinceAction = false;
++    st->lastSessionCheckAt = 0; /* read the category again on the next tick */
++    return out;
++}
++
++#endif
 diff --git a/ios/TwilioVoiceReactNative+CallKit.m b/ios/TwilioVoiceReactNative+CallKit.m
 index adcd79044d5acb80ced4be4421e1774c9f2b4053..06eed1812a14090ffbac47519d65fe0d542ed190 100644
 --- a/ios/TwilioVoiceReactNative+CallKit.m

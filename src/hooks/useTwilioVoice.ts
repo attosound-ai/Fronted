@@ -18,6 +18,11 @@ import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
 import {
+  persistEngineHealFlags,
+  registerHealRouteReapplier,
+  startEngineHealReporting,
+} from '@/lib/callAudio/engineHeal';
+import {
   startCallTelemetry,
   registerCallCadenceListener,
   endCallTelemetry,
@@ -2738,6 +2743,17 @@ export function useTwilioVoice() {
   const setIncomingCall = useCallStore((s) => s.setIncomingCall);
   const endCall = useCallStore((s) => s.endCall);
 
+  // The voice engine heals itself natively (Oct 10 2026); JS reports it and puts
+  // the user's speaker or earpiece choice back after a heal, because the session
+  // reassert clears the port override.
+  useEffect(() => {
+    registerHealRouteReapplier(() => {
+      void ensureAudioRoute();
+    });
+    startEngineHealReporting();
+    return () => registerHealRouteReapplier(null);
+  }, []);
+
   // Only set the Playback audio mode when there's NO call.
   // During a call, let Twilio manage its own PlayAndRecord session.
   // Our setAudioModeAsync calls were interfering with Twilio's setup,
@@ -3282,6 +3298,8 @@ export function useTwilioVoice() {
         // activation time. Off by default, so this is a no-op for everyone
         // outside the cohort.
         persistEngineRenderFormatRecheckFlag();
+        // The engine's self heal switches (kill switch, test fault injection).
+        persistEngineHealFlags();
 
         // If we were previously registered under a different account,
         // unregister that identity before binding the new one. Without

@@ -38,6 +38,7 @@ TEST_FILES=(
   "src/lib/push/__tests__/pushTapPlan.test.ts"
   "src/lib/calls/__tests__/inviteSiblings.test.ts"
   "src/lib/calls/__tests__/uplinkWatch.test.ts"
+  "src/lib/callAudio/__tests__/engineHealModel.test.ts"
   "src/lib/navigation/__tests__/modalRoutes.test.ts"
   "src/features/messages/thread/__tests__/editRules.test.ts"
   "src/features/messages/thread/__tests__/editMorph.test.ts"
@@ -98,3 +99,5 @@ for f in "${TEST_FILES[@]}"; do
   COMPILED+=("$OUT/out/${f%.ts}.js")
 done
 NODE_PATH="$PWD/node_modules" node --test "${COMPILED[@]}"
+# Native decision logic (C, compiled with clang): the voice engine self heal.
+./scripts/test-native.sh

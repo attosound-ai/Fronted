@@ -637,6 +637,10 @@ function RootLayout() {
                           }}
                         />
                         <Stack.Screen
+                          name="atto-fault"
+                          options={{ headerShown: false, animation: 'none' }}
+                        />
+                        <Stack.Screen
                           name="create-post"
                           options={{
                             headerShown: false,

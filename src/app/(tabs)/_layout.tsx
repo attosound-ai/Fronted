@@ -20,6 +20,7 @@ import {
   persistAudioInjectionFlag,
   persistEngineRenderFormatRecheckFlag,
 } from '@/hooks/useTwilioVoice';
+import { persistEngineHealFlags } from '@/lib/callAudio/engineHeal';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
 import { phoenixSocket } from '@/lib/api/phoenixSocket';
@@ -95,12 +96,17 @@ export default function TabsLayout() {
     // write the gate again once they are, so no cold launch reads a stale false.
     void analytics
       .reloadFeatureFlags()
-      ?.then(() => persistAudioInjectionFlag('flags_reloaded'))
+      ?.then(() => {
+        persistAudioInjectionFlag('flags_reloaded');
+        persistEngineHealFlags();
+      })
       .catch(() => {});
     // Same again for the engine's render-format-recheck cohort. The engine reads
     // it during CallKit's audio activation, where PostHog cannot be consulted, so
     // the decision has to be on disk before the first call of the session.
     persistEngineRenderFormatRecheckFlag();
+    // The engine's self heal switches, same reason (read during activation).
+    persistEngineHealFlags();
   }, [isAuthenticated]);
 
   useEffect(() => {

@@ -21,9 +21,11 @@ import { resumeContext } from './resumeProbe';
  * as `nav_screen_presented_late`, so a slow transition is told apart from one
  * that never happens.
  *
- * A screen that already appeared and was never hidden (a page sheet modal over
- * it does not hide it) is not checked again when it regains focus: iOS sends no
- * second viewDidAppear in that case.
+ * Only the FIRST focus of each route key is checked, i.e. a screen that was
+ * just pushed or presented. A screen regaining focus after something above it
+ * closed is not: when a page sheet modal closes iOS sends no viewDidAppear to
+ * the screen under it, so checking re-focus would report screens that are
+ * plainly on screen.
  */
 
 const NOT_PRESENTED_AFTER_MS = 2500;
@@ -118,9 +120,8 @@ export function navPresenceListeners({
 }) {
   return {
     focus: () => {
+      if (watches.has(route.key)) return;
       const w = watchFor(route);
-      if (w.appeared) return;
-      clearTimer(w);
       w.focusedAt = Date.now();
       w.timer = setTimeout(() => check(route, navigation), NOT_PRESENTED_AFTER_MS);
     },

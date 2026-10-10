@@ -1,5 +1,5 @@
 diff --git a/ios/VideoManager.swift b/ios/VideoManager.swift
-index 0b82a77c4c2d895ab5c92342935ed1407361222b..829e39ad369abdd8425b207ae580248063885f97 100644
+index 0b82a77c4c2d895ab5c92342935ed1407361222b..7a52525800cc39d4515b6dc49055d0f74633db79 100644
 --- a/ios/VideoManager.swift
 +++ b/ios/VideoManager.swift
 @@ -1,6 +1,7 @@
@@ -10,7 +10,7 @@ index 0b82a77c4c2d895ab5c92342935ed1407361222b..829e39ad369abdd8425b207ae5802480
  import Foundation
  import ExpoModulesCore
  
-@@ -70,8 +71,28 @@ class VideoManager {
+@@ -70,8 +71,34 @@ class VideoManager {
      }
    }
  
@@ -34,6 +34,12 @@ index 0b82a77c4c2d895ab5c92342935ed1407361222b..829e39ad369abdd8425b207ae5802480
    private func setAudioSession() {
      let audioSession = AVAudioSession.sharedInstance()
 +    if Self.isPhoneCallLive(audioSession) {
++      // Same rule and notification as expo-audio and atto-recorder (the app counts
++      // these; see front/docs/arquitectura/audio-y-reanudacion.md).
++      NotificationCenter.default.post(
++        name: Notification.Name("AttoAudioSessionWriteDenied"),
++        object: nil,
++        userInfo: ["client": "expo-video.setAudioSession"])
 +      return
 +    }
      let audioMixingMode = findAudioMixingMode()

@@ -27,3 +27,25 @@ export const MODAL_ROUTES: ReadonlySet<string> = new Set([
 export function presentedModal(routeNames: readonly string[]): string | null {
   return routeNames.find((name) => MODAL_ROUTES.has(name)) ?? null;
 }
+
+interface NavStateLike {
+  routes?: readonly { name: string; state?: NavStateLike }[];
+}
+
+/**
+ * Route names of the app's root Stack, bottom first, from the container's root
+ * state. expo-router wraps that Stack in a single `__root` route, so the names
+ * live one level down: reading the outer level saw `["__root"]` and never the
+ * modal (found on David's phone, Oct 10 2026, the remount ran over New Post).
+ */
+export function rootStackNames(rootState: NavStateLike | null | undefined): string[] {
+  let state = rootState;
+  while (
+    state?.routes?.length === 1 &&
+    state.routes[0].name === '__root' &&
+    state.routes[0].state
+  ) {
+    state = state.routes[0].state;
+  }
+  return state?.routes?.map((r) => r.name) ?? [];
+}

@@ -69,6 +69,7 @@
     "previewContact": "👤 Contacto",
     "previewLocation": "📍 Ubicación",
     "permissionMic": "Permite el micrófono en Ajustes para grabar notas de voz.",
+    "voiceNoteInCall": "No puedes grabar una nota de voz durante una llamada",
     "permissionCamera": "Permite la cámara en Ajustes.",
     "permissionPhotos": "Permite el acceso a fotos en Ajustes.",
     "permissionContacts": "Permite los contactos en Ajustes.",

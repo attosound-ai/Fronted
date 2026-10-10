@@ -29,6 +29,7 @@ import {
   AudioModule,
   setAudioModeAsync,
 } from 'expo-audio';
+import { isCallLiveNow } from '@/lib/calls/callLive';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Text } from '@/components/ui/Text';
@@ -402,10 +403,15 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
         // passthrough (the "no te escucho" root — engine couldn't mix).
         render_fail_count: diag?.renderFailCount ?? null,
       });
-      try {
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      } catch {
-        // Best-effort
+      // This branch stops the engine mix of a LIVE call: writing Playback here took
+      // the call's microphone away (Oct 10 2026 audit). When the call has already
+      // ended, the no call restore in useTwilioVoice puts Playback back on its own.
+      if (!(await isCallLiveNow())) {
+        try {
+          await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+        } catch {
+          // Best-effort
+        }
       }
       if (mixPath) {
         const uri = mixPath.startsWith('file://') ? mixPath : `file://${mixPath}`;

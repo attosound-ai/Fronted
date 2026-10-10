@@ -318,6 +318,11 @@ final class AttoRecorderEngine: NSObject, AVAudioPlayerDelegate {
         return
       }
       do {
+        // ATTO (Oct 10 2026): the session is the call's until it ends.
+        if AttoCallSession.ownsSession(denying: "atto-recorder.resume") {
+          completion(.failure(.busy("The audio session is owned by a call")))
+          return
+        }
         if self.needsRestartOnResume || !self.pausedByUser {
           try self.restartGraph(reason: nil)
         } else {
@@ -460,6 +465,11 @@ final class AttoRecorderEngine: NSObject, AVAudioPlayerDelegate {
     if !allowDuringCall && AttoRecorderEngine.isSessionBusy() {
       throw AttoRecorderError.busy("The audio session is owned by a call or other audio")
     }
+    // ATTO (Oct 10 2026): a live CallKit call owns the session even when the caller
+    // allowed it: mode measurement or default here drops the call's VoiceChat.
+    if AttoCallSession.ownsSession(denying: "atto-recorder.activate") {
+      throw AttoRecorderError.busy("The audio session is owned by a call")
+    }
     let session = AVAudioSession.sharedInstance()
     if savedSession == nil {
       savedSession = (session.category, session.mode, session.categoryOptions)
@@ -479,6 +489,11 @@ final class AttoRecorderEngine: NSObject, AVAudioPlayerDelegate {
 
   private func restoreSession() {
     let session = AVAudioSession.sharedInstance()
+    // ATTO (Oct 10 2026): a call arrived while armed; the session is the call's now.
+    if AttoCallSession.ownsSession(denying: "atto-recorder.restore") {
+      savedSession = nil
+      return
+    }
     try? session.setActive(false, options: [.notifyOthersOnDeactivation])
     if let saved = savedSession {
       if session.category != saved.0 || session.mode != saved.1 || session.categoryOptions != saved.2 {
@@ -491,6 +506,10 @@ final class AttoRecorderEngine: NSObject, AVAudioPlayerDelegate {
   private func restorePreviewSession() {
     guard let saved = previewSavedSession else { return }
     let session = AVAudioSession.sharedInstance()
+    if AttoCallSession.ownsSession(denying: "atto-recorder.restorePreview") {
+      previewSavedSession = nil
+      return
+    }
     try? session.setActive(false, options: [.notifyOthersOnDeactivation])
     try? session.setCategory(saved.0, mode: saved.1, options: saved.2)
     previewSavedSession = nil
@@ -964,6 +983,20 @@ final class AttoRecorderEngine: NSObject, AVAudioPlayerDelegate {
 
   private func recoverGraph(reason: String) {
     if engine.isRunning && Date().timeIntervalSince(lastEngineStart) < 1.0 { return }
+    // ATTO (Oct 10 2026): a route or configuration change caused by an incoming
+    // call must not rebuild our graph over the call's session. Keep the take,
+    // paused, and rebuild when the user resumes after the call.
+    if AttoCallSession.ownsSession(denying: "atto-recorder.recoverGraph") {
+      if state == .recording {
+        engine.pause()
+        pausedByUser = false
+        needsRestartOnResume = true
+        setState(.paused, reason: "call_owns_session")
+      } else if state == .paused {
+        needsRestartOnResume = true
+      }
+      return
+    }
     switch state {
     case .recording, .ready:
       do {

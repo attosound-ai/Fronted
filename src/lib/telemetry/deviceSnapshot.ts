@@ -57,6 +57,16 @@ export interface NativeCallAudioState {
    * Ahead of the JS call store on a lock screen answer. Absent before build 243.
    */
   liveCallKitCalls?: number;
+  /**
+   * Session writes that a library skipped because a call owned the session
+   * (expo-audio, expo-video, atto-recorder). Counted since launch. Build 243+.
+   */
+  sessionWritesDenied?: {
+    total: number;
+    byClient: Record<string, number>;
+    lastClient: string;
+    lastAt: number;
+  };
   liveCategory: string;
   liveMode: string;
   liveOutputPort: string;

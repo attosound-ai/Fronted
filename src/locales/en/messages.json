@@ -69,6 +69,7 @@
     "previewContact": "👤 Contact",
     "previewLocation": "📍 Location",
     "permissionMic": "Allow the microphone in Settings to record voice notes.",
+    "voiceNoteInCall": "You can't record a voice note during a call",
     "permissionCamera": "Allow the camera in Settings.",
     "permissionPhotos": "Allow photo access in Settings.",
     "permissionContacts": "Allow contacts in Settings.",

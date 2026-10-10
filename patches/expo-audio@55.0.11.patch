@@ -1,5 +1,40 @@
+diff --git a/ios/AttoCallSession.swift b/ios/AttoCallSession.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..16c2fe9003e24260ae6be902fe64f0e7feaa2294
+--- /dev/null
++++ b/ios/AttoCallSession.swift
+@@ -0,0 +1,29 @@
++import AVFoundation
++import CallKit
++
++/// ATTO patch (Oct 10 2026). One rule for every library that writes the shared
++/// audio session: while CallKit holds a call that has not ended, the session
++/// belongs to the call. The library skips its write and says so with the
++/// `AttoAudioSessionWriteDenied` notification, which the app counts. The same
++/// rule and notification live in expo-audio, expo-video and atto-recorder; see
++/// front/docs/arquitectura/audio-y-reanudacion.md.
++///
++/// Why: on Oct 10 2026 a library write (category Playback) in the middle of a
++/// call took its microphone away and the call ran 36 s in silence. Library
++/// internal state (modes, recorder flags) keeps updating; only the
++/// AVAudioSession write is skipped.
++enum AttoCallSession {
++  private static let observer = CXCallObserver()
++
++  /// True when a call owns the session; posts the denial for `client` then.
++  static func ownsSession(denying client: String) -> Bool {
++    let live = observer.calls.contains { !$0.hasEnded }
++    if live {
++      NotificationCenter.default.post(
++        name: Notification.Name("AttoAudioSessionWriteDenied"),
++        object: nil,
++        userInfo: ["client": client])
++    }
++    return live
++  }
++}
 diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
-index d2046b5185ff05f1f5b0d131b26b83e0052bb785..04fb08329f69f164684bb1c59fe150eff29236c9 100644
+index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc68f8328a 100644
 --- a/ios/AudioModule.swift
 +++ b/ios/AudioModule.swift
 @@ -1,5 +1,8 @@
@@ -57,3 +92,94 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..04fb08329f69f164684bb1c59fe150ef
          }
        }
  
+@@ -594,6 +618,11 @@ public class AudioModule: Module {
+   }
+ 
+   private func handleInterruptionEnded(with options: AVAudioSession.InterruptionOptions) {
++    // ATTO patch (Oct 10 2026): when the interruption was a call, the voice engine
++    // and CallKit own the reactivation; players resume once the call is over.
++    if AttoCallSession.ownsSession(denying: "expo-audio.interruptionEnded") {
++      return
++    }
+     do {
+       try AVAudioSession.sharedInstance().setActive(true)
+       if options.contains(.shouldResume) {
+@@ -636,6 +665,12 @@ public class AudioModule: Module {
+   }
+ 
+   private func reconfigureAudioSession() {
++    // ATTO patch (Oct 10 2026): after a media services reset during a call the
++    // voice engine rebuilds the call's session; replaying our last mode (often
++    // Playback) on top of it would take the call's microphone.
++    if AttoCallSession.ownsSession(denying: "expo-audio.mediaServicesReset") {
++      return
++    }
+     do {
+       if let mode = lastConfiguredMode {
+         try setAudioMode(mode: mode)
+@@ -750,6 +785,10 @@ public class AudioModule: Module {
+       pauseAllPlayers()
+     }
+ 
++    // ATTO patch (Oct 10 2026): never toggle a call's session from here.
++    if AttoCallSession.ownsSession(denying: "expo-audio.setIsAudioActive") {
++      return
++    }
+     do {
+       try AVAudioSession.sharedInstance().setActive(isActive, options: isActive ? [] : [.notifyOthersOnDeactivation])
+       sessionIsActive = isActive
+@@ -821,6 +860,11 @@ public class AudioModule: Module {
+       sessionOptions = categoryOptions
+     }
+ 
++    // ATTO patch (Oct 10 2026): the state above stays current; the session write
++    // waits until no call owns the session (see AttoCallSession.swift).
++    if AttoCallSession.ownsSession(denying: "expo-audio.setAudioMode") {
++      return
++    }
+     if sessionOptions.isEmpty {
+       try session.setCategory(category, mode: .default)
+     } else {
+@@ -829,6 +873,11 @@ public class AudioModule: Module {
+   }
+ 
+   private func activateSession() throws {
++    // ATTO patch (Oct 10 2026): during a call the session is already active and
++    // CallKit's; a player mixes into it as is.
++    if AttoCallSession.ownsSession(denying: "expo-audio.activate") {
++      return
++    }
+     try AVAudioSession.sharedInstance().setActive(true)
+   }
+ 
+@@ -841,6 +890,10 @@ public class AudioModule: Module {
+       let hasActivePlayers = self.registry.allPlayers.values.contains { $0.isPlaying }
+       let hasActivePlaylists = self.registry.allPlaylists.values.contains { $0.isPlaying }
+       if !hasActivePlayers && !hasActivePlaylists {
++        // ATTO patch (Oct 10 2026): deactivating now would kill the call's audio.
++        if AttoCallSession.ownsSession(denying: "expo-audio.deactivate") {
++          return
++        }
+         do {
+           try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+         } catch {
+diff --git a/ios/AudioRecorder.swift b/ios/AudioRecorder.swift
+index 6794fe9d38b538757364cd1da1f3dbc8db0dbc72..3cb9bd0e9942d234a676f4e99ba3d212b272da49 100644
+--- a/ios/AudioRecorder.swift
++++ b/ios/AudioRecorder.swift
+@@ -80,8 +80,13 @@ class AudioRecorder: SharedRef<AVAudioRecorder>, RecordingResultHandler {
+ 
+     let session = AVAudioSession.sharedInstance()
+     do {
+-      try session.setCategory(.playAndRecord, mode: .default, options: sessionOptions)
+-      try session.setActive(true)
++      // ATTO patch (Oct 10 2026): during a call the session is already
++      // PlayAndRecord and active; mode .default here would drop VoiceChat (echo
++      // cancellation) under the call. Record from the session as it is.
++      if !AttoCallSession.ownsSession(denying: "expo-audio.recorderPrepare") {
++        try session.setCategory(.playAndRecord, mode: .default, options: sessionOptions)
++        try session.setActive(true)
++      }
+     } catch {
+       currentState = .error
+       throw AudioRecordingException("Failed to configure audio session: \(error.localizedDescription)")

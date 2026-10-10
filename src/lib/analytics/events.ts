@@ -298,6 +298,10 @@ export const ANALYTICS_EVENTS = {
     // Oct 10 2026: the client's call with Larry ran 36 s at packets_sent 0 and
     // nothing raised a hand; the fields were there, the alarm was not.
     UPLINK_DEAD: 'call_uplink_dead',
+    // A library tried to write the audio session during a call and the native
+    // guard skipped it (Oct 10 2026). by_client says who: expo-video,
+    // expo-audio.*, atto-recorder.*. Each of these used to take the mic away.
+    SESSION_WRITE_DENIED: 'call_session_write_denied',
     // The uplink came back after UPLINK_DEAD (packets_sent moved again).
     UPLINK_RECOVERED: 'call_uplink_recovered',
     // ONE row per call describing the invite→answer audio transition. Carries the

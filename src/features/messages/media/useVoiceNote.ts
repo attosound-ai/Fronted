@@ -7,6 +7,9 @@ import {
   useAudioRecorderState,
 } from 'expo-audio';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { isCallLiveNow } from '@/lib/calls/callLive';
+import { showToast } from '@/components/ui/Toast';
+import i18n from '@/lib/i18n';
 import { levelFromDb, waveformFromSamples, type OutgoingMedia } from './chatMedia';
 
 /** Anything shorter is a slip of the finger, not a voice note (WhatsApp: 1 s). */
@@ -40,6 +43,19 @@ export function useVoiceNote(conversationId: string) {
   }, [state.isRecording, state.durationMillis, state]);
 
   const start = useCallback(async (): Promise<boolean> => {
+    // A voice note during a call would take the session away from the call: the
+    // recorder writes PlayAndRecord with mode Default (no echo cancellation) and the
+    // finish below writes Playback, which has no microphone. Signal and Telegram
+    // refuse it too. (Oct 10 2026 audit, docs/arquitectura/audio-y-reanudacion.md.)
+    if (await isCallLiveNow()) {
+      analytics.capture(ANALYTICS_EVENTS.MESSAGES.VOICE_NOTE_STARTED, {
+        conversation_id: conversationId,
+        permission: null,
+        blocked: 'call_live',
+      });
+      showToast(i18n.t('messages:media.voiceNoteInCall'), 'warning');
+      return false;
+    }
     const { granted } = await requestRecordingPermissionsAsync();
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.VOICE_NOTE_STARTED, {
       conversation_id: conversationId,
@@ -64,7 +80,11 @@ export function useVoiceNote(conversationId: string) {
       } catch {
         // Already stopped: nothing to send.
       }
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      // A call can arrive while the note is being recorded: then the session is the
+      // call's, and writing Playback here would take its microphone away.
+      if (!(await isCallLiveNow())) {
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      }
       const durationMs = Math.max(state.durationMillis, Date.now() - startedAt.current);
       const tooShort = durationMs < MIN_DURATION_MS;
       if (cancelled || tooShort || !recorder.uri) {

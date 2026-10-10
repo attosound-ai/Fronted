@@ -68,6 +68,10 @@ let lastSessionKey: string | null = null;
 // revealed that it had happened, and never why. Tracking it here lets the watcher
 // emit on a count advance even when the key is unchanged.
 let lastRouteChangeCount: number | null = null;
+// Session writes the native guard has skipped since launch (expo-audio, expo-video,
+// atto-recorder). Each increase during a call is reported as call_session_write_denied:
+// before the guard (Oct 10 2026) every one of them took the call's microphone.
+let lastDeniedWrites: number | null = null;
 let appStateSub: { remove(): void } | null = null;
 let callStartedAt: number | null = null;
 let isActive = false;
@@ -227,6 +231,7 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
   cadence = 'foreground';
   lastSessionKey = null;
   lastRouteChangeCount = null;
+  lastDeniedWrites = null;
   routeHistory = [];
   if (sessionWatchInterval) clearInterval(sessionWatchInterval);
   void watchAudioSession();
@@ -458,11 +463,32 @@ export function reportUnreportedCallDeath(native?: NativeCallAudioState | null):
  * launches. Emits ONLY on change, with the from→to transition, so the timeline shows
  * precisely when ownership moved and what it moved to.
  */
+function reportDeniedWrites(
+  s: NonNullable<Awaited<ReturnType<typeof getCallAudioState>>>
+): void {
+  const denied = s.sessionWritesDenied;
+  if (!denied) return;
+  const prev = lastDeniedWrites;
+  lastDeniedWrites = denied.total;
+  // The first read of a call is the baseline (denials from earlier calls).
+  if (prev == null || denied.total <= prev) return;
+  analytics.capture(ANALYTICS_EVENTS.CALL.SESSION_WRITE_DENIED, {
+    new_denials: denied.total - prev,
+    total_since_launch: denied.total,
+    last_client: denied.lastClient || null,
+    by_client: denied.byClient,
+    category: s.liveCategory,
+    mode: s.liveMode,
+    call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+  });
+}
+
 async function watchAudioSession(): Promise<void> {
   if (!isActive) return;
   try {
     const s = await getCallAudioState();
     if (!s) return;
+    reportDeniedWrites(s);
     // Mode and sample rate are part of the session identity. Without them a
     // 24000 → 48000 flip on an unchanged route emitted NOTHING, and a sample-rate
     // mismatch is exactly the class of defect we hunt on the playout side (it is

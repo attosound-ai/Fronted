@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..ed5ef846e00314052a73f39ae28257d3b5715f69 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..e77f6f010e2465522df2d807ada0790182ffba9b 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,11 @@
@@ -34,7 +34,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..ed5ef846e00314052a73f39ae28257d3
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +981,410 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +981,451 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -195,6 +195,46 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..ed5ef846e00314052a73f39ae28257d3
 +// activeCall still null, and the resume path rebuilt the feed (video players
 +// took the session) in the middle of it. The *_at markers above are history;
 +// this is the present.
++// ATTO (Oct 10 2026): writes to the shared audio session that a library skipped
++// because a call owned it (expo-audio, expo-video and atto-recorder post
++// AttoAudioSessionWriteDenied with the client name). Counted from image load so
++// none is missed; read below as sessionWritesDenied. A growing number during a
++// call is the guard doing its job; without it each of these was a call losing
++// its microphone (the Oct 10 Larry call).
++static NSMutableDictionary<NSString *, NSNumber *> *sAttoDeniedWrites;
++static NSString *sAttoLastDeniedClient;
++static double sAttoLastDeniedAt;
++
++__attribute__((constructor)) static void AttoObserveDeniedWrites(void) {
++    sAttoDeniedWrites = [NSMutableDictionary new];
++    [[NSNotificationCenter defaultCenter]
++        addObserverForName:@"AttoAudioSessionWriteDenied"
++                    object:nil
++                     queue:nil
++                usingBlock:^(NSNotification *note) {
++        NSString *client = [note.userInfo[@"client"] isKindOfClass:[NSString class]]
++            ? note.userInfo[@"client"] : @"unknown";
++        @synchronized(sAttoDeniedWrites) {
++            sAttoDeniedWrites[client] = @(sAttoDeniedWrites[client].integerValue + 1);
++            sAttoLastDeniedClient = [client copy];
++            sAttoLastDeniedAt = [[NSDate date] timeIntervalSince1970];
++        }
++    }];
++}
++
++static NSDictionary *AttoDeniedWritesSnapshot(void) {
++    @synchronized(sAttoDeniedWrites) {
++        NSInteger total = 0;
++        for (NSNumber *n in sAttoDeniedWrites.allValues) total += n.integerValue;
++        return @{
++            @"total": @(total),
++            @"byClient": [sAttoDeniedWrites copy] ?: @{},
++            @"lastClient": sAttoLastDeniedClient ?: @"",
++            @"lastAt": @(sAttoLastDeniedAt),
++        };
++    }
++}
++
 +static NSInteger AttoLiveCallKitCalls(void) {
 +    static CXCallObserver *observer = nil;
 +    static dispatch_once_t once;
@@ -225,6 +265,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..ed5ef846e00314052a73f39ae28257d3
 +        @"callConnectAt": @([ud doubleForKey:@"atto_audio_callConnect_at"]),
 +        @"twilioAudioEnabled": @([ud boolForKey:@"atto_audio_enabled"]),
 +        @"liveCallKitCalls": @(AttoLiveCallKitCalls()),
++        @"sessionWritesDenied": AttoDeniedWritesSnapshot(),
 +        // Live AVAudioSession state at snapshot time.
 +        @"liveCategory": (s.category ?: @""),
 +        @"liveMode": (s.mode ?: @""),

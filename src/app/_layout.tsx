@@ -38,7 +38,7 @@ import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
 import { noteScreen, notedScreen, startAmbientTelemetry } from '@/lib/telemetry';
 import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
 import { navPresenceListeners } from '@/lib/telemetry/navPresence';
-import { presentedModal } from '@/lib/navigation/modalRoutes';
+import { presentedModal, rootStackNames } from '@/lib/navigation/modalRoutes';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
 import { CallBanner } from '@/components/call/CallBanner';
 import { InCallTopBar } from '@/components/call/InCallTopBar';
@@ -231,7 +231,7 @@ async function deepResumeRemount(
 function rootStackRoutes(ref: ReturnType<typeof useNavigationContainerRef>): string[] {
   try {
     if (!ref.isReady()) return [];
-    return ref.getRootState()?.routes.map((r) => r.name) ?? [];
+    return rootStackNames(ref.getRootState());
   } catch {
     return [];
   }

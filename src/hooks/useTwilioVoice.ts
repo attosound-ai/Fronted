@@ -17,6 +17,7 @@ import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
+import { isCallLiveNow } from '@/lib/calls/callLive';
 import {
   persistEngineHealFlags,
   reassertCallSession,
@@ -1371,7 +1372,17 @@ export async function reclaimAudioSession(opts?: {
         () => reassertCallSession(),
         { guard_enabled: guardEnabled }
       );
-      if (engine !== 'scheduled') {
+      if (engine === 'no_call' && (await isCallLiveNow())) {
+        // A live call the engine does not carry (Twilio's stock device, used for
+        // non creators): expo-audio refuses session writes during calls, so the
+        // old write would only report a success that did not happen. Say so.
+        emitSessionWriteSkipped(
+          'reclaim_set_audio_mode',
+          'playAndRecord+mixWithOthers',
+          'stock_device_call_owns_session',
+          await getCallAudioState()
+        );
+      } else if (engine !== 'applied') {
         await runSessionWrite(
           'reclaim_set_audio_mode',
           'playAndRecord+mixWithOthers',

@@ -39,6 +39,7 @@ static void sim_init(Sim *s) {
     s->in.hasUnit = true;
     s->in.callLive = true;
     s->in.categoryIsPlayAndRecord = true;
+    s->in.callToken = 7; /* on the phone callLive always comes with a call UUID */
     AttoHealArm(&s->st, 0);
 }
 
@@ -312,6 +313,41 @@ static void session_reads_limited_on_hold(void) {
     CHECK(reads >= 55 && reads <= 61, "reads %d in 60 s", reads);
 }
 
+static void counter_reset_while_frozen_is_not_recovery(void) {
+    printf("mix recording resets the counter while still frozen: no false ok (second review)\n");
+    Sim s; sim_init(&s);
+    run(&s, 2.0, true);
+    s.in.recCb = 9000;
+    run(&s, 1.5, false);
+    CHECK(s.attempts == 1, "one attempt, got %d", s.attempts);
+    s.in.recCb = 0;
+    run(&s, 0.75, false);
+    CHECK(s.oks == 0, "no ok from a reset, got %d", s.oks);
+}
+
+static void wrong_category_during_grace_fixed_before_it_ends(void) {
+    printf("category wrong during a route grace, fixed before it ends: no rebuild\n");
+    Sim s; sim_init(&s);
+    run(&s, 3.0, true);
+    AttoHealNoteRouteChange(&s.st, s.in.now);
+    s.in.categoryIsPlayAndRecord = false;
+    run(&s, 0.75, true);
+    s.in.categoryIsPlayAndRecord = true;
+    run(&s, 3.0, true);
+    CHECK(s.attempts == 0 && s.stalls == 0, "attempts %d stalls %d", s.attempts, s.stalls);
+}
+
+static void route_flapping_cannot_blind_forever(void) {
+    printf("route changes every second with a dead unit: judged after the 5 s cap\n");
+    Sim s; sim_init(&s);
+    run(&s, 3.0, true);
+    for (int i = 0; i < 20; i++) { /* 20 s of flapping */
+        AttoHealNoteRouteChange(&s.st, s.in.now);
+        run(&s, 1.0, false);
+    }
+    CHECK(s.stalls >= 1 && s.attempts >= 1, "stalls %d attempts %d", s.stalls, s.attempts);
+}
+
 static void session_reads_are_rate_limited(void) {
     printf("the category is read at most once a second\n");
     Sim s; sim_init(&s);
@@ -346,6 +382,9 @@ int main(void) {
     new_call_same_context_pointer();
     mix_recording_resets_the_counter();
     session_reads_limited_on_hold();
+    counter_reset_while_frozen_is_not_recovery();
+    wrong_category_during_grace_fixed_before_it_ends();
+    route_flapping_cannot_blind_forever();
     session_reads_are_rate_limited();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

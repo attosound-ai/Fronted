@@ -145,19 +145,33 @@ export async function injectCallAudioFault(
 
 /**
  * Put the call's own session back (PlayAndRecord, VoiceChat, options preserved,
- * active) through the voice engine, on its worker. The reclaim used to do this
- * through expo-audio, which now refuses during calls (the session is the call's)
- * and which also dropped VoiceChat and added defaultToSpeaker (review, Oct 10
- * 2026). 'not_supported' on binaries before build 243: the caller falls back.
+ * active) through the voice engine, on its worker, and resolve once it is written
+ * so the caller's speaker override lands after it (a category write clears the
+ * override). The reclaim used to do this through expo-audio, which now refuses
+ * during calls (the session is the call's) and which also dropped VoiceChat and
+ * added defaultToSpeaker (review, Oct 10 2026).
+ *
+ *   applied        written
+ *   no_call        the engine has no call: Twilio's stock device carries it
+ *                  (non creators) or it already ended
+ *   timeout        the worker did not answer within REASSERT_TIMEOUT_MS
+ *   not_supported  binary before build 243
  */
+const REASSERT_TIMEOUT_MS = 1500;
+
 export async function reassertCallSession(): Promise<
-  'scheduled' | 'no_call' | 'not_supported'
+  'applied' | 'no_call' | 'timeout' | 'not_supported'
 > {
   const mod = native();
   if (!mod?.reassertCallSession) return 'not_supported';
   try {
-    const refused = await mod.reassertCallSession();
-    return refused == null ? 'scheduled' : 'no_call';
+    const result = await Promise.race([
+      mod.reassertCallSession(),
+      new Promise<string>((r) => setTimeout(() => r('timeout'), REASSERT_TIMEOUT_MS)),
+    ]);
+    if (result === 'applied' || result === 'no_call' || result === 'timeout')
+      return result;
+    return 'not_supported';
   } catch {
     return 'not_supported';
   }

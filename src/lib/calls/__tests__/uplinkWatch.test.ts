@@ -116,3 +116,18 @@ test('coming back from hold or mute is not judged against the pause', () => {
   }
   assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 62000, packetsSent: 260 })), null);
 });
+
+test('held before the first packet: judged from the unhold, not from the connect', () => {
+  const w = newUplinkWatch();
+  for (let t = 1000; t <= 20000; t += 2000) {
+    assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + t, onHold: true })), null);
+  }
+  // Unheld at about 21 s; audio starts within a couple of seconds.
+  assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 21000 })), null);
+  assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 23000, packetsSent: 80 })), null);
+  // But a call that stays silent after the unhold is still caught.
+  const w2 = newUplinkWatch();
+  stepUplinkWatch(w2, sample({ nowMs: T0 + 1000, onHold: true }));
+  assert.equal(stepUplinkWatch(w2, sample({ nowMs: T0 + 5000 })), null);
+  assert.equal(stepUplinkWatch(w2, sample({ nowMs: T0 + 8000 }))?.kind, 'dead');
+});

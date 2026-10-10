@@ -18,6 +18,8 @@ export interface UplinkWatch {
   deadAtMs: number | null;
   lastSent: number | null;
   lastMovedAtMs: number | null;
+  /** Last sample taken muted or on hold: "never sent" counts from after it. */
+  lastPausedAtMs: number | null;
 }
 
 export interface UplinkSample {
@@ -36,7 +38,13 @@ export type UplinkVerdict =
   | null;
 
 export function newUplinkWatch(): UplinkWatch {
-  return { sid: null, deadAtMs: null, lastSent: null, lastMovedAtMs: null };
+  return {
+    sid: null,
+    deadAtMs: null,
+    lastSent: null,
+    lastMovedAtMs: null,
+    lastPausedAtMs: null,
+  };
 }
 
 export function stepUplinkWatch(w: UplinkWatch, s: UplinkSample): UplinkVerdict {
@@ -45,6 +53,7 @@ export function stepUplinkWatch(w: UplinkWatch, s: UplinkSample): UplinkVerdict 
     w.deadAtMs = null;
     w.lastSent = null;
     w.lastMovedAtMs = null;
+    w.lastPausedAtMs = null;
   }
   const sent = s.packetsSent;
   if (!s.connected || s.connectedAtMs == null || sent == null) return null;
@@ -64,15 +73,18 @@ export function stepUplinkWatch(w: UplinkWatch, s: UplinkSample): UplinkVerdict 
     // (review, Oct 10 2026: it fired a false call_uplink_dead).
     w.lastSent = sent;
     w.lastMovedAtMs = s.nowMs;
+    w.lastPausedAtMs = s.nowMs;
     return null;
   }
   if (w.deadAtMs != null) return null;
   const connectedMs = s.nowMs - s.connectedAtMs;
+  // Held or muted before the first packet: judge from the end of that pause.
+  const sendingSinceMs = s.nowMs - Math.max(s.connectedAtMs, w.lastPausedAtMs ?? 0);
   const flatForMs = w.lastMovedAtMs != null ? s.nowMs - w.lastMovedAtMs : 0;
   // Nothing sent since connecting, or the counter stopped moving for as long.
   const neverSent = sent === 0;
   const dead =
-    (neverSent && connectedMs >= UPLINK_DEAD_AFTER_MS) ||
+    (neverSent && sendingSinceMs >= UPLINK_DEAD_AFTER_MS) ||
     flatForMs >= UPLINK_DEAD_AFTER_MS;
   if (!dead) return null;
   w.deadAtMs = s.nowMs;

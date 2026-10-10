@@ -36,7 +36,16 @@ import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
 import { noteScreen, notedScreen, startAmbientTelemetry } from '@/lib/telemetry';
-import { getCallAudioState } from '@/lib/telemetry/deviceSnapshot';
+import {
+  getCallAudioState,
+  getWindowHealth,
+  repaintKeyWindow,
+} from '@/lib/telemetry/deviceSnapshot';
+import {
+  decideResumeRecovery,
+  isDark,
+  type WindowHealth,
+} from '@/lib/resume/resumeRecovery';
 import { navPresenceListeners } from '@/lib/telemetry/navPresence';
 import { presentedModal, rootStackNames } from '@/lib/navigation/modalRoutes';
 import { useBadgeSync } from '@/hooks/useBadgeSync';
@@ -54,6 +63,7 @@ import {
   markAppResumed,
   markDeepRemount,
   msSinceBackground,
+  DEEP_RESUME_MS,
 } from '@/lib/telemetry/resumeProbe';
 import { AccountSwitchOverlay } from '@/components/ui/AccountSwitchOverlay';
 import { AccountSwitchBlockedSheet } from '@/components/ui/AccountSwitchBlockedSheet';
@@ -188,43 +198,67 @@ function AnalyticsInitializer() {
 }
 
 /**
- * Decides whether the deep resume remount runs now, and records the decision
- * with the screen it throws away (it used to vanish without a trace).
+ * The return after a long background (Oct 10 2026, docs/arquitectura/
+ * audio-y-reanudacion.md, piece 3). The app used to remount everything on every
+ * return over 2 min; that lost the user's screen and drafts, killed an upload's
+ * Live Activity, rebuilt the feed's video players in the middle of a call (the
+ * silent Larry call) and, with New Post presented, left modals dead until the
+ * app was killed. Now:
  *
- * Held while a call is live. On Oct 10 2026 a call answered from the lock screen
- * resumed the app with the JS call store still empty; the remount rebuilt the
- * feed, its video players took the audio session, and the call sent 0 packets
- * for 36 s. CallKit's own list is asked first because it knows before JS does.
+ *   1. refresh what only the remount used to refresh: the feed and the minimum
+ *      version gate (the chat socket is checked in (tabs)/_layout);
+ *   2. measure the window; a black one gets a repaint and a second measure;
+ *   3. remount only if it is still black, and never over a live call (CallKit's
+ *      own list, which knows before JS does) or a presented modal.
  *
- * Held while a modal screen is presented. Tearing the navigator down under a
- * presented modal left the native stack unable to present any modal again
- * until the app was killed: New Post dead for the client on Oct 9 2026 and on
- * Sep 10 (see lib/navigation/modalRoutes.ts). Holding also keeps what the user
- * was writing there.
+ * Every return is recorded with what was decided and the screen the user was on.
+ * Resolves true when the caller should remount.
  */
-async function deepResumeRemount(
+async function recoverAfterDeepResume(
   routeBefore: string | null,
   awayMs: number | null,
   stackRoutes: string[]
 ): Promise<boolean> {
+  void queryClient.invalidateQueries({ queryKey: ['feed'] });
+  void queryClient.invalidateQueries({ queryKey: ['app-release'] });
+
+  await new Promise((r) => setTimeout(r, 600));
+  if (AppState.currentState !== 'active') {
+    analytics.capture(ANALYTICS_EVENTS.RUNTIME.DEEP_RESUME_REMOUNT, {
+      action: 'skipped_background',
+      route_before: routeBefore,
+      ms_since_background: awayMs,
+    });
+    return false;
+  }
+  const first = await getWindowHealth();
+  let afterRepaint: WindowHealth | null = null;
+  if (isDark(first)) {
+    await repaintKeyWindow();
+    await new Promise((r) => setTimeout(r, 400));
+    afterRepaint = await getWindowHealth();
+  }
   const native = await getCallAudioState();
   const liveCallKitCalls = native?.liveCallKitCalls ?? null;
   const storeCall = useCallStore.getState().activeCall != null;
+  const callLive = storeCall || (liveCallKitCalls ?? 0) > 0;
   const modal = presentedModal(stackRoutes);
-  const hold =
-    storeCall || (liveCallKitCalls ?? 0) > 0 ? 'call_live' : modal ? 'modal_open' : null;
-  if (!hold) markDeepRemount(routeBefore);
+  const decision = decideResumeRecovery({ first, afterRepaint, callLive, modal });
+  if (decision.action === 'last_resort') markDeepRemount(routeBefore);
   analytics.capture(ANALYTICS_EVENTS.RUNTIME.DEEP_RESUME_REMOUNT, {
-    action: hold ? 'held' : 'remounted',
-    hold_reason: hold,
+    action: decision.action,
+    hold_reason: decision.holdReason,
     route_before: routeBefore,
     modal_open: modal,
     stack: stackRoutes,
     ms_since_background: awayMs,
     live_callkit_calls: liveCallKitCalls,
     store_call: storeCall,
+    bright_fraction: first?.brightFraction ?? null,
+    bright_fraction_after_repaint: afterRepaint?.brightFraction ?? null,
+    window_drew: first?.drew ?? null,
   });
-  return hold == null;
+  return decision.action === 'last_resort';
 }
 
 /** Route names of the root stack, bottom first (empty if not ready). */
@@ -318,7 +352,9 @@ function RootLayout() {
   //       and re-acquire a drawable.
   const prevAppStateRef = useRef(AppState.currentState);
   const [resumeNudge, setResumeNudge] = useState(false);
-  // Bumped on a DEEP resume to force a full remount of the content subtree. A
+  // Bumped only as the LAST RESORT of recoverAfterDeepResume (Oct 10 2026): when
+  // the measured window is still black after a repaint. History: it used to be
+  // bumped on every DEEP resume to force a full remount of the content subtree. A
   // sub-pixel transform (resumeNudge) only re-commits layout — it does NOT
   // re-paint layers whose GPU backing store iOS purged during a long
   // suspension, which is why the phone-off black screen survived build 58. A
@@ -328,7 +364,6 @@ function RootLayout() {
   // untouched.
   const [deepResumeKey, setDeepResumeKey] = useState(0);
   const navigationRef = useNavigationContainerRef();
-  const DEEP_RESUME_MS = 120_000;
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       const prev = prevAppStateRef.current;
@@ -352,9 +387,9 @@ function RootLayout() {
         });
         setResumeNudge(true);
         requestAnimationFrame(() => requestAnimationFrame(() => setResumeNudge(false)));
-        // Deep suspension → remount to recover from a purged drawable (black screen).
+        // Deep suspension: refresh, measure, and remount only as the last resort.
         if (deep) {
-          void deepResumeRemount(
+          void recoverAfterDeepResume(
             routeBefore,
             awayMs,
             rootStackRoutes(navigationRef)

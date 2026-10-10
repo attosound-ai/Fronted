@@ -21,6 +21,9 @@ import { analytics } from '@/lib/analytics';
 
 let lastBackgroundAt: number | null = null;
 
+/** A return after this long in the background is a deep resume (refresh, measure). */
+export const DEEP_RESUME_MS = 120_000;
+
 /** Call when AppState leaves 'active' so probeResume can measure suspension depth. */
 export function markAppBackgrounded(): void {
   lastBackgroundAt = Date.now();

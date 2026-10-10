@@ -1,8 +1,8 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..e77f6f010e2465522df2d807ada0790182ffba9b 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..c529dba9caa4e276f3b0d97e919acfd7227030be 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
-@@ -10,7 +10,11 @@
+@@ -10,7 +10,12 @@
  #include <arpa/inet.h>
  #import <mach/mach.h>
  #import <mach-o/arch.h>
@@ -11,10 +11,11 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..e77f6f010e2465522df2d807ada07901
 +#import <AVFoundation/AVFoundation.h>
 +#import <AVKit/AVKit.h>
 +#import <CallKit/CallKit.h>
++#import <QuartzCore/QuartzCore.h>
  #import <React/RCTUtils.h>
  #import "RNDeviceInfo.h"
  #import "DeviceUID.h"
-@@ -104,6 +108,19 @@ - (id)init
+@@ -104,6 +109,19 @@ - (id)init
                                                   selector:@selector(headphoneBluetoothConnectionDidChange:)
                                                       name:AVAudioSessionRouteChangeNotification
                                                     object: [AVAudioSession sharedInstance]];
@@ -34,7 +35,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..e77f6f010e2465522df2d807ada07901
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +981,451 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +982,542 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -244,6 +245,97 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..e77f6f010e2465522df2d807ada07901
 +        if (!call.hasEnded) live += 1;
 +    }
 +    return live;
++}
++
++// ATTO (Oct 10 2026) — WINDOW HEALTH, for the resume without remount.
++//
++// Until Oct 10 every return after 2 min in the background remounted the whole app
++// (it lost the user's screen, drafts, an upload's Live Activity, and rebuilt video
++// players in the middle of calls) to cure a June black screen that was never
++// measured. Now the app measures instead: the key window is drawn into a small
++// bitmap from what the render server shows (drawViewHierarchyInRect,
++// afterScreenUpdates NO; layer renderInContext would repaint the model and lie),
++// and the fraction of bright pixels says whether anything is on screen. ATTO's
++// background is pure black, so mean luminance means nothing; any healthy screen
++// has white text or icons somewhere.
++static UIWindow *AttoKeyWindow(void) {
++    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
++        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
++        for (UIWindow *w in ((UIWindowScene *)scene).windows) {
++            if (w.isKeyWindow) return w;
++        }
++    }
++    return nil;
++}
++
++RCT_EXPORT_METHOD(getWindowHealth:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    dispatch_async(dispatch_get_main_queue(), ^{
++        UIWindow *window = AttoKeyWindow();
++        if (window == nil || window.bounds.size.width <= 0 || window.bounds.size.height <= 0) {
++            resolve(@{ @"hasWindow": @NO });
++            return;
++        }
++        const size_t w = 96;
++        const size_t h = (size_t)MAX(1.0, round(96.0 * window.bounds.size.height / window.bounds.size.width));
++        uint8_t *pixels = calloc(w * h * 4, 1);
++        if (pixels == NULL) {
++            resolve(@{ @"hasWindow": @YES, @"error": @"alloc" });
++            return;
++        }
++        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
++        CGContextRef ctx = CGBitmapContextCreate(pixels, w, h, 8, w * 4, space,
++                                                 kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
++        CGColorSpaceRelease(space);
++        BOOL drew = NO;
++        if (ctx != NULL) {
++            CGContextTranslateCTM(ctx, 0, (CGFloat)h);
++            CGContextScaleCTM(ctx, (CGFloat)w / window.bounds.size.width, -(CGFloat)h / window.bounds.size.height);
++            UIGraphicsPushContext(ctx);
++            drew = [window drawViewHierarchyInRect:window.bounds afterScreenUpdates:NO];
++            UIGraphicsPopContext();
++            CGContextRelease(ctx);
++        }
++        size_t bright = 0;
++        for (size_t i = 0; i < w * h; i++) {
++            const uint8_t *p = pixels + i * 4;
++            const double luma = 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
++            if (luma > 40.0) bright++;
++        }
++        free(pixels);
++        resolve(@{
++            @"hasWindow": @YES,
++            @"windowHidden": @(window.isHidden),
++            @"drew": @(drew),
++            @"samples": @(w * h),
++            @"brightPixels": @(bright),
++            @"brightFraction": @((double)bright / (double)(w * h)),
++            @"appState": @(UIApplication.sharedApplication.applicationState),
++        });
++    });
++}
++
++// ATTO (Oct 10 2026): first, cheapest recovery for a dark window. Asks every view
++// and layer to lay out and redraw, then commits. Text is drawn by drawRect, so this
++// repaints it; navigation and state are untouched.
++static void AttoRepaintViewTree(UIView *view) {
++    [view setNeedsLayout];
++    [view setNeedsDisplay];
++    [view.layer setNeedsDisplay];
++    for (UIView *sub in view.subviews) AttoRepaintViewTree(sub);
++}
++
++RCT_EXPORT_METHOD(repaintKeyWindow:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {
++    dispatch_async(dispatch_get_main_queue(), ^{
++        UIWindow *window = AttoKeyWindow();
++        if (window == nil) {
++            resolve(@NO);
++            return;
++        }
++        AttoRepaintViewTree(window);
++        [window layoutIfNeeded];
++        [CATransaction flush];
++        resolve(@YES);
++    });
 +}
 +
 +RCT_EXPORT_METHOD(getCallAudioState:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject) {

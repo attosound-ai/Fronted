@@ -12,6 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 
 import { telemetryCounters } from './counters';
 import { consumeJsLagStats } from './jsLag';
+import type { WindowHealth } from '@/lib/resume/resumeRecovery';
 
 /**
  * Timestamp captured at module load — used as a proxy for "process started
@@ -265,6 +266,8 @@ const RNDeviceInfoNative = (
         error: string;
       }>;
       showAudioRoutePicker?: () => Promise<{ ok: boolean; reason?: string }>;
+      getWindowHealth?: () => Promise<WindowHealth>;
+      repaintKeyWindow?: () => Promise<boolean>;
     };
   }
 ).RNDeviceInfo;
@@ -306,6 +309,32 @@ export async function showAudioRoutePicker(): Promise<{
     return await RNDeviceInfoNative.showAudioRoutePicker();
   } catch {
     return null;
+  }
+}
+
+/**
+ * The key window drawn from what is on screen, as a count of bright pixels (Oct
+ * 10 2026, the return without remount). Null when not iOS or the binary predates
+ * build 243.
+ */
+export async function getWindowHealth(): Promise<WindowHealth | null> {
+  if (Platform.OS !== 'ios') return null;
+  try {
+    if (!RNDeviceInfoNative?.getWindowHealth) return null;
+    return await RNDeviceInfoNative.getWindowHealth();
+  } catch {
+    return null;
+  }
+}
+
+/** Ask every view of the key window to lay out and redraw (state untouched). */
+export async function repaintKeyWindow(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  try {
+    if (!RNDeviceInfoNative?.repaintKeyWindow) return false;
+    return await RNDeviceInfoNative.repaintKeyWindow();
+  } catch {
+    return false;
   }
 }
 

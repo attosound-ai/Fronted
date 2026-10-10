@@ -21,6 +21,7 @@ import {
   persistEngineRenderFormatRecheckFlag,
 } from '@/hooks/useTwilioVoice';
 import { persistEngineHealFlags } from '@/lib/callAudio/engineHeal';
+import { DEEP_RESUME_MS, msSinceBackground } from '@/lib/telemetry/resumeProbe';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUserChannel } from '@/features/messages/hooks/useUserChannel';
 import { phoenixSocket } from '@/lib/api/phoenixSocket';
@@ -129,7 +130,9 @@ export default function TabsLayout() {
   useEffect(() => {
     if (!isAuthenticated) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void phoenixSocket.resume();
+      if (state === 'active') {
+        void phoenixSocket.resume({ deep: (msSinceBackground() ?? 0) >= DEEP_RESUME_MS });
+      }
     });
     return () => sub.remove();
   }, [isAuthenticated]);

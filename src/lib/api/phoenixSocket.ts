@@ -254,11 +254,16 @@ class PhoenixSocketManager {
    * the token may have expired while phoenix sat disconnected. Refresh it and,
    * if the socket is not up, reconnect now instead of waiting out the backoff.
    */
-  async resume(): Promise<void> {
+  async resume(opts?: { deep?: boolean }): Promise<void> {
     if (!this.socket) return;
     await this.refreshLatestToken('resume');
-    if (!this.socket.isConnected()) {
-      track('messages_websocket_resume_reconnect', {});
+    // After a long background (Oct 10 2026, the return without remount) a socket
+    // that reports connected can be half open: iOS froze the app and the server
+    // may have dropped it. The remount used to hide this by reconnecting from
+    // scratch; now a deep return reconnects on purpose, which also fires
+    // SOCKET_RECONNECTED_EVENT so open chats fetch what they missed.
+    if (opts?.deep === true || !this.socket.isConnected()) {
+      track('messages_websocket_resume_reconnect', { deep: opts?.deep === true });
       await this.refreshAndReconnect();
     }
   }

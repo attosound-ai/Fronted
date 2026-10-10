@@ -27,24 +27,26 @@ const LAST_REPORTED_DIAG_KEY = 'atto_last_reported_metrickit_diag_at';
  * M times for a background task that overran, ...". Diagnostics (crashes,
  * hangs) arrive on the launch after the event. One row per new payload.
  */
-function emitExitReasonsIfNew(
-  s: Awaited<ReturnType<typeof getCallAudioState>>
-): void {
+function emitExitReasonsIfNew(s: Awaited<ReturnType<typeof getCallAudioState>>): void {
   if (!s) return;
   try {
     const receivedAt = s.metricKitReceivedAt ?? 0;
     const diagAt = s.metricKitDiagReceivedAt ?? 0;
     const newExits =
-      receivedAt > 0 && mmkvStorage.getString(LAST_REPORTED_EXITS_KEY) !== String(receivedAt);
+      receivedAt > 0 &&
+      mmkvStorage.getString(LAST_REPORTED_EXITS_KEY) !== String(receivedAt);
     const newDiag =
       diagAt > 0 && mmkvStorage.getString(LAST_REPORTED_DIAG_KEY) !== String(diagAt);
     if (!newExits && !newDiag) return;
-    const exits = newExits && s.metricKitExitsJson ? JSON.parse(s.metricKitExitsJson) : null;
+    const exits =
+      newExits && s.metricKitExitsJson ? JSON.parse(s.metricKitExitsJson) : null;
     const diag = newDiag && s.metricKitDiagJson ? JSON.parse(s.metricKitDiagJson) : null;
     analytics.capture(ANALYTICS_EVENTS.RUNTIME.EXIT_REASONS, {
       exits_received_at: receivedAt > 0 ? receivedAt : null,
       diag_received_at: diagAt > 0 ? diagAt : null,
-      ...(exits ? Object.fromEntries(Object.entries(exits).map(([k, v]) => [`exit_${k}`, v])) : {}),
+      ...(exits
+        ? Object.fromEntries(Object.entries(exits).map(([k, v]) => [`exit_${k}`, v]))
+        : {}),
       diag_crashes: diag?.crashes?.length ?? null,
       diag_hangs: diag?.hangs ?? null,
       diag_crash_list: diag?.crashes ? JSON.stringify(diag.crashes).slice(0, 4000) : null,
@@ -115,9 +117,14 @@ export function useVoipReportTelemetry(): void {
         if (mmkvStorage.getString(dedupKey) === dedupVal) return;
         mmkvStorage.setString(dedupKey, dedupVal);
 
-        const answerAt = s.answerActionAt > 0 ? s.answerActionAt : null;
-        const activateAt = s.didActivateAt > 0 ? s.didActivateAt : null;
-        const connectAt = s.callConnectAt > 0 ? s.callConnectAt : null;
+        // A marker older than this push belongs to an earlier call. The markers are
+        // single slots that are never cleared, so on Oct 10 2026 three unanswered
+        // calls were reported as answered and connected from Oct 6 stamps. Only
+        // stamps at or after the push count, the same rule `since` applies.
+        const ofThisPush = (t: number) => (t > 0 && t >= pushAt ? t : null);
+        const answerAt = ofThisPush(s.answerActionAt);
+        const activateAt = ofThisPush(s.didActivateAt);
+        const connectAt = ofThisPush(s.callConnectAt);
         const since = (t: number | null) =>
           t != null && t >= pushAt ? Math.round((t - pushAt) * 1000) : null;
 
@@ -128,6 +135,10 @@ export function useVoipReportTelemetry(): void {
           // immediate only when settled never arrived (app died in between —
           // itself a finding).
           phase,
+          // How long after the push this row was written. JS can stay suspended
+          // for many minutes after a push it did not answer (21 min on Oct 10
+          // 2026), so a late row describes the past, not the ringing.
+          report_delay_ms: Math.max(0, Math.round(Date.now() - pushAt * 1000)),
           // Native UIApplicationState at push arrival (0=active,1=inactive,2=bg).
           push_app_state: s.voipPushAppState ?? null,
           // The chain. A null here is the finding: it says how far we got.

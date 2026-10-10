@@ -1,9 +1,9 @@
 diff --git a/ios/AttoCallSession.swift b/ios/AttoCallSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..16c2fe9003e24260ae6be902fe64f0e7feaa2294
+index 0000000000000000000000000000000000000000..803bd71f58d07c8055bdd39e77f857a47d185a17
 --- /dev/null
 +++ b/ios/AttoCallSession.swift
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,50 @@
 +import AVFoundation
 +import CallKit
 +
@@ -14,15 +14,28 @@ index 0000000000000000000000000000000000000000..16c2fe9003e24260ae6be902fe64f0e7
 +/// rule and notification live in expo-audio, expo-video and atto-recorder; see
 +/// front/docs/arquitectura/audio-y-reanudacion.md.
 +///
++/// A skipped write is not lost: when the last live call ends, CallKit tells us
++/// and `releasedNotification` is posted on the main queue, so the library replays
++/// the write it skipped. Without that, a hang up by the far party (JS restores
++/// Playback a moment before CallKit marks the call ended) left the session in
++/// the call's PlayAndRecord / VoiceChat after the call (review, Oct 10 2026).
++///
 +/// Why: on Oct 10 2026 a library write (category Playback) in the middle of a
 +/// call took its microphone away and the call ran 36 s in silence. Library
 +/// internal state (modes, recorder flags) keeps updating; only the
-+/// AVAudioSession write is skipped.
++/// AVAudioSession write waits.
 +enum AttoCallSession {
++  static let releasedNotification = Notification.Name("AttoCallSessionReleased")
++
 +  private static let observer = CXCallObserver()
++  private static let watcher = AttoCallReleaseWatcher()
++  private static let startWatching: Void = {
++    observer.setDelegate(watcher, queue: DispatchQueue.main)
++  }()
 +
 +  /// True when a call owns the session; posts the denial for `client` then.
 +  static func ownsSession(denying client: String) -> Bool {
++    _ = startWatching
 +    let live = observer.calls.contains { !$0.hasEnded }
 +    if live {
 +      NotificationCenter.default.post(
@@ -33,8 +46,16 @@ index 0000000000000000000000000000000000000000..16c2fe9003e24260ae6be902fe64f0e7
 +    return live
 +  }
 +}
++
++private final class AttoCallReleaseWatcher: NSObject, CXCallObserverDelegate {
++  func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
++    if !callObserver.calls.contains(where: { !$0.hasEnded }) {
++      NotificationCenter.default.post(name: AttoCallSession.releasedNotification, object: nil)
++    }
++  }
++}
 diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
-index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc68f8328a 100644
+index d2046b5185ff05f1f5b0d131b26b83e0052bb785..961dfdee44ad3d4205fa8f1355fc46565cf1f0b0 100644
 --- a/ios/AudioModule.swift
 +++ b/ios/AudioModule.swift
 @@ -1,5 +1,8 @@
@@ -46,7 +67,17 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
  public class AudioModule: Module {
    private var sessionIsActive = true
    private let registry = AudioComponentRegistry()
-@@ -210,9 +213,24 @@ public class AudioModule: Module {
+@@ -14,6 +17,9 @@ public class AudioModule: Module {
+   private var allowsBackgroundRecording = false
+   private var sessionOptions: AVAudioSession.CategoryOptions = []
+   private var lastConfiguredMode: AudioMode?
++  // ATTO patch (Oct 10 2026): a session write skipped because a call owned the
++  // session, replayed when the last call ends (see AttoCallSession.swift).
++  private var attoPendingModeWrite = false
+ 
+   public func definition() -> ModuleDefinition {
+     Name("ExpoAudio")
+@@ -210,9 +216,24 @@ public class AudioModule: Module {
        }
  
        Function("play") { player in
@@ -73,7 +104,7 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
        }
  
        Function("setPlaybackRate") { (player, rate: Double, pitchCorrectionQuality: PitchCorrectionQuality?) in
-@@ -242,9 +260,15 @@ public class AudioModule: Module {
+@@ -242,9 +263,15 @@ public class AudioModule: Module {
        }
  
        Function("pause") { player in
@@ -92,7 +123,32 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
          }
        }
  
-@@ -594,6 +618,11 @@ public class AudioModule: Module {
+@@ -528,6 +555,24 @@ public class AudioModule: Module {
+       object: session
+     )
+     #endif
++
++    // ATTO patch (Oct 10 2026): replay the mode a call made us skip.
++    NotificationCenter.default.addObserver(
++      self,
++      selector: #selector(attoHandleCallSessionReleased(_:)),
++      name: AttoCallSession.releasedNotification,
++      object: nil
++    )
++  }
++
++  @objc private func attoHandleCallSessionReleased(_ notification: Notification) {
++    guard attoPendingModeWrite, let mode = lastConfiguredMode else { return }
++    attoPendingModeWrite = false
++    do {
++      try setAudioMode(mode: mode)
++    } catch {
++      print("expo-audio: replaying the audio mode after the call failed: \(error)")
++    }
+   }
+ 
+   @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+@@ -594,6 +639,11 @@ public class AudioModule: Module {
    }
  
    private func handleInterruptionEnded(with options: AVAudioSession.InterruptionOptions) {
@@ -104,7 +160,7 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
      do {
        try AVAudioSession.sharedInstance().setActive(true)
        if options.contains(.shouldResume) {
-@@ -636,6 +665,12 @@ public class AudioModule: Module {
+@@ -636,6 +686,12 @@ public class AudioModule: Module {
    }
  
    private func reconfigureAudioSession() {
@@ -117,7 +173,7 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
      do {
        if let mode = lastConfiguredMode {
          try setAudioMode(mode: mode)
-@@ -750,6 +785,10 @@ public class AudioModule: Module {
+@@ -750,6 +806,10 @@ public class AudioModule: Module {
        pauseAllPlayers()
      }
  
@@ -128,19 +184,21 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
      do {
        try AVAudioSession.sharedInstance().setActive(isActive, options: isActive ? [] : [.notifyOthersOnDeactivation])
        sessionIsActive = isActive
-@@ -821,6 +860,11 @@ public class AudioModule: Module {
+@@ -821,6 +881,13 @@ public class AudioModule: Module {
        sessionOptions = categoryOptions
      }
  
 +    // ATTO patch (Oct 10 2026): the state above stays current; the session write
 +    // waits until no call owns the session (see AttoCallSession.swift).
 +    if AttoCallSession.ownsSession(denying: "expo-audio.setAudioMode") {
++      attoPendingModeWrite = true
 +      return
 +    }
++    attoPendingModeWrite = false
      if sessionOptions.isEmpty {
        try session.setCategory(category, mode: .default)
      } else {
-@@ -829,6 +873,11 @@ public class AudioModule: Module {
+@@ -829,6 +896,11 @@ public class AudioModule: Module {
    }
  
    private func activateSession() throws {
@@ -152,7 +210,7 @@ index d2046b5185ff05f1f5b0d131b26b83e0052bb785..0f07e39d8ded2897fdb70a81cb5b1fcc
      try AVAudioSession.sharedInstance().setActive(true)
    }
  
-@@ -841,6 +890,10 @@ public class AudioModule: Module {
+@@ -841,6 +913,10 @@ public class AudioModule: Module {
        let hasActivePlayers = self.registry.allPlayers.values.contains { $0.isPlaying }
        let hasActivePlaylists = self.registry.allPlaylists.values.contains { $0.isPlaying }
        if !hasActivePlayers && !hasActivePlaylists {

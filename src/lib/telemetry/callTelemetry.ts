@@ -68,10 +68,14 @@ let lastSessionKey: string | null = null;
 // revealed that it had happened, and never why. Tracking it here lets the watcher
 // emit on a count advance even when the key is unchanged.
 let lastRouteChangeCount: number | null = null;
-// Session writes the native guard has skipped since launch (expo-audio, expo-video,
-// atto-recorder). Each increase during a call is reported as call_session_write_denied:
-// before the guard (Oct 10 2026) every one of them took the call's microphone.
-let lastDeniedWrites: number | null = null;
+// Session writes the native guard has skipped (expo-audio, expo-video,
+// atto-recorder), reported as call_session_write_denied: before the guard (Oct 10
+// 2026) every one of them took the call's microphone.
+// Per call: the count each client had at the call's first read, and the clients
+// already reported. One event per client per call, not one per 750 ms poll:
+// expo-video writes on every player create, play and mute while the feed scrolls.
+let deniedBaselineByClient: Record<string, number> | null = null;
+let deniedClientsReported = new Set<string>();
 let appStateSub: { remove(): void } | null = null;
 let callStartedAt: number | null = null;
 let isActive = false;
@@ -231,7 +235,8 @@ export async function startCallTelemetry(reason: string = 'call_started'): Promi
   cadence = 'foreground';
   lastSessionKey = null;
   lastRouteChangeCount = null;
-  lastDeniedWrites = null;
+  deniedBaselineByClient = null;
+  deniedClientsReported = new Set<string>();
   routeHistory = [];
   if (sessionWatchInterval) clearInterval(sessionWatchInterval);
   void watchAudioSession();
@@ -468,19 +473,24 @@ function reportDeniedWrites(
 ): void {
   const denied = s.sessionWritesDenied;
   if (!denied) return;
-  const prev = lastDeniedWrites;
-  lastDeniedWrites = denied.total;
   // The first read of a call is the baseline (denials from earlier calls).
-  if (prev == null || denied.total <= prev) return;
-  analytics.capture(ANALYTICS_EVENTS.CALL.SESSION_WRITE_DENIED, {
-    new_denials: denied.total - prev,
-    total_since_launch: denied.total,
-    last_client: denied.lastClient || null,
-    by_client: denied.byClient,
-    category: s.liveCategory,
-    mode: s.liveMode,
-    call_sid: useCallStore.getState().activeCall?.callSid ?? null,
-  });
+  if (deniedBaselineByClient == null) {
+    deniedBaselineByClient = { ...denied.byClient };
+    return;
+  }
+  for (const [client, count] of Object.entries(denied.byClient)) {
+    const before = deniedBaselineByClient[client] ?? 0;
+    if (count <= before || deniedClientsReported.has(client)) continue;
+    deniedClientsReported.add(client);
+    analytics.capture(ANALYTICS_EVENTS.CALL.SESSION_WRITE_DENIED, {
+      client,
+      denials_so_far: count - before,
+      total_since_launch: denied.total,
+      category: s.liveCategory,
+      mode: s.liveMode,
+      call_sid: useCallStore.getState().activeCall?.callSid ?? null,
+    });
+  }
 }
 
 async function watchAudioSession(): Promise<void> {

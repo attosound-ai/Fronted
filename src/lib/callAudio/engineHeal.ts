@@ -41,6 +41,7 @@ const HEAL_EVENT = 'AttoCallAudioHealEvent';
 interface HealNative {
   drainCallAudioHealRing?: () => Promise<NativeHealEvent[]>;
   injectCallAudioFault?: (mode: string) => Promise<string | null>;
+  reassertCallSession?: () => Promise<string | null>;
 }
 
 function native(): HealNative | null {
@@ -140,4 +141,24 @@ export async function injectCallAudioFault(
     call_sid: useCallStore.getState().activeCall?.callSid ?? null,
   });
   return refused;
+}
+
+/**
+ * Put the call's own session back (PlayAndRecord, VoiceChat, options preserved,
+ * active) through the voice engine, on its worker. The reclaim used to do this
+ * through expo-audio, which now refuses during calls (the session is the call's)
+ * and which also dropped VoiceChat and added defaultToSpeaker (review, Oct 10
+ * 2026). 'not_supported' on binaries before build 243: the caller falls back.
+ */
+export async function reassertCallSession(): Promise<
+  'scheduled' | 'no_call' | 'not_supported'
+> {
+  const mod = native();
+  if (!mod?.reassertCallSession) return 'not_supported';
+  try {
+    const refused = await mod.reassertCallSession();
+    return refused == null ? 'scheduled' : 'no_call';
+  } catch {
+    return 'not_supported';
+  }
 }

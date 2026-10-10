@@ -53,9 +53,13 @@ puede reescribir. Este documento es el contrato; cada pieza se prueba contra él
 * Detecta: contador de captura sin moverse 1000 ms; categoría distinta de
   PlayAndRecord o entrada `none`; `IsRunning == 0`. El caso CategoryChange del
   observador de ruta lo evalúa al instante.
-* Escalera: L0 reafirmar sesión (solo si está mal, conservando opciones), L1
-  reconstruir el unit, L2 `TVOAudioDeviceReinitialize`. 3 intentos por contexto,
-  espera 1, 2, 4 s, reinicio del contador tras 10 s sanos. Interruptor remoto.
+* Escalera: L1 la reconstrucción de didActivate (reafirma la sesión solo si está
+  mal, conservando opciones, y reconstruye el unit), L2 el reinicio completo por
+  `TVOAudioDeviceFormatChanged`, L1 otra vez. 3 intentos por llamada (UUID de
+  CallKit), espera 1, 2, 4 s, se devuelven tras 10 s sanos. "Recuperado" exige
+  evidencia: callbacks moviéndose tras la acción y una lectura nueva de la sesión.
+  Cada cambio de ruta da 1,5 s de gracia (el motor puede estar reconstruyendo).
+  Interruptor remoto.
 * `mediaServicesWereReset` con llamada viva: reconfigurar sesión y reconstruir.
 * Telemetría: `call_audio_stall_detected`, `call_audio_heal_attempt`,
   `call_audio_heal_result`, `call_audio_heal_exhausted`, anillo persistido.
@@ -67,6 +71,14 @@ puede reescribir. Este documento es el contrato; cada pieza se prueba contra él
   CXCallObserver. Política pura en Swift, probada con un arnés propio.
 * Se conectan: expo-video, expo-audio (setAudioMode, grabadora, fin de
   interrupción, reset), atto-recorder, y la reafirmación del motor.
+* Una escritura saltada no se pierde: cuando CallKit avisa que no queda ninguna
+  llamada, expo-audio y expo-video la reaplican (si no, al colgar el otro la
+  sesión quedaba en PlayAndRecord / VoiceChat).
+* El reclaim de JS durante la llamada reafirma a través del motor
+  (`reassertCallSession`), no de expo-audio.
+* Alcance deliberado: CXCallObserver ve todas las llamadas del teléfono (celular,
+  WhatsApp). Durante esas tampoco se escribe la sesión ni se graban notas de voz;
+  iOS no deja grabar en una llamada de todos modos.
 * JS: nota de voz bloqueada durante una llamada; `SimpleRecordingScreen` no
   escribe Playback con la llamada viva.
 

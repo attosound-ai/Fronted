@@ -92,3 +92,27 @@ test('ringing and connecting are not judged, and a new call starts clean', () =>
     'dead'
   );
 });
+
+test('coming back from hold or mute is not judged against the pause', () => {
+  const w = newUplinkWatch();
+  stepUplinkWatch(w, sample({ nowMs: T0 + 2000, packetsSent: 100 }));
+  stepUplinkWatch(w, sample({ nowMs: T0 + 4000, packetsSent: 200 }));
+  // 30 s on hold, the counter does not move.
+  for (let t = 6000; t <= 34000; t += 2000) {
+    assert.equal(
+      stepUplinkWatch(w, sample({ nowMs: T0 + t, packetsSent: 200, onHold: true })),
+      null
+    );
+  }
+  // Unhold: the first samples still read 200 while audio restarts.
+  assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 36000, packetsSent: 200 })), null);
+  assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 38000, packetsSent: 260 })), null);
+  // Muted for 20 s, then unmuted.
+  for (let t = 40000; t <= 60000; t += 2000) {
+    assert.equal(
+      stepUplinkWatch(w, sample({ nowMs: T0 + t, packetsSent: 260, muted: true })),
+      null
+    );
+  }
+  assert.equal(stepUplinkWatch(w, sample({ nowMs: T0 + 62000, packetsSent: 260 })), null);
+});

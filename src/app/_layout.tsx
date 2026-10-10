@@ -31,7 +31,13 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useAuthStore } from '@/stores/authStore';
 import { useCallStore } from '@/stores/callStore';
 import { AppSplash } from '@/components/AppSplash';
-import { useTwilioVoice } from '@/hooks/useTwilioVoice';
+import {
+  persistAudioInjectionFlag,
+  persistColdLaunchCallKitFlag,
+  persistEngineRenderFormatRecheckFlag,
+  useTwilioVoice,
+} from '@/hooks/useTwilioVoice';
+import { persistEngineHealFlags } from '@/lib/callAudio/engineHeal';
 import { useVoipReportTelemetry } from '@/hooks/useVoipReportTelemetry';
 import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 import { installBackgroundFramePacing } from '@/lib/backgroundFrames';
@@ -221,6 +227,18 @@ async function recoverAfterDeepResume(
 ): Promise<boolean> {
   void queryClient.invalidateQueries({ queryKey: ['feed'] });
   void queryClient.invalidateQueries({ queryKey: ['app-release'] });
+  // The remount used to rerun (tabs)/_layout's flag reload and the native
+  // switches it writes; a VoIP woken process can live for days, so a changed
+  // kill switch or cohort would otherwise never reach it (review, Oct 10 2026).
+  void analytics
+    .reloadFeatureFlags()
+    ?.then(() => {
+      persistColdLaunchCallKitFlag();
+      persistAudioInjectionFlag('deep_resume');
+      persistEngineRenderFormatRecheckFlag();
+      persistEngineHealFlags();
+    })
+    .catch(() => {});
 
   await new Promise((r) => setTimeout(r, 600));
   if (AppState.currentState !== 'active') {
@@ -382,7 +400,9 @@ function RootLayout() {
           in_call: useCallStore.getState().activeCall != null,
           prev_state: prev,
           deep_resume: deep,
-          remounted: deep,
+          // Kept for old dashboards: a deep return no longer remounts by itself.
+          // runtime_deep_resume_remount says what was decided (Oct 10 2026).
+          remounted: false,
           route_before: routeBefore,
         });
         setResumeNudge(true);

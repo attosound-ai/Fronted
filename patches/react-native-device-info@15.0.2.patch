@@ -1,5 +1,5 @@
 diff --git a/ios/RNDeviceInfo/RNDeviceInfo.m b/ios/RNDeviceInfo/RNDeviceInfo.m
-index 948c561f03fc7da53f6e843867574b642d04d0ea..c529dba9caa4e276f3b0d97e919acfd7227030be 100644
+index 948c561f03fc7da53f6e843867574b642d04d0ea..3b3a269c540d8b7fcbdc09a2a5156765112b74f3 100644
 --- a/ios/RNDeviceInfo/RNDeviceInfo.m
 +++ b/ios/RNDeviceInfo/RNDeviceInfo.m
 @@ -10,7 +10,12 @@
@@ -35,7 +35,7 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..c529dba9caa4e276f3b0d97e919acfd7
          #if !TARGET_OS_VISION
          [[NSNotificationCenter defaultCenter] addObserver:self
                                                   selector:@selector(brightnessDidChange:)
-@@ -964,6 +982,542 @@ - (unsigned long) getUsedMemory {
+@@ -964,6 +982,548 @@ - (unsigned long) getUsedMemory {
      return @(self.getUsedMemory);
  }
  
@@ -314,13 +314,19 @@ index 948c561f03fc7da53f6e843867574b642d04d0ea..c529dba9caa4e276f3b0d97e919acfd7
 +    });
 +}
 +
-+// ATTO (Oct 10 2026): first, cheapest recovery for a dark window. Asks every view
-+// and layer to lay out and redraw, then commits. Text is drawn by drawRect, so this
-+// repaints it; navigation and state are untouched.
++// ATTO (Oct 10 2026): first, cheapest recovery for a dark window. Lays every view
++// out again and asks only the views that DRAW their own content (they override
++// drawRect:, like React Native's text) to redraw, then commits. Never a bare
++// layer setNeedsDisplay: on a layer whose contents are an image (UIImageView,
++// React Native images, borders) that discards the image (CALayer docs; review,
++// Oct 10 2026). Navigation and state are untouched.
 +static void AttoRepaintViewTree(UIView *view) {
++    static IMP baseDrawRect = NULL;
++    if (baseDrawRect == NULL) baseDrawRect = [UIView instanceMethodForSelector:@selector(drawRect:)];
 +    [view setNeedsLayout];
-+    [view setNeedsDisplay];
-+    [view.layer setNeedsDisplay];
++    if ([view methodForSelector:@selector(drawRect:)] != baseDrawRect) {
++        [view setNeedsDisplay];
++    }
 +    for (UIView *sub in view.subviews) AttoRepaintViewTree(sub);
 +}
 +

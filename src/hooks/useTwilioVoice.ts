@@ -19,6 +19,7 @@ import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
 import {
   persistEngineHealFlags,
+  reassertCallSession,
   registerHealRouteReapplier,
   startEngineHealReporting,
 } from '@/lib/callAudio/engineHeal';
@@ -1361,17 +1362,28 @@ export async function reclaimAudioSession(opts?: {
         observed
       );
     } else {
-      await runSessionWrite(
-        'reclaim_set_audio_mode',
-        'playAndRecord+mixWithOthers',
-        () =>
-          setAudioModeAsync({
-            playsInSilentMode: true,
-            allowsRecording: true,
-            interruptionMode: 'mixWithOthers',
-          }),
+      // Build 243+: through the voice engine, which writes the call's real session
+      // (VoiceChat, options kept). expo-audio refuses session writes during a call
+      // now, so the old path would report success and change nothing.
+      const { result: engine } = await runSessionWrite(
+        'reclaim_engine_reassert',
+        'playAndRecord+voiceChat',
+        () => reassertCallSession(),
         { guard_enabled: guardEnabled }
       );
+      if (engine !== 'scheduled') {
+        await runSessionWrite(
+          'reclaim_set_audio_mode',
+          'playAndRecord+mixWithOthers',
+          () =>
+            setAudioModeAsync({
+              playsInSilentMode: true,
+              allowsRecording: true,
+              interruptionMode: 'mixWithOthers',
+            }),
+          { guard_enabled: guardEnabled, engine_reassert: engine }
+        );
+      }
     }
     await ensureAudioRoute({ skipOverride: opts?.skipRouteOverride === true });
     console.log('[TwilioVoice] reclaimAudioSession: done');

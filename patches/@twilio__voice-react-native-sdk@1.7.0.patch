@@ -1,9 +1,9 @@
 diff --git a/ios/AttoAudioEngineDevice.h b/ios/AttoAudioEngineDevice.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..a32c2efda4a5725437d823b3789c0328a8fb79c0
+index 0000000000000000000000000000000000000000..6585f26814b78779ac444779b4bcf3421b9de21d
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.h
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,165 @@
 +//
 +//  AttoAudioEngineDevice.h
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -159,19 +159,22 @@ index 0000000000000000000000000000000000000000..a32c2efda4a5725437d823b3789c0328
 + * are kept in a small ring in NSUserDefaults because JS can be asleep during a
 + * lock screen call; drainHealRing returns and clears it.
 + */
-+@property (nonatomic, copy, nullable) void (^onHeal)(NSDictionary * _Nonnull event);
++@property (atomic, copy, nullable) void (^onHeal)(NSDictionary * _Nonnull event);
 +- (NSArray<NSDictionary *> * _Nonnull)drainHealRing;
 +
 +/* TEST ONLY: break a live call on purpose (see injectFault: in the .m). */
 +- (NSString * _Nullable)injectFault:(NSString * _Nonnull)mode;
 +
++/* Reassert the call's session (PlayAndRecord, VoiceChat) through the engine. nil = scheduled. */
++- (NSString * _Nullable)reassertCallSession;
++
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675ab42fbd24
+index 0000000000000000000000000000000000000000..ed39953ba137e7170884e10f3b90d0ea9974113c
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,4298 @@
+@@ -0,0 +1,4340 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -4006,6 +4009,12 @@ index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675a
 +     * Plain scalar writes under the device's existing lock, on the notification
 +     * thread. Nothing here is reachable from a render or record callback.
 +     */
++    // ATTO (Oct 10 2026): a route change (AirPods joining, HFP handoff) pauses the
++    // unit while handleValidRouteChange works; the self heal must not judge that.
++    dispatch_async(_healQueue, ^{
++        AttoHealNoteRouteChange(&self->_heal, CACurrentMediaTime());
++    });
++
 +    @synchronized(self) {
 +        _dbgRouteChangeNotifyCount++;
 +        _dbgLastRouteReason = (NSInteger)reason;
@@ -4272,14 +4281,16 @@ index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675a
 +    });
 +}
 +
-+// _healQueue only. A CallKit call that is connected, not ended and not on hold.
-+- (BOOL)attoHealCallIsLive {
++// _healQueue only. A CallKit call that is connected, not ended and not on hold:
++// its UUID as a token (the attempts belong to it), or 0 when there is none.
++- (uint64_t)attoHealLiveCallToken {
 +    for (CXCall *call in _healCallObserver.calls) {
 +        if (call.hasConnected && !call.hasEnded && !call.isOnHold) {
-+            return YES;
++            const uint64_t token = (uint64_t)call.UUID.hash;
++            return token != 0 ? token : 1;
 +        }
 +    }
-+    return NO;
++    return 0;
 +}
 +
 +// _healQueue only: read the signals, let AttoHealStep decide, act on its answer.
@@ -4293,7 +4304,8 @@ index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675a
 +    in.interrupted = self.isInterrupted;
 +    in.hasUnit = (_audioUnit != NULL);
 +    in.recCb = self.capturingContext ? self.capturingContext->cbCount : 0;
-+    in.callLive = (in.context != NULL) && [self attoHealCallIsLive];
++    in.callToken = (in.context != NULL) ? [self attoHealLiveCallToken] : 0;
++    in.callLive = in.callToken != 0;
 +    if (in.context != NULL && AttoHealSessionCheckDue(&_heal, now)) {
 +        in.sessionChecked = true;
 +        in.categoryIsPlayAndRecord =
@@ -4377,6 +4389,39 @@ index 0000000000000000000000000000000000000000..3001cb60f4b73df24c1e888eec7d675a
 +    } else {
 +        NSLog(@"[AttoAudioEngine] rebuild failed to set up the audio unit");
 +    }
++}
++
++/*
++ * ATTO (Oct 10 2026): the JS reclaim's way back into the call's session. It used
++ * to write PlayAndRecord through expo-audio, which now (rightly) refuses during a
++ * call, and which also set mode Default and added defaultToSpeaker. This writes
++ * exactly what the engine itself configures: PlayAndRecord, VoiceChat, the current
++ * options plus AllowBluetooth, only when the session is wrong (a redundant write
++ * clears the user's speaker pick), then activates. On the media engine worker,
++ * like every other session write of this device. Returns nil when scheduled.
++ */
++- (NSString *)reassertCallSession {
++    @synchronized(self) {
++        TVOAudioDeviceContext context = [self deviceContext];
++        if (context == NULL) {
++            return @"no_call";
++        }
++        AttoSafeExecuteWorkerBlock(context, ^{
++            AVAudioSession *session = [AVAudioSession sharedInstance];
++            NSError *err = nil;
++            if (![session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ||
++                ![session.mode isEqualToString:AVAudioSessionModeVoiceChat]) {
++                AVAudioSessionCategoryOptions opts =
++                    session.categoryOptions | AVAudioSessionCategoryOptionAllowBluetooth;
++                [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:opts error:&err];
++                [session setMode:AVAudioSessionModeVoiceChat error:&err];
++            }
++            if (![session setActive:YES error:&err]) {
++                NSLog(@"[AttoAudioEngine] reassertCallSession setActive failed: %@", err);
++            }
++        });
++    }
++    return nil;
 +}
 +
 +// L2: the interruption resume escalation (see handleAudioInterruption:).
@@ -4494,10 +4539,10 @@ index 0000000000000000000000000000000000000000..63b195cef5178c8d48f63223183a3586
 +@end
 diff --git a/ios/AttoAudioInjection.m b/ios/AttoAudioInjection.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..74018fd31b1b607ca2057bb37d2b6551fee912e1
+index 0000000000000000000000000000000000000000..423f0e4efd9dc395c9a37d67034c37cb6d1e7fc5
 --- /dev/null
 +++ b/ios/AttoAudioInjection.m
-@@ -0,0 +1,495 @@
+@@ -0,0 +1,506 @@
 +//
 +//  AttoAudioInjection.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -4528,6 +4573,7 @@ index 0000000000000000000000000000000000000000..74018fd31b1b607ca2057bb37d2b6551
 +    // startObserving/stopObserving so we never emit into a bridge with no JS
 +    // observers attached.
 +    BOOL _hasListeners;
++    BOOL _healHookWired;
 +}
 +
 +RCT_EXPORT_MODULE(AttoAudioInjection);
@@ -4920,11 +4966,21 @@ index 0000000000000000000000000000000000000000..74018fd31b1b607ca2057bb37d2b6551
 +RCT_EXPORT_METHOD(drainCallAudioHealRing:(RCTPromiseResolveBlock)resolve
 +                  rejecter:(RCTPromiseRejectBlock)reject) {
 +    @try {
-+        [self wireStatusHook]; // live events from now on, not only the ring
++        if (!_healHookWired) {
++            _healHookWired = YES;
++            [self wireStatusHook]; // live events from now on, not only the ring
++        }
 +        resolve([[AttoAudioEngineDevice sharedDevice] drainHealRing]);
 +    } @catch (NSException *exception) {
 +        reject(@"heal_ring_failed", exception.reason ?: @"Failed to read the heal ring", nil);
 +    }
++}
++
++/* The JS reclaim's session reassert during a call (see -reassertCallSession). Null = scheduled. */
++RCT_EXPORT_METHOD(reassertCallSession:(RCTPromiseResolveBlock)resolve
++                  rejecter:(RCTPromiseRejectBlock)reject) {
++    NSString *refused = [[AttoAudioEngineDevice sharedDevice] reassertCallSession];
++    resolve(refused ?: [NSNull null]);
 +}
 +
 +/* TEST ONLY: see -[AttoAudioEngineDevice injectFault:]. Resolves null when applied. */
@@ -6117,10 +6173,10 @@ index 0000000000000000000000000000000000000000..2b11a12813c1f69e06ee07c61b5e81d7
 +@end
 diff --git a/ios/AttoHealPolicy.h b/ios/AttoHealPolicy.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca0794a202671
+index 0000000000000000000000000000000000000000..81da967811e6d49d305108c0c3d1b9392df57178
 --- /dev/null
 +++ b/ios/AttoHealPolicy.h
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,242 @@
 +/*
 + * ATTO (Oct 10 2026) — the self heal decision, as pure C.
 + *
@@ -6144,6 +6200,7 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +#define ATTO_HEAL_HEALTHY_RESET_SEC 10.0  /* healthy this long gives the attempts back */
 +#define ATTO_HEAL_MAX_ATTEMPTS 3          /* per stall episode: L1, L2, L1 */
 +#define ATTO_HEAL_FORGET_SEC 30.0         /* disarmed this long = the next arm is a new call */
++#define ATTO_HEAL_ROUTE_GRACE_SEC 1.5     /* after any route change: a Bluetooth handoff pauses the unit */
 +
 +typedef enum {
 +    AttoHealCauseNone = 0,
@@ -6177,6 +6234,14 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +     */
 +    uint64_t recCbAtLastAction;
 +    bool sessionReadSinceAction;
++    /*
++     * The CallKit call the attempts belong to. The device context pointer can be
++     * reused by the next call, so a call that starts right after an exhausted one
++     * would otherwise begin with no attempts (review, Oct 10 2026).
++     */
++    uint64_t callToken;
++    /* Route changes (AirPods joining, HFP handoff) legitimately pause the unit. */
++    double routeGraceUntil;
 +} AttoHealState;
 +
 +typedef struct {
@@ -6190,6 +6255,7 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +    bool sessionChecked;      /* the caller read the category this tick */
 +    bool categoryIsPlayAndRecord;
 +    bool healOff;             /* remote kill switch */
++    uint64_t callToken;       /* hash of the live CallKit call's UUID, 0 when none */
 +} AttoHealInput;
 +
 +typedef struct {
@@ -6229,6 +6295,16 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +    return (now - st->lastSessionCheckAt) >= ATTO_HEAL_SESSION_CHECK_SEC;
 +}
 +
++/*
++ * Call from the route change observer. The engine's own handleValidRouteChange
++ * may be rebuilding right now; judging the pause it causes would make L1 rebuild
++ * on top of it (the Sep 30 and Oct 4 Bluetooth cases), so the watchdog waits.
++ */
++static inline void AttoHealNoteRouteChange(AttoHealState *st, double now) {
++    st->routeGraceUntil = now + ATTO_HEAL_ROUTE_GRACE_SEC;
++    st->lastMovedAt = now;
++}
++
 +static inline AttoHealOutput AttoHealStep(AttoHealState *st, const AttoHealInput *in) {
 +    AttoHealOutput out = {0};
 +    const double now = in->now;
@@ -6248,23 +6324,26 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +        st->lastRecCb = in->recCb;
 +        st->lastMovedAt = now;
 +    }
-+    if (in->context != st->context) {
++    if (in->context != st->context || (in->callToken != 0 && in->callToken != st->callToken)) {
 +        st->context = in->context;
++        if (in->callToken != 0) st->callToken = in->callToken;
 +        st->attempts = 0;
 +        st->nextAllowedAt = 0;
 +        st->stallStartedAt = 0;
 +        st->exhaustedEmitted = false;
 +        st->offCounted = false;
 +    }
-+    if (!in->enabled || in->interrupted || (now - st->armedAt) < ATTO_HEAL_GRACE_SEC || !in->callLive) {
-+        /* Nothing to judge: keep the baseline fresh so the gap itself is never judged. */
-+        st->lastMovedAt = now;
-+        return out;
-+    }
 +    if (in->sessionChecked) {
++        /* Recorded even when nothing is judged, or the caller reads every tick. */
 +        st->lastSessionCheckAt = now;
 +        st->categoryLost = !in->categoryIsPlayAndRecord;
 +        st->sessionReadSinceAction = true;
++    }
++    if (!in->enabled || in->interrupted || (now - st->armedAt) < ATTO_HEAL_GRACE_SEC || !in->callLive ||
++        now < st->routeGraceUntil) {
++        /* Nothing to judge: keep the baseline fresh so the gap itself is never judged. */
++        st->lastMovedAt = now;
++        return out;
 +    }
 +
 +    int cause = AttoHealCauseNone;
@@ -6277,7 +6356,8 @@ index 0000000000000000000000000000000000000000..ecb6a7d111d457a17bfe7ac363aca079
 +
 +    if (cause == AttoHealCauseNone) {
 +        if (st->stallStartedAt > 0) {
-+            if (in->recCb <= st->recCbAtLastAction || !st->sessionReadSinceAction) {
++            /* != and not >: starting a mix recording resets the counter to 0. */
++            if (in->recCb == st->recCbAtLastAction || !st->sessionReadSinceAction) {
 +                return out; /* no evidence yet: wait, the next ticks judge again */
 +            }
 +            out.emitResultOk = true;

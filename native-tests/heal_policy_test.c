@@ -258,6 +258,60 @@ static void callbacks_back_but_category_still_wrong(void) {
     CHECK(s.oks == 1, "ok once the category is right, got %d", s.oks);
 }
 
+static void route_change_gets_a_grace(void) {
+    printf("AirPods join mid call: the handoff pause is not judged (review Oct 10)\n");
+    Sim s; sim_init(&s);
+    run(&s, 3.0, true);
+    AttoHealNoteRouteChange(&s.st, s.in.now);
+    run(&s, 1.25, false); /* the engine's own route rebuild pauses the unit */
+    run(&s, 2.0, true);
+    CHECK(s.stalls == 0 && s.attempts == 0, "stalls %d attempts %d", s.stalls, s.attempts);
+    /* A freeze that outlasts the grace is still caught. */
+    AttoHealNoteRouteChange(&s.st, s.in.now);
+    run(&s, 4.0, false);
+    CHECK(s.stalls == 1 && s.attempts >= 1, "stalls %d attempts %d", s.stalls, s.attempts);
+}
+
+static void new_call_same_context_pointer(void) {
+    printf("call B right after an exhausted call A, same context pointer: fresh attempts\n");
+    Sim s; sim_init(&s);
+    s.in.callToken = 111;
+    run(&s, 2.0, true);
+    run(&s, 30, false);
+    CHECK(s.exhausted == 1, "call A exhausted");
+    s.in.callToken = 222; /* new CallKit UUID, context pointer reused */
+    AttoHealArm(&s.st, s.in.now);
+    run(&s, 2.0, true);
+    run(&s, 30, false);
+    CHECK(s.attempts == 2 * ATTO_HEAL_MAX_ATTEMPTS, "fresh ladder for call B, total %d", s.attempts);
+}
+
+static void mix_recording_resets_the_counter(void) {
+    printf("a mix recording resets the callback counter to 0 during recovery: still recovers\n");
+    Sim s; sim_init(&s);
+    run(&s, 2.0, true);
+    s.in.recCb = 50000;
+    run(&s, 3.0, false);
+    CHECK(s.attempts == 1, "one attempt, got %d", s.attempts);
+    s.in.recCb = 0; /* startMixRecording */
+    run(&s, 2.0, true);
+    CHECK(s.oks == 1, "recovered after the reset, got %d", s.oks);
+}
+
+static void session_reads_limited_on_hold(void) {
+    printf("on hold for 60 s the category is still read only once a second\n");
+    Sim s; sim_init(&s);
+    s.in.callLive = false;
+    int reads = 0;
+    for (int i = 0; i < 240; i++) {
+        s.in.now += TICK;
+        s.in.sessionChecked = AttoHealSessionCheckDue(&s.st, s.in.now);
+        if (s.in.sessionChecked) reads++;
+        AttoHealStep(&s.st, &s.in);
+    }
+    CHECK(reads >= 55 && reads <= 61, "reads %d in 60 s", reads);
+}
+
 static void session_reads_are_rate_limited(void) {
     printf("the category is read at most once a second\n");
     Sim s; sim_init(&s);
@@ -288,6 +342,10 @@ int main(void) {
     flapping_is_bounded();
     no_false_recovery_after_an_action();
     callbacks_back_but_category_still_wrong();
+    route_change_gets_a_grace();
+    new_call_same_context_pointer();
+    mix_recording_resets_the_counter();
+    session_reads_limited_on_hold();
     session_reads_are_rate_limited();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

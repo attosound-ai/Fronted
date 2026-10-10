@@ -58,7 +58,15 @@ export function stepUplinkWatch(w: UplinkWatch, s: UplinkSample): UplinkVerdict 
       return { kind: 'recovered', deadForMs };
     }
   }
-  if (w.deadAtMs != null || s.muted || s.onHold) return null;
+  if (s.muted || s.onHold) {
+    // Muted or held stops the uplink on purpose. Keep the baseline fresh so the
+    // first sample after unmute or unhold is not judged against the pause
+    // (review, Oct 10 2026: it fired a false call_uplink_dead).
+    w.lastSent = sent;
+    w.lastMovedAtMs = s.nowMs;
+    return null;
+  }
+  if (w.deadAtMs != null) return null;
   const connectedMs = s.nowMs - s.connectedAtMs;
   const flatForMs = w.lastMovedAtMs != null ? s.nowMs - w.lastMovedAtMs : 0;
   // Nothing sent since connecting, or the counter stopped moving for as long.

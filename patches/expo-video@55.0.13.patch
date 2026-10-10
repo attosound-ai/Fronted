@@ -1,5 +1,5 @@
 diff --git a/ios/VideoManager.swift b/ios/VideoManager.swift
-index 0b82a77c4c2d895ab5c92342935ed1407361222b..7a52525800cc39d4515b6dc49055d0f74633db79 100644
+index 0b82a77c4c2d895ab5c92342935ed1407361222b..762e86abfd965b980c4e57185eefcb3245bc17c1 100644
 --- a/ios/VideoManager.swift
 +++ b/ios/VideoManager.swift
 @@ -1,6 +1,7 @@
@@ -10,7 +10,7 @@ index 0b82a77c4c2d895ab5c92342935ed1407361222b..7a52525800cc39d4515b6dc49055d0f7
  import Foundation
  import ExpoModulesCore
  
-@@ -70,8 +71,34 @@ class VideoManager {
+@@ -70,8 +71,57 @@ class VideoManager {
      }
    }
  
@@ -21,21 +21,44 @@ index 0b82a77c4c2d895ab5c92342935ed1407361222b..7a52525800cc39d4515b6dc49055d0f7
 +  // 2026 a call answered from the lock screen connected with 0 packets sent for
 +  // 36 s because the feed's players were created at that moment. While a call is
 +  // live the session belongs to the call, so the players mix into it as is.
++  //
++  // Only CallKit's own list decides (review, Oct 10 2026): an earlier version also
++  // treated "PlayAndRecord + VoiceChat" as a call, and since the session stays that
++  // way for a moment after a call ends, the players never wrote Playback again
++  // (feed audio on the earpiece, silent switch ignored). A write skipped during a
++  // call is replayed when CallKit reports that the last call ended.
 +  private static let callObserver = CXCallObserver()
++  private static let callReleaseWatcher = AttoVideoCallReleaseWatcher()
++  private static let startWatchingCalls: Void = {
++    callObserver.setDelegate(callReleaseWatcher, queue: DispatchQueue.main)
++  }()
++  private static let callReleasedNotification = Notification.Name("AttoCallSessionReleased")
++  private var attoPendingSessionWrite = false // managerQueue only
++  private var attoReleaseObserver: NSObjectProtocol?
 +
-+  private static func isPhoneCallLive(_ audioSession: AVAudioSession) -> Bool {
-+    if callObserver.calls.contains(where: { !$0.hasEnded }) {
-+      return true
++  private static func isPhoneCallLive() -> Bool {
++    _ = startWatchingCalls
++    return callObserver.calls.contains(where: { !$0.hasEnded })
++  }
++
++  init() {
++    attoReleaseObserver = NotificationCenter.default.addObserver(
++      forName: Self.callReleasedNotification, object: nil, queue: nil
++    ) { [weak self] _ in
++      Self.managerQueue.async {
++        guard let self, self.attoPendingSessionWrite else { return }
++        self.attoPendingSessionWrite = false
++        self.setAudioSession()
++      }
 +    }
-+    return audioSession.category == .playAndRecord
-+      && (audioSession.mode == .voiceChat || audioSession.mode == .videoChat)
 +  }
 +
    private func setAudioSession() {
      let audioSession = AVAudioSession.sharedInstance()
-+    if Self.isPhoneCallLive(audioSession) {
++    if Self.isPhoneCallLive() {
 +      // Same rule and notification as expo-audio and atto-recorder (the app counts
 +      // these; see front/docs/arquitectura/audio-y-reanudacion.md).
++      attoPendingSessionWrite = true
 +      NotificationCenter.default.post(
 +        name: Notification.Name("AttoAudioSessionWriteDenied"),
 +        object: nil,
@@ -45,3 +68,17 @@ index 0b82a77c4c2d895ab5c92342935ed1407361222b..7a52525800cc39d4515b6dc49055d0f7
      let audioMixingMode = findAudioMixingMode()
      var audioSessionCategoryOptions: AVAudioSession.CategoryOptions = audioSession.categoryOptions
  
+@@ -135,3 +185,13 @@ class VideoManager {
+     return audioMixingMode
+   }
+ }
++
++// ATTO patch (Oct 10 2026): posts AttoCallSessionReleased when CallKit reports that
++// no call is left, so a session write skipped during the call is replayed.
++private final class AttoVideoCallReleaseWatcher: NSObject, CXCallObserverDelegate {
++  func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
++    if !callObserver.calls.contains(where: { !$0.hasEnded }) {
++      NotificationCenter.default.post(name: Notification.Name("AttoCallSessionReleased"), object: nil)
++    }
++  }
++}

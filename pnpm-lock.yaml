@@ -20,19 +20,19 @@ patchedDependencies:
     hash: 90da512d6c17d08fe733e075cea5b1cb8e2c1ea3da5b225187a9c2b96e024d24
     path: patches/@stripe__stripe-react-native@0.58.0.patch
   '@twilio/voice-react-native-sdk@1.7.0':
-    hash: 2f70d91d1e665339f6f99124616009c42d574627bf626424d7ce57f83d1e3bdc
+    hash: 60448e04074d2180e1b0b792c694166b3dd9c2be3f18aa63a841e25d6f2ff04e
     path: patches/@twilio__voice-react-native-sdk@1.7.0.patch
   expo-audio@55.0.11:
-    hash: 803163834c20d49f3941cfd2c18f4af0cb9002d66920e1170c767165748b2210
+    hash: 3e40ff1c8cec40d56043df47a37d7a807bcd098e5feddc4da5e2bf332edff042
     path: patches/expo-audio@55.0.11.patch
   expo-video@55.0.13:
-    hash: c82588de43b8d137a29a7478e0d287f32ed31a8b5def02c6a40c10fffe2ac7fa
+    hash: 36c33ec9a25c93ffbc2cd2dadf05af9aaf865ae7c83d941f88a459bc5efa61ba
     path: patches/expo-video@55.0.13.patch
   react-native-compressor:
     hash: 43ab995a1b0b0710ecd373db352f22c3189f6db1b7ebae96bb3a10d4c59160d6
     path: patches/react-native-compressor.patch
   react-native-device-info@15.0.2:
-    hash: b74746e15f67decd4aae71f9f4bc606d527f19815685cb26516f46e1a7dbe590
+    hash: 2ab1d8daea12b0b1d4e6f02a5b0fed41280d16c21f619a4063f2cce0a42a273f
     path: patches/react-native-device-info@15.0.2.patch
   react-native-ios-context-menu@3.2.1:
     hash: 42e5e37a27085c14c13cc483ea73645182afd04586679e6e1ff3db5293077794
@@ -95,7 +95,7 @@ importers:
         version: 5.96.2(@tanstack/react-query@5.96.2(react@19.2.0))(react@19.2.0)
       '@twilio/voice-react-native-sdk':
         specifier: 1.7.0
-        version: 1.7.0(patch_hash=2f70d91d1e665339f6f99124616009c42d574627bf626424d7ce57f83d1e3bdc)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 1.7.0(patch_hash=60448e04074d2180e1b0b792c694166b3dd9c2be3f18aa63a841e25d6f2ff04e)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       axios:
         specifier: 1.13.4
         version: 1.13.4
@@ -113,7 +113,7 @@ importers:
         version: 55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       expo-audio:
         specifier: ~55.0.9
-        version: 55.0.11(patch_hash=803163834c20d49f3941cfd2c18f4af0cb9002d66920e1170c767165748b2210)(expo-asset@55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 55.0.11(patch_hash=3e40ff1c8cec40d56043df47a37d7a807bcd098e5feddc4da5e2bf332edff042)(expo-asset@55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       expo-blur:
         specifier: ~55.0.10
         version: 55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -200,7 +200,7 @@ importers:
         version: 55.0.18(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       expo-video:
         specifier: ~55.0.11
-        version: 55.0.13(patch_hash=c82588de43b8d137a29a7478e0d287f32ed31a8b5def02c6a40c10fffe2ac7fa)(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 55.0.13(patch_hash=36c33ec9a25c93ffbc2cd2dadf05af9aaf865ae7c83d941f88a459bc5efa61ba)(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       expo-video-thumbnails:
         specifier: ~55.0.11
         version: 55.0.12(expo@55.0.11)
@@ -215,7 +215,7 @@ importers:
         version: 1.8.5
       posthog-react-native:
         specifier: ^4.41.2
-        version: 4.43.9(3112a2175bd94f16c241f0489a5e0996)
+        version: 4.43.9(67b6d713da40d5c4d7775da1bb316f25)
       posthog-react-native-session-replay:
         specifier: ^1.5.6
         version: 1.5.6(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -242,7 +242,7 @@ importers:
         version: 1.10.3(patch_hash=43ab995a1b0b0710ecd373db352f22c3189f6db1b7ebae96bb3a10d4c59160d6)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^15.0.2
-        version: 15.0.2(patch_hash=b74746e15f67decd4aae71f9f4bc606d527f19815685cb26516f46e1a7dbe590)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
+        version: 15.0.2(patch_hash=2ab1d8daea12b0b1d4e6f02a5b0fed41280d16c21f619a4063f2cce0a42a273f)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       react-native-gesture-handler:
         specifier: ~2.30.0
         version: 2.30.1(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -7060,7 +7060,7 @@ snapshots:
 
   '@twilio/voice-errors@1.8.0': {}
 
-  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=2f70d91d1e665339f6f99124616009c42d574627bf626424d7ce57f83d1e3bdc)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
+  '@twilio/voice-react-native-sdk@1.7.0(patch_hash=60448e04074d2180e1b0b792c694166b3dd9c2be3f18aa63a841e25d6f2ff04e)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@twilio/voice-errors': 1.8.0
       eventemitter3: 4.0.7
@@ -8287,7 +8287,7 @@ snapshots:
       - supports-color
       - typescript
 
-  expo-audio@55.0.11(patch_hash=803163834c20d49f3941cfd2c18f4af0cb9002d66920e1170c767165748b2210)(expo-asset@55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  expo-audio@55.0.11(patch_hash=3e40ff1c8cec40d56043df47a37d7a807bcd098e5feddc4da5e2bf332edff042)(expo-asset@55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       expo: 55.0.11(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.0(react@19.2.0))(react-native-webview@13.16.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       expo-asset: 55.0.12(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
@@ -8638,7 +8638,7 @@ snapshots:
     dependencies:
       expo: 55.0.11(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.0(react@19.2.0))(react-native-webview@13.16.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
 
-  expo-video@55.0.13(patch_hash=c82588de43b8d137a29a7478e0d287f32ed31a8b5def02c6a40c10fffe2ac7fa)(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  expo-video@55.0.13(patch_hash=36c33ec9a25c93ffbc2cd2dadf05af9aaf865ae7c83d941f88a459bc5efa61ba)(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       expo: 55.0.11(@babel/core@7.29.0)(@expo/dom-webview@55.0.5)(@expo/metro-runtime@55.0.9)(expo-router@55.0.10)(react-dom@19.2.0(react@19.2.0))(react-native-webview@13.16.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       react: 19.2.0
@@ -9836,7 +9836,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 
-  posthog-react-native@4.43.9(3112a2175bd94f16c241f0489a5e0996):
+  posthog-react-native@4.43.9(67b6d713da40d5c4d7775da1bb316f25):
     dependencies:
       '@posthog/core': 1.27.7
       '@posthog/types': 1.372.3
@@ -9847,7 +9847,7 @@ snapshots:
       expo-file-system: 55.0.14(expo@55.0.11)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       expo-localization: 55.0.11(expo@55.0.11)(react@19.2.0)
       posthog-react-native-session-replay: 1.5.6(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
-      react-native-device-info: 15.0.2(patch_hash=b74746e15f67decd4aae71f9f4bc606d527f19815685cb26516f46e1a7dbe590)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
+      react-native-device-info: 15.0.2(patch_hash=2ab1d8daea12b0b1d4e6f02a5b0fed41280d16c21f619a4063f2cce0a42a273f)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))
       react-native-safe-area-context: 5.7.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-svg: 15.15.3(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
 
@@ -9961,7 +9961,7 @@ snapshots:
       react: 19.2.0
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 
-  react-native-device-info@15.0.2(patch_hash=b74746e15f67decd4aae71f9f4bc606d527f19815685cb26516f46e1a7dbe590)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
+  react-native-device-info@15.0.2(patch_hash=2ab1d8daea12b0b1d4e6f02a5b0fed41280d16c21f619a4063f2cce0a42a273f)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)):
     dependencies:
       react-native: 0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0)
 

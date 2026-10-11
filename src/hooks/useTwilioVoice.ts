@@ -17,6 +17,11 @@ import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
+import { newMicSilentWatch, stepMicSilentWatch } from '@/lib/calls/micSilentWatch';
+import {
+  micPermissionStatus,
+  warnIfMicBlockedForCall,
+} from '@/lib/calls/micPermissionWarning';
 import { isCallLiveNow } from '@/lib/calls/callLive';
 import {
   persistEngineHealFlags,
@@ -489,6 +494,47 @@ let lastBytesReceived: number | null = null;
 let lastBytesReceivedAtMs: number | null = null;
 let lastBytesReceivedCallSid: string | null = null;
 
+// ── Microphone silent watchdog (`call_mic_silent`) ──────────────────────────────
+// Packets can flow with a dead microphone (WebRTC sends silence frames), so the
+// uplink watchdog cannot see a denied permission: the level can. Oct 10 2026,
+// bj203. The rule lives in lib/calls/micSilentWatch.ts.
+const micSilentWatch = newMicSilentWatch();
+
+function checkMicSilent(
+  sid: string | null,
+  ac: ReturnType<typeof useCallStore.getState>['activeCall'],
+  flat: Record<string, unknown>,
+  nowMs: number
+): void {
+  try {
+    const verdict = stepMicSilentWatch(micSilentWatch, {
+      sid,
+      connected: ac?.state === 'connected',
+      muted: ac?.isMuted ?? false,
+      onHold: ac?.isOnHold ?? false,
+      micLevel: typeof flat.mic_audio_level === 'number' ? flat.mic_audio_level : null,
+      nowMs,
+    });
+    if (!verdict) return;
+    void micPermissionStatus().then((permission) => {
+      analytics.capture(
+        verdict.kind === 'silent'
+          ? ANALYTICS_EVENTS.CALL.MIC_SILENT
+          : ANALYTICS_EVENTS.CALL.MIC_RECOVERED,
+        {
+          call_sid: sid,
+          silent_for_ms: verdict.silentForMs,
+          mic_permission: permission,
+          packets_sent: flat.packets_sent ?? null,
+          app_state: AppState.currentState,
+        }
+      );
+    });
+  } catch {
+    // Telemetry must never break a call.
+  }
+}
+
 // ── Uplink watchdog (`call_uplink_dead`) ─────────────────────────────────────
 // One event when a connected call stops sending audio, one when it comes back.
 // The rule lives in lib/calls/uplinkWatch.ts (Oct 10 2026, the Larry call).
@@ -584,6 +630,7 @@ async function captureCallStats(reason: string): Promise<Record<string, unknown>
       ...payload,
     });
     checkUplink(sid, ac, flat, nowMs);
+    checkMicSilent(sid, ac, flat, nowMs);
     return payload;
   } catch {
     // getStats() can reject before media is flowing; the next tick retries.
@@ -2775,6 +2822,19 @@ export function useTwilioVoice() {
     });
     startEngineHealReporting();
     return () => registerHealRouteReapplier(null);
+  }, []);
+
+  // Every call that connects, on any path (live, CallKit, cold adopted), checks
+  // the microphone permission once and warns when iOS blocks it (bj203, Oct 10
+  // 2026: the check used to run on one answer path only, and silently).
+  useEffect(() => {
+    let lastWarnedSid: string | null = null;
+    return useCallStore.subscribe((state) => {
+      const ac = state.activeCall;
+      if (!ac || ac.state !== 'connected' || ac.callSid === lastWarnedSid) return;
+      lastWarnedSid = ac.callSid;
+      void warnIfMicBlockedForCall(ac.callSid ?? null);
+    });
   }, []);
 
   // Only set the Playback audio mode when there's NO call.

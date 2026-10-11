@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react-native';
 
 import { useAuthStore } from '@/stores/authStore';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
+import { warnIfMicBlockedAtLogin } from '@/lib/calls/micPermissionWarning';
 
 /**
  * Requests microphone permission as soon as the user is authenticated, instead
@@ -39,8 +40,13 @@ export function useMicrophonePermission() {
         });
 
         // Already granted, or the user permanently denied it (can't re-prompt
-        // from here — they'd have to enable it in Settings). Nothing to do.
-        if (current.granted || !current.canAskAgain) return;
+        // from here — they'd have to enable it in Settings). Since Oct 10 2026 a
+        // permanent denial gets an alert with a button to Settings (bj203 lived
+        // with it for a month without knowing).
+        if (current.granted || !current.canAskAgain) {
+          warnIfMicBlockedAtLogin(current.granted, current.canAskAgain);
+          return;
+        }
 
         const result = await AudioModule.requestRecordingPermissionsAsync();
         analytics.capture(ANALYTICS_EVENTS.CALL.MIC_PERMISSION_REQUESTED, {

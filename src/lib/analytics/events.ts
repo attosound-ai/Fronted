@@ -302,6 +302,14 @@ export const ANALYTICS_EVENTS = {
     // guard skipped it (Oct 10 2026). by_client says who: expo-video,
     // expo-audio.*, atto-recorder.*. Each of these used to take the mic away.
     SESSION_WRITE_DENIED: 'call_session_write_denied',
+    // Connected, not muted or held, and the microphone level stayed exactly 0 for
+    // MIC_SILENT_AFTER_MS: the far party hears nothing (Oct 10 2026, bj203, mic
+    // permission denied in iOS). Once per call; MIC_RECOVERED if it comes back.
+    MIC_SILENT: 'call_mic_silent',
+    MIC_RECOVERED: 'call_mic_recovered',
+    // The blocked microphone alert: shown, open_settings or later (phase
+    // call_connected or login).
+    MIC_BLOCKED_ALERT: 'call_mic_blocked_alert',
     // The uplink came back after UPLINK_DEAD (packets_sent moved again).
     UPLINK_RECOVERED: 'call_uplink_recovered',
     // ONE row per call describing the invite→answer audio transition. Carries the

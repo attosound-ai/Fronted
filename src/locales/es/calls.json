@@ -127,5 +127,12 @@
   "controls": {
     "play": "Reproducir",
     "pause": "Pausar"
+  },
+  "micBlocked": {
+    "title": "El micrófono de ATTO está desactivado",
+    "callBody": "La persona en la llamada no te escucha. Activa el micrófono de ATTO en Ajustes.",
+    "loginBody": "En las llamadas de ATTO no te van a escuchar hasta que actives el micrófono de ATTO en Ajustes.",
+    "open": "Abrir Ajustes",
+    "later": "Ahora no"
   }
 }

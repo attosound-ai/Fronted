@@ -348,8 +348,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(
     const voice = useVoiceNote(conversationId);
     const [cancelArmed, setCancelArmed] = useState(false);
     const startVoice = useCallback(async () => {
-      const ok = await voice.start();
-      if (!ok) Alert.alert(t('media.permissionMic'));
+      const started = await voice.start();
+      if (started === 'denied') Alert.alert(t('media.permissionMic'));
+      else if (started === 'in_call') Alert.alert(t('media.voiceNoteInCall'));
       else haptic('medium');
     }, [voice, t]);
     const endVoice = useCallback(

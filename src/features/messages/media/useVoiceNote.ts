@@ -8,8 +8,6 @@ import {
 } from 'expo-audio';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { isCallLiveNow } from '@/lib/calls/callLive';
-import { showToast } from '@/components/ui/Toast';
-import i18n from '@/lib/i18n';
 import { levelFromDb, waveformFromSamples, type OutgoingMedia } from './chatMedia';
 
 /** Anything shorter is a slip of the finger, not a voice note (WhatsApp: 1 s). */
@@ -42,7 +40,13 @@ export function useVoiceNote(conversationId: string) {
     setLevel(value);
   }, [state.isRecording, state.durationMillis, state]);
 
-  const start = useCallback(async (): Promise<boolean> => {
+  /**
+   * 'started', or why not: 'denied' (microphone permission) or 'in_call' (a call
+   * owns the audio session). The caller says the reason to the user; a single
+   * boolean made the composer show the permission alert during a call (seen on
+   * David's phone, Oct 10 2026).
+   */
+  const start = useCallback(async (): Promise<'started' | 'denied' | 'in_call'> => {
     // A voice note during a call would take the session away from the call: the
     // recorder writes PlayAndRecord with mode Default (no echo cancellation) and the
     // finish below writes Playback, which has no microphone. Signal and Telegram
@@ -53,22 +57,21 @@ export function useVoiceNote(conversationId: string) {
         permission: null,
         blocked: 'call_live',
       });
-      showToast(i18n.t('messages:media.voiceNoteInCall'), 'warning');
-      return false;
+      return 'in_call';
     }
     const { granted } = await requestRecordingPermissionsAsync();
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.VOICE_NOTE_STARTED, {
       conversation_id: conversationId,
       permission: granted,
     });
-    if (!granted) return false;
+    if (!granted) return 'denied';
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
     await recorder.prepareToRecordAsync(VOICE_OPTIONS);
     samples.current = [];
     startedAt.current = Date.now();
     recorder.record();
     setRecording(true);
-    return true;
+    return 'started';
   }, [conversationId, recorder]);
 
   const finish = useCallback(

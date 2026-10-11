@@ -39,6 +39,7 @@ static void sim_init(Sim *s) {
     s->in.hasUnit = true;
     s->in.callLive = true;
     s->in.categoryIsPlayAndRecord = true;
+    s->in.modeIsVoiceChat = true;
     s->in.callToken = 7; /* on the phone callLive always comes with a call UUID */
     AttoHealArm(&s->st, 0);
 }
@@ -57,7 +58,7 @@ static AttoHealOutput sim_tick(Sim *s, bool advance) {
     if (o.attempt > 0) {
         s->attempts++;
         s->lastLevel = o.level;
-        if (o.level == 1) s->l1++; else s->l2++;
+        if (o.level == 1) s->l1++; else if (o.level == 2) s->l2++;
     }
     if (o.cause) s->lastCause = o.cause;
     return o;
@@ -348,6 +349,30 @@ static void route_flapping_cannot_blind_forever(void) {
     CHECK(s.stalls >= 1 && s.attempts >= 1, "stalls %d attempts %d", s.stalls, s.attempts);
 }
 
+static void mode_lost_gets_a_session_reassert_not_a_rebuild(void) {
+    printf("Oct 10 phone test: mode Default with audio flowing -> level 0 only, then ok\n");
+    Sim s; sim_init(&s);
+    run(&s, 3.0, true);
+    s.in.modeIsVoiceChat = false;
+    run(&s, 1.5, true);
+    CHECK(s.attempts == 1 && s.lastLevel == 0 && s.lastCause == AttoHealCauseModeLost,
+          "attempts %d level %d cause %d", s.attempts, s.lastLevel, s.lastCause);
+    CHECK(s.l1 == 0 && s.l2 == 0, "never a rebuild, l1 %d l2 %d", s.l1, s.l2);
+    s.in.modeIsVoiceChat = true; /* the reassert worked */
+    run(&s, 2.0, true);
+    CHECK(s.oks == 1, "ok once VoiceChat is back, got %d", s.oks);
+}
+
+static void mode_that_will_not_come_back_is_bounded(void) {
+    printf("mode stays Default: at most 3 reasserts, then exhausted, still no rebuild\n");
+    Sim s; sim_init(&s);
+    run(&s, 3.0, true);
+    s.in.modeIsVoiceChat = false;
+    run(&s, 60, true);
+    CHECK(s.attempts == ATTO_HEAL_MAX_ATTEMPTS && s.exhausted == 1 && s.l1 == 0 && s.l2 == 0,
+          "attempts %d exhausted %d l1 %d l2 %d", s.attempts, s.exhausted, s.l1, s.l2);
+}
+
 static void session_reads_are_rate_limited(void) {
     printf("the category is read at most once a second\n");
     Sim s; sim_init(&s);
@@ -385,6 +410,8 @@ int main(void) {
     counter_reset_while_frozen_is_not_recovery();
     wrong_category_during_grace_fixed_before_it_ends();
     route_flapping_cannot_blind_forever();
+    mode_lost_gets_a_session_reassert_not_a_rebuild();
+    mode_that_will_not_come_back_is_bounded();
     session_reads_are_rate_limited();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

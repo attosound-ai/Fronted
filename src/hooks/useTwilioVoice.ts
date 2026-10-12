@@ -2351,6 +2351,34 @@ export function hangUpCall() {
     activeCallObj = null;
     restoreInjectionDevice();
     useCallStore.getState().endCall();
+    // The UI is cleared, but the call may still be live on Twilio (Oct 5 2026,
+    // Voss: the screen cleared and the far side kept talking to nobody). The
+    // server ends it through Twilio and reads it back.
+    if (sid) {
+      const t0 = Date.now();
+      telephonyService
+        .forceHangup(sid, path)
+        .then((r) =>
+          analytics.capture(ANALYTICS_EVENTS.CALL.FORCED_HANGUP, {
+            call_sid: sid,
+            hangup_path: path,
+            verified: r.verified,
+            legs: r.legs,
+            latency_ms: Date.now() - t0,
+          })
+        )
+        .catch((error: unknown) =>
+          analytics.capture(ANALYTICS_EVENTS.CALL.FORCED_HANGUP, {
+            call_sid: sid,
+            hangup_path: path,
+            verified: false,
+            http_status:
+              (error as { response?: { status?: number } })?.response?.status ?? null,
+            error: error instanceof Error ? error.message : String(error),
+            latency_ms: Date.now() - t0,
+          })
+        );
+    }
   };
 
   void (async () => {

@@ -52,6 +52,20 @@ export const telephonyService = {
     return data.data;
   },
 
+  /**
+   * Ask the server to end the call through Twilio and read it back: the
+   * backstop for when the SDK's own disconnect failed or never confirmed.
+   */
+  async forceHangup(
+    callSid: string,
+    reason: string
+  ): Promise<{ verified: boolean; legs: { sid: string; status: string }[] }> {
+    const { data } = await apiClient.post<
+      ApiResponse<{ verified: boolean; legs: { sid: string; status: string }[] }>
+    >(API_ENDPOINTS.TELEPHONY.HANGUP(callSid), { reason }, { timeout: 10_000 });
+    return data.data;
+  },
+
   async stopCapture(callSid: string, streamSid: string): Promise<void> {
     await apiClient.post(API_ENDPOINTS.TELEPHONY.STREAM_STOP(callSid), {
       streamSid,

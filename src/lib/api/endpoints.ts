@@ -154,6 +154,7 @@ export const API_ENDPOINTS = {
     CALL: (callSid: string) => `/telephony/calls/${callSid}`,
     STREAM_START: (callSid: string) => `/telephony/calls/${callSid}/stream/start`,
     STREAM_STOP: (callSid: string) => `/telephony/calls/${callSid}/stream/stop`,
+    HANGUP: (callSid: string) => `/telephony/calls/${callSid}/hangup`,
     SEGMENTS: (callSid: string) => `/telephony/calls/${callSid}/segments`,
     NUMBER_LOOKUP: '/telephony/numbers/lookup',
   },

@@ -310,6 +310,9 @@ export const ANALYTICS_EVENTS = {
     // The blocked microphone alert: shown, open_settings or later (phase
     // call_connected or login).
     MIC_BLOCKED_ALERT: 'call_mic_blocked_alert',
+    // The app could not end the call itself (disconnect rejected, or Twilio's
+    // Disconnected never came): the server ended it and read it back.
+    FORCED_HANGUP: 'call_forced_hangup',
     // CallKit holds a live call 8 s after boot or a foreground and JS has no
     // activeCall: a call with no call screen (Voss, Oct 6 2026, expired session).
     // Carries is_authenticated, active_account_id, sdk_calls; one more adoption

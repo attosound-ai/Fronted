@@ -309,6 +309,7 @@
       "zoomInLimit": "Este es el zoom más cercano, hasta centésimas de segundo."
     },
     "loopHint": "Selecciona un rango para repetirlo",
+    "tipsOpen": "Consejos",
     "tipsReplay": "Ver los consejos otra vez",
     "togglePanels": "Mostrar u ocultar paneles de pista",
     "configTitle": "Ajustes del editor",

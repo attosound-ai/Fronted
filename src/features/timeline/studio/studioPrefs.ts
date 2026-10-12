@@ -1,3 +1,5 @@
+import * as SecureStore from 'expo-secure-store';
+
 import { mmkvStorage } from '@/lib/storage/mmkv';
 
 /**
@@ -6,6 +8,18 @@ import { mmkvStorage } from '@/lib/storage/mmkv';
  * editor, not part of the project.
  */
 const KEY_TIPS_SEEN = 'studio.tipsSeen.v1';
+// Keychain copy of the tips flag (Oct 12 2026, David: the tips showed again on a
+// phone that had seen them). The keychain survives a reinstall and any failure
+// of the local store, so once seen they never show by themselves again.
+const KEYCHAIN_TIPS_SEEN = 'atto_studio_tips_seen_v1';
+
+function keychainTipsSeen(): boolean {
+  try {
+    return SecureStore.getItem(KEYCHAIN_TIPS_SEEN) === '1';
+  } catch {
+    return false;
+  }
+}
 const KEY_PREVIEW_SECONDS = 'studio.previewSeconds';
 const KEY_TIMELINE_MARKER = 'studio.timelineMarker';
 const KEY_REDUCE_ANIMATION = 'studio.reduceAnimation';
@@ -23,10 +37,25 @@ const flag = (key: string, fallback: boolean): boolean => {
 
 export const studioPrefs = {
   tipsSeen(): boolean {
-    return mmkvStorage.getString(KEY_TIPS_SEEN) === '1';
+    return studioPrefs.tipsSeenWhere() !== null;
+  },
+  /** Where the seen flag was found, for telemetry: local store, keychain, or null. */
+  tipsSeenWhere(): 'local' | 'keychain' | null {
+    if (mmkvStorage.getString(KEY_TIPS_SEEN) === '1') return 'local';
+    if (keychainTipsSeen()) {
+      mmkvStorage.setString(KEY_TIPS_SEEN, '1');
+      return 'keychain';
+    }
+    return null;
   },
   setTipsSeen(seen: boolean): void {
     mmkvStorage.setString(KEY_TIPS_SEEN, seen ? '1' : '0');
+    try {
+      if (seen) SecureStore.setItem(KEYCHAIN_TIPS_SEEN, '1');
+      else void SecureStore.deleteItemAsync(KEYCHAIN_TIPS_SEEN);
+    } catch {
+      // The local store still has it.
+    }
   },
   previewSeconds(): 3 | 5 {
     return mmkvStorage.getNumber(KEY_PREVIEW_SECONDS) === 5 ? 5 : 3;

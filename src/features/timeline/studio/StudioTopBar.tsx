@@ -1,5 +1,12 @@
 import { StyleSheet, View } from 'react-native';
-import { X, Plus, Trash2, Settings, Share } from 'lucide-react-native';
+import {
+  X,
+  Plus,
+  Trash2,
+  Settings,
+  Share,
+  CircleQuestionMark,
+} from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import { StudioIconButton } from './StudioButton';
@@ -11,6 +18,8 @@ interface Props {
   onRemoveTrack: () => void;
   canRemoveTrack: boolean;
   onConfig: () => void;
+  /** Opens the editor tips; they only show by themselves the first time. */
+  onHelp: () => void;
   onShare: () => void;
   canShare: boolean;
   /** Why Share is dimmed right now (empty project, or already publishing). */
@@ -18,13 +27,14 @@ interface Props {
 }
 
 /** SoundLab's top bar: close on the left, track add and remove in the middle,
- *  config and share on the right. Share is the bar's primary action. */
+ *  tips, config and share on the right. Share is the bar's primary action. */
 export function StudioTopBar({
   onClose,
   onAddTrack,
   onRemoveTrack,
   canRemoveTrack,
   onConfig,
+  onHelp,
   onShare,
   canShare,
   shareDisabledReason,
@@ -55,6 +65,11 @@ export function StudioTopBar({
         />
       </View>
       <View style={styles.right}>
+        <StudioIconButton
+          icon={icon(CircleQuestionMark)}
+          onPress={onHelp}
+          accessibilityLabel={t('studio.tipsOpen')}
+        />
         <StudioIconButton
           icon={icon(Settings)}
           onPress={onConfig}

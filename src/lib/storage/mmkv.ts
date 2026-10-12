@@ -24,6 +24,9 @@ const memoryStorage = new Map<string, string>();
 
 const useNative = storage !== null;
 
+/** Which store this process writes to: 'memory' means nothing survives a restart. */
+export const mmkvBackend: 'native' | 'memory' = useNative ? 'native' : 'memory';
+
 export const mmkvStorage = {
   getString(key: string): string | undefined {
     if (useNative) return storage!.getString(key);

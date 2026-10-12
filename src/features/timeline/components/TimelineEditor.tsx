@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useCallBarVisible, IN_CALL_BAR_HEIGHT } from '@/hooks/useInCallChrome';
 import { analytics, ANALYTICS_EVENTS, useFeatureFlag } from '@/lib/analytics';
+import { mmkvBackend } from '@/lib/storage/mmkv';
 import { emitTelemetryMarker } from '@/lib/telemetry/callTelemetry';
 import { useCallStore } from '@/stores/callStore';
 import { haptic } from '@/lib/haptics/hapticService';
@@ -2062,21 +2063,30 @@ export function TimelineEditor({
       if (left === 0) setTipTargets(next);
     });
   }, []);
-  const showTips = useCallback(() => {
-    measureTips();
-    setTipsVisible(true);
-  }, [measureTips]);
+  const showTips = useCallback(
+    (trigger: 'auto' | 'help' | 'settings') => {
+      analytics.capture(ANALYTICS_EVENTS.PROJECT.STUDIO_TIPS_SHOWN, {
+        trigger,
+        storage_backend: mmkvBackend,
+      });
+      measureTips();
+      setTipsVisible(true);
+    },
+    [measureTips]
+  );
   // Once per device, the first time the editor opens. The flag is written the
   // moment they appear, not when they are dismissed, so a force quit or a
   // crash can never bring them back (David, Sep 19: under no circumstance
-  // should they show again).
+  // should they show again). It is also kept in the keychain (Oct 12: they came
+  // back on David's phone); after that, only the ? button in the top bar or
+  // Settings opens them.
   const tipsAutoShownRef = useRef(false);
   useEffect(() => {
     if (tipsAutoShownRef.current) return;
     tipsAutoShownRef.current = true;
     if (studioPrefs.tipsSeen()) return;
     studioPrefs.setTipsSeen(true);
-    const timer = setTimeout(showTips, 700);
+    const timer = setTimeout(() => showTips('auto'), 700);
     return () => clearTimeout(timer);
   }, [showTips]);
   const finishTips = useCallback(() => {
@@ -2339,6 +2349,7 @@ export function TimelineEditor({
         onRemoveTrack={handleRemoveActiveLane}
         canRemoveTrack={state.laneCount > 1}
         onConfig={() => setConfigVisible(true)}
+        onHelp={() => showTips('help')}
         onShare={() => setExporterVisible(true)}
         canShare={state.clips.length > 0 && !isPublishing}
         shareDisabledReason={
@@ -2605,7 +2616,7 @@ export function TimelineEditor({
         onClose={() => setConfigVisible(false)}
         isSaving={isSaving}
         isDirty={state.isDirty}
-        onReplayTips={() => setTimeout(showTips, 350)}
+        onReplayTips={() => setTimeout(() => showTips('settings'), 350)}
         onPrefsChange={() => setPrefsVersion((v) => v + 1)}
       />
 

@@ -309,6 +309,7 @@
       "zoomInLimit": "This is the closest zoom, down to hundredths of a second."
     },
     "loopHint": "Select a range to loop it",
+    "tipsOpen": "Tips",
     "tipsReplay": "Show tips again",
     "togglePanels": "Show or hide track panels",
     "configTitle": "Editor settings",

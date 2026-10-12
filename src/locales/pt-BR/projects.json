@@ -309,6 +309,7 @@
       "zoomInLimit": "Este é o zoom mais próximo, até centésimos de segundo."
     },
     "loopHint": "Selecione um trecho para repetir",
+    "tipsOpen": "Dicas",
     "tipsReplay": "Ver as dicas de novo",
     "togglePanels": "Mostrar ou ocultar painéis de faixa",
     "configTitle": "Ajustes do editor",

@@ -741,6 +741,9 @@ export const ANALYTICS_EVENTS = {
     RANGE_EFFECT: 'project_range_effect',
     /** Phases of a studio take: armed, started, stopped, placed, discarded, failed. */
     STUDIO_RECORDING: 'project_studio_recording',
+    /** The editor tips appeared: trigger auto (first time) or help (the ? button) or
+     *  settings, and where the seen flag was found, so a repeat is explained. */
+    STUDIO_TIPS_SHOWN: 'project_studio_tips_shown',
     /** How the editor was left: save or discard, with the clip count. */
     EDITOR_CLOSED: 'project_editor_closed',
     /** A track was created from a source: files, video, music library, text to speech. */

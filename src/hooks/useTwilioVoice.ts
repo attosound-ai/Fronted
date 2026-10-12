@@ -852,19 +852,8 @@ function bindCallEvents(call: any): () => void {
       void queueSessionTask(runConnectSessionSequence);
     } else {
       setTimeout(() => {
-        void reclaimAudioSession();
+        void reclaimAudioSession({ atConnect: true });
       }, CONNECT_RECLAIM_DELAY_MS);
-      // Force earpiece IMMEDIATELY too (not just at the 700ms reclaim) so the
-      // window where iOS routes a "video" call to Speaker — the client's echo — is
-      // as short as possible. No-op if the user chose speaker.
-      if (useCallStore.getState().activeCall?.isSpeaker !== true) {
-        void runSessionWrite(
-          'connect_early_earpiece',
-          'speaker=false',
-          () => setSpeakerOutput(false),
-          { sequenced: false }
-        );
-      }
     }
     // Consolidated call_context: fire once audio has settled (after the reclaim)
     // so the audio-session snapshot reflects the true in-call state — this is the
@@ -1287,26 +1276,11 @@ const CONNECT_RECLAIM_DELAY_MS = 700;
  * the logging and the one redundant override are different.
  */
 async function runConnectSessionSequence(): Promise<void> {
-  const wantSpeaker = useCallStore.getState().activeCall?.isSpeaker === true;
-  let earlyOverrideOk = false;
-  if (!wantSpeaker) {
-    // Force earpiece IMMEDIATELY (not just at the 700ms reclaim) so the window
-    // where iOS routes a "video" call to Speaker (the client's echo) is as short
-    // as possible. No-op if the user chose speaker.
-    const early = await runSessionWrite(
-      'connect_early_earpiece',
-      'speaker=false',
-      () => setSpeakerOutput(false),
-      { sequenced: true }
-    );
-    earlyOverrideOk = early.ok === true;
-  }
+  // No early earpiece override any more (Oct 12 2026): without headphones the
+  // call goes to the SPEAKER (David, Oct 5), decided once the route exists, in
+  // ensureAudioRoute at the reclaim below.
   await wait(CONNECT_RECLAIM_DELAY_MS);
-  // The user may have tapped speaker during the wait; that toggle already issued
-  // its own override, so we must not fight it with a stale intent.
-  const intentUnchanged =
-    (useCallStore.getState().activeCall?.isSpeaker === true) === wantSpeaker;
-  await reclaimAudioSession({ skipRouteOverride: earlyOverrideOk && intentUnchanged });
+  await reclaimAudioSession({ atConnect: true });
 }
 
 /**
@@ -1318,8 +1292,47 @@ async function runConnectSessionSequence(): Promise<void> {
  * changed since, so we stop issuing two or three overrideOutputAudioPort calls
  * inside one second with no ordering guarantee.
  */
-export async function ensureAudioRoute(opts?: { skipOverride?: boolean }) {
+/**
+ * Outputs that are a headset or an external device: with one of these the call
+ * keeps its natural route; without one it goes to the speaker by default.
+ */
+const HEADSET_OUTPUTS = new Set([
+  'BluetoothHFP',
+  'BluetoothA2DPOutput',
+  'BluetoothLE',
+  'Headphones',
+  'CarAudio',
+  'USBAudio',
+  'AirPlay',
+  'HDMI',
+  'LineOut',
+]);
+
+export async function ensureAudioRoute(opts?: {
+  skipOverride?: boolean;
+  speakerByDefault?: boolean;
+}) {
   try {
+    // SPEAKER BY DEFAULT WITHOUT HEADPHONES (David, Oct 5 2026). Until build 241
+    // this happened as a side effect: expo-audio's reclaim wrote PlayAndRecord
+    // with .defaultToSpeaker and every connected call ended on Speaker (call_context
+    // out_port Speaker on 240/241). The one owner guard refuses that write during
+    // a call now, so calls stayed on the receiver (fix46, Oct 12). The default is
+    // applied here, once, at connect, and only when the user has not chosen.
+    if (
+      opts?.speakerByDefault === true &&
+      useCallStore.getState().activeCall?.isSpeaker !== true
+    ) {
+      const route = await getCallAudioState();
+      const out = route?.liveOutputPort ?? 'none';
+      if (!HEADSET_OUTPUTS.has(out)) {
+        useCallStore.getState().setSpeaker(true);
+        analytics.capture(ANALYTICS_EVENTS.CALL.TELEMETRY_MARKER, {
+          marker: 'connect_speaker_default',
+          output_before: out,
+        });
+      }
+    }
     // Force EARPIECE (Receiver) unless the user explicitly chose speaker. iOS
     // defaults VIDEO calls — and ours are CallKit hasVideo=YES for the lock-screen
     // auto-open — to SPEAKER. Speaker output + the built-in mic = the client's
@@ -1410,6 +1423,8 @@ export async function ensureAudioRoute(opts?: { skipOverride?: boolean }) {
  */
 export async function reclaimAudioSession(opts?: {
   skipRouteOverride?: boolean;
+  /** The reclaim right after a call connects: applies the speaker default. */
+  atConnect?: boolean;
 }): Promise<void> {
   // Safety net: re-apply PlayAndRecord + mixWithOthers and re-select device.
   // With keepAudioSessionActive: true on players, this should rarely be needed.
@@ -1472,7 +1487,10 @@ export async function reclaimAudioSession(opts?: {
         );
       }
     }
-    await ensureAudioRoute({ skipOverride: opts?.skipRouteOverride === true });
+    await ensureAudioRoute({
+      skipOverride: opts?.skipRouteOverride === true,
+      speakerByDefault: opts?.atConnect === true,
+    });
     console.log('[TwilioVoice] reclaimAudioSession: done');
   } catch (err) {
     console.warn('[TwilioVoice] reclaimAudioSession failed:', err);

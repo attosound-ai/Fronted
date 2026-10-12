@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { PenLine, Music, Mic } from 'lucide-react-native';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Text } from '@/components/ui/Text';
+import { useRecorderModeStore } from '@/stores/recorderModeStore';
 
 interface CreateActionSheetProps {
   visible: boolean;
@@ -11,8 +12,17 @@ interface CreateActionSheetProps {
   hasAdvancedProduction: boolean;
 }
 
-export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: CreateActionSheetProps) {
+export function CreateActionSheet({
+  visible,
+  onClose,
+  hasAdvancedProduction,
+}: CreateActionSheetProps) {
   const { t } = useTranslation('feed');
+  // Profile > Settings > Recorder set to Simple (David, Oct 12 2026): recording
+  // from "+" opens the simple recorder, and Projects stays so the projects
+  // already made still open in the editor.
+  const prefersSimple = useRecorderModeStore((s) => s.mode) === 'simple';
+  const showRecord = !hasAdvancedProduction || prefersSimple;
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.options}>
@@ -33,7 +43,26 @@ export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: C
           </View>
         </TouchableOpacity>
 
-        {hasAdvancedProduction ? (
+        {showRecord && (
+          <TouchableOpacity
+            style={styles.option}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose();
+              router.push('/(tabs)/recording');
+            }}
+          >
+            <Mic size={22} color="#FFFFFF" strokeWidth={2.25} />
+            <View style={styles.optionText}>
+              <Text style={styles.optionTitle}>{t('createActions.recordTitle')}</Text>
+              <Text style={styles.optionSubtitle}>
+                {t('createActions.recordSubtitle')}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {hasAdvancedProduction && (
           <TouchableOpacity
             style={styles.option}
             activeOpacity={0.7}
@@ -49,23 +78,6 @@ export function CreateActionSheet({ visible, onClose, hasAdvancedProduction }: C
               </Text>
               <Text style={styles.optionSubtitle}>
                 {t('createActions.projectsSubtitle')}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.option}
-            activeOpacity={0.7}
-            onPress={() => {
-              onClose();
-              router.push('/(tabs)/recording');
-            }}
-          >
-            <Mic size={22} color="#FFFFFF" strokeWidth={2.25} />
-            <View style={styles.optionText}>
-              <Text style={styles.optionTitle}>{t('createActions.recordTitle')}</Text>
-              <Text style={styles.optionSubtitle}>
-                {t('createActions.recordSubtitle')}
               </Text>
             </View>
           </TouchableOpacity>

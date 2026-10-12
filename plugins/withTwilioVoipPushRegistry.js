@@ -772,6 +772,24 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     }
   }
 
+  /// The installed audio device's session configuration block, exactly what the
+  /// Twilio module's performAnswerCallAction runs before fulfilling an answer.
+  /// The SDK's DefaultAudioDevice exposes it directly; the injection engine
+  /// (AttoAudioEngineDevice) is an NSObject whose block getter never returns nil.
+  private func runAudioDeviceConfigurationBlock() {
+    let device = TwilioVoiceSDK.audioDevice
+    if let d = device as? TwilioVoice.DefaultAudioDevice {
+      d.block()
+      return
+    }
+    if let obj = device as? NSObject, obj.responds(to: NSSelectorFromString("block")),
+       let raw = obj.value(forKey: "block") {
+      typealias ConfigBlock = @convention(block) () -> Void
+      let configure = unsafeBitCast(raw as AnyObject, to: ConfigBlock.self)
+      configure()
+    }
+  }
+
   /// Accept a held cold invite under its CallKit UUID. Shared by our own
   /// CXAnswerCallAction and by an answer the module forwards to us.
   private func acceptHeldCall(_ callUUID: UUID) -> Bool {
@@ -796,6 +814,20 @@ final class AttoVoipBootstrap: NSObject, PKPushRegistryDelegate, CXCallObserverD
     // setColdAudioEnabled on didActivate.
     coldAudioDevice = TwilioVoiceSDK.audioDevice
     UserDefaults.standard.set(true, forKey: AttoVoipBootstrap.coldCallLiveKey)
+
+    // CONFIGURE THE CALL'S SESSION BEFORE THE ANSWER IS FULFILLED (Oct 12 2026).
+    // The Twilio module's performAnswerCallAction runs enabled = NO and the
+    // audio device's configuration block (PlayAndRecord, VoiceChat) before it
+    // fulfills; this path never did. CallKit then found the session still in
+    // SoloAmbient and, in most cold answers, never activated it: no didActivate,
+    // route none, and the app's own setActive refused with 'ent?' (fix42 and
+    // fix45: 1 of 5 cold calls with audio). Until build 241 expo-audio's reclaim
+    // wrote PlayAndRecord in that same second and hid it (fix35: 5 of 5); the one
+    // owner guard now rightly refuses that write during a call. Doing here what
+    // the module does makes the cold answer the same as a warm one.
+    setColdAudioEnabled(false)
+    runAudioDeviceConfigurationBlock()
+    mark("cold_session_configured")
 
     // Adopt CallKit's UUID (== coldReportUUID, the one on screen) as the Twilio
     // Call identity so end/disconnect/report all reference the same call.

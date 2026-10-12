@@ -310,6 +310,11 @@ export const ANALYTICS_EVENTS = {
     // The blocked microphone alert: shown, open_settings or later (phase
     // call_connected or login).
     MIC_BLOCKED_ALERT: 'call_mic_blocked_alert',
+    // CallKit holds a live call 8 s after boot or a foreground and JS has no
+    // activeCall: a call with no call screen (Voss, Oct 6 2026, expired session).
+    // Carries is_authenticated, active_account_id, sdk_calls; one more adoption
+    // is attempted right after.
+    COLD_ADOPT_MISSING: 'call_cold_adopt_missing',
     // The uplink came back after UPLINK_DEAD (packets_sent moved again).
     UPLINK_RECOVERED: 'call_uplink_recovered',
     // ONE row per call describing the invite→answer audio transition. Carries the

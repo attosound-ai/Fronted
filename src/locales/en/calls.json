@@ -130,7 +130,7 @@
   },
   "micBlocked": {
     "title": "Your microphone is off for ATTO",
-    "callBody": "The person on the call can't hear you. Turn on the microphone for ATTO in Settings.",
+    "callBody": "The person on the call can't hear you because ATTO's microphone is off. Turning it on in Settings closes ATTO and ends this call; call back afterwards.",
     "loginBody": "People you talk to on ATTO calls won't hear you until you turn on the microphone for ATTO in Settings.",
     "open": "Open Settings",
     "later": "Not now"

@@ -130,7 +130,7 @@
   },
   "micBlocked": {
     "title": "El micrófono de ATTO está desactivado",
-    "callBody": "La persona en la llamada no te escucha. Activa el micrófono de ATTO en Ajustes.",
+    "callBody": "La persona en la llamada no te escucha porque el micrófono de ATTO está desactivado. Activarlo en Ajustes cierra ATTO y termina esta llamada; vuelve a llamar después.",
     "loginBody": "En las llamadas de ATTO no te van a escuchar hasta que actives el micrófono de ATTO en Ajustes.",
     "open": "Abrir Ajustes",
     "later": "Ahora no"

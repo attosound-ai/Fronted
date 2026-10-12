@@ -1629,6 +1629,39 @@ async function adoptNativeColdCall(trigger: string): Promise<void> {
   }
 }
 
+/**
+ * A call CallKit holds that JS never adopted (Oct 12 2026). Voss, Oct 6: the call
+ * was answered from the lock screen with an expired session; every adoption probe
+ * lived in the registration effect, which waits for the session and the active
+ * account, and the 401s kept it from ever running: 15 minutes of call with no call
+ * screen and no recorder. Reports once per trigger and tries one more adoption.
+ */
+async function checkUnadoptedCall(trigger: string): Promise<void> {
+  try {
+    if (useCallStore.getState().activeCall) return;
+    const native = await getCallAudioState();
+    const liveCallKitCalls = native?.liveCallKitCalls ?? 0;
+    if (liveCallKitCalls <= 0) return;
+    let sdkCalls: number | null = null;
+    try {
+      sdkCalls = (await getVoice().getCalls()).size;
+    } catch {
+      sdkCalls = null;
+    }
+    analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_MISSING, {
+      trigger,
+      live_callkit_calls: liveCallKitCalls,
+      sdk_calls: sdkCalls,
+      is_authenticated: useAuthStore.getState().isAuthenticated,
+      active_account_id: useAccountStore.getState().activeAccountId ?? null,
+      ms_since_js_start: Date.now() - MODULE_LOAD_MS,
+    });
+    await adoptNativeColdCall(`missing_${trigger}`);
+  } catch {
+    // Telemetry must never break startup.
+  }
+}
+
 // ── Standalone actions (importable from anywhere) ──
 
 /**
@@ -2822,6 +2855,41 @@ export function useTwilioVoice() {
     });
     startEngineHealReporting();
     return () => registerHealRouteReapplier(null);
+  }, []);
+
+  // Cold call adoption that does NOT wait for the session (Oct 12 2026, Voss Oct
+  // 6: an expired token kept the registration effect, and with it every adoption
+  // probe, from running for the whole call). Adopting needs no API: the native
+  // module's -init puts the bootstrap answered call in callMap, getCalls() reads
+  // it, and the store, the call bar and the recorder follow. The registration
+  // effect keeps its own probes; adoption is deduped per call SID.
+  useEffect(() => {
+    if (!IS_IOS) return;
+    getVoice();
+    void adoptNativeColdCall('early_probe');
+    let ticks = 0;
+    const poll = setInterval(() => {
+      ticks += 1;
+      if (ticks > 40 || useCallStore.getState().activeCall) {
+        clearInterval(poll);
+        return;
+      }
+      void adoptNativeColdCall(`early_poll_${ticks}s`);
+    }, 1000);
+    const missAtBoot = setTimeout(() => void checkUnadoptedCall('boot'), 8000);
+    let missAtForeground: ReturnType<typeof setTimeout> | null = null;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void adoptNativeColdCall('early_foreground');
+      if (missAtForeground) clearTimeout(missAtForeground);
+      missAtForeground = setTimeout(() => void checkUnadoptedCall('foreground'), 8000);
+    });
+    return () => {
+      clearInterval(poll);
+      clearTimeout(missAtBoot);
+      if (missAtForeground) clearTimeout(missAtForeground);
+      sub.remove();
+    };
   }, []);
 
   // Every call that connects, on any path (live, CallKit, cold adopted), checks

@@ -15,6 +15,8 @@ import { mmkvStorage } from '@/lib/storage/mmkv';
  *
  * Now: at every connected call, and at sign in at most once a day, a blocked
  * microphone gets an alert with a button straight to ATTO's page in Settings.
+ * iOS terminates an app whose privacy permission changes, so the in call text
+ * says that turning it on ends the call.
  */
 
 const LOGIN_WARNED_KEY = 'atto_mic_blocked_warned_at';

@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { newMicSilentWatch, stepMicSilentWatch, type MicSample } from '../micSilentWatch';
+import {
+  newMicSilentWatch,
+  newRemoteSilentWatch,
+  stepMicSilentWatch,
+  stepRemoteSilentWatch,
+  type MicSample,
+} from '../micSilentWatch';
 
 const T0 = 5_000_000;
 
@@ -71,4 +77,51 @@ test('short pauses in speech never report, and a new call starts clean', () => {
     stepMicSilentWatch(w, sample({ sid: 'CA2', nowMs: T0 + 80_000 }))?.kind,
     'silent'
   );
+});
+
+test('the Oct 11 Larry call: inbound bytes keep coming with near zero level for minutes', () => {
+  const w = newRemoteSilentWatch();
+  // Levels and packets from the call (CAd41133...), 60 s samples in background.
+  const samples = [
+    [0, 14664, 248],
+    [65_000, 17881, 11],
+    [125_000, 20883, 41],
+    [185_000, 23883, 8],
+    [271_000, 28179, 9],
+    [331_000, 31181, 8],
+  ];
+  const verdicts = samples.map(([t, rx, lvl]) =>
+    stepRemoteSilentWatch(w, {
+      sid: 'CAd4',
+      connected: true,
+      onHold: false,
+      remoteLevel: lvl,
+      packetsReceived: rx,
+      nowMs: T0 + t,
+    })
+  );
+  assert.deepEqual(
+    verdicts.map((v) => v?.kind ?? null),
+    [null, null, 'remote_silent', null, null, null]
+  );
+});
+
+test('a normal conversation with pauses never reports the far party silent', () => {
+  const w = newRemoteSilentWatch();
+  let rx = 0;
+  for (let t = 0; t <= 600_000; t += 10_000) {
+    rx += 500;
+    const lvl = t % 40_000 === 0 ? 3000 : 30; // speaks at least every 40 s
+    assert.equal(
+      stepRemoteSilentWatch(w, {
+        sid: 'CA1',
+        connected: true,
+        onHold: false,
+        remoteLevel: lvl,
+        packetsReceived: rx,
+        nowMs: T0 + t,
+      }),
+      null
+    );
+  }
 });

@@ -17,7 +17,12 @@ import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
-import { newMicSilentWatch, stepMicSilentWatch } from '@/lib/calls/micSilentWatch';
+import {
+  newMicSilentWatch,
+  newRemoteSilentWatch,
+  stepMicSilentWatch,
+  stepRemoteSilentWatch,
+} from '@/lib/calls/micSilentWatch';
 import {
   micPermissionStatus,
   warnIfMicBlockedForCall,
@@ -499,6 +504,7 @@ let lastBytesReceivedCallSid: string | null = null;
 // uplink watchdog cannot see a denied permission: the level can. Oct 10 2026,
 // bj203. The rule lives in lib/calls/micSilentWatch.ts.
 const micSilentWatch = newMicSilentWatch();
+const remoteSilentWatch = newRemoteSilentWatch();
 
 function checkMicSilent(
   sid: string | null,
@@ -515,6 +521,29 @@ function checkMicSilent(
       micLevel: typeof flat.mic_audio_level === 'number' ? flat.mic_audio_level : null,
       nowMs,
     });
+    const remote = stepRemoteSilentWatch(remoteSilentWatch, {
+      sid,
+      connected: ac?.state === 'connected',
+      onHold: ac?.isOnHold ?? false,
+      remoteLevel:
+        typeof flat.remote_audio_level === 'number' ? flat.remote_audio_level : null,
+      packetsReceived:
+        typeof flat.packets_received === 'number' ? flat.packets_received : null,
+      nowMs,
+    });
+    if (remote) {
+      analytics.capture(
+        remote.kind === 'remote_silent'
+          ? ANALYTICS_EVENTS.CALL.REMOTE_SILENT
+          : ANALYTICS_EVENTS.CALL.REMOTE_BACK,
+        {
+          call_sid: sid,
+          silent_for_ms: remote.silentForMs,
+          app_state: AppState.currentState,
+          packets_received: flat.packets_received ?? null,
+        }
+      );
+    }
     if (!verdict) return;
     void micPermissionStatus().then((permission) => {
       analytics.capture(

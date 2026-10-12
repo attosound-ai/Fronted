@@ -315,6 +315,11 @@ export const ANALYTICS_EVENTS = {
     // Carries is_authenticated, active_account_id, sdk_calls; one more adoption
     // is attempted right after.
     COLD_ADOPT_MISSING: 'call_cold_adopt_missing',
+    // Inbound bytes keep arriving but the far party's decoded level stays near zero
+    // for 60 s (Oct 11 2026, Larry "disappeared" while the Securus beep played).
+    // Telemetry, not an alarm: a long pause looks the same. Carries app_state.
+    REMOTE_SILENT: 'call_remote_silent',
+    REMOTE_BACK: 'call_remote_back',
     // The uplink came back after UPLINK_DEAD (packets_sent moved again).
     UPLINK_RECOVERED: 'call_uplink_recovered',
     // ONE row per call describing the invite→answer audio transition. Carries the

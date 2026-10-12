@@ -67,3 +67,70 @@ export function stepMicSilentWatch(w: MicSilentWatch, s: MicSample): MicVerdict 
   }
   return null;
 }
+
+/**
+ * Far party silent: bytes keep arriving but the decoded inbound level stays near
+ * zero for REMOTE_SILENT_AFTER_MS (Oct 11 2026, the client's call with Larry: five
+ * minutes in, his voice stopped while the Securus beep still played, from the
+ * moment the app went to the background). Telemetry only: a long pause on the far
+ * side looks the same, so this is not an alarm, but it tells us when it happens
+ * and in which app state.
+ */
+export const REMOTE_SILENT_AFTER_MS = 60_000;
+export const REMOTE_SILENT_LEVEL = 50;
+
+export interface RemoteSilentWatch {
+  sid: string | null;
+  silentSinceMs: number | null;
+  lastReceived: number | null;
+  reported: boolean;
+}
+
+export function newRemoteSilentWatch(): RemoteSilentWatch {
+  return { sid: null, silentSinceMs: null, lastReceived: null, reported: false };
+}
+
+export function stepRemoteSilentWatch(
+  w: RemoteSilentWatch,
+  s: {
+    sid: string | null;
+    connected: boolean;
+    onHold: boolean;
+    remoteLevel: number | null;
+    packetsReceived: number | null;
+    nowMs: number;
+  }
+):
+  | { kind: 'remote_silent'; silentForMs: number }
+  | { kind: 'remote_back'; silentForMs: number }
+  | null {
+  if (s.sid !== w.sid) {
+    w.sid = s.sid;
+    w.silentSinceMs = null;
+    w.lastReceived = null;
+    w.reported = false;
+  }
+  if (!s.connected || s.onHold || s.remoteLevel == null || s.packetsReceived == null)
+    return null;
+  const receiving = w.lastReceived == null || s.packetsReceived > w.lastReceived;
+  w.lastReceived = s.packetsReceived;
+  if (!receiving) {
+    // Nothing arriving is a network or uplink matter for other watchdogs.
+    w.silentSinceMs = null;
+    return null;
+  }
+  if (s.remoteLevel > REMOTE_SILENT_LEVEL) {
+    const back = w.reported && w.silentSinceMs != null;
+    const silentForMs = w.silentSinceMs != null ? s.nowMs - w.silentSinceMs : 0;
+    w.silentSinceMs = null;
+    w.reported = false;
+    return back ? { kind: 'remote_back', silentForMs } : null;
+  }
+  if (w.silentSinceMs == null) w.silentSinceMs = s.nowMs;
+  const silentForMs = s.nowMs - w.silentSinceMs;
+  if (!w.reported && silentForMs >= REMOTE_SILENT_AFTER_MS) {
+    w.reported = true;
+    return { kind: 'remote_silent', silentForMs };
+  }
+  return null;
+}

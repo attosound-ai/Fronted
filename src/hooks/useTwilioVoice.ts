@@ -1665,12 +1665,35 @@ async function adoptNativeColdCall(trigger: string): Promise<void> {
  * account, and the 401s kept it from ever running: 15 minutes of call with no call
  * screen and no recorder. Reports once per trigger and tries one more adoption.
  */
-async function checkUnadoptedCall(trigger: string): Promise<void> {
+const UNADOPTED_RECHECK_MS = 8000;
+const UNADOPTED_MAX_RECHECKS = 4;
+const ANSWERED_RECENTLY_S = 120;
+
+async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
   try {
     if (useCallStore.getState().activeCall) return;
     const native = await getCallAudioState();
     const liveCallKitCalls = native?.liveCallKitCalls ?? 0;
     if (liveCallKitCalls <= 0) return;
+    // CallKit counts a call that is still RINGING as live. Only an answered one
+    // can be unadopted (Oct 12 2026: four cold calls reported at 8 s, each
+    // answered that same second). Not answered yet: look again shortly.
+    const answeredAtS = Math.max(
+      native?.coldAcceptAt ?? 0,
+      native?.coldAnswerActionAt ?? 0,
+      native?.answerActionAt ?? 0
+    );
+    const answeredRecently =
+      answeredAtS > 0 && Date.now() / 1000 - answeredAtS < ANSWERED_RECENTLY_S;
+    if (!answeredRecently) {
+      if (recheck < UNADOPTED_MAX_RECHECKS) {
+        setTimeout(
+          () => void checkUnadoptedCall(trigger, recheck + 1),
+          UNADOPTED_RECHECK_MS
+        );
+      }
+      return;
+    }
     let sdkCalls: number | null = null;
     try {
       sdkCalls = (await getVoice().getCalls()).size;
@@ -1684,6 +1707,8 @@ async function checkUnadoptedCall(trigger: string): Promise<void> {
       is_authenticated: useAuthStore.getState().isAuthenticated,
       active_account_id: useAccountStore.getState().activeAccountId ?? null,
       ms_since_js_start: Date.now() - MODULE_LOAD_MS,
+      ms_since_answer: Math.round(Date.now() - answeredAtS * 1000),
+      rechecks: recheck,
     });
     await adoptNativeColdCall(`missing_${trigger}`);
   } catch {

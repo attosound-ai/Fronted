@@ -171,10 +171,10 @@ index 0000000000000000000000000000000000000000..46eaf3a1d6da35d917ccfec3b9d8ecc8
 +@end
 diff --git a/ios/AttoAudioEngineDevice.m b/ios/AttoAudioEngineDevice.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c70307a78f166
+index 0000000000000000000000000000000000000000..acf4dbd2a02c81455c44ec4461dd8c269a348cd8
 --- /dev/null
 +++ b/ios/AttoAudioEngineDevice.m
-@@ -0,0 +1,4351 @@
+@@ -0,0 +1,4403 @@
 +//
 +//  AttoAudioEngineDevice.m
 +//  TwilioVoiceReactNative (ATTO SOUND)
@@ -487,6 +487,56 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +static NSString * const kAttoSelfHealOffKey = @"atto_engine_self_heal_off";
 +static NSString * const kAttoFaultInjectionKey = @"atto_fault_injection";
 +static NSString * const kAttoHealRingKey = @"atto_heal_ring";
++
++/*
++ * ATTO (Oct 12 2026): activate the call's session, bridging through Playback
++ * when iOS refuses a cold activation with 'ent?' (MissingEntitlement).
++ *
++ * On a call answered with the app killed, CallKit sometimes never activates the
++ * session (the answer reaches the Twilio provider and is forwarded to the cold
++ * bootstrap's). The app may not then activate PlayAndRecord itself from scratch:
++ * iOS answers 'ent?' and the voice engine never runs (3 of 4 cold calls with
++ * fix43, 0 packets sent, route none). Until build 241 an unplanned side effect
++ * covered it: the feed's video and expo-audio's reclaim activated the session as
++ * Playback first, and the engine then moved the ACTIVE session to PlayAndRecord,
++ * which iOS allows (fix35: 3 of 3 cold calls fine, two of them without any
++ * CallKit activation). The one owner guard now (rightly) blocks those writers
++ * during a call, so the engine does the same bridge itself, and only when the
++ * plain activation fails with 'ent?'. A session CallKit activated never fails
++ * here, so the normal path is untouched.
++ */
++static uint64_t gAttoActivationBridgeTried = 0;
++static uint64_t gAttoActivationBridgeOk = 0;
++
++static BOOL AttoActivateCallSession(AVAudioSession *session, NSError **outErr) {
++    NSError *err = nil;
++    if ([session setActive:YES error:&err]) {
++        return YES;
++    }
++    if (err.code != 1701737535) { // 'ent?' AVAudioSessionErrorCodeMissingEntitlement
++        if (outErr) *outErr = err;
++        return NO;
++    }
++    gAttoActivationBridgeTried++;
++    const AVAudioSessionCategoryOptions callOpts =
++        session.categoryOptions | AVAudioSessionCategoryOptionAllowBluetooth;
++    NSError *bridgeErr = nil;
++    const BOOL playbackActive =
++        [session setCategory:AVAudioSessionCategoryPlayback error:&bridgeErr] &&
++        [session setActive:YES error:&bridgeErr];
++    // Back to the call's configuration whatever happened above.
++    NSError *backErr = nil;
++    [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:callOpts error:&backErr];
++    [session setMode:AVAudioSessionModeVoiceChat error:&backErr];
++    if (playbackActive && [session setActive:YES error:&backErr]) {
++        gAttoActivationBridgeOk++;
++        NSLog(@"[AttoAudioEngine] activation bridged through Playback after 'ent?'");
++        return YES;
++    }
++    NSLog(@"[AttoAudioEngine] activation bridge failed: playback=%@ back=%@", bridgeErr, backErr);
++    if (outErr) *outErr = backErr ?: bridgeErr ?: err;
++    return NO;
++}
 +static const double kAttoHealTickSec = 0.25;          // watchdog period; thresholds live in AttoHealPolicy.h
 +static const NSUInteger kAttoHealRingMax = 12;
 +
@@ -1114,7 +1164,7 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +            [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:attoOpts1 error:&serr];
 +            [session setMode:AVAudioSessionModeVoiceChat error:&serr];
 +        }
-+        if (![session setActive:YES error:&serr]) {
++        if (!AttoActivateCallSession(session, &serr)) {
 +            _dbgSetActiveFailCount++; // telemetry: setActive rejected (CallKit owns session?)
 +            NSLog(@"[AttoAudioEngine] ensureEngineFormat setActive failed: %@", serr);
 +        }
@@ -1317,7 +1367,7 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +            [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:attoOpts2 error:&err];
 +            [session setMode:AVAudioSessionModeVoiceChat error:&err];
 +        }
-+        if (![session setActive:YES error:&err]) {
++        if (!AttoActivateCallSession(session, &err)) {
 +            NSLog(@"[AttoAudioEngine] block setActive failed: %@", err);
 +        }
 +    };
@@ -2518,6 +2568,8 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +        // distrust when someone says "my voice doesn't line up".
 +        @"micStarvedFallbacks": @(_dbgMicStarvedFallbacks),
 +        @"setActiveFailCount": @(_dbgSetActiveFailCount),
++        @"activationBridgeTried": @(gAttoActivationBridgeTried),
++        @"activationBridgeOk": @(gAttoActivationBridgeOk),
 +        // renderFailCount > 0 ⇒ the manual mix render failed and we fell back to
 +        // raw-mic passthrough (the "no te escucho" root: engine couldn't mix, but
 +        // two-way audio survives via the guard). Cumulative since device install.
@@ -3672,7 +3724,7 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +
 +    [self registerAVAudioSessionObservers];
 +
-+    if (![session setActive:YES error:&error]) {
++    if (!AttoActivateCallSession(session, &error)) {
 +        NSLog(@"Error activating AVAudioSession: %@", error);
 +    }
 +
@@ -4427,7 +4479,7 @@ index 0000000000000000000000000000000000000000..6b665244f97137d2da9f77b1577c7030
 +                [session setCategory:AVAudioSessionCategoryPlayAndRecord withOptions:opts error:&err];
 +                [session setMode:AVAudioSessionModeVoiceChat error:&err];
 +            }
-+            if (![session setActive:YES error:&err]) {
++            if (!AttoActivateCallSession(session, &err)) {
 +                NSLog(@"[AttoAudioEngine] reassertCallSession setActive failed: %@", err);
 +            }
 +            completion(@"applied");

@@ -420,6 +420,10 @@ export function InCallTopBar({ mirror = false }: { mirror?: boolean } = {}) {
           // two cohorts are separable in one query.
           render_format_recheck_enabled: diag?.renderFormatRecheckEnabled ?? null,
           set_active_fail_count: diag?.setActiveFailCount ?? null,
+          // Oct 12 2026: cold activation refused with 'ent?' and bridged through
+          // Playback by the engine (AttoActivateCallSession).
+          activation_bridge_tried: diag?.activationBridgeTried ?? null,
+          activation_bridge_ok: diag?.activationBridgeOk ?? null,
           mic_frames: diag?.micFrames ?? null,
           remote_frames: diag?.remoteFrames ?? null,
           app_frames: diag?.appFrames ?? null,

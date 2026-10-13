@@ -17,6 +17,7 @@ import * as Sentry from '@sentry/react-native';
 import { mmkvStorage } from '@/lib/storage/mmkv';
 import { InviteSiblings, type InviteLike } from '@/lib/calls/inviteSiblings';
 import { newUplinkWatch, stepUplinkWatch } from '@/lib/calls/uplinkWatch';
+import { judgeUnadoptedCall } from '@/lib/calls/unadoptedCall';
 import {
   newMicSilentWatch,
   newRemoteSilentWatch,
@@ -1685,45 +1686,25 @@ async function adoptNativeColdCall(trigger: string): Promise<void> {
  */
 const UNADOPTED_RECHECK_MS = 8000;
 const UNADOPTED_MAX_RECHECKS = 4;
-const ANSWERED_RECENTLY_S = 120;
-const UNADOPTED_GRACE_MS = 6000;
 
 async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
   try {
     if (useCallStore.getState().activeCall) return;
     const native = await getCallAudioState();
-    const liveCallKitCalls = native?.liveCallKitCalls ?? 0;
-    if (liveCallKitCalls <= 0) return;
-    // CallKit counts a call that is still RINGING as live. Only an answered one
-    // can be unadopted (Oct 12 2026: four cold calls reported at 8 s, each
-    // answered that same second). Not answered yet: look again shortly.
-    const answeredAtS = Math.max(
-      native?.coldAcceptAt ?? 0,
-      native?.coldAnswerActionAt ?? 0,
-      native?.answerActionAt ?? 0
-    );
-    const answeredRecently =
-      answeredAtS > 0 && Date.now() / 1000 - answeredAtS < ANSWERED_RECENTLY_S;
-    if (!answeredRecently) {
+    // Only an answered call of THIS ring can be unadopted; the rules and the
+    // false alarms behind them live in judgeUnadoptedCall.
+    const verdict = judgeUnadoptedCall(native, Date.now());
+    if (verdict.kind === 'none') return;
+    if (verdict.kind !== 'report') {
       if (recheck < UNADOPTED_MAX_RECHECKS) {
         setTimeout(
           () => void checkUnadoptedCall(trigger, recheck + 1),
-          UNADOPTED_RECHECK_MS
+          verdict.kind === 'grace' ? verdict.waitMs : UNADOPTED_RECHECK_MS
         );
       }
       return;
     }
-    // Answered a moment ago: the adoption probes may still be on their way
-    // (Oct 13 2026, fix47: five cold calls reported 0.45 s after the answer and
-    // adopted 0.2 s before the report). Give them the grace window first.
-    const msSinceAnswer = Date.now() - answeredAtS * 1000;
-    if (msSinceAnswer < UNADOPTED_GRACE_MS && recheck < UNADOPTED_MAX_RECHECKS) {
-      setTimeout(
-        () => void checkUnadoptedCall(trigger, recheck + 1),
-        UNADOPTED_GRACE_MS - msSinceAnswer
-      );
-      return;
-    }
+    const liveCallKitCalls = native?.liveCallKitCalls ?? 0;
     let sdkCalls: number | null = null;
     try {
       sdkCalls = (await getVoice().getCalls()).size;
@@ -1739,7 +1720,7 @@ async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
       is_authenticated: useAuthStore.getState().isAuthenticated,
       active_account_id: useAccountStore.getState().activeAccountId ?? null,
       ms_since_js_start: Date.now() - MODULE_LOAD_MS,
-      ms_since_answer: Math.round(msSinceAnswer),
+      ms_since_answer: Math.round(verdict.msSinceAnswer),
       rechecks: recheck,
     });
     await adoptNativeColdCall(`missing_${trigger}`);

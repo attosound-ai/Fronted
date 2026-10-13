@@ -39,6 +39,7 @@ TEST_FILES=(
   "src/lib/calls/__tests__/inviteSiblings.test.ts"
   "src/lib/calls/__tests__/uplinkWatch.test.ts"
   "src/lib/calls/__tests__/micSilentWatch.test.ts"
+  "src/lib/calls/__tests__/unadoptedCall.test.ts"
   "src/lib/callAudio/__tests__/engineHealModel.test.ts"
   "src/lib/navigation/__tests__/modalRoutes.test.ts"
   "src/lib/resume/__tests__/resumeRecovery.test.ts"

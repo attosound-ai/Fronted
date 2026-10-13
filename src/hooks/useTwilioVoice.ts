@@ -1686,6 +1686,7 @@ async function adoptNativeColdCall(trigger: string): Promise<void> {
 const UNADOPTED_RECHECK_MS = 8000;
 const UNADOPTED_MAX_RECHECKS = 4;
 const ANSWERED_RECENTLY_S = 120;
+const UNADOPTED_GRACE_MS = 6000;
 
 async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
   try {
@@ -1712,12 +1713,25 @@ async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
       }
       return;
     }
+    // Answered a moment ago: the adoption probes may still be on their way
+    // (Oct 13 2026, fix47: five cold calls reported 0.45 s after the answer and
+    // adopted 0.2 s before the report). Give them the grace window first.
+    const msSinceAnswer = Date.now() - answeredAtS * 1000;
+    if (msSinceAnswer < UNADOPTED_GRACE_MS && recheck < UNADOPTED_MAX_RECHECKS) {
+      setTimeout(
+        () => void checkUnadoptedCall(trigger, recheck + 1),
+        UNADOPTED_GRACE_MS - msSinceAnswer
+      );
+      return;
+    }
     let sdkCalls: number | null = null;
     try {
       sdkCalls = (await getVoice().getCalls()).size;
     } catch {
       sdkCalls = null;
     }
+    // Adoption can finish during the awaits above.
+    if (useCallStore.getState().activeCall) return;
     analytics.capture(ANALYTICS_EVENTS.CALL.COLD_ADOPT_MISSING, {
       trigger,
       live_callkit_calls: liveCallKitCalls,
@@ -1725,7 +1739,7 @@ async function checkUnadoptedCall(trigger: string, recheck = 0): Promise<void> {
       is_authenticated: useAuthStore.getState().isAuthenticated,
       active_account_id: useAccountStore.getState().activeAccountId ?? null,
       ms_since_js_start: Date.now() - MODULE_LOAD_MS,
-      ms_since_answer: Math.round(Date.now() - answeredAtS * 1000),
+      ms_since_answer: Math.round(msSinceAnswer),
       rechecks: recheck,
     });
     await adoptNativeColdCall(`missing_${trigger}`);

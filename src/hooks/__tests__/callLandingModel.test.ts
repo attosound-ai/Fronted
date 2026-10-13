@@ -20,6 +20,7 @@ function base(over: Partial<LandingInput> = {}): LandingInput {
     subscriptionFetchFailed: false,
     alreadyFetchedSubscription: false,
     alreadySentHome: false,
+    firstPathname: null,
     alreadyLanded: false,
     ...over,
   };
@@ -212,4 +213,33 @@ test('the gates keep their order under every combination that matters', () => {
   for (const [over, reason] of rows) {
     assert.equal(decideLanding(base(over)).reason, reason, JSON.stringify(over));
   }
+});
+
+// ── Oct 13 2026: a screen opened during the call is not stray ────────────
+
+test('the screen the call found is still sent home once', () => {
+  assert.deepEqual(
+    decideLanding(base({ pathname: '/chat/abc', firstPathname: '/chat/abc' })),
+    { kind: 'home', reason: 'stray_screen' }
+  );
+});
+
+test('Projects opened by the creator mid call stays open', () => {
+  // The call found the feed (or its own /call screen); the creator then opened
+  // Projects. Before this fix the hook sent Projects back to the feed 1 s later.
+  for (const first of ['/', '/call']) {
+    assert.deepEqual(
+      decideLanding(base({ pathname: '/projects', firstPathname: first })),
+      { kind: 'wait', reason: 'awaiting_digit' }
+    );
+  }
+});
+
+test('the keypad still outranks everything, whatever the first screen was', () => {
+  assert.deepEqual(
+    decideLanding(
+      base({ pathname: '/chat/abc', firstPathname: '/chat/abc', keypadUp: true })
+    ),
+    { kind: 'wait', reason: 'keypad_open' }
+  );
 });

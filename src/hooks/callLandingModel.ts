@@ -36,6 +36,13 @@ export interface LandingInput {
   alreadyFetchedSubscription: boolean;
   /** This call already sent a stray screen home once. */
   alreadySentHome: boolean;
+  /**
+   * The screen the app was on when this call was first seen connected, or null
+   * if unknown. Only that screen is stray: a screen the creator opened during
+   * the call is a choice (Oct 13 2026: Projects opened mid call was sent back
+   * to the feed a second later).
+   */
+  firstPathname: string | null;
   /** This call already landed. */
   alreadyLanded: boolean;
 }
@@ -77,7 +84,8 @@ export function decideLanding(input: LandingInput): LandingAction {
     if (
       !input.alreadySentHome &&
       !isCallOwnedScreen(input.pathname) &&
-      input.pathname !== '/'
+      input.pathname !== '/' &&
+      (input.firstPathname == null || input.pathname === input.firstPathname)
     ) {
       return { kind: 'home', reason: 'stray_screen' };
     }

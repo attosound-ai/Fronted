@@ -89,6 +89,9 @@ export function useConnectedCallLanding(): void {
   const landedSid = useCallStore((s) => s.landedSid);
   const homedSid = useCallStore((s) => s.homedSid);
   const fetchedForSid = useRef<string | null>(null);
+  // The screen this call found when it was first seen connected (see
+  // LandingInput.firstPathname).
+  const firstPath = useRef<{ sid: string; path: string } | null>(null);
   // One landing-skip row per (call, reason) — a Set, not a last-wins slot, so two
   // alternating reasons can't re-emit each other forever.
   const loggedSkips = useRef<Set<string>>(new Set());
@@ -159,6 +162,9 @@ export function useConnectedCallLanding(): void {
     // The decision itself is pure and lives in callLandingModel, where every
     // case an incoming call can arrive in is written down as a test. This
     // hook owns only the consequences.
+    if (isCallConnected(callState) && callSid && firstPath.current?.sid !== callSid) {
+      firstPath.current = { sid: callSid, path: pathname };
+    }
     const decision = decideLanding({
       connected: isCallConnected(callState),
       callSid,
@@ -174,6 +180,7 @@ export function useConnectedCallLanding(): void {
       subscriptionFetchFailed: lastFetchFailed,
       alreadyFetchedSubscription: fetchedForSid.current === callSid,
       alreadySentHome: homedSid === callSid,
+      firstPathname: firstPath.current?.sid === callSid ? firstPath.current.path : null,
       alreadyLanded: landedSid === callSid,
     });
 

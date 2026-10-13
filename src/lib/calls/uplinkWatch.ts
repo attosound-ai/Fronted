@@ -57,6 +57,13 @@ export function stepUplinkWatch(w: UplinkWatch, s: UplinkSample): UplinkVerdict 
   }
   const sent = s.packetsSent;
   if (!s.connected || s.connectedAtMs == null || sent == null) return null;
+  if (s.nowMs < s.connectedAtMs) {
+    // Not judged yet (a cold call adopted before Twilio connected it, Oct 13
+    // 2026): keep the baseline fresh so the wait is not counted as a flat uplink.
+    w.lastSent = sent;
+    w.lastMovedAtMs = s.nowMs;
+    return null;
+  }
   if (w.lastSent == null || sent !== w.lastSent) {
     w.lastSent = sent;
     w.lastMovedAtMs = s.nowMs;

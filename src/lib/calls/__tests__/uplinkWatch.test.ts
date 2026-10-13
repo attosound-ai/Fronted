@@ -131,3 +131,36 @@ test('held before the first packet: judged from the unhold, not from the connect
   assert.equal(stepUplinkWatch(w2, sample({ nowMs: T0 + 5000 })), null);
   assert.equal(stepUplinkWatch(w2, sample({ nowMs: T0 + 8000 }))?.kind, 'dead');
 });
+
+test('Oct 13 2026: a cold call adopted 9 s before Twilio connects it is not judged before the connect', () => {
+  const w = newUplinkWatch();
+  const realConnect = T0 + 9000;
+  // Adopted at T0, still connecting: 0 packets every 2 s until the real connect.
+  for (let t = 0; t < 9000; t += 2000) {
+    assert.equal(
+      stepUplinkWatch(w, sample({ nowMs: T0 + t, connectedAtMs: realConnect })),
+      null
+    );
+  }
+  // Connected: audio flows within a second.
+  assert.equal(
+    stepUplinkWatch(
+      w,
+      sample({ nowMs: T0 + 10000, connectedAtMs: realConnect, packetsSent: 50 })
+    ),
+    null
+  );
+  // But a call that stays silent after the real connect is still caught.
+  const w2 = newUplinkWatch();
+  for (let t = 0; t < 9000; t += 2000) {
+    stepUplinkWatch(w2, sample({ nowMs: T0 + t, connectedAtMs: realConnect }));
+  }
+  assert.equal(
+    stepUplinkWatch(w2, sample({ nowMs: T0 + 13000, connectedAtMs: realConnect })),
+    null
+  );
+  assert.equal(
+    stepUplinkWatch(w2, sample({ nowMs: T0 + 15000, connectedAtMs: realConnect }))?.kind,
+    'dead'
+  );
+});

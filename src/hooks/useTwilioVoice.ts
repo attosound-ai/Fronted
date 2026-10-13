@@ -514,9 +514,12 @@ function checkMicSilent(
   nowMs: number
 ): void {
   try {
+    // Judged from Twilio's real connect, like the uplink watch.
+    const startAtMs = watchedConnectedAtMs(sid, ac);
+    const connected = startAtMs != null && nowMs >= startAtMs;
     const verdict = stepMicSilentWatch(micSilentWatch, {
       sid,
-      connected: ac?.state === 'connected',
+      connected,
       muted: ac?.isMuted ?? false,
       onHold: ac?.isOnHold ?? false,
       micLevel: typeof flat.mic_audio_level === 'number' ? flat.mic_audio_level : null,
@@ -524,7 +527,7 @@ function checkMicSilent(
     });
     const remote = stepRemoteSilentWatch(remoteSilentWatch, {
       sid,
-      connected: ac?.state === 'connected',
+      connected,
       onHold: ac?.isOnHold ?? false,
       remoteLevel:
         typeof flat.remote_audio_level === 'number' ? flat.remote_audio_level : null,
@@ -569,6 +572,25 @@ function checkMicSilent(
 // One event when a connected call stops sending audio, one when it comes back.
 // The rule lives in lib/calls/uplinkWatch.ts (Oct 10 2026, the Larry call).
 const uplinkWatch = newUplinkWatch();
+// When Twilio really connected the call (its Connected event, or connected at
+// bind). Not the store's connectedAt: a cold call is adopted while it may still
+// be connecting, and the store stamps the adoption (Oct 13 2026: on a slow
+// network the adoption came 6 to 9 s before the real connect, and every such call
+// raised a false call_uplink_dead counted from the adoption).
+let mediaConnected: { sid: string; atMs: number } | null = null;
+// If Twilio's Connected never reaches us, judge from the store's connect plus
+// this grace, so a call that never really connects is still watched.
+const MEDIA_CONNECT_GRACE_MS = 15_000;
+
+/** When the watchdogs start judging this call, or null while it is not up. */
+function watchedConnectedAtMs(
+  sid: string | null,
+  ac: ReturnType<typeof useCallStore.getState>['activeCall']
+): number | null {
+  if (!sid || ac?.state !== 'connected') return null;
+  if (mediaConnected?.sid === sid) return mediaConnected.atMs;
+  return ac.connectedAt ? ac.connectedAt.getTime() + MEDIA_CONNECT_GRACE_MS : null;
+}
 
 function checkUplink(
   sid: string | null,
@@ -580,7 +602,7 @@ function checkUplink(
     const verdict = stepUplinkWatch(uplinkWatch, {
       sid,
       connected: ac?.state === 'connected',
-      connectedAtMs: ac?.connectedAt ? ac.connectedAt.getTime() : null,
+      connectedAtMs: watchedConnectedAtMs(sid, ac),
       muted: ac?.isMuted ?? false,
       onHold: ac?.isOnHold ?? false,
       packetsSent: typeof flat.packets_sent === 'number' ? flat.packets_sent : null,
@@ -828,6 +850,8 @@ function bindCallEvents(call: any): () => void {
     );
     setCallState('connected');
     setActiveCallMarker(useCallStore.getState().activeCall?.callSid ?? null);
+    const connectedSid = useCallStore.getState().activeCall?.callSid ?? null;
+    if (connectedSid) mediaConnected = { sid: connectedSid, atMs: Date.now() };
     // Telemetry begins capturing tick snapshots at this point — pre-connect
     // states are already covered by startCallTelemetry() at invite/outgoing.
     // Stats + answer context ride along; see beginConnectedCallTelemetry.

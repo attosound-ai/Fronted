@@ -35,7 +35,7 @@ patchedDependencies:
     hash: 2ab1d8daea12b0b1d4e6f02a5b0fed41280d16c21f619a4063f2cce0a42a273f
     path: patches/react-native-device-info@15.0.2.patch
   react-native-ios-context-menu@3.2.1:
-    hash: 42e5e37a27085c14c13cc483ea73645182afd04586679e6e1ff3db5293077794
+    hash: 1f4a467252bcb2d380f87c2c30e36cdb7be244ac2768497c080d5e7a71b3f0ec
     path: patches/react-native-ios-context-menu@3.2.1.patch
   react-native@0.83.4:
     hash: b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af
@@ -251,7 +251,7 @@ importers:
         version: 3.3.2(a97686b7af7b2fc232296a4bf7bd3ef4)
       react-native-ios-context-menu:
         specifier: ^3.2.1
-        version: 3.2.1(patch_hash=42e5e37a27085c14c13cc483ea73645182afd04586679e6e1ff3db5293077794)(react-native-ios-utilities@5.2.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
+        version: 3.2.1(patch_hash=1f4a467252bcb2d380f87c2c30e36cdb7be244ac2768497c080d5e7a71b3f0ec)(react-native-ios-utilities@5.2.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
       react-native-keyboard-controller:
         specifier: 1.20.7
         version: 1.20.7(react-native-reanimated@4.2.1(react-native-worklets@0.7.1(@babel/core@7.29.0)(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0)
@@ -9989,7 +9989,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  react-native-ios-context-menu@3.2.1(patch_hash=42e5e37a27085c14c13cc483ea73645182afd04586679e6e1ff3db5293077794)(react-native-ios-utilities@5.2.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
+  react-native-ios-context-menu@3.2.1(patch_hash=1f4a467252bcb2d380f87c2c30e36cdb7be244ac2768497c080d5e7a71b3f0ec)(react-native-ios-utilities@5.2.0(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0))(react-native@0.83.4(patch_hash=b96a92fd05d260280cd64d5d483e5498af361224dd8ddf57555c7cedf5c906af)(@babel/core@7.29.0)(@types/react@19.2.14)(react@19.2.0))(react@19.2.0):
     dependencies:
       '@dominicstop/ts-event-emitter': 1.1.0
       react: 19.2.0

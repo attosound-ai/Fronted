@@ -1,5 +1,20 @@
+diff --git a/ios/RNIContextMenu/RNIMenuActionItem.swift b/ios/RNIContextMenu/RNIMenuActionItem.swift
+index 63fae48aeb169f0ec81798adc60f53304be9afcb..85d22a6483b8256d77b88c6ffb875bc4f9c2b117 100644
+--- a/ios/RNIContextMenu/RNIMenuActionItem.swift
++++ b/ios/RNIContextMenu/RNIMenuActionItem.swift
+@@ -182,7 +182,9 @@ extension RNIMenuActionItem {
+     );
+     
+     #if swift(>=5.5)
+-    if #available(iOS 15.0, *) {
++    // ATTO patch: the iOS 27 SDK marks UIAction.subtitle as iOS 16+, and
++    // Xcode 27 refuses the old iOS 15 check. iOS 15 phones lose the subtitle.
++    if #available(iOS 16.0, *) {
+       action.subtitle =
+            self.actionSubtitle
+         ?? self.fallbackActionSubtitle;
 diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
-index ec1c031..7289fb6 100644
+index ec1c0316f2d0e955b28dd80beb4712ef436dfdf1..7289fb68a9e0b17ed108d3340298e52cab4e1911 100644
 --- a/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
 +++ b/ios/RNIContextMenuView/RNIContextMenuViewContent+UIContextMenuInteractionDelegate.swift
 @@ -105,6 +105,19 @@ extension RNIContextMenuViewContent: UIContextMenuInteractionDelegate {
@@ -112,7 +127,7 @@ index ec1c031..7289fb6 100644
 +  };
 +};
 diff --git a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
-index c01e1ef..c7dfef8 100644
+index c01e1ef8449defcc35b8513991de85c8e8acc07f..c7dfef807ce1e5df5f7cbfad8d74d96da0fc3cd4 100644
 --- a/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
 +++ b/ios/RNIContextMenuView/RNIContextMenuViewContent.swift
 @@ -251,6 +251,18 @@ public final class RNIContextMenuViewContent: UIView, RNIContentView {

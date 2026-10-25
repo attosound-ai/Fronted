@@ -35,9 +35,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Text } from '@/components/ui/Text';
 import { Logo } from '@/components/ui/Logo';
 import { showToast } from '@/components/ui/Toast';
-
-const ATTO_LOGO_URI =
-  'https://res.cloudinary.com/da9vymoah/image/upload/v1774905442/Property_1_Default_zqv4qr.png';
+import { BUNDLED_WORDMARK } from '@/features/feed/constants/wordmark';
 import { AudioVisualizer } from './AudioVisualizer';
 import { RecBadge } from './RecBadge';
 import { RecordingControls } from './RecordingControls';
@@ -724,16 +722,13 @@ export function SimpleRecordingScreen({ onBack }: SimpleRecordingScreenProps) {
           <ArrowLeft size={22} color="#FFF" strokeWidth={2.25} />
         </TouchableOpacity>
         <View style={styles.topNavLogoCenter} pointerEvents="none">
+          {/* The bundled wordmark carries "SOUND" too; the old remote default
+              lived on a Cloudinary account that is disabled. */}
           <Image
-            source={{ uri: customLogoUri ?? ATTO_LOGO_URI }}
-            style={customLogoUri ? styles.attoCustomLogo : styles.attoLogo}
+            source={customLogoUri ? { uri: customLogoUri } : BUNDLED_WORDMARK}
+            style={styles.attoCustomLogo}
             resizeMode="contain"
           />
-          {!customLogoUri && (
-            <Text style={styles.attoSubtext} numberOfLines={1}>
-              sound
-            </Text>
-          )}
         </View>
       </View>
 
@@ -914,33 +909,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_600SemiBold',
     fontSize: 14,
   },
-  attoLogo: {
-    width: 100,
-    height: 28,
-  },
   // Same box as FeedHeader.customLogo: the uploaded wordmark carries its own
   // "SOUND" line and needs the height the image plus the subtext used to take.
   attoCustomLogo: {
     width: 118,
     height: 41,
-  },
-  attoSubtext: {
-    // Match the home-feed header's "SOUND" exactly (FeedHeader.logoSubtext): a
-    // 5-letter word spread to span the 100px wordmark width above it. Bumping
-    // font size alone would be too tall — letterSpacing does the spanning.
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_400Regular',
-    fontSize: 12,
-    lineHeight: 14,
-    letterSpacing: 11,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    // Wide enough that "SOUND" + its trailing letterSpacing never wraps the D to
-    // a second line (numberOfLines={1} on the Text is the hard guarantee).
-    width: 112,
-    // letterSpacing leaves a trailing gap after the last letter; nudge right so
-    // the caps sit optically centred under the wordmark (render-only).
-    transform: [{ translateX: 5 }],
   },
   callBarControls: {
     flexDirection: 'row',

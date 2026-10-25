@@ -97,9 +97,12 @@ import { useLogoVote } from '@/features/feed/hooks/useLogoVote';
 import { useAppLogo } from '@/features/feed/hooks/useAppLogo';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { COLORS } from '@/constants/theme';
-
-const ATTO_LOGO_URI =
-  'https://res.cloudinary.com/da9vymoah/image/upload/v1774905442/Property_1_Default_zqv4qr.png';
+import {
+  BUNDLED_WORDMARK,
+  BUNDLED_WORDMARK_URI,
+  cloudinaryCloudOf,
+} from '@/features/feed/constants/wordmark';
+import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 
 const HEADER_HEIGHT = 44;
 /**
@@ -140,15 +143,30 @@ export function FeedHeader() {
   const { logos: creatorLogos } = useCreatorLogos();
   const { mutate: castVote } = useLogoVote();
   // Main header wordmark: admin-settable from atto-web (served by
-  // content-service). Falls back to the bundled default when unset/offline.
-  // When a CUSTOM logo is set we treat it as the COMPLETE wordmark (it bakes in
-  // "SOUND"), so the app stops drawing its own "sound" subtext — otherwise it
-  // would double up. With no custom logo, everything renders exactly as before
-  // (bundled ATTO image + app-drawn "sound"), so production is unchanged until
-  // a logo is actually uploaded.
+  // content-service). Falls back to the wordmark bundled in the app when unset,
+  // offline or when the remote image fails to load. Both carry "SOUND".
   const customLogoUri = useAppLogo();
-  const attoLogoUri = customLogoUri ?? ATTO_LOGO_URI;
-  const showSoundSubtext = !customLogoUri;
+
+  // Remote logos that failed to load in this session. Each one falls back a
+  // step (creator logo to the ATTO logo, ATTO logo to the bundled one) instead
+  // of leaving the header empty: RN clears the image on failure and never
+  // retries, which is how the creators only header went blank on Oct 25 2026.
+  const [failedLogos, setFailedLogos] = useState<ReadonlySet<string>>(() => new Set());
+  const markLogoFailed = useCallback(
+    (kind: 'creator' | 'app', uri: string, error: string | undefined) => {
+      setFailedLogos((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)));
+      analytics.capture(ANALYTICS_EVENTS.FEED.HEADER_LOGO_FAILED, {
+        kind,
+        cloud: cloudinaryCloudOf(uri),
+        uri: uri.slice(0, 200),
+        error: error?.slice(0, 200) ?? null,
+      });
+    },
+    []
+  );
+  const liveCustomLogoUri =
+    customLogoUri && !failedLogos.has(customLogoUri) ? customLogoUri : null;
+  const attoLogoUri = liveCustomLogoUri ?? BUNDLED_WORDMARK_URI;
 
   // Day-based logo: rotates to next logo each calendar day
   const [todayIndex, setTodayIndex] = useState(() =>
@@ -178,6 +196,10 @@ export function FeedHeader() {
   const notifUnread = useNotificationStore((s) => s.unreadCount);
   const isFilterActive = useFeedFilterStore((s) => s.isAnyFilterActive);
   const creatorsOnly = useFeedFilterStore((s) => s.filters.creatorsOnly);
+  // With "creators only" on, the header shows today's creator logo, unless it
+  // failed to load (then the ATTO logo, so the header is never empty).
+  const creatorLogoUri =
+    creatorsOnly && todayLogoUri && !failedLogos.has(todayLogoUri) ? todayLogoUri : null;
   const setFilter = useFeedFilterStore((s) => s.setFilter);
   const contentTypeCount = useFeedFilterStore((s) => s.filters.contentTypes.length);
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
@@ -445,23 +467,30 @@ export function FeedHeader() {
               setLogoFullscreen(true);
             }}
           >
-            {creatorsOnly && todayLogoUri ? (
+            {creatorLogoUri ? (
               <Image
-                source={{ uri: todayLogoUri }}
+                source={{ uri: creatorLogoUri }}
                 style={styles.logo}
                 resizeMode="contain"
+                onError={(e) =>
+                  markLogoFailed('creator', creatorLogoUri, e.nativeEvent.error)
+                }
+              />
+            ) : liveCustomLogoUri ? (
+              <Image
+                source={{ uri: liveCustomLogoUri }}
+                style={styles.customLogo}
+                resizeMode="contain"
+                onError={(e) =>
+                  markLogoFailed('app', liveCustomLogoUri, e.nativeEvent.error)
+                }
               />
             ) : (
               <Image
-                source={{ uri: attoLogoUri }}
-                style={customLogoUri ? styles.customLogo : styles.logo}
+                source={BUNDLED_WORDMARK}
+                style={styles.customLogo}
                 resizeMode="contain"
               />
-            )}
-            {showSoundSubtext && (
-              <Text style={styles.logoSubtext} allowFontScaling={false}>
-                sound
-              </Text>
             )}
           </TouchableOpacity>
 
@@ -523,10 +552,10 @@ export function FeedHeader() {
       />
       <FilterModal visible={filterVisible} onClose={() => setFilterVisible(false)} />
       <FullscreenImageViewer
-        uri={creatorsOnly && todayLogoUri ? todayLogoUri : attoLogoUri}
-        logo={creatorsOnly ? todayLogo : undefined}
+        uri={creatorLogoUri ?? attoLogoUri}
+        logo={creatorLogoUri ? todayLogo : undefined}
         onVote={
-          creatorsOnly
+          creatorLogoUri
             ? (logoId, rating) => {
                 const currentRating =
                   creatorLogos.find((l) => l.id === logoId)?.userRating ?? null;
@@ -621,25 +650,6 @@ const styles = StyleSheet.create({
   creatorLogo: {
     width: 100,
     height: 28,
-  },
-  logoSubtext: {
-    color: '#FFFFFF',
-    fontFamily: 'Archivo_400Regular',
-    // Sized + letter-spaced so "SOUND" spans the same 100px width as the
-    // wordmark image above it (a short 5-letter word only reaches that width
-    // by spreading the caps — bumping font size alone would make it far too
-    // tall for the 44px header). Fixed width + centre keeps it locked to the
-    // logo's width.
-    fontSize: 12,
-    lineHeight: 14,
-    letterSpacing: 11,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    width: 100,
-    // letterSpacing adds a trailing gap after the last letter, which leaves the
-    // visible caps sitting ~5px left of centre. Nudge the render right (doesn't
-    // affect layout/width) so it's optically centred under the wordmark.
-    transform: [{ translateX: 5 }],
   },
   iconButton: {
     width: 40,

@@ -131,6 +131,8 @@ export const ANALYTICS_EVENTS = {
     POST_MENTION_PICKED: 'feed_post_mention_picked',
     POST_MENTION_OPENED: 'feed_post_mention_opened',
     AUDIO_PLAY: 'feed_audio_play',
+    /** A remote header logo failed to load and the header fell back a step. */
+    HEADER_LOGO_FAILED: 'feed_header_logo_failed',
     AUDIO_PAUSE: 'feed_audio_pause',
     POST_PUBLISH_NAV: 'feed_post_publish_nav',
     /** Cover art on an audio post: uploaded, failed, picked or removed. */

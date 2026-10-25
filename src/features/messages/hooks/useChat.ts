@@ -3,6 +3,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import { messageService } from '../services/messageService';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import type { ChatMessage, ChatMessagesPage } from '../types';
+import { keepLocalRows } from '../utils/localRows';
 
 export function useChat(conversationId: string) {
   const queryClient = useQueryClient();
@@ -18,7 +19,16 @@ export function useChat(conversationId: string) {
     error,
   } = useInfiniteQuery({
     queryKey: QUERY_KEYS.MESSAGES.CHAT(conversationId),
-    queryFn: ({ pageParam }) => messageService.getMessages(conversationId, pageParam),
+    queryFn: async ({ pageParam }) => {
+      const page = await messageService.getMessages(conversationId, pageParam);
+      if (pageParam !== undefined) return page;
+      // A refetch must not drop what is still sending or failed on this phone.
+      const cached = queryClient.getQueryData<{ pages: ChatMessagesPage[] }>(
+        QUERY_KEYS.MESSAGES.CHAT(conversationId)
+      );
+      const cachedFirst = cached?.pages?.[0]?.messages ?? [];
+      return { ...page, messages: keepLocalRows(page.messages, cachedFirst) };
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: ChatMessagesPage) =>
       lastPage.hasMore ? (lastPage.nextCursor ?? undefined) : undefined,

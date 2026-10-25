@@ -289,6 +289,23 @@ export const ChatThread = forwardRef<ChatThreadHandle, ChatThreadProps>(
       }
     }, [messages, currentUserId, farFromBottom]);
 
+    // The typing bubble is the list header, the visual bottom of an inverted
+    // list, and `maintainVisibleContentPosition` keeps the newest message where
+    // it was, so the bubble grew under the composer and the user had to scroll
+    // to see "typing" (David, Oct 25 2026, with the keyboard up). Follow it like
+    // a new message when the bottom was in view; once more after its zoom in.
+    useEffect(() => {
+      if (!isParticipantTyping || farFromBottom) return;
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      const late = setTimeout(
+        () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
+        200
+      );
+      return () => clearTimeout(late);
+      // farFromBottom is read when the bubble appears, on purpose.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isParticipantTyping]);
+
     const scrollToBottom = useCallback((animated = true) => {
       listRef.current?.scrollToOffset({ offset: 0, animated });
       setUnseenCount(0);

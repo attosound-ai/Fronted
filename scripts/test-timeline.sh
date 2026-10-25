@@ -57,6 +57,7 @@ TEST_FILES=(
   "src/features/messages/media/__tests__/messagePreview.test.ts"
   "src/features/messages/media/__tests__/pendingAttachments.test.ts"
   "src/features/messages/utils/__tests__/sentRow.test.ts"
+  "src/features/messages/utils/__tests__/localRows.test.ts"
   "src/features/messages/utils/__tests__/clientKeys.test.ts"
   "src/lib/telephony/__tests__/testNumber.test.ts"
   "src/features/updates/__tests__/requiredBuild.test.ts"

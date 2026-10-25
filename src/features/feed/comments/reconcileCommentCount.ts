@@ -23,8 +23,8 @@ export async function reconcileCommentCount(
   action: 'comment_create' | 'comment_delete'
 ): Promise<void> {
   try {
-    // feedService.getPost returns the RAW API shape (it does not run the
-    // feed mapper), so the count lives under `interactions`.
+    // feedService.getPost runs the feed mapper (commentsCount at the top);
+    // `interactions` is still read in case an older shape comes back.
     const fresh = (await feedService.getPost(postId)) as unknown as {
       commentsCount?: number;
       interactions?: { commentsCount?: number };

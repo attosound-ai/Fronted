@@ -48,6 +48,7 @@ TEST_FILES=(
   "src/features/appIcon/lib/__tests__/appIconModel.test.ts"
   "src/features/timeline/utils/__tests__/exportFileName.test.ts"
   "src/lib/media/__tests__/cloudinaryUrl.test.ts"
+  "src/features/feed/services/__tests__/mapApiPost.test.ts"
   "src/lib/media/__tests__/uploadResponse.test.ts"
   "src/features/messages/media/__tests__/mediaBox.test.ts"
   "src/features/messages/media/__tests__/postCover.test.ts"

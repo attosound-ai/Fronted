@@ -1,42 +1,8 @@
 import { apiClient } from '@/lib/api/client';
 import { API_ENDPOINTS } from '@/lib/api/endpoints';
-import { cloudinaryUrl } from '@/lib/media/cloudinaryUrl';
 import type { Post, ApiResponse } from '@/types';
 import type { FeedResponse, CreatePostDTO, FeedApiResponse, FeedApiPost } from '../types';
-
-/** Map a backend FeedApiPost into the frontend Post shape. */
-function mapApiPost(raw: FeedApiPost): Post {
-  return {
-    id: raw.id,
-    content: raw.textContent || '',
-    images:
-      raw.contentType === 'image'
-        ? raw.filePaths.map((fp) => cloudinaryUrl(fp, 'feed') ?? fp)
-        : [],
-    author: {
-      id: Number(raw.author?.id) || 0,
-      username: raw.author?.username || 'unknown',
-      displayName: raw.author?.displayName || raw.author?.username || 'Unknown',
-      avatar: raw.author?.avatar || null,
-      role: raw.author?.role ?? 'listener',
-    } as Post['author'],
-    likesCount: raw.interactions?.likesCount ?? 0,
-    commentsCount: raw.interactions?.commentsCount ?? 0,
-    isLiked: raw.interactions?.isLiked ?? false,
-    createdAt: raw.createdAt || '',
-    updatedAt: raw.updatedAt || raw.createdAt || '',
-    contentType: raw.contentType,
-    textContent: raw.textContent,
-    filePaths: raw.filePaths,
-    metadata: raw.metadata,
-    tags: raw.tags,
-    sharesCount: raw.interactions?.sharesCount ?? 0,
-    repostsCount: raw.interactions?.repostsCount ?? 0,
-    isBookmarked: raw.interactions?.isBookmarked ?? false,
-    isReposted: raw.interactions?.isReposted ?? false,
-    isFollowingAuthor: raw.isFollowingAuthor,
-  };
-}
+import { mapApiPost } from './mapApiPost';
 
 /**
  * FeedService - Servicio de API para el feed
@@ -68,10 +34,13 @@ export const feedService = {
    * Obtiene un post por ID
    */
   async getPost(postId: string): Promise<Post> {
-    const response = await apiClient.get<ApiResponse<Post>>(
+    // The detail endpoint returns the same shape as the feed (counts under
+    // `interactions`). Returning it raw left likesCount/commentsCount undefined,
+    // so a post opened from a notification or from bookmarks hid its counters.
+    const response = await apiClient.get<ApiResponse<FeedApiPost>>(
       API_ENDPOINTS.POSTS.DETAIL(postId)
     );
-    return response.data.data;
+    return mapApiPost(response.data.data);
   },
 
   /**

@@ -15,7 +15,8 @@
     "build:ios": "./scripts/release-gate.sh production && ./scripts/verify-audio-api-binaries.sh && eas build --platform ios --profile production --local --non-interactive --output ./build-final.ipa",
     "submit:ios": "eas submit -p ios --path ./build-final.ipa --non-interactive",
     "release:gate": "./scripts/release-gate.sh production",
-    "eas-build-pre-install": "./scripts/release-gate.sh"
+    "eas-build-pre-install": "./scripts/release-gate.sh",
+    "eas-build-post-install": "./scripts/ensure-audio-api-binaries.sh"
   },
   "dependencies": {
     "@expo-google-fonts/archivo": "^0.4.2",

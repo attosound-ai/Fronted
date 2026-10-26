@@ -207,11 +207,40 @@ export function handleNotificationResponse(
   void openAsRecipient(alreadyHandled, data);
 }
 
+// On a cold start from a tap, the tabs layout hands the tap over as soon as the
+// session is authenticated, but the phone's accounts are still being read from
+// SecureStore (loadAccounts). The plan then saw no accounts, called the
+// recipient "not on device" and dropped the tap: the app opened on the feed
+// (David, Oct 26 2026; 29 of 59 taps in 30 days, 10 users). The plan waits for
+// the account list, and decides on what it has after ACCOUNTS_WAIT_MS.
+const ACCOUNTS_WAIT_MS = 8000;
+
+async function accountsLoaded(): Promise<number> {
+  const { useAccountStore } = await import('@/stores/accountStore');
+  const loaded = (s: { accounts: unknown[]; activeAccountId: number | null }) =>
+    s.accounts.length > 0 && s.activeAccountId !== null;
+  if (loaded(useAccountStore.getState())) return 0;
+  const startedAt = Date.now();
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      unsubscribe();
+      resolve();
+    };
+    const timer = setTimeout(done, ACCOUNTS_WAIT_MS);
+    const unsubscribe = useAccountStore.subscribe((s) => {
+      if (loaded(s)) done();
+    });
+  });
+  return Date.now() - startedAt;
+}
+
 async function openAsRecipient(
   alreadyHandled: boolean,
   data: Record<string, unknown>
 ): Promise<void> {
   const { useAccountStore } = await import('@/stores/accountStore');
+  const waitedMs = alreadyHandled ? 0 : await accountsLoaded();
   const store = useAccountStore.getState();
   const plan = planPushTap({
     alreadyHandled,
@@ -223,7 +252,7 @@ async function openAsRecipient(
   const url = typeof data.url === 'string' ? data.url : undefined;
   if (plan.kind === 'no_url') return;
   if (plan.kind === 'replay_skipped' || plan.kind === 'recipient_not_on_device') {
-    void track(plan.kind, url, data.account_id);
+    void track(plan.kind, url, data.account_id, waitedMs);
     return;
   }
   if (plan.kind === 'switch_then_open') {
@@ -239,21 +268,27 @@ async function openAsRecipient(
       void track('switch_failed', url, plan.accountId);
       return;
     }
-    void track('switched_then_opened', url, plan.accountId);
+    void track('switched_then_opened', url, plan.accountId, waitedMs);
   } else {
-    void track('opened', url, data.account_id);
+    void track('opened', url, data.account_id, waitedMs);
   }
   // Small delay on cold start to ensure navigation is mounted
   setTimeout(() => router.push(plan.url as any), 100);
 }
 
-async function track(outcome: string, url: string | undefined, accountId: unknown): Promise<void> {
+async function track(
+  outcome: string,
+  url: string | undefined,
+  accountId: unknown,
+  waitedMs?: number
+): Promise<void> {
   try {
     const { analytics, ANALYTICS_EVENTS } = await import('@/lib/analytics');
     analytics.capture(ANALYTICS_EVENTS.MESSAGES.PUSH_TAP_HANDLED, {
       outcome,
       route: url ? url.split('?')[0] : null,
       account_id: accountId ?? null,
+      accounts_wait_ms: waitedMs ?? null,
     });
   } catch {
     // Telemetry never blocks navigation.

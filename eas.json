@@ -42,7 +42,8 @@
     "production": {
       "ios": {
         "buildConfiguration": "Release",
-        "autoIncrement": true
+        "autoIncrement": true,
+        "image": "sdk-55"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api-gateway-kong-production.up.railway.app/api/v1",

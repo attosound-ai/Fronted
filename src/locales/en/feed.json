@@ -209,5 +209,8 @@
   "comingSoon": {
     "title": "Coming Soon",
     "showSupport": "Show your support to creators by sending donations directly. This feature is coming soon!"
+  },
+  "mention": {
+    "notFound": "No account named @{{username}}"
   }
 }

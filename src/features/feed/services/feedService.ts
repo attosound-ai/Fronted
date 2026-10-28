@@ -74,7 +74,7 @@ export const feedService = {
    */
   async updatePost(
     postId: string,
-    data: { textContent?: string; tags?: string[] }
+    data: { textContent?: string; tags?: string[]; metadata?: Record<string, string> }
   ): Promise<Post> {
     const response = await apiClient.put<ApiResponse<FeedApiPost>>(
       API_ENDPOINTS.POSTS.UPDATE(postId),

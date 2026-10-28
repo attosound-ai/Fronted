@@ -1,11 +1,15 @@
-import { useCallback } from 'react';
-import { Linking, StyleSheet, type TextStyle } from 'react-native';
+import { useCallback, useMemo } from 'react';
+import { Alert, Linking, StyleSheet, type TextStyle } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/ui/Text';
-import { apiClient } from '@/lib/api/client';
-import { API_ENDPOINTS } from '@/lib/api/endpoints';
+import { showToast } from '@/components/ui/Toast';
+import { GOLD } from '@/constants/gold';
 import { analytics, ANALYTICS_EVENTS } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics/hapticService';
+import { fetchMentionPerson, useMentionPeople } from '../hooks/useMentionPeople';
+import { mentionedUsernames } from '../utils/mentions';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
 /** Split on the whole mention so the "@" stays with the name. */
@@ -19,8 +23,8 @@ interface LinkedTextProps {
   maxFontSizeMultiplier?: number;
   /**
    * username (lowercased) to user id, from the post's own metadata. A name
-   * picked from the composer's list resolves with no request; one typed by
-   * hand is looked up when tapped.
+   * picked from the composer's list opens with no wait; every name is also
+   * looked up once (useMentionPeople) for its colour and to know it exists.
    */
   mentions?: Record<string, string>;
 }
@@ -39,6 +43,11 @@ export function LinkedText({
   maxFontSizeMultiplier,
   mentions,
 }: LinkedTextProps) {
+  const { t } = useTranslation('feed');
+  const queryClient = useQueryClient();
+  const names = useMemo(() => mentionedUsernames(children), [children]);
+  const people = useMentionPeople(names);
+
   const handleLinkPress = useCallback((url: string) => {
     Linking.openURL(url);
   }, []);
@@ -46,35 +55,42 @@ export function LinkedText({
   const openMention = useCallback(
     async (handle: string) => {
       const username = handle.slice(1);
+      const key = username.toLowerCase();
       void haptic('selection');
-      let id = mentions?.[username.toLowerCase()];
-      if (!id) {
-        // Typed by hand rather than picked: find them by name, once, on tap.
+      let id = mentions?.[key] ?? people[key]?.id;
+      let missing = people[key] === null;
+      if (!id && !missing) {
+        // The caption's own lookup has not answered yet: ask the same cache.
         try {
-          const res = await apiClient.get(API_ENDPOINTS.USERS.SEARCH, {
-            params: { q: username },
-          });
-          const list = (res.data?.data ?? []) as {
-            id: string | number;
-            username: string;
-          }[];
-          const exact = list.find(
-            (u) => u.username?.toLowerCase() === username.toLowerCase()
-          );
-          if (exact) id = String(exact.id);
+          const person = await fetchMentionPerson(queryClient, username);
+          id = person?.id;
+          missing = person === null;
         } catch {
-          // No profile to open; the name simply stays text.
+          // Offline: say nothing rather than claim the account does not exist.
         }
       }
       analytics.capture(ANALYTICS_EVENTS.FEED.POST_MENTION_OPENED, {
         username,
         resolved: !!id,
-        from_metadata: !!mentions?.[username.toLowerCase()],
+        missing,
+        from_metadata: !!mentions?.[key],
       });
-      if (id) router.push({ pathname: '/user/[id]', params: { id, username } });
+      if (id) {
+        router.push({ pathname: '/user/[id]', params: { id, username } });
+      } else if (missing) {
+        // A typo must say so, not look like a broken link (Oct 27 2026).
+        const message = t('mention.notFound', { username });
+        if (!showToast(message, 'warning')) Alert.alert(message);
+      }
     },
-    [mentions]
+    [mentions, people, queryClient, t]
   );
+
+  const mentionStyle = (run: string) => {
+    const person = people[run.slice(1).toLowerCase()];
+    if (person === null) return null;
+    return person?.role === 'creator' ? styles.mentionCreator : styles.mention;
+  };
 
   // Links first, then the people named inside each plain run.
   URL_REGEX.lastIndex = 0;
@@ -105,7 +121,7 @@ export function LinkedText({
           run.startsWith('@') && run.length > 1 ? (
             <Text
               key={`${i}-${j}`}
-              style={[style, styles.mention]}
+              style={[style, mentionStyle(run)]}
               onPress={() => void openMention(run)}
               maxFontSizeMultiplier={maxFontSizeMultiplier}
             >
@@ -124,9 +140,15 @@ const styles = StyleSheet.create({
   link: {
     color: '#3B82F6',
   },
-  // A tagged name reads as one of ours, not as a web link.
+  // A tagged name reads as one of ours, not as a web link: bold and cream, and
+  // gold for a creator, like the rest of the app (David, Oct 27 2026). A name
+  // that matches no account keeps the caption's own style.
   mention: {
-    color: '#FFFFFF',
+    color: '#F2E6C9',
+    fontFamily: 'Archivo_600SemiBold',
+  },
+  mentionCreator: {
+    color: GOLD.bright,
     fontFamily: 'Archivo_600SemiBold',
   },
 });

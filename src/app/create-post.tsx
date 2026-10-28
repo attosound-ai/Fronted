@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -26,13 +26,7 @@ import { BottomSheet } from '@/components/ui/BottomSheet';
 import { ComposeMediaPreview } from '@/features/feed/components/create/ComposeMediaPreview';
 import { MentionSuggestions } from '@/features/feed/components/create/MentionSuggestions';
 import { GlassSurface } from '@/components/navigation/GlassSurface';
-import {
-  activeMention,
-  applyMention,
-  survivingTags,
-  type ActiveMention,
-  type TaggedPerson,
-} from '@/features/feed/utils/mentions';
+import { useMentionComposer } from '@/features/feed/hooks/useMentionComposer';
 import { ProjectPickerSheet } from '@/features/projects/components/ProjectPickerSheet';
 import { usePublishQueue } from '@/features/feed/publish/publishQueueStore';
 import {
@@ -97,15 +91,18 @@ export default function CreatePostScreen() {
   // teclado (David, 27 de septiembre de 2026).
   const insets = useSafeAreaInsets();
 
-  const [textContent, setTextContent] = useState('');
   // Tagging people, the way Instagram does it: type @, pick from the list,
-  // and the name you picked rides with the post so the link still works for
-  // whoever reads it (David, Sep 25 2026).
-  const [tagged, setTagged] = useState<TaggedPerson[]>([]);
-  const [mention, setMention] = useState<ActiveMention | null>(null);
-  // Set once after a pick so the caret lands after the name, then released,
-  // because a caption whose selection is always controlled fights the keyboard.
-  const [forcedCaret, setForcedCaret] = useState<{ start: number; end: number }>();
+  // and the name you picked rides with the post (shared with Edit Post).
+  const {
+    text: textContent,
+    tagged,
+    mention,
+    forcedCaret,
+    inputRef: campoRef,
+    onChangeText: handleCaption,
+    onSelectionChange,
+    pickMention,
+  } = useMentionComposer();
   const [media, setMedia] = useState<PickedMedia[]>([]);
   const [attachmentType, setAttachmentType] = useState<PostType | null>(null);
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
@@ -341,63 +338,6 @@ export default function CreatePostScreen() {
     }
   };
 
-  /**
-   * Every keystroke decides whether a mention is being written at the caret.
-   * A name the author deleted stops being a tag, so nobody is notified for a
-   * post that no longer names them.
-   */
-  /**
-   * Lo que la leyenda dice ahora mismo y dónde está el cursor.
-   *
-   * La mención que se está escribiendo depende de las dos cosas a la vez, y
-   * `textContent` leído dentro de `onSelectionChange` es el valor del render
-   * ANTERIOR. Eso dejaba la lista un carácter por detrás (con "@andrey" aún
-   * decía "sigue escribiendo") y, al elegir, hacía que `applyMention` cortara
-   * con una longitud equivocada: la última letra escrita reaparecía DESPUÉS
-   * del nombre insertado. Un solo origen para los dos fallos.
-   */
-  /** El campo, para devolverle el foco cuando la lista nativa se lo quita. */
-  const campoRef = useRef<TextInput>(null);
-  const captionRef = useRef('');
-  const caretRef = useRef(0);
-
-  const handleCaption = useCallback((next: string) => {
-    // El cursor real llega en `onSelectionChange`, que puede ir detrás de esta
-    // llamada; mientras tanto se estima con lo que creció o menguó el texto,
-    // que es exacto al escribir y al borrar, que es lo que importa aquí.
-    const moved = next.length - captionRef.current.length;
-    const caret = Math.max(0, Math.min(caretRef.current + moved, next.length));
-    captionRef.current = next;
-    caretRef.current = caret;
-    setTextContent(next);
-    setMention(activeMention(next, caret));
-    setTagged((current) => survivingTags(next, current));
-  }, []);
-
-  const pickMention = useCallback(
-    (person: TaggedPerson) => {
-      if (!mention) return;
-      const { text, caret } = applyMention(captionRef.current, mention, person.username);
-      captionRef.current = text;
-      caretRef.current = caret;
-      setTextContent(text);
-      setForcedCaret({ start: caret, end: caret });
-      setMention(null);
-      // La lista es una vista nativa de SwiftUI, así que al tocarla se lleva el
-      // primer respondedor y el teclado se cierra. En Instagram no pasa: eliges
-      // y sigues escribiendo. Se lo devolvemos en cuanto la fila desaparece
-      // (David, 27 de septiembre de 2026).
-      requestAnimationFrame(() => campoRef.current?.focus());
-      setTagged((current) =>
-        current.some((p) => p.id === person.id) ? current : [...current, person]
-      );
-      analytics.capture(ANALYTICS_EVENTS.FEED.POST_MENTION_PICKED, {
-        tagged_count: tagged.length + 1,
-      });
-    },
-    [mention, tagged.length]
-  );
-
   // ── Publish ──
 
   const canPost = textContent.trim().length > 0 || media.length > 0;
@@ -522,12 +462,7 @@ export default function CreatePostScreen() {
             multiline
             value={textContent}
             onChangeText={handleCaption}
-            onSelectionChange={(e) => {
-              const at = e.nativeEvent.selection.end;
-              caretRef.current = at;
-              if (forcedCaret) setForcedCaret(undefined);
-              setMention(activeMention(captionRef.current, at));
-            }}
+            onSelectionChange={onSelectionChange}
             selection={forcedCaret}
             maxLength={MAX_CHARS}
             autoFocus

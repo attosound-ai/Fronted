@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 import {
   activeMention,
   applyMention,
+  editedTagMetadata,
   mentionedUsernames,
   survivingTags,
+  taggedFrom,
   tagMapFrom,
   tagMetadata,
 } from '../utils/mentions';
@@ -44,10 +46,7 @@ test('picking a name at the end of the caption still ends with a space', () => {
 });
 
 test('the usernames written in a caption come back once each, in order', () => {
-  assert.deepEqual(mentionedUsernames('@ana y @juan y @ANA otra vez'), [
-    'ana',
-    'juan',
-  ]);
+  assert.deepEqual(mentionedUsernames('@ana y @juan y @ANA otra vez'), ['ana', 'juan']);
   assert.deepEqual(mentionedUsernames('sin nadie'), []);
 });
 
@@ -104,4 +103,28 @@ test('a mention computed one keystroke late is what stranded the last letter', (
     applyMention(texto, vieja, 'andrey.plazas').text,
     'En el estudio con @andrey.plazas .'
   );
+});
+
+// Editar un post (27 oct 2026): Anthony añadió a mano @youngraybeatz al editar,
+// sin lista de la que elegir, y el nombre no abría nada ni avisaba a nadie.
+
+test('an edit starts from the people the saved post already tags', () => {
+  const metadata = {
+    duration: '137.135',
+    taggedUserIds: '167,28',
+    taggedUsernames: 'youngraybeats,andrey.plazas',
+  };
+  assert.deepEqual(taggedFrom(metadata), [
+    { id: '167', username: 'youngraybeats' },
+    { id: '28', username: 'andrey.plazas' },
+  ]);
+  assert.deepEqual(taggedFrom(undefined), []);
+});
+
+test('an edit that removes the last name sends empty tags, so the server drops them', () => {
+  assert.deepEqual(editedTagMetadata([]), { taggedUserIds: '', taggedUsernames: '' });
+  assert.deepEqual(editedTagMetadata([{ id: '167', username: 'youngraybeats' }]), {
+    taggedUserIds: '167',
+    taggedUsernames: 'youngraybeats',
+  });
 });

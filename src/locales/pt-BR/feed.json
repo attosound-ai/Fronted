@@ -209,5 +209,8 @@
   "comingSoon": {
     "title": "Em Breve",
     "showSupport": "Mostre seu apoio aos criadores enviando doações diretamente. Esse recurso estará disponível em breve!"
+  },
+  "mention": {
+    "notFound": "Nenhuma conta chamada @{{username}}"
   }
 }

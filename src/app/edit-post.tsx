@@ -17,9 +17,21 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/authStore';
 import { feedService } from '@/features/feed/services/feedService';
 import { useEditPost } from '@/features/feed/hooks/useEditPost';
+import { useMentionComposer } from '@/features/feed/hooks/useMentionComposer';
+import { MentionSuggestions } from '@/features/feed/components/create/MentionSuggestions';
+import {
+  editedTagMetadata,
+  taggedFrom,
+  type TaggedPerson,
+} from '@/features/feed/utils/mentions';
 import { COLORS } from '@/constants/theme';
 
 const MAX_CHARS = 2200;
+
+/** The tagged ids in order, to tell whether an edit changed who is tagged. */
+function tagKey(people: TaggedPerson[]): string {
+  return people.map((p) => p.id).join(',');
+}
 
 export default function EditPostScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
@@ -27,8 +39,21 @@ export default function EditPostScreen() {
   const user = useAuthStore((s) => s.user);
   const { editPostAsync, isEditing } = useEditPost();
 
-  const [textContent, setTextContent] = useState('');
+  // The same @ list as New Post, so a name added while editing is picked, not
+  // typed (Oct 27 2026: a hand typed @youngraybeatz opened nothing).
+  const {
+    text: textContent,
+    tagged,
+    mention,
+    forcedCaret,
+    inputRef,
+    load,
+    onChangeText,
+    onSelectionChange,
+    pickMention,
+  } = useMentionComposer();
   const [originalText, setOriginalText] = useState('');
+  const [originalTagged, setOriginalTagged] = useState<TaggedPerson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load current post data
@@ -38,15 +63,17 @@ export default function EditPostScreen() {
       .getPost(postId)
       .then((post) => {
         const text = post.textContent ?? post.content ?? '';
-        setTextContent(text);
+        const saved = taggedFrom(post.metadata);
+        load(text, saved);
         setOriginalText(text);
+        setOriginalTagged(saved);
       })
       .catch(() => {
         Alert.alert(t('common:errors.title'), t('edit.loadFailed'));
         router.back();
       })
       .finally(() => setIsLoading(false));
-  }, [postId]);
+  }, [postId, load]);
 
   const hasChanges = textContent !== originalText;
   const charCount = textContent.length;
@@ -57,7 +84,14 @@ export default function EditPostScreen() {
       // Await the backend write. Only navigate back on SUCCESS — previously we
       // fire-and-forgot and popped immediately, so a failed save (auth/5xx) looked
       // saved (optimistic flash) then silently reverted ("guarda pero no se refleja").
-      await editPostAsync({ postId, textContent });
+      // Tags only travel when they changed, so an edit of a post from before
+      // tagging existed leaves its metadata alone.
+      const tagsChanged = tagKey(tagged) !== tagKey(originalTagged);
+      await editPostAsync({
+        postId,
+        textContent,
+        ...(tagsChanged ? { metadata: editedTagMetadata(tagged) } : {}),
+      });
       router.back();
     } catch {
       Alert.alert(
@@ -116,15 +150,28 @@ export default function EditPostScreen() {
             style={styles.avatar}
           />
           <TextInput
+            ref={inputRef}
             style={styles.textInput}
             multiline
             value={textContent}
-            onChangeText={setTextContent}
+            onChangeText={onChangeText}
+            onSelectionChange={onSelectionChange}
+            selection={forcedCaret}
             maxLength={MAX_CHARS}
             autoFocus
             placeholderTextColor="#666666"
           />
         </View>
+
+        {mention ? (
+          <View style={styles.mentionCard}>
+            <MentionSuggestions
+              query={mention.query}
+              selfId={user ? String(user.id) : ''}
+              onPick={pickMention}
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -172,6 +219,10 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  // Right under the caption, as in New Post.
+  mentionCard: {
+    marginTop: 2,
   },
   composeRow: {
     flexDirection: 'row',

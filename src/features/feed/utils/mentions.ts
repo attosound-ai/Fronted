@@ -106,3 +106,29 @@ export function tagMapFrom(
   }
   return map;
 }
+
+/** The people a saved post already tags, in the order they were picked. */
+export function taggedFrom(
+  metadata: Record<string, string> | null | undefined
+): TaggedPerson[] {
+  const ids = (metadata?.[MENTION_METADATA_IDS] ?? '').split(',').filter(Boolean);
+  const names = (metadata?.[MENTION_METADATA_NAMES] ?? '').split(',').filter(Boolean);
+  const out: TaggedPerson[] = [];
+  for (let i = 0; i < Math.min(ids.length, names.length); i += 1) {
+    out.push({ id: ids[i], username: names[i] });
+  }
+  return out;
+}
+
+/**
+ * The tag entries an edit sends. Unlike a new post it always carries both
+ * keys: an empty value tells the server to drop them, so taking the last name
+ * out of a caption also takes its tag away. The server merges these into the
+ * post's metadata and keeps the rest (duration, cover, size).
+ */
+export function editedTagMetadata(tagged: TaggedPerson[]): Record<string, string> {
+  return {
+    [MENTION_METADATA_IDS]: tagged.map((p) => p.id).join(','),
+    [MENTION_METADATA_NAMES]: tagged.map((p) => p.username).join(','),
+  };
+}

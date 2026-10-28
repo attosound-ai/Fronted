@@ -10,6 +10,8 @@ interface EditPostParams {
   postId: string;
   textContent?: string;
   tags?: string[];
+  /** Merged into the post's metadata by the server; used for the tagged people. */
+  metadata?: Record<string, string>;
 }
 
 export function useEditPost() {
@@ -17,8 +19,8 @@ export function useEditPost() {
   const userId = useAuthStore((s) => s.user?.id);
 
   const mutation = useMutation({
-    mutationFn: ({ postId, textContent, tags }: EditPostParams) =>
-      feedService.updatePost(postId, { textContent, tags }),
+    mutationFn: ({ postId, textContent, tags, metadata }: EditPostParams) =>
+      feedService.updatePost(postId, { textContent, tags, metadata }),
 
     onMutate: async ({ postId, textContent }) => {
       const queryKey = QUERY_KEYS.FEED.INFINITE(userId);
